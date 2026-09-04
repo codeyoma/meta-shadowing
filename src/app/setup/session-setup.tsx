@@ -1,15 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { getLesson, lessons, levelNames } from "@/lib/lessons";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { levelNames, type Lesson } from "@/lib/lessons";
 import { saveLastSelection, SessionSelection } from "@/lib/resume";
 import { ArrowIcon, BackIcon, Brand, Page } from "../ui";
 
-export function SessionSetup() {
+export function SessionSetup({ lesson }: { lesson: Lesson }) {
   const router = useRouter();
-  const params = useSearchParams();
-  const lesson = useMemo(() => getLesson(params.get("lesson")) ?? lessons[0], [params]);
   const language = lesson.language;
   const [level, setLevel] = useState(1);
   const [mode, setMode] = useState<SessionSelection["mode"]>("manual");

@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getLesson, Language, lessons } from "@/lib/lessons";
+import { getLesson, type Language, type Lesson } from "@/lib/lessons";
 import { readLastSelection, SessionSelection } from "@/lib/resume";
 import { ArrowIcon, Brand, Page, PlayIcon } from "../ui";
 
-function ResumeRow({ selection }: { selection: SessionSelection }) {
+function ResumeRow({ selection, catalog }: { selection: SessionSelection; catalog: Lesson[] }) {
   const router = useRouter();
-  const lesson = getLesson(selection.lessonId);
+  const lesson = getLesson(selection.lessonId, catalog);
   if (!lesson) return null;
 
   return (
@@ -23,20 +23,20 @@ function ResumeRow({ selection }: { selection: SessionSelection }) {
   );
 }
 
-export function LearnerHome() {
+export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
   const router = useRouter();
   const [language, setLanguage] = useState<Language>("english");
   const [resume, setResume] = useState<SessionSelection | null>(null);
 
   useEffect(() => setResume(readLastSelection()), []);
-  const visibleLessons = lessons.filter((lesson) => lesson.language === language);
+  const visibleLessons = catalog.filter((lesson) => lesson.language === language);
 
   return (
     <Page className="home-page">
       <section className="learner-shell" aria-labelledby="home-title">
         <Brand compact />
         <h1 id="home-title">오늘도 한 프레이즈부터.</h1>
-        {resume ? <ResumeRow selection={resume} /> : null}
+        {resume ? <ResumeRow selection={resume} catalog={catalog} /> : null}
         <section className="home-section" aria-labelledby="language-title">
           <h2 id="language-title">언어 선택</h2>
           <div className="open-list">
@@ -58,6 +58,9 @@ export function LearnerHome() {
                 <ArrowIcon />
               </button>
             ))}
+            {visibleLessons.length === 0 ? (
+              <p className="empty-lessons" role="status">아직 게시된 레슨이 없습니다.</p>
+            ) : null}
           </div>
         </section>
       </section>

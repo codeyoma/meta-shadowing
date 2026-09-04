@@ -22,7 +22,9 @@ const serverEnvironment = runSupabaseIntegration
       ...inheritedServerEnvironment,
       ADMIN_TEST_MODE: "0",
       NEXT_PUBLIC_SUPABASE_URL: integrationUrl!,
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: integrationPublishableKey!
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: integrationPublishableKey!,
+      BETA_PASSWORD: "integration-beta-password",
+      LEARNER_COOKIE_SECRET: "integration-learner-cookie-secret"
     }
   : {
       ...inheritedServerEnvironment,

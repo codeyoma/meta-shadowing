@@ -91,3 +91,40 @@ test("changing either source file clears a stale validation preview", async ({ p
   await expect(page.getByRole("region", { name: "검증 미리보기" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "초안 저장" })).toHaveCount(0);
 });
+
+test("naturally maps sentence audio and blocks duplicate numbers before upload", async ({ page }) => {
+  await signInAsConfiguredAdministrator(page);
+
+  await page.getByLabel("레슨 제목").fill("Morning Routine");
+  await page.getByLabel("목표어 텍스트").setInputFiles({
+    name: "target.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("## Morning\nGood morning.\n\nI wash my face.\n")
+  });
+  await page.getByLabel("한국어 텍스트").setInputFiles({
+    name: "ko.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("## 아침\n좋은 아침입니다.\n\n세수합니다.\n")
+  });
+  await page.getByRole("button", { name: "파일 검증" }).click();
+
+  await page.getByLabel("문장별 음성 파일").setInputFiles([
+    { name: "002-wash.webm", mimeType: "audio/webm", buffer: Buffer.from([2]) },
+    { name: "001-morning.mp3", mimeType: "audio/mpeg", buffer: Buffer.from([1]) }
+  ]);
+  await expect(page.getByText("2 / 2 연결 · 게시 가능")).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "Good morning." })).toContainText("001-morning.mp3");
+  await expect(page.getByRole("row").filter({ hasText: "I wash my face." })).toContainText("002-wash.webm");
+  await expect(page.getByRole("button", { name: "음성 업로드 후 게시" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "초안 저장" }).click();
+  await expect(page.getByRole("button", { name: "음성 업로드 후 게시" })).toBeEnabled();
+
+  await page.getByLabel("문장별 음성 파일").setInputFiles([
+    { name: "001-morning.mp3", mimeType: "audio/mpeg", buffer: Buffer.from([1]) },
+    { name: "001-copy.webm", mimeType: "audio/webm", buffer: Buffer.from([2]) },
+    { name: "002-wash.webm", mimeType: "audio/webm", buffer: Buffer.from([3]) }
+  ]);
+  await expect(page.getByText("1번 프레이즈의 음성 파일 번호가 중복됩니다.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "음성 업로드 후 게시" })).toBeDisabled();
+});

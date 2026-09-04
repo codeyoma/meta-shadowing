@@ -8,6 +8,18 @@ export type Lesson = {
   phraseCount: number;
 };
 
+export type LessonPhrase = {
+  kind: "phrase";
+  sourceLine: number;
+  phraseNumber: number;
+  target: string;
+  korean: string;
+};
+
+export type PublishedLesson = Lesson & {
+  phrases: LessonPhrase[];
+};
+
 export const lessons: Lesson[] = [
   {
     id: "morning-routine",
@@ -43,6 +55,6 @@ export const levelNames = [
   "속사포 한글"
 ];
 
-export function getLesson(id: string | null): Lesson | undefined {
-  return lessons.find((lesson) => lesson.id === id);
+export function getLesson(id: string | null, catalog: Lesson[] = lessons): Lesson | undefined {
+  return catalog.find((lesson) => lesson.id === id);
 }

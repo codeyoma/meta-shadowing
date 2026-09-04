@@ -1,7 +1,16 @@
+import { redirect } from "next/navigation";
+import { getPublishedLesson } from "@/lib/published-lessons";
 import { requireLearner } from "@/lib/server-auth";
 import { PlayerShell } from "./player-shell";
 
-export default async function PlayerPage() {
+type PlayerPageProps = { searchParams: Promise<{ lesson?: string; level?: string }> };
+
+export default async function PlayerPage({ searchParams }: PlayerPageProps) {
   await requireLearner();
-  return <PlayerShell />;
+  const params = await searchParams;
+  const lesson = await getPublishedLesson(params.lesson ?? null);
+  if (!lesson) redirect("/home");
+  const requestedLevel = Number(params.level);
+  const level = Number.isInteger(requestedLevel) && requestedLevel >= 1 && requestedLevel <= 8 ? requestedLevel : 1;
+  return <PlayerShell lesson={lesson} level={level} />;
 }

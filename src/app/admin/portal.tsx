@@ -1,14 +1,24 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { AdminIdentity } from "@/lib/admin-auth";
+import { mapAudioPackage, type AudioPackageResult } from "@/lib/audio-package";
+import { LESSON_AUDIO_BUCKET } from "@/lib/lesson-audio";
 import type { LessonDraftParseResult } from "@/lib/lesson-draft-parser";
+import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { Brand, Page } from "../ui";
 
 type ImportResponse = {
   draftId?: string;
   error?: string;
   result?: LessonDraftParseResult;
+};
+
+type PublishResponse = {
+  error?: string;
+  message?: string;
+  lessonId?: string;
+  result?: AudioPackageResult;
 };
 
 function FileIcon() {
@@ -112,8 +122,17 @@ function AdminLogin() {
   );
 }
 
-function DraftPreview({ result }: { result: LessonDraftParseResult }) {
+function DraftPreview({
+  result,
+  audioResult,
+  audioSelected
+}: {
+  result: LessonDraftParseResult;
+  audioResult: AudioPackageResult | null;
+  audioSelected: boolean;
+}) {
   const summary = `${result.summary.phrases}개 프레이즈 · ${result.summary.chapters}개 챕터 · ${result.summary.sections}개 구간`;
+  const audioByPhrase = new Map(audioResult?.items.map((item) => [item.phraseNumber, item]));
 
   return (
     <section className="draft-preview" aria-labelledby="preview-title">
@@ -135,6 +154,28 @@ function DraftPreview({ result }: { result: LessonDraftParseResult }) {
           </ul>
         </div>
       ) : null}
+      <section className="audio-package-summary" aria-labelledby="audio-package-title">
+        <div>
+          <h3 id="audio-package-title">문장별 음성</h3>
+          {audioResult ? (
+            <strong className={audioResult.publishReady ? "preview-ready" : "preview-blocked"}>
+              {audioResult.items.length} / {result.summary.phrases} 연결 · {audioResult.publishReady ? "게시 가능" : "확인 필요"}
+            </strong>
+          ) : (
+            <strong className="preview-blocked">파일 선택 필요</strong>
+          )}
+        </div>
+        {!audioSelected ? <p>MP3, M4A, WebM 파일을 001부터 문장 순서대로 선택해 주세요.</p> : null}
+        {audioResult?.issues.length ? (
+          <div className="validation-errors audio-errors" role="alert">
+            <ul>
+              {audioResult.issues.map((issue, index) => (
+                <li key={`${issue.code}-${issue.fileName ?? issue.phraseNumber}-${index}`}>{issue.message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
       <div className="preview-table-wrap">
         <table className="preview-table" role="table">
           <thead role="rowgroup">
@@ -143,6 +184,7 @@ function DraftPreview({ result }: { result: LessonDraftParseResult }) {
               <th scope="col" role="columnheader">구분</th>
               <th scope="col" role="columnheader">목표어</th>
               <th scope="col" role="columnheader">한국어</th>
+              <th scope="col" role="columnheader">음성</th>
             </tr>
           </thead>
           <tbody role="rowgroup">
@@ -151,7 +193,7 @@ function DraftPreview({ result }: { result: LessonDraftParseResult }) {
                 return (
                   <tr className="preview-section-row" role="row" key={`section-${entry.sourceLine}-${index}`}>
                     <td role="cell">—</td>
-                    <td role="cell" colSpan={3}>이름 없는 구간</td>
+                    <td role="cell" colSpan={4}>이름 없는 구간</td>
                   </tr>
                 );
               }
@@ -161,6 +203,9 @@ function DraftPreview({ result }: { result: LessonDraftParseResult }) {
                   <td role="cell">{entry.kind === "chapter" ? "챕터" : "프레이즈"}</td>
                   <td role="cell">{entry.target || "(비어 있음)"}</td>
                   <td role="cell">{entry.korean || "(비어 있음)"}</td>
+                  <td role="cell" className="preview-audio-cell">
+                    {entry.kind === "phrase" ? audioByPhrase.get(entry.phraseNumber)?.originalName ?? "미연결" : "—"}
+                  </td>
                 </tr>
               );
             })}
@@ -175,15 +220,34 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [hydrated, setHydrated] = useState(false);
   const [result, setResult] = useState<LessonDraftParseResult | null>(null);
-  const [busyAction, setBusyAction] = useState<"validate" | "save" | null>(null);
+  const [audioFiles, setAudioFiles] = useState<File[]>([]);
+  const [busyAction, setBusyAction] = useState<"validate" | "save" | "publish" | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [published, setPublished] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const audioResult = useMemo(
+    () => (result && audioFiles.length ? mapAudioPackage(result.entries, audioFiles) : null),
+    [audioFiles, result]
+  );
 
   useEffect(() => setHydrated(true), []);
 
   function clearImportResult() {
     setResult(null);
     setSaved(false);
+    setDraftId(null);
+    setPublished(false);
+    setUploadProgress("");
+    setError("");
+  }
+
+  function clearSavedDraft() {
+    setSaved(false);
+    setDraftId(null);
+    setPublished(false);
+    setUploadProgress("");
     setError("");
   }
 
@@ -193,14 +257,89 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
     setBusyAction(action);
     setError("");
     setSaved(false);
+    setPublished(false);
+    setUploadProgress("");
     try {
       const response = await fetch(path, { method: "POST", body: new FormData(formRef.current) });
       const payload = (await response.json()) as ImportResponse;
       if (!response.ok || !payload.result) throw new Error(payload.error || "요청을 처리하지 못했습니다.");
       setResult(payload.result);
-      setSaved(action === "save" && Boolean(payload.draftId));
+      if (action === "save" && payload.draftId) {
+        setDraftId(payload.draftId);
+        setSaved(true);
+      } else {
+        setDraftId(null);
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "요청을 처리하지 못했습니다.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function selectAudioFiles(files: FileList | null) {
+    setAudioFiles(Array.from(files ?? []));
+    setPublished(false);
+    setUploadProgress("");
+    setError("");
+  }
+
+  async function publishLesson() {
+    if (!draftId || !result?.publishReady || !audioResult?.publishReady) return;
+    const supabase = getBrowserSupabaseClient();
+    if (!supabase) {
+      setError("Supabase 공개 설정이 없어 음성을 업로드할 수 없습니다.");
+      return;
+    }
+
+    setBusyAction("publish");
+    setError("");
+    setPublished(false);
+    try {
+      const folder = `${admin.id}/${draftId}`;
+      const desiredNames = new Set(audioResult.items.map((item) => item.canonicalName));
+      const { data: existingFiles, error: listError } = await supabase.storage
+        .from(LESSON_AUDIO_BUCKET)
+        .list(folder, { limit: 1000 });
+      if (listError) throw new Error(`기존 음성을 확인하지 못했습니다: ${listError.message}`);
+
+      for (const [index, item] of audioResult.items.entries()) {
+        const file = audioFiles.find(
+          (candidate) => candidate.name === item.originalName && candidate.size === item.size
+        );
+        if (!file) throw new Error(`${item.originalName} 파일을 다시 선택해 주세요.`);
+        setUploadProgress(`${index + 1} / ${audioResult.items.length} 업로드 중`);
+        const { error: uploadError } = await supabase.storage
+          .from(LESSON_AUDIO_BUCKET)
+          .upload(`${folder}/${item.canonicalName}`, file, {
+            cacheControl: "3600",
+            contentType: item.contentType,
+            upsert: true
+          });
+        if (uploadError) throw new Error(`${item.originalName} 업로드 실패: ${uploadError.message}`);
+      }
+
+      const stalePaths = (existingFiles ?? [])
+        .filter((file: { name: string }) => !desiredNames.has(file.name))
+        .map((file: { name: string }) => `${folder}/${file.name}`);
+      if (stalePaths.length) {
+        const { error: removeError } = await supabase.storage
+          .from(LESSON_AUDIO_BUCKET)
+          .remove(stalePaths);
+        if (removeError) throw new Error(`이전 음성을 정리하지 못했습니다: ${removeError.message}`);
+      }
+
+      setUploadProgress("게시 확인 중");
+      const response = await fetch(`/api/admin/drafts/${draftId}/publish`, { method: "POST" });
+      const payload = (await response.json()) as PublishResponse;
+      if (!response.ok || !payload.lessonId) {
+        throw new Error(payload.message || "레슨을 게시하지 못했습니다.");
+      }
+      setPublished(true);
+      setUploadProgress("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "레슨을 게시하지 못했습니다.");
+      setUploadProgress("");
     } finally {
       setBusyAction(null);
     }
@@ -236,9 +375,9 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
         >
           <div className="import-metadata">
             <label htmlFor="lesson-title">레슨 제목</label>
-            <input id="lesson-title" name="title" maxLength={120} required />
+            <input id="lesson-title" name="title" maxLength={120} required onChange={clearSavedDraft} />
             <label htmlFor="lesson-language">언어</label>
-            <select id="lesson-language" name="language" defaultValue="english">
+            <select id="lesson-language" name="language" defaultValue="english" onChange={clearSavedDraft}>
               <option value="english">English 영어</option>
               <option value="japanese">日本語 일본어</option>
             </select>
@@ -266,7 +405,17 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
                 onChange={clearImportResult}
               />
             </label>
-            <p>.txt · UTF-8 · 파일당 최대 2MB</p>
+            <label className="file-field audio-file-field" htmlFor="audio-files">
+              <span><FileIcon /> 문장별 음성 파일</span>
+              <input
+                id="audio-files"
+                type="file"
+                accept=".mp3,.m4a,.webm,audio/mpeg,audio/mp4,audio/webm"
+                multiple
+                onChange={(event) => selectAudioFiles(event.currentTarget.files)}
+              />
+            </label>
+            <p>.txt · UTF-8 · 텍스트 파일당 최대 2MB<br />음성 · 001부터 세 자리 번호 · MP3, M4A, WebM · 파일당 최대 4MB</p>
           </div>
           <button
             type="button"
@@ -280,9 +429,13 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
         {error ? <p className="admin-form-error" role="alert">{error}</p> : null}
         {result ? (
           <>
-            <DraftPreview result={result} />
+            <DraftPreview result={result} audioResult={audioResult} audioSelected={audioFiles.length > 0} />
             <div className="draft-actions">
-              {saved ? <p role="status">초안이 저장되었습니다.</p> : <span />}
+              {saved ? (
+                <p role="status">
+                  {published ? "레슨이 게시되었습니다." : uploadProgress || "초안이 저장되었습니다."}
+                </p>
+              ) : <span />}
               <button
                 type="button"
                 className="secondary-button"
@@ -290,6 +443,20 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
                 onClick={() => submitImport("/api/admin/drafts", "save")}
               >
                 {busyAction === "save" ? "저장 중…" : "초안 저장"}
+              </button>
+              <button
+                type="button"
+                className="primary-button publish-button"
+                disabled={
+                  !hydrated ||
+                  busyAction !== null ||
+                  !draftId ||
+                  !result.publishReady ||
+                  !audioResult?.publishReady
+                }
+                onClick={publishLesson}
+              >
+                {busyAction === "publish" ? "업로드 중…" : "음성 업로드 후 게시"}
               </button>
             </div>
           </>

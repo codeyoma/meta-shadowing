@@ -9,8 +9,11 @@ export function readAuthEnvironment(): { password: string; secret: string } | nu
 }
 
 export async function requireLearner(): Promise<void> {
+  if (!(await hasLearnerAccess())) redirect("/");
+}
+
+export async function hasLearnerAccess(): Promise<boolean> {
   const config = readAuthEnvironment();
   const cookie = (await cookies()).get(LEARNER_COOKIE_NAME)?.value;
-
-  if (!config || !verifyLearnerCookie(cookie, config.secret)) redirect("/");
+  return Boolean(config && verifyLearnerCookie(cookie, config.secret));
 }

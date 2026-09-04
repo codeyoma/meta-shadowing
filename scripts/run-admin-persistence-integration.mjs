@@ -28,6 +28,7 @@ const result = spawnSync(
     "playwright",
     "test",
     "e2e/admin-persistence.integration.spec.ts",
+    "e2e/lesson-publication.integration.spec.ts",
     "--project=desktop"
   ],
   {
@@ -37,7 +38,8 @@ const result = spawnSync(
       ADMIN_SUPABASE_INTEGRATION: "1",
       SUPABASE_INTEGRATION_URL: localEnvironment.API_URL,
       SUPABASE_INTEGRATION_PUBLISHABLE_KEY: localEnvironment.PUBLISHABLE_KEY,
-      SUPABASE_INTEGRATION_SECRET_KEY: localEnvironment.SECRET_KEY
+      SUPABASE_INTEGRATION_SECRET_KEY: localEnvironment.SECRET_KEY,
+      SUPABASE_SECRET_KEY: localEnvironment.SECRET_KEY
     }
   }
 );
