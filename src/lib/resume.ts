@@ -27,14 +27,18 @@ function isSessionSelection(value: unknown): value is SessionSelection {
 }
 
 export function saveLastSelection(selection: SessionSelection): void {
-  window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify(selection));
+  try {
+    window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify(selection));
+  } catch {
+    // Resume persistence is best-effort; storage may be blocked by the browser.
+  }
 }
 
 export function readLastSelection(): SessionSelection | null {
-  const stored = window.localStorage.getItem(LAST_SELECTION_KEY);
-  if (!stored) return null;
-
   try {
+    const stored = window.localStorage.getItem(LAST_SELECTION_KEY);
+    if (!stored) return null;
+
     const selection = JSON.parse(stored) as unknown;
     return isSessionSelection(selection) ? selection : null;
   } catch {

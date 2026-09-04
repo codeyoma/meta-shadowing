@@ -66,22 +66,32 @@ function Page({ children, className = "" }: { children: ReactNode; className?: s
 
 export function EntryForm() {
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState<"idle" | "submitting" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "submitting" | "wrong-password" | "unavailable">("idle");
+  const errorMessage = status === "wrong-password"
+    ? "비밀번호가 올바르지 않습니다."
+    : status === "unavailable"
+      ? "지금은 입장할 수 없습니다. 잠시 후 다시 시도해 주세요."
+      : null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus("submitting");
-    const response = await fetch("/api/auth", {
-      body: JSON.stringify({ password }),
-      headers: { "content-type": "application/json" },
-      method: "POST"
-    });
+    try {
+      const response = await fetch("/api/auth", {
+        body: JSON.stringify({ password }),
+        headers: { "content-type": "application/json" },
+        method: "POST"
+      });
 
-    if (response.ok) {
-      window.location.assign("/home");
-      return;
+      if (response.ok) {
+        window.location.assign("/home");
+        return;
+      }
+
+      setStatus(response.status === 401 ? "wrong-password" : "unavailable");
+    } catch {
+      setStatus("unavailable");
     }
-    setStatus("error");
   }
 
   return (
@@ -101,11 +111,11 @@ export function EntryForm() {
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            aria-invalid={status === "error"}
-            aria-describedby={status === "error" ? "password-error" : undefined}
+            aria-invalid={status === "wrong-password"}
+            aria-describedby={errorMessage ? "password-error" : undefined}
             required
           />
-          {status === "error" ? <p id="password-error" className="password-error" role="alert">비밀번호가 올바르지 않습니다.</p> : null}
+          {errorMessage ? <p id="password-error" className="password-error" role="alert">{errorMessage}</p> : null}
           <button className="primary-button" type="submit" disabled={status === "submitting"}>
             입장하기
           </button>

@@ -11,6 +11,26 @@ test("rejects an incorrect password without revealing learner content", async ({
   await expect(page.getByLabel("베타 비밀번호")).toHaveAttribute("aria-describedby", "password-error");
 });
 
+test("restores password entry after an authentication network failure", async ({ page }) => {
+  await page.route("**/api/auth", (route) => route.abort("failed"));
+  await page.goto("/");
+  await page.getByLabel("베타 비밀번호").fill("test-beta-password");
+  await page.getByRole("button", { name: "입장하기" }).click();
+
+  await expect(page.locator("#password-error")).toHaveText("지금은 입장할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+  await expect(page.getByRole("button", { name: "입장하기" })).toBeEnabled();
+});
+
+test("distinguishes an unavailable authentication service from a wrong password", async ({ page }) => {
+  await page.route("**/api/auth", (route) => route.fulfill({ status: 503, contentType: "application/json", body: '{"authenticated":false}' }));
+  await page.goto("/");
+  await page.getByLabel("베타 비밀번호").fill("test-beta-password");
+  await page.getByRole("button", { name: "입장하기" }).click();
+
+  await expect(page.locator("#password-error")).toHaveText("지금은 입장할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+  await expect(page.getByRole("button", { name: "입장하기" })).toBeEnabled();
+});
+
 test("takes an authorized learner from password entry through session setup to the player", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("베타 비밀번호").fill("test-beta-password");

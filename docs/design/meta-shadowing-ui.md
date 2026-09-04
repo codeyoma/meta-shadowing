@@ -71,7 +71,7 @@ Icons use clean two-pixel round strokes and current color. Use proper SVG compon
 
 ## Copy lock for the first learner slice
 
-Allowed entry copy: `Meta Shadowing`, `나만의 문장으로, 여덟 번 다르게.`, `헤드폰을 끼고 오늘의 레슨을 시작하세요.`, `베타 비밀번호`, `입장하기`, `개인 학습 자료를 위한 비공개 베타`.
+Allowed entry copy: `Meta Shadowing`, `나만의 문장으로, 여덟 번 다르게.`, `헤드폰을 끼고 오늘의 레슨을 시작하세요.`, `베타 비밀번호`, `입장하기`, `개인 학습 자료를 위한 비공개 베타`, `비밀번호가 올바르지 않습니다.`, `지금은 입장할 수 없습니다. 잠시 후 다시 시도해 주세요.`.
 
 Allowed learner-home copy: `오늘도 한 프레이즈부터.`, `마지막 학습 계속하기`, `언어 선택`, `English`, `영어`, `日本語`, `일본어`, `영어 레슨`, `일본어 레슨`, lesson names, localized lesson names, and phrase counts.
 
