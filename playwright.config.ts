@@ -1,12 +1,44 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const chromeExecutable = process.env.PLAYWRIGHT_CHROME_EXECUTABLE;
+const runSupabaseIntegration = process.env.ADMIN_SUPABASE_INTEGRATION === "1";
+const port = runSupabaseIntegration ? 3010 : 3000;
+const integrationUrl = process.env.SUPABASE_INTEGRATION_URL;
+const integrationPublishableKey = process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY;
+
+if (runSupabaseIntegration && (!integrationUrl || !integrationPublishableKey)) {
+  throw new Error("The local Supabase integration URL and publishable key are required.");
+}
+
+const inheritedServerEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(
+    (entry): entry is [string, string] =>
+      entry[1] !== undefined && entry[0] !== "SUPABASE_INTEGRATION_SECRET_KEY"
+  )
+);
+
+const serverEnvironment = runSupabaseIntegration
+  ? {
+      ...inheritedServerEnvironment,
+      ADMIN_TEST_MODE: "0",
+      NEXT_PUBLIC_SUPABASE_URL: integrationUrl!,
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: integrationPublishableKey!
+    }
+  : {
+      ...inheritedServerEnvironment,
+      BETA_PASSWORD: "test-beta-password",
+      LEARNER_COOKIE_SECRET: "test-cookie-secret",
+      ADMIN_TEST_MODE: "1",
+      ADMIN_TEST_EMAIL: "admin@example.com",
+      ADMIN_TEST_OTP: "123456",
+      ADMIN_TEST_SESSION_SECRET: "test-admin-cookie-secret"
+    };
 
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: `http://127.0.0.1:${port}`,
     trace: "on-first-retry",
     launchOptions: chromeExecutable ? { executablePath: chromeExecutable } : undefined
   },
@@ -15,8 +47,9 @@ export default defineConfig({
     { name: "desktop", use: { ...devices["Desktop Chrome"] } }
   ],
   webServer: {
-    command: "BETA_PASSWORD=test-beta-password LEARNER_COOKIE_SECRET=test-cookie-secret npm run dev -- --port 3000",
-    url: "http://127.0.0.1:3000",
-    reuseExistingServer: !process.env.CI
+    command: `npm run dev -- --port ${port}`,
+    env: serverEnvironment,
+    url: `http://127.0.0.1:${port}`,
+    reuseExistingServer: runSupabaseIntegration ? false : !process.env.CI
   }
 });
