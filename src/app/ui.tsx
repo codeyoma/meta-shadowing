@@ -105,7 +105,7 @@ export function EntryForm() {
             aria-describedby={status === "error" ? "password-error" : undefined}
             required
           />
-          {status === "error" ? <span id="password-error" className="error-line" role="alert" aria-label="password rejected" /> : null}
+          {status === "error" ? <p id="password-error" className="password-error" role="alert">비밀번호가 올바르지 않습니다.</p> : null}
           <button className="primary-button" type="submit" disabled={status === "submitting"}>
             입장하기
           </button>
@@ -238,7 +238,8 @@ export function SessionSetup() {
 export function PlayerShell() {
   const params = useSearchParams();
   const lesson = getLesson(params.get("lesson")) ?? lessons[0];
-  const level = Number(params.get("level")) || 1;
+  const requestedLevel = Number(params.get("level"));
+  const level = Number.isInteger(requestedLevel) && requestedLevel >= 1 && requestedLevel <= 8 ? requestedLevel : 1;
 
   return (
     <Page className="player-page">
