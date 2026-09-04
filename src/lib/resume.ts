@@ -1,0 +1,43 @@
+const LAST_SELECTION_KEY = "meta-shadowing:last-selection";
+
+export type SessionSelection = {
+  language: "english" | "japanese";
+  lessonId: string;
+  level: number;
+  mode: "manual" | "automatic";
+  display: "current" | "cumulative";
+  speed: number;
+};
+
+function isSessionSelection(value: unknown): value is SessionSelection {
+  if (!value || typeof value !== "object") return false;
+
+  const selection = value as Record<string, unknown>;
+  return (
+    (selection.language === "english" || selection.language === "japanese") &&
+    typeof selection.lessonId === "string" &&
+    typeof selection.level === "number" &&
+    Number.isInteger(selection.level) &&
+    selection.level >= 1 &&
+    selection.level <= 8 &&
+    (selection.mode === "manual" || selection.mode === "automatic") &&
+    (selection.display === "current" || selection.display === "cumulative") &&
+    typeof selection.speed === "number"
+  );
+}
+
+export function saveLastSelection(selection: SessionSelection): void {
+  window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify(selection));
+}
+
+export function readLastSelection(): SessionSelection | null {
+  const stored = window.localStorage.getItem(LAST_SELECTION_KEY);
+  if (!stored) return null;
+
+  try {
+    const selection = JSON.parse(stored) as unknown;
+    return isSessionSelection(selection) ? selection : null;
+  } catch {
+    return null;
+  }
+}
