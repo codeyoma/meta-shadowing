@@ -1,13 +1,16 @@
 import "server-only";
 
 import type { AdminIdentity } from "./admin-auth";
+import { hasSupportedAudioSignature } from "./audio-signature";
 import {
   mapAudioPackage,
   type AudioPackageResult,
   type AudioPackageItem
 } from "./audio-package";
+import { decodeLessonDraftEntries } from "./lesson-entry-decoder";
 import type { LessonDraftEntry } from "./lesson-draft-parser";
-import { LESSON_AUDIO_BUCKET } from "./lesson-audio";
+import { LESSON_AUDIO_BUCKET, getLessonAudioFolder, getLessonAudioPath } from "./lesson-audio";
+import { createSecretSupabaseClient } from "./supabase/secret";
 import { createServerSupabaseClient } from "./supabase/server";
 
 export type PublishedAudioItem = AudioPackageItem & { path: string };
@@ -23,28 +26,12 @@ export class LessonPublicationError extends Error {
   }
 }
 
-function isLessonDraftEntry(value: unknown): value is LessonDraftEntry {
-  if (!value || typeof value !== "object") return false;
-  const entry = value as Record<string, unknown>;
-  if (!Number.isInteger(entry.sourceLine)) return false;
-
-  if (entry.kind === "section") return true;
-  if (entry.kind === "chapter") {
-    return typeof entry.target === "string" && typeof entry.korean === "string";
-  }
-  return (
-    entry.kind === "phrase" &&
-    Number.isInteger(entry.phraseNumber) &&
-    typeof entry.target === "string" &&
-    typeof entry.korean === "string"
-  );
-}
-
 function readEntries(value: unknown): LessonDraftEntry[] {
-  if (!Array.isArray(value) || !value.every(isLessonDraftEntry)) {
+  const entries = decodeLessonDraftEntries(value);
+  if (!entries) {
     throw new LessonPublicationError(500, "invalid-stored-draft", "저장된 레슨 초안 형식이 올바르지 않습니다.");
   }
-  return value;
+  return entries;
 }
 
 export async function publishLessonDraft(admin: AdminIdentity, draftId: string) {
@@ -70,7 +57,7 @@ export async function publishLessonDraft(admin: AdminIdentity, draftId: string) 
     throw new LessonPublicationError(422, "text-draft-invalid", "텍스트 검증 오류를 먼저 해결해 주세요.");
   }
 
-  const folder = `${admin.id}/${draftId}`;
+  const folder = getLessonAudioFolder(admin.id, draftId);
   const { data: storedFiles, error: storageError } = await supabase.storage
     .from(LESSON_AUDIO_BUCKET)
     .list(folder, { limit: 1000, sortBy: { column: "name", order: "asc" } });
@@ -97,19 +84,47 @@ export async function publishLessonDraft(admin: AdminIdentity, draftId: string) 
     );
   }
 
+  const contentIssues = [];
+  for (const item of result.items) {
+    const path = getLessonAudioPath(admin.id, draftId, item.canonicalName);
+    const { data: audio, error: downloadError } = await supabase.storage
+      .from(LESSON_AUDIO_BUCKET)
+      .download(path);
+    if (downloadError) {
+      throw new LessonPublicationError(500, "audio-read-failed", downloadError.message);
+    }
+    const signature = new Uint8Array(await audio.slice(0, 12).arrayBuffer());
+    if (!hasSupportedAudioSignature(item.canonicalName, signature)) {
+      contentIssues.push({
+        code: "invalid-audio-content",
+        phraseNumber: item.phraseNumber,
+        fileName: item.originalName,
+        message: `${item.originalName}의 실제 오디오 형식을 확인할 수 없습니다. 원본 파일을 다시 업로드해 주세요.`
+      });
+    }
+  }
+  if (contentIssues.length) {
+    throw new LessonPublicationError(
+      422,
+      "audio-package-invalid",
+      "실제 형식을 확인할 수 없는 음성 파일이 있습니다.",
+      { ...result, publishReady: false, issues: contentIssues }
+    );
+  }
+
   const manifest: PublishedAudioItem[] = result.items.map((item) => ({
     ...item,
-    path: `${folder}/${item.canonicalName}`
+    path: getLessonAudioPath(admin.id, draftId, item.canonicalName)
   }));
-  const { error: publishError } = await supabase
-    .from("lesson_drafts")
-    .update({
-      audio_manifest: manifest,
-      publication_status: "published",
-      published_at: new Date().toISOString()
-    })
-    .eq("id", draftId)
-    .eq("created_by", admin.id);
+  const secretSupabase = createSecretSupabaseClient();
+  if (!secretSupabase) {
+    throw new LessonPublicationError(503, "supabase-secret-unavailable", "서버 게시 키가 설정되지 않았습니다.");
+  }
+  const { error: publishError } = await secretSupabase.rpc("publish_lesson_draft", {
+    p_draft_id: draftId,
+    p_admin_id: admin.id,
+    p_audio_manifest: manifest
+  });
 
   if (publishError) {
     throw new LessonPublicationError(500, "publish-failed", publishError.message);

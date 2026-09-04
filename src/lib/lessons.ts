@@ -1,3 +1,5 @@
+import type { LessonDraftEntry } from "./lesson-draft-parser";
+
 export type Language = "english" | "japanese";
 
 export type Lesson = {
@@ -8,13 +10,7 @@ export type Lesson = {
   phraseCount: number;
 };
 
-export type LessonPhrase = {
-  kind: "phrase";
-  sourceLine: number;
-  phraseNumber: number;
-  target: string;
-  korean: string;
-};
+export type LessonPhrase = Extract<LessonDraftEntry, { kind: "phrase" }>;
 
 export type PublishedLesson = Lesson & {
   phrases: LessonPhrase[];

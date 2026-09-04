@@ -1,4 +1,9 @@
 import type { LessonDraftEntry } from "./lesson-draft-parser";
+import {
+  getSupportedAudioFormat,
+  matchesDeclaredAudioType,
+  type AudioContentType
+} from "./audio-format";
 
 export type AudioFileDescriptor = {
   name: string;
@@ -11,7 +16,7 @@ export type AudioPackageItem = {
   sourceLine: number;
   originalName: string;
   canonicalName: string;
-  contentType: "audio/mpeg" | "audio/mp4" | "audio/webm";
+  contentType: AudioContentType;
   size: number;
 };
 
@@ -28,16 +33,6 @@ export type AudioPackageResult = {
   issues: AudioPackageIssue[];
 };
 
-const contentTypes = {
-  mp3: "audio/mpeg",
-  m4a: "audio/mp4",
-  webm: "audio/webm"
-} as const;
-
-function getExtension(fileName: string) {
-  return fileName.split(".").at(-1)?.toLowerCase();
-}
-
 function getLeadingNumber(fileName: string) {
   const match = /^(\d{3})(?=[^0-9]|$)/.exec(fileName);
   return match ? { label: match[1], value: Number(match[1]) } : null;
@@ -51,20 +46,20 @@ export function mapAudioPackage(
   const items = files
     .map((file) => {
       const leadingNumber = getLeadingNumber(file.name);
-      const extension = getExtension(file.name) as keyof typeof contentTypes;
+      const format = getSupportedAudioFormat(file.name);
       if (!leadingNumber) return null;
 
       const phraseNumber = leadingNumber.value;
       const phrase = phrases.find((entry) => entry.phraseNumber === phraseNumber);
 
-      if (!phrase || !(extension in contentTypes)) return null;
+      if (!phrase || !format) return null;
 
       return {
         phraseNumber,
         sourceLine: phrase.sourceLine,
         originalName: file.name,
-        canonicalName: `${String(phraseNumber).padStart(3, "0")}.${extension}`,
-        contentType: contentTypes[extension],
+        canonicalName: `${String(phraseNumber).padStart(3, "0")}.${format.extension}`,
+        contentType: format.contentType,
         size: file.size
       } satisfies AudioPackageItem;
     })
@@ -73,14 +68,20 @@ export function mapAudioPackage(
   const mappedNumbers = new Set(items.map((item) => item.phraseNumber));
   const issues: AudioPackageIssue[] = files.flatMap((file) => {
     const fileIssues: AudioPackageIssue[] = [];
-    const extension = getExtension(file.name);
+    const format = getSupportedAudioFormat(file.name);
     const leadingNumber = getLeadingNumber(file.name);
 
-    if (!extension || !(extension in contentTypes)) {
+    if (!format) {
       fileIssues.push({
         code: "unsupported-audio-format",
         fileName: file.name,
         message: `${file.name}은(는) 지원하지 않는 형식입니다. MP3, M4A, WebM 파일만 사용해 주세요.`
+      });
+    } else if (!matchesDeclaredAudioType(file.name, file.type)) {
+      fileIssues.push({
+        code: "audio-content-type-mismatch",
+        fileName: file.name,
+        message: `${file.name}의 미디어 형식이 ${format.label} 파일과 일치하지 않습니다. 원본 오디오 파일을 다시 선택해 주세요.`
       });
     }
 

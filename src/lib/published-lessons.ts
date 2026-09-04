@@ -1,5 +1,6 @@
 import "server-only";
 
+import { decodeLessonDraftEntries } from "./lesson-entry-decoder";
 import { lessons, type Language, type Lesson, type LessonPhrase, type PublishedLesson } from "./lessons";
 import { LESSON_AUDIO_BUCKET } from "./lesson-audio";
 import type { PublishedAudioItem } from "./lesson-publication";
@@ -30,39 +31,13 @@ function readLanguage(value: string): Language | null {
   return value === "english" || value === "japanese" ? value : null;
 }
 
-function readPhrases(value: unknown): LessonPhrase[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => {
-    if (!entry || typeof entry !== "object") return [];
-    const candidate = entry as Record<string, unknown>;
-    if (
-      candidate.kind !== "phrase" ||
-      !Number.isInteger(candidate.sourceLine) ||
-      !Number.isInteger(candidate.phraseNumber) ||
-      typeof candidate.target !== "string" ||
-      typeof candidate.korean !== "string"
-    ) {
-      return [];
-    }
-    return [candidate as LessonPhrase];
-  });
-}
-
-function readChapter(value: unknown) {
-  if (!Array.isArray(value)) return null;
-  const entry = value.find((candidate) => {
-    if (!candidate || typeof candidate !== "object") return false;
-    const chapter = candidate as Record<string, unknown>;
-    return chapter.kind === "chapter" && typeof chapter.target === "string" && typeof chapter.korean === "string";
-  }) as { target: string; korean: string } | undefined;
-  return entry ?? null;
-}
-
 function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {
   const language = readLanguage(row.language);
-  const phrases = readPhrases(row.parsed_entries);
+  const entries = decodeLessonDraftEntries(row.parsed_entries);
+  if (!entries) return null;
+  const phrases = entries.filter((entry): entry is LessonPhrase => entry.kind === "phrase");
   if (!language || phrases.length !== row.phrase_count || phrases.length === 0) return null;
-  const chapter = readChapter(row.parsed_entries);
+  const chapter = entries.find((entry) => entry.kind === "chapter");
 
   return {
     id: row.id,

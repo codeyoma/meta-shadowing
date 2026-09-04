@@ -112,6 +112,21 @@ describe("mapAudioPackage", () => {
     });
   });
 
+  it("blocks a supported extension whose declared media type does not match", () => {
+    const result = mapAudioPackage(entries, [
+      { name: "001-renamed.mp3", size: 10, type: "audio/wav" },
+      { name: "002-wash.m4a", size: 20, type: "audio/mp4" },
+      { name: "003-teeth.webm", size: 30, type: "audio/webm" }
+    ]);
+
+    expect(result.publishReady).toBe(false);
+    expect(result.issues).toContainEqual({
+      code: "audio-content-type-mismatch",
+      fileName: "001-renamed.mp3",
+      message: "001-renamed.mp3의 미디어 형식이 MP3 파일과 일치하지 않습니다. 원본 오디오 파일을 다시 선택해 주세요."
+    });
+  });
+
   it("blocks publishing for missing, zero, or out-of-range three-digit numbers", () => {
     const result = mapAudioPackage(entries, [
       { name: "morning.mp3", size: 10, type: "audio/mpeg" },

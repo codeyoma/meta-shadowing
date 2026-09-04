@@ -3,7 +3,12 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { AdminIdentity } from "@/lib/admin-auth";
 import { mapAudioPackage, type AudioPackageResult } from "@/lib/audio-package";
-import { LESSON_AUDIO_BUCKET } from "@/lib/lesson-audio";
+import { hasSupportedAudioSignature } from "@/lib/audio-signature";
+import {
+  LESSON_AUDIO_BUCKET,
+  getLessonAudioFolder,
+  getLessonAudioPath
+} from "@/lib/lesson-audio";
 import type { LessonDraftParseResult } from "@/lib/lesson-draft-parser";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { Brand, Page } from "../ui";
@@ -296,7 +301,7 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
     setError("");
     setPublished(false);
     try {
-      const folder = `${admin.id}/${draftId}`;
+      const folder = getLessonAudioFolder(admin.id, draftId);
       const desiredNames = new Set(audioResult.items.map((item) => item.canonicalName));
       const { data: existingFiles, error: listError } = await supabase.storage
         .from(LESSON_AUDIO_BUCKET)
@@ -308,10 +313,14 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
           (candidate) => candidate.name === item.originalName && candidate.size === item.size
         );
         if (!file) throw new Error(`${item.originalName} 파일을 다시 선택해 주세요.`);
+        const signature = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+        if (!hasSupportedAudioSignature(item.canonicalName, signature)) {
+          throw new Error(`${item.originalName}의 실제 오디오 형식을 확인할 수 없습니다. 원본 파일을 다시 선택해 주세요.`);
+        }
         setUploadProgress(`${index + 1} / ${audioResult.items.length} 업로드 중`);
         const { error: uploadError } = await supabase.storage
           .from(LESSON_AUDIO_BUCKET)
-          .upload(`${folder}/${item.canonicalName}`, file, {
+          .upload(getLessonAudioPath(admin.id, draftId, item.canonicalName), file, {
             cacheControl: "3600",
             contentType: item.contentType,
             upsert: true
@@ -321,7 +330,7 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
 
       const stalePaths = (existingFiles ?? [])
         .filter((file: { name: string }) => !desiredNames.has(file.name))
-        .map((file: { name: string }) => `${folder}/${file.name}`);
+        .map((file: { name: string }) => getLessonAudioPath(admin.id, draftId, file.name));
       if (stalePaths.length) {
         const { error: removeError } = await supabase.storage
           .from(LESSON_AUDIO_BUCKET)

@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const integrationEnabled = process.env.ADMIN_SUPABASE_INTEGRATION === "1";
+const TEST_WEBM_BASE64 =
+  "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwH/////////FUmpZpkq17GDD0JATYCGQ2hyb21lV0GGQ2hyb21lFlSua7+uvdeBAXPFh66ru3m7D4GDgQKGhkFfT1BVU2Oik09wdXNIZWFkAQIAAIC7AAAAAADhjbWERzuAAJ+BAmJkgSAfQ7Z1Af/////////ngQCjrIEAAIAY4DS5l0C1XAIsifMfvrNWxLKc86HhO6VEb7z9oOU3T28pdxxnTmTJo6iBADyAGMHI8BlHdEHCVMGu05gLBgj4emwVBLWN1xbBZazgQKOxor2AH0O2dQH/////////54F1o6WBAACAGAiA/8jL2Mfg7FNHZso2F4OvjixR5e82E/WmKaozzJjAo6eBADyAGAiEIhzSwbkVJIcfk1H2DNwGJ34oAoC7qAKsqJajKihF6TYfQ7Z1Af/////////ngfCjpIEAAIAYCIQiHNS4J7sHL5U06nBw+jB7XR8oPsPO/W6R7YKOgKOlgQA8gBgIhCIc0q3RNGE3lgynT4sEncZJ+LbuGRlrocUVKBIkYR9DtnUB/////////+eCAWWjpYEAAIAYCIQiHNSwFnjGJHdAOULzdO+SOfP0g6FSgCKkyQwlFDo=";
 
 test.skip(!integrationEnabled, "requires the project-local Supabase stack");
 
@@ -82,28 +84,7 @@ test("only a complete private audio package can be published and played by a bet
 
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "새 레슨 가져오기" })).toBeVisible();
-    const audioBytes = Buffer.from(
-      await page.evaluate(async () => {
-        const context = new AudioContext();
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        const destination = context.createMediaStreamDestination();
-        gain.gain.value = 0;
-        oscillator.connect(gain).connect(destination);
-        const recorder = new MediaRecorder(destination.stream, { mimeType: "audio/webm" });
-        const chunks: Blob[] = [];
-        recorder.addEventListener("dataavailable", (event) => chunks.push(event.data));
-        const stopped = new Promise<void>((resolve) => recorder.addEventListener("stop", () => resolve()));
-        recorder.start();
-        oscillator.start();
-        await new Promise((resolve) => setTimeout(resolve, 250));
-        oscillator.stop();
-        recorder.stop();
-        await stopped;
-        await context.close();
-        return Array.from(new Uint8Array(await new Blob(chunks, { type: "audio/webm" }).arrayBuffer()));
-      })
-    );
+    const audioBytes = Buffer.from(TEST_WEBM_BASE64, "base64");
     expect(audioBytes.byteLength).toBeGreaterThan(100);
 
     await page.getByLabel("레슨 제목").fill(title);
@@ -166,6 +147,26 @@ test("only a complete private audio package can be published and played by a bet
 
     const secondPath = `${folder}/002.webm`;
     uploadedPaths.push(secondPath);
+    const secondUpload = await adminClient.storage.from("lesson-audio").upload(secondPath, audioBytes, {
+      contentType: "audio/webm"
+    });
+    expect(secondUpload.error).toBeNull();
+    const corruptReplacement = await adminClient.storage
+      .from("lesson-audio")
+      .upload(firstPath, Uint8Array.from([0x52, 0x49, 0x46, 0x46]), {
+        contentType: "audio/webm",
+        upsert: true
+      });
+    expect(corruptReplacement.error).toBeNull();
+    const corruptPublish = await page.request.post(`/api/admin/drafts/${draftId}/publish`);
+    expect(corruptPublish.status()).toBe(422);
+    await expect(corruptPublish.json()).resolves.toMatchObject({
+      error: "audio-package-invalid",
+      result: {
+        publishReady: false,
+        issues: [{ code: "invalid-audio-content", phraseNumber: 1 }]
+      }
+    });
 
     await page.getByLabel("문장별 음성 파일").setInputFiles([
       { name: "002-second.webm", mimeType: "audio/webm", buffer: audioBytes },

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(14);
 
 insert into auth.users (id, email) values
   ('11111111-1111-4111-8111-111111111111', 'audio-admin@example.com'),
@@ -36,10 +36,11 @@ select results_eq(
   'lesson audio has separate administrator policies for read, insert, update, and delete'
 );
 
-insert into storage.objects (bucket_id, name, owner_id) values (
+insert into storage.objects (bucket_id, name, owner_id, metadata) values (
   'lesson-audio',
   '11111111-1111-4111-8111-111111111111/44444444-4444-4444-8444-444444444444/001.mp3',
-  '11111111-1111-4111-8111-111111111111'
+  '11111111-1111-4111-8111-111111111111',
+  '{"size":12,"mimetype":"audio/mpeg"}'
 );
 
 set local role anon;
@@ -103,37 +104,64 @@ select lives_ok(
   'an administrator can replace an object under their own user folder'
 );
 
-select lives_ok(
+select throws_ok(
   $$update public.lesson_drafts
-      set audio_manifest = '[{"phraseNumber":1,"sourceLine":1,"originalName":"001-hello.mp3","canonicalName":"001.mp3","contentType":"audio/mpeg","size":12,"path":"11111111-1111-4111-8111-111111111111/44444444-4444-4444-8444-444444444444/001.mp3"}]',
-          publication_status = 'published',
-          published_at = now()
+      set audio_manifest = '[{"phraseNumber":1}]', publication_status = 'published', published_at = now()
       where id = '44444444-4444-4444-8444-444444444444'$$,
-  'a validated draft with a complete audio manifest can be published'
+  '42501',
+  'permission denied for table lesson_drafts',
+  'an administrator cannot bypass the publication API with a direct table update'
+);
+select throws_ok(
+  $$select public.publish_lesson_draft(
+      '44444444-4444-4444-8444-444444444444',
+      '11111111-1111-4111-8111-111111111111',
+      '[{"phraseNumber":1,"sourceLine":1,"originalName":"001-hello.mp3","canonicalName":"001.mp3","contentType":"audio/mpeg","size":12,"path":"11111111-1111-4111-8111-111111111111/44444444-4444-4444-8444-444444444444/001.mp3"}]'
+    )$$,
+  '42501',
+  'permission denied for function publish_lesson_draft',
+  'an administrator cannot invoke the server-only publication function directly'
 );
 reset role;
 
-select throws_ok(
-  $$update public.lesson_drafts
-      set audio_manifest = '[]', publication_status = 'published', published_at = now()
-      where id = '44444444-4444-4444-8444-444444444444'$$,
-  '23514',
-  'new row for relation "lesson_drafts" violates check constraint "lesson_drafts_publication_is_complete"',
-  'a lesson cannot be published with missing audio'
+set local role service_role;
+select lives_ok(
+  $$select public.publish_lesson_draft(
+      '44444444-4444-4444-8444-444444444444',
+      '11111111-1111-4111-8111-111111111111',
+      '[{"phraseNumber":1,"sourceLine":1,"originalName":"001-hello.mp3","canonicalName":"001.mp3","contentType":"audio/mpeg","size":12,"path":"11111111-1111-4111-8111-111111111111/44444444-4444-4444-8444-444444444444/001.mp3"}]'
+    )$$,
+  'the server-only publication function accepts a complete private audio package'
 );
+
+select throws_ok(
+  $$select public.publish_lesson_draft(
+      '44444444-4444-4444-8444-444444444444',
+      '11111111-1111-4111-8111-111111111111',
+      '[]'
+    )$$,
+  '23514',
+  'audio manifest is incomplete',
+  'the publication function rejects missing audio'
+);
+reset role;
 
 update public.lesson_drafts
 set publication_status = 'draft', published_at = null, audio_manifest = '[]',
     validation_status = 'invalid', validation_issues = '[{"code":"empty-phrase"}]';
 
+set local role service_role;
 select throws_ok(
-  $$update public.lesson_drafts
-      set audio_manifest = '[{"phraseNumber":1}]', publication_status = 'published', published_at = now()
-      where id = '44444444-4444-4444-8444-444444444444'$$,
+  $$select public.publish_lesson_draft(
+      '44444444-4444-4444-8444-444444444444',
+      '11111111-1111-4111-8111-111111111111',
+      '[{"phraseNumber":1,"sourceLine":1,"originalName":"001-hello.mp3","canonicalName":"001.mp3","contentType":"audio/mpeg","size":12,"path":"11111111-1111-4111-8111-111111111111/44444444-4444-4444-8444-444444444444/001.mp3"}]'
+    )$$,
   '23514',
-  'new row for relation "lesson_drafts" violates check constraint "lesson_drafts_publication_is_complete"',
-  'an invalid text draft cannot be published even with an audio entry'
+  'lesson text validation is incomplete',
+  'the publication function rejects an invalid text draft'
 );
+reset role;
 
 select * from finish();
 rollback;
