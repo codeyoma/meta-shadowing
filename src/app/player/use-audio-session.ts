@@ -5,6 +5,7 @@ import { createAudioSession, transitionAudioSession, type AudioPracticeLevel, ty
 import type { PublishedLesson } from "@/lib/lessons";
 import type { PhraseGroup } from "@/lib/phrase-groups";
 import { useLearningRecord, type LearningStart } from "./use-learning-record";
+import { createAudioPreloader } from "@/lib/audio-preloader";
 
 function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
@@ -16,8 +17,16 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, groupSizes: groups.map(group => group.phrases.length), level, ...settings, initialGroupIndex: start.progress?.nextUnit }));
   const currentSession = useRef(session);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const preloader = useRef<ReturnType<typeof createAudioPreloader> | null>(null);
   const playRequest = useRef(0);
   const [mediaTime, setMediaTime] = useState({ elapsed: 0, duration: 0 });
+
+  const prepareAudio = useCallback((index: number, refresh = false) => {
+    if (!audioRef.current) return;
+    preloader.current ??= createAudioPreloader(audioRef.current, lesson.phrases.map(phrase =>
+      `/api/lessons/${lesson.id}/audio/${phrase.phraseNumber}?version=${encodeURIComponent(lesson.version)}`));
+    preloader.current.select(index, refresh);
+  }, [lesson]);
 
   const send = useCallback(function send(event: AudioSessionEvent) {
     const previous = currentSession.current;
@@ -45,15 +54,15 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       setMediaTime({ elapsed: 0, duration: 0 });
 
       if (next.phase !== "loading") {
-        audio.removeAttribute("src");
-        audio.load();
+        if (finished) {
+          preloader.current?.dispose();
+          preloader.current = null;
+        } else prepareAudio(next.phraseIndex);
         return;
       }
 
       const attempt = next.attempt;
-      const phrase = lesson.phrases[next.phraseIndex];
-      audio.src = `/api/lessons/${lesson.id}/audio/${phrase.phraseNumber}?attempt=${attempt}&version=${encodeURIComponent(lesson.version)}`;
-      audio.load();
+      prepareAudio(next.phraseIndex, previous.phase === "error");
       audio.onplaying = () => {
         if (!audio.paused) send({ type: "audio-playing", attempt });
       };
@@ -87,7 +96,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       playRequest.current++;
       audio.pause();
     }
-  }, [lesson, shortcutsEnabled, updateRecord]);
+  }, [lesson, shortcutsEnabled, updateRecord, prepareAudio]);
 
   useEffect(() => {
     if (!["gap", "speaking", "countdown"].includes(session.phase)) return;
@@ -137,15 +146,15 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
 
   useEffect(() => {
     const audio = audioRef.current;
+    prepareAudio(currentSession.current.phraseIndex);
     return () => {
       playRequest.current++;
       if (!audio) return;
       detachAudioListeners(audio);
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
+      preloader.current?.dispose();
+      preloader.current = null;
     };
-  }, []);
+  }, [prepareAudio]);
 
   return { session, send, audioRef, mediaTime, completion, storageFailed };
 }

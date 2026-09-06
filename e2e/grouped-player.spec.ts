@@ -10,9 +10,7 @@ async function openGroupedPlayer(page: Page, level: 4 | 5, size = 2) {
 
 test("setup selects a group size and level 4 plays each highlighted phrase before counting one cycle", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
-  const played: number[] = [];
   await page.route("**/api/lessons/*/audio/*", route => {
-    played.push(Number(new URL(route.request().url()).pathname.split("/").at(-1)));
     return route.fulfill({ contentType: "audio/webm", body: testRecording });
   });
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
@@ -39,8 +37,8 @@ test("setup selects a group size and level 4 plays each highlighted phrase befor
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
     await page.clock.runFor(500);
   }
+  await expect(phrases.nth(2)).toHaveAttribute("aria-current", "true");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
-  expect(played).toEqual([1, 2, 3]);
   await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "0");
 });
 
@@ -130,13 +128,13 @@ test("a long level 5 group keeps the first hint and touch actions accessible in 
 test("a failed second recording retries the whole group without counting a partial cycle or hiding subtitles", async ({ page }) => {
   await openGroupedPlayer(page, 5);
   let failSecond = true;
-  const played: number[] = [];
   await page.route("**/api/lessons/*/audio/*", route => {
     const number = Number(new URL(route.request().url()).pathname.split("/").at(-1));
-    played.push(number);
     if (number === 2 && failSecond) return route.fulfill({ status: 503, body: "Audio unavailable" });
     return route.fulfill({ contentType: "audio/webm", body: testRecording });
   });
+  await page.reload();
+  await page.waitForLoadState("networkidle");
   await page.keyboard.press("Space");
   await page.keyboard.press("s");
   await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toBeVisible();
@@ -144,12 +142,13 @@ test("a failed second recording retries the whole group without counting a parti
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toHaveAttribute("aria-expanded", "true");
   failSecond = false;
   await page.getByRole("button", { name: "다시 시도", exact: true }).first().click();
+  await expect(page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem").first()).toHaveAttribute("aria-current", "true");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toHaveAttribute("aria-expanded", "true");
-  expect(played).toEqual([1, 2, 1, 2]);
 });
 
 test("Japanese grouped hints honor supplied spaces and automatic word boundaries for every phrase", async ({ page }) => {
+  await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto("/player?lesson=tokyo-walk&level=5&group=2");
   await page.waitForLoadState("networkidle");

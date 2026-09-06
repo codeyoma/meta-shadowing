@@ -11,6 +11,7 @@ import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon, SubtitleIcon } fr
 import { useAudioSession } from "./use-audio-session";
 import type { LearningStart } from "./use-learning-record";
 import { CompletionSummary } from "../completion-summary";
+import { ScreenWake } from "./screen-wake";
 
 function formatTime(seconds: number) {
   return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
@@ -84,7 +85,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
       </header> : null}
       <section className="practice-shell" aria-labelledby="player-title">
         <h1 id="player-title">메타쉐도잉 레벨 {level}</h1>
-        <audio ref={audioRef} preload="none" />
+        <audio ref={audioRef} preload="auto" />
         {settingsOpen ? <section id="player-settings" className="player-settings" aria-label="학습 설정">
           <h2>세션 설정</h2>
           <AudioSessionControls level={level} settings={session} onChange={(value) => send({ type: "settings", ...value })} />
@@ -125,6 +126,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
           </>
         ) : null}
       </section>
+      <ScreenWake active={active && !settingsOpen && !complete} />
       {!complete && !settingsOpen ? <nav className="playback-dock" aria-label="재생 제어" data-player-shortcuts>
         <button type="button" disabled={session.groupIndex === 0} onClick={() => send({ type: "previous" })}>이전<kbd>←</kbd></button>
         <button type="button" className="dock-play" aria-label="재생 또는 일시정지" onClick={() => send({ type: active ? "pause" : "space" })}>{active ? <PauseIcon /> : <PlayIcon />}</button>

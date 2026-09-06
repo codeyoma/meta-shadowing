@@ -100,13 +100,14 @@ test("grouped progress resumes the whole next group, not a recording inside an u
   await page.getByRole("button", { name: "다음 묶음", exact: true }).click();
   await expect(page.getByText("묶음 2 / 4 · 3문장", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
-  await expect.poll(() => page.locator("audio").getAttribute("src")).toContain("/audio/4?");
+  const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");
+  await expect(phrases.nth(1)).toHaveAttribute("aria-current", "true");
   await page.reload();
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("묶음 2 / 4 · 3문장", { exact: true })).toBeVisible();
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
-  await expect.poll(() => page.locator("audio").getAttribute("src")).toContain("/audio/3?");
+  await expect(phrases.nth(0)).toHaveAttribute("aria-current", "true");
 });
 
 test("blocked browser storage does not block practice and reports an unsaved completion honestly", async ({ page }) => {

@@ -1,6 +1,7 @@
 .worktrees/
 .superpowers/
 .next/
+.vercel/
 node_modules/
 coverage/
 playwright-report/
@@ -10,4 +11,3 @@ test-results/
 !.env.example
 *.tsbuildinfo
 .DS_Store
-

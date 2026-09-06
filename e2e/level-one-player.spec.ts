@@ -69,6 +69,9 @@ test("touch controls recover a failed recording and complete every phrase withou
   await page.route("**/api/lessons/*/audio/*", (route) => failPlayback
     ? route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"audio-unavailable"}' })
     : route.fulfill({ contentType: "audio/webm", body: testRecording }));
+  // Fail before the new player's current/next preload starts.
+  await page.reload();
+  await page.waitForLoadState("networkidle");
   const activate = async (locator: ReturnType<Page["getByRole"]>) => isMobile ? locator.tap() : locator.click();
   await activate(page.getByRole("button", { name: "첫 원음 듣기", exact: true }));
   const playbackError = page.getByRole("alert", { name: "원음 재생 오류" });

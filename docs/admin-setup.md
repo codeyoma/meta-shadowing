@@ -17,6 +17,8 @@ Issue #9 also requires migration `20260906072641_session_defaults.sql`. It creat
 
 Issue #10 requires `20260906080425_lesson_lifecycle.sql`. It backfills a stable `lesson_id` for existing drafts without changing their existing publication-version timestamps. A lesson's first row anchors that ID; later version rows refer to it. The publication validator now lives in the non-exposed `private` schema; the public lifecycle functions are executable only by `service_role`, with the application checking administrator identity and the functions checking ownership. Apply this migration before deploying the #10 application changes.
 
+Issue #11 requires `20260906090138_release_explicit_grants.sql`. It removes inherited authenticated `TRUNCATE`, `REFERENCES`, and `TRIGGER` privileges on drafts while retaining the explicit Data API grants and RLS. Run the [release checklist](release.md), including the production-mode local integration suite, before hosted deployment.
+
 ## 2. Configure the one administrator
 
 1. Disable public email sign-ups in Supabase Auth.
@@ -25,7 +27,7 @@ Issue #10 requires `20260906080425_lesson_lifecycle.sql`. It backfills a stable 
 4. Add `https://<your-vercel-domain>/auth/confirm` to the Auth redirect allow list.
 5. Choose one email experience:
    - Leave the default Magic Link template in place; `/auth/confirm` accepts the PKCE `code` callback.
-   - For a typed OTP, include `{{ .Token }}` in the email template. The administrator page accepts the resulting 6–8 digit code.
+   - For a typed OTP, include `{{ .Token }}` in the email template. The administrator page accepts the resulting 6–8 digit code. New free projects using default SMTP may not permit template customization; keep the default Magic Link flow or configure supported SMTP first. See the [email-template change](https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier).
 
 The application calls `signInWithOtp` with `shouldCreateUser: false`, so entering an unknown address never creates an account.
 
@@ -48,7 +50,7 @@ The bucket remains private. Learners receive only a short-lived signed redirect 
 Open `/admin/lessons` (also linked from the import screen).
 
 - **New version:** choose `새 버전 가져오기`, supply corrected source text and a complete numbered audio package, validate, save, then publish. English/Japanese lessons retain their language. The old version stays live until the replacement publishes atomically. Version audio stays in separate folders; historical versions remain stored until permanent deletion. There is no inline transcript editor or version rollback UI.
-- **Unpublish:** choose `게시 해제`. The lesson leaves the learner catalog and stops issuing new audio URLs. Text, drafts, all versions, and audio stay stored. An already issued signed audio URL may remain valid for up to 60 seconds.
+- **Unpublish:** choose `게시 해제`. The lesson leaves the learner catalog and stops issuing new audio URLs. Text, drafts, all versions, and audio stay stored. An already issued signed audio URL may remain valid for up to 60 seconds. Already delivered current/next audio can remain in the open player's temporary memory until it is replaced or the player is left/reloaded; unpublishing cannot recall downloaded bytes.
 - **Permanent deletion:** choose `영구 삭제`, enter the displayed lesson title, and confirm. The server checks that the lesson/version still matches the confirmation, hides it, removes every version's Storage folder through the Storage API, and finally deletes the lesson rows. This cannot be undone.
 - **Interrupted deletion:** the hidden lesson remains in the management list as `삭제 정리 필요`. Some files may already be gone. Reload the list, choose `삭제 정리 다시 시도`, and confirm the title again. Do not restore publication or manually delete rows; retry continues cleanup without losing the folder identities. If the API response was lost, reload before retrying.
 

@@ -7,7 +7,8 @@ import { getPlayerHref, readLastSelection, saveLastSelection, SessionSelection }
 import { reconcileLearningJournal, type ProgressRecord, type CompletionRecord } from "@/lib/learning-records";
 import { VersionNotice } from "../version-notice";
 import { RecordDetails } from "../completion-summary";
-import { ArrowIcon, Brand, Page, PlayIcon } from "../ui";
+import { ArrowIcon, Brand, LessonIcon, Page, PlayIcon } from "../ui";
+import { OnlineInstallHelp } from "../online-install-help";
 
 function ResumeRow({ selection, catalog, progress }: { selection: SessionSelection; catalog: Lesson[]; progress: ProgressRecord | null }) {
   const router = useRouter();
@@ -60,10 +61,10 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
         <section className="home-section" aria-labelledby="language-title">
           <h2 id="language-title">언어 선택</h2>
           <div className="open-list">
-            <button className={`choice-row ${language === "english" ? "selected" : ""}`} onClick={() => setLanguage("english")}>
+            <button className={`choice-row ${language === "english" ? "selected" : ""}`} aria-pressed={language === "english"} onClick={() => setLanguage("english")}>
               <span><strong>English</strong><em>영어</em></span><ArrowIcon />
             </button>
-            <button className={`choice-row ${language === "japanese" ? "selected" : ""}`} onClick={() => setLanguage("japanese")}>
+            <button className={`choice-row ${language === "japanese" ? "selected" : ""}`} aria-pressed={language === "japanese"} onClick={() => setLanguage("japanese")}>
               <span><strong>日本語</strong><em>일본어</em></span><ArrowIcon />
             </button>
           </div>
@@ -73,7 +74,7 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
           <div className="open-list">
             {visibleLessons.map((lesson) => (
               <button className="lesson-row" key={lesson.id} onClick={() => router.push(`/setup?language=${language}&lesson=${lesson.id}`)}>
-                <span className="lesson-symbol"><span /></span>
+                <span className="round-icon"><LessonIcon /></span>
                 <span><strong>{lesson.name}</strong><em>{lesson.localizedName}</em><small>{lesson.phraseCount}개 프레이즈</small></span>
                 <ArrowIcon />
               </button>
@@ -90,6 +91,7 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
             <RecordDetails record={record} />
           </li>)}</ol>
         </section> : null}
+        <OnlineInstallHelp />
       </section>
     </Page>
   );

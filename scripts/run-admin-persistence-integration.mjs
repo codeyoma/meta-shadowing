@@ -24,6 +24,30 @@ if (missing.length > 0) {
   );
 }
 
+if (!["127.0.0.1", "localhost", "[::1]"].includes(new URL(localEnvironment.API_URL).hostname)) {
+  throw new Error("Integration fixtures may only use the local Supabase stack.");
+}
+
+const integrationEnvironment = {
+  ...process.env,
+  ADMIN_TEST_MODE: "0",
+  ADMIN_SUPABASE_INTEGRATION: "1",
+  SUPABASE_INTEGRATION_URL: localEnvironment.API_URL,
+  SUPABASE_INTEGRATION_PUBLISHABLE_KEY: localEnvironment.PUBLISHABLE_KEY,
+  SUPABASE_INTEGRATION_SECRET_KEY: localEnvironment.SECRET_KEY,
+  NEXT_PUBLIC_SUPABASE_URL: localEnvironment.API_URL,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: localEnvironment.PUBLISHABLE_KEY,
+  SUPABASE_SECRET_KEY: localEnvironment.SECRET_KEY,
+  BETA_PASSWORD: "integration-beta-password",
+  LEARNER_COOKIE_SECRET: "integration-learner-cookie-secret"
+};
+
+if (process.env.PLAYWRIGHT_PRODUCTION === "1") {
+  // Next.js embeds public settings in the browser bundle at build time.
+  const build = spawnSync("npm", ["run", "build"], { stdio: "inherit", env: integrationEnvironment });
+  if (build.status !== 0) process.exit(build.status ?? 1);
+}
+
 const result = spawnSync(
   "npx",
   [
@@ -40,14 +64,7 @@ const result = spawnSync(
   ],
   {
     stdio: "inherit",
-    env: {
-      ...process.env,
-      ADMIN_SUPABASE_INTEGRATION: "1",
-      SUPABASE_INTEGRATION_URL: localEnvironment.API_URL,
-      SUPABASE_INTEGRATION_PUBLISHABLE_KEY: localEnvironment.PUBLISHABLE_KEY,
-      SUPABASE_INTEGRATION_SECRET_KEY: localEnvironment.SECRET_KEY,
-      SUPABASE_SECRET_KEY: localEnvironment.SECRET_KEY
-    }
+    env: integrationEnvironment
   }
 );
 

@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "verify:env": "node --env-file-if-exists=.env.local scripts/check-release-env.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:browser": "playwright test",

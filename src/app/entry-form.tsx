@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Brand, Page } from "./ui";
+import { OnlineInstallHelp } from "./online-install-help";
 
 export function EntryForm() {
   const [password, setPassword] = useState("");
@@ -60,6 +61,7 @@ export function EntryForm() {
           </button>
         </form>
         <p className="entry-footer">개인 학습 자료를 위한 비공개 베타</p>
+        <OnlineInstallHelp />
       </section>
     </Page>
   );

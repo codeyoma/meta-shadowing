@@ -377,7 +377,6 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
       </header>
       <div className="admin-workspace">
         <div className="admin-page-title">
-          <p>관리자</p>
           <h1>{replacement ? "레슨 새 버전 가져오기" : "새 레슨 가져오기"}</h1>
           {replacement ? <p className="replacement-note">새 파일을 검증하고 게시하면 “{replacement.title}”을 교체합니다. 그전까지 현재 레슨은 유지됩니다.</p> : null}
         </div>

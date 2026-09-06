@@ -4,11 +4,14 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Meta Shadowing",
     short_name: "Meta Shadowing",
-    description: "Private beta learner shell",
+    description: "개인 문장으로 여덟 단계 학습 · 인터넷 연결이 필요한 온라인 전용 앱",
+    id: "/",
+    scope: "/",
+    lang: "ko",
     start_url: "/",
     display: "standalone",
     background_color: "#0d1216",
     theme_color: "#0d1216",
-    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }]
+    icons: [192, 512].map(size => ({ src: `/icons/${size}`, sizes: `${size}x${size}`, type: "image/png", purpose: "any" }))
   };
 }

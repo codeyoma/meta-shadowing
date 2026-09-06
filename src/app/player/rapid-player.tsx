@@ -9,6 +9,7 @@ import { RapidSessionControls } from "../rapid-session-controls";
 import { useRapidSession } from "./use-rapid-session";
 import type { LearningStart } from "./use-learning-record";
 import { CompletionSummary } from "../completion-summary";
+import { ScreenWake } from "./screen-wake";
 
 export function RapidPlayer({ lesson, lines, level, settings, start }: { lesson: Lesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings; start: LearningStart }) {
   const router = useRouter();
@@ -70,6 +71,7 @@ export function RapidPlayer({ lesson, lines, level, settings, start }: { lesson:
         </div>
       </>}
     </section>
+    <ScreenWake active={running && !settingsOpen && !complete} />
     {!complete && !settingsOpen ? <nav className="playback-dock" aria-label="재생 제어" data-player-shortcuts>
       <button type="button" disabled={session.lineIndex === 0} onClick={() => send({ type: "previous" })}>이전<kbd>←</kbd></button>
       <button type="button" className="dock-play" aria-label="재생 또는 일시정지" onClick={() => send({ type: "space" })}>{running ? <PauseIcon /> : <PlayIcon />}</button>

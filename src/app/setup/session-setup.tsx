@@ -45,7 +45,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS }: { 
             {levelNames.map((name, index) => {
               const number = index + 1;
               return (
-                <button className={`level-row ${level === number ? "selected" : ""}`} key={name} onClick={() => setLevel(number)}>
+                <button className={`level-row ${level === number ? "selected" : ""}`} aria-pressed={level === number} key={name} onClick={() => setLevel(number)}>
                   <span>{number}</span><strong>{name}</strong><ArrowIcon />
                 </button>
               );

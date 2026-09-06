@@ -2,7 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 const chromeExecutable = process.env.PLAYWRIGHT_CHROME_EXECUTABLE;
 const runSupabaseIntegration = process.env.ADMIN_SUPABASE_INTEGRATION === "1";
+const productionBuild = process.env.PLAYWRIGHT_PRODUCTION === "1";
+if (productionBuild && !runSupabaseIntegration) {
+  throw new Error("Production browser tests require the real local Supabase integration setup, not test-mode fixtures.");
+}
 const port = Number(process.env.PLAYWRIGHT_PORT ?? (runSupabaseIntegration ? 3010 : 3000));
+const baseURL = `${productionBuild ? "https" : "http"}://127.0.0.1:${port}`;
 const integrationUrl = process.env.SUPABASE_INTEGRATION_URL;
 const integrationPublishableKey = process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY;
 
@@ -40,7 +45,8 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   use: {
-    baseURL: `http://127.0.0.1:${port}`,
+    baseURL,
+    ignoreHTTPSErrors: productionBuild,
     trace: "on-first-retry",
     launchOptions: chromeExecutable ? { executablePath: chromeExecutable } : undefined
   },
@@ -49,9 +55,12 @@ export default defineConfig({
     { name: "desktop", use: { ...devices["Desktop Chrome"] } }
   ],
   webServer: {
-    command: `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
+    command: productionBuild
+      ? `node scripts/start-production-test-server.mjs ${port}`
+      : `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
     env: serverEnvironment,
-    url: `http://127.0.0.1:${port}`,
+    url: baseURL,
+    ignoreHTTPSErrors: productionBuild,
     reuseExistingServer: runSupabaseIntegration ? false : !process.env.CI
   }
 });
