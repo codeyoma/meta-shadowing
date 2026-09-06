@@ -28,6 +28,11 @@ export type AudioSessionEvent =
   | ({ type: "settings" } & Partial<AudioSessionSettings>)
   | { type: "audio-ended"; attempt: number; durationMs: number };
 
+export function hasSessionTimer(session: AudioSession): boolean {
+  return ["speaking", "countdown"].includes(session.phase)
+    || (session.phase === "paused" && ["speaking", "countdown"].includes(session.pausedPhase));
+}
+
 export function createAudioSession({
   phraseCount, mode = "manual", advanceDelayMs = 1000, playbackRate = 1
 }: { phraseCount: number } & Partial<AudioSessionSettings>): AudioSession {
@@ -105,9 +110,7 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
           && event.advanceDelayMs >= 0 && event.advanceDelayMs <= 30000
           ? event.advanceDelayMs : session.advanceDelayMs
       };
-      const inTimer = ["speaking", "countdown"].includes(session.phase)
-        || (session.phase === "paused" && ["speaking", "countdown"].includes(session.pausedPhase));
-      return next.mode === "manual" && inTimer ? { ...next, phase: "ready", remainingMs: 0 } : next;
+      return next.mode === "manual" && hasSessionTimer(session) ? { ...next, phase: "ready", remainingMs: 0 } : next;
     }
   }
 }

@@ -2,14 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { AudioSessionSettings } from "@/lib/audio-session";
+import { hasSessionTimer, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 import { AudioSessionControls } from "../audio-session-controls";
 import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon } from "../ui";
 import { useAudioSession } from "./use-audio-session";
 
 function formatTime(seconds: number) {
-  return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
+  return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 }
 
 export function LevelOnePlayer({ lesson, settings }: { lesson: PublishedLesson; settings: AudioSessionSettings }) {
@@ -20,8 +20,7 @@ export function LevelOnePlayer({ lesson, settings }: { lesson: PublishedLesson; 
   const complete = session.phase === "completed";
   const active = ["loading", "playing", "speaking", "countdown"].includes(session.phase);
   const playing = ["loading", "playing"].includes(session.phase);
-  const timed = ["speaking", "countdown"].includes(session.phase)
-    || (session.phase === "paused" && ["speaking", "countdown"].includes(session.pausedPhase));
+  const timed = hasSessionTimer(session);
   const actionLabel = playing ? "일시정지" : session.phase === "paused" ? "계속 재생"
     : session.phase === "error" ? "다시 시도" : session.completedCycles >= 3 ? "다음 프레이즈"
     : session.completedCycles === 0 ? "첫 원음 듣기" : "다음 원음 듣기";
@@ -76,8 +75,10 @@ export function LevelOnePlayer({ lesson, settings }: { lesson: PublishedLesson; 
               <span>{formatTime(mediaTime.duration)}</span>
             </div>
             <p className="cycle-status" aria-label="완료한 듣기">필수 <strong>{Math.min(3, session.completedCycles)} / 3</strong>{session.completedCycles > 3 ? <> · 추가 <strong>{session.completedCycles - 3} / 2</strong></> : null}</p>
-            <p className="session-mode">{session.mode === "automatic" ? "자동" : "수동"} · {session.playbackRate}×</p>
-            {timed ? <p className="session-timer" role="timer" aria-label="남은 시간">{(session.remainingMs / 1000).toFixed(1)}초</p> : null}
+            <div className="session-meta">
+              <p className="session-mode">{session.mode === "automatic" ? "자동" : "수동"} · {session.playbackRate}×</p>
+              {timed ? <p className="session-timer" role="timer" aria-label="남은 시간">{(session.remainingMs / 1000).toFixed(1)}초</p> : null}
+            </div>
             {session.phase === "error" ? (
               <div className="playback-error" role="alert" aria-label="원음 재생 오류"><p>원음을 재생할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.</p><button type="button" className="secondary-button" onClick={() => send({ type: "retry" })}>다시 시도</button></div>
             ) : <p className="session-status" role="status">{status}</p>}

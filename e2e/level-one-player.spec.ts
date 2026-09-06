@@ -31,7 +31,7 @@ test("setup applies automatic mode and speed, and R cancels advancement for an e
   await openPlayer(page);
   await page.goto("/setup?lesson=morning-routine");
   await page.getByRole("button", { name: "자동", exact: true }).click();
-  await page.getByLabel("원음 속도").selectOption("0.5");
+  await page.getByLabel("재생속도").selectOption("0.5");
   await page.getByLabel("다음 이동 대기 (초)").fill("3");
   await page.getByRole("button", { name: "학습 시작" }).click();
   await expect(page.getByText("자동 · 0.5×")).toBeVisible();
@@ -90,8 +90,8 @@ test("keyboard focus keeps settings operable and speed choices reach the actual 
   await openPlayer(page);
   await page.getByRole("button", { name: "학습 설정", exact: true }).focus();
   await page.keyboard.press("Space");
-  await expect(page.getByLabel("원음 속도")).toBeVisible();
-  await page.getByLabel("원음 속도").selectOption("3");
+  await expect(page.getByLabel("재생속도")).toBeVisible();
+  await page.getByLabel("재생속도").selectOption("3");
   await page.getByRole("button", { name: "설정 닫기" }).click();
   await expect(page.getByText("수동 · 3×")).toBeVisible();
   await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();

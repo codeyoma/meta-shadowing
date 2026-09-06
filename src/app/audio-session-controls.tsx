@@ -12,7 +12,7 @@ export function AudioSessionControls({ settings, onChange }: {
         <button type="button" className={settings.mode === "manual" ? "selected" : ""} aria-pressed={settings.mode === "manual"} onClick={() => onChange({ mode: "manual" })}>수동</button>
         <button type="button" className={settings.mode === "automatic" ? "selected" : ""} aria-pressed={settings.mode === "automatic"} onClick={() => onChange({ mode: "automatic" })}>자동</button>
       </div>
-      <label className="audio-setting">원음 속도
+      <label className="audio-setting">재생속도
         <select value={settings.playbackRate} onChange={(event) => onChange({ playbackRate: Number(event.target.value) })}>
           {PLAYBACK_RATES.map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
         </select>

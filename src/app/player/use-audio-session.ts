@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createAudioSession, transitionAudioSession, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 
+function detachAudioListeners(audio: HTMLAudioElement) {
+  audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
+  audio.ontimeupdate = audio.ondurationchange = null;
+}
+
 export function useAudioSession(lesson: PublishedLesson, settings: AudioSessionSettings) {
   const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, ...settings }));
   const currentSession = useRef(session);
@@ -22,8 +27,7 @@ export function useAudioSession(lesson: PublishedLesson, settings: AudioSessionS
     if (!audio) return;
     if (next.attempt !== previous.attempt) {
       playRequest.current++;
-      audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
-      audio.ontimeupdate = audio.ondurationchange = null;
+      detachAudioListeners(audio);
       audio.pause();
       setMediaTime({ elapsed: 0, duration: 0 });
 
@@ -111,8 +115,7 @@ export function useAudioSession(lesson: PublishedLesson, settings: AudioSessionS
     return () => {
       playRequest.current++;
       if (!audio) return;
-      audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
-      audio.ontimeupdate = audio.ondurationchange = null;
+      detachAudioListeners(audio);
       audio.pause();
       audio.removeAttribute("src");
       audio.load();

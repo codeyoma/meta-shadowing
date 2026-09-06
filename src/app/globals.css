@@ -76,9 +76,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .level-one-player .practice-canvas small { font-size: 18px; overflow-wrap: anywhere; }
 .level-one-player .playback-line { margin: 22px 0; font-variant-numeric: tabular-nums; }
 .level-one-player .cycle-status { margin: 0; padding: 10px 18px; gap: 6px; font-size: 18px; }
-.session-mode { margin: 14px 0; color: var(--muted); font-size: 16px; }
+.session-meta { display: flex; justify-content: center; align-items: center; gap: 20px; min-height: 32px; margin-top: 12px; }
+.session-mode { margin: 0; color: var(--muted); font-size: 16px; }
 .session-status { min-height: 44px; margin: 16px 0; color: var(--muted); line-height: 1.5; }
-.session-timer { margin: 12px 0; font-size: 24px; font-weight: 750; color: var(--green-focus); font-variant-numeric: tabular-nums; }
+.session-timer { margin: 0; font-size: 24px; font-weight: 750; color: var(--green-focus); font-variant-numeric: tabular-nums; }
 .level-one-player .player-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .level-one-player .player-actions button { min-height: 76px; padding: 12px; }
 .level-one-player kbd { display: block; margin-top: 6px; font: 12px system-ui, sans-serif; opacity: .8; }
@@ -91,6 +92,15 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .completion-canvas h2 { margin: 0; color: var(--green); }
 .completion-canvas p { color: var(--muted); line-height: 1.5; }
 .completion-canvas button { padding: 12px 20px; }
+@media (max-width: 560px) {
+  .level-one-player .player-topbar { height: 64px; }
+  .level-one-player .chapter-header { padding-block: 14px; }
+  .level-one-player .practice-shell { padding-top: 20px; }
+  .level-one-player .practice-shell h1 { margin-bottom: 18px; }
+  .level-one-player .practice-canvas { min-height: 180px; }
+  .level-one-player .playback-line { margin-block: 16px; }
+  .level-one-player .session-status { margin-block: 12px; }
+}
 
 .admin-header { min-height: 72px; padding: 12px max(20px, calc((100% - 72rem) / 2)); display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border); background: var(--bg); }
 .admin-brand-row { display: flex; align-items: center; gap: 16px; }
