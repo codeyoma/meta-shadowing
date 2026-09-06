@@ -2,6 +2,10 @@ import type { LessonDraftEntry } from "./lesson-draft-parser";
 import type { LessonPhrase } from "./lessons";
 
 export type GroupSize = 2 | 3 | 4;
+export function isGroupSize(value: unknown): value is GroupSize {
+  return value === 2 || value === 3 || value === 4;
+}
+
 export type PhraseGroup = {
   phrases: LessonPhrase[];
   chapter: { target: string; korean: string } | null;

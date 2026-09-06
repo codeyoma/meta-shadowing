@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { levelNames, type Lesson } from "@/lib/lessons";
 import { getPlayerHref, saveLastSelection, SessionSelection } from "@/lib/resume";
+import { isGroupSize, type GroupSize } from "@/lib/phrase-groups";
 import { AudioSessionControls } from "../audio-session-controls";
 import { ArrowIcon, BackIcon, Brand, Page } from "../ui";
 
@@ -15,7 +16,7 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
   const [display, setDisplay] = useState<SessionSelection["display"]>("current");
   const [speed, setSpeed] = useState(1);
   const [advanceDelayMs, setAdvanceDelayMs] = useState(1000);
-  const [groupSize, setGroupSize] = useState(2);
+  const [groupSize, setGroupSize] = useState<GroupSize>(2);
 
   function start(): void {
     const selection = { language, lessonId: lesson.id, level, mode, display, speed, advanceDelayMs, groupSize };
@@ -50,7 +51,10 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
           <h2 id="session-title">세션 설정</h2>
           <div className="session-controls">
             {level === 4 || level === 5 ? <label className="audio-setting">묶음 크기
-              <select value={groupSize} onChange={(event) => setGroupSize(Number(event.target.value))}>
+              <select value={groupSize} onChange={(event) => {
+                const size = Number(event.target.value);
+                if (isGroupSize(size)) setGroupSize(size);
+              }}>
                 {[2, 3, 4].map(size => <option key={size} value={size}>{size}개</option>)}
               </select>
             </label> : null}

@@ -1,3 +1,5 @@
+import { isGroupSize, type GroupSize } from "./phrase-groups";
+
 const LAST_SELECTION_KEY = "meta-shadowing:last-selection";
 
 export type SessionSelection = {
@@ -8,7 +10,7 @@ export type SessionSelection = {
   display: "current" | "cumulative";
   speed: number;
   advanceDelayMs?: number;
-  groupSize?: number;
+  groupSize?: GroupSize;
 };
 
 export function getPlayerHref(selection: SessionSelection): string {
@@ -36,7 +38,8 @@ function isSessionSelection(value: unknown): value is SessionSelection {
     selection.level <= 8 &&
     (selection.mode === "manual" || selection.mode === "automatic") &&
     (selection.display === "current" || selection.display === "cumulative") &&
-    typeof selection.speed === "number"
+    typeof selection.speed === "number" &&
+    (selection.groupSize === undefined || isGroupSize(selection.groupSize))
   );
 }
 

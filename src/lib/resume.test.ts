@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { readLastSelection, saveLastSelection } from "./resume";
+import { getPlayerHref, readLastSelection, saveLastSelection } from "./resume";
 
 const selection = {
   language: "english",
@@ -27,6 +27,18 @@ describe("last learner selection", () => {
     saveLastSelection(selection);
 
     expect(readLastSelection()).toEqual(selection);
+  });
+
+  it.each([2, 3, 4] as const)("retains group size %s in the saved selection and player URL", groupSize => {
+    const grouped = { ...selection, level: 5, groupSize };
+    saveLastSelection(grouped);
+    expect(readLastSelection()).toEqual(grouped);
+    expect(new URL(getPlayerHref(grouped), "http://localhost").searchParams.get("group")).toBe(String(groupSize));
+  });
+
+  it.each([0, 1, 5, 2.5, "2", null])("rejects invalid saved group size %s", groupSize => {
+    window.localStorage.setItem("meta-shadowing:last-selection", JSON.stringify({ ...selection, level: 5, groupSize }));
+    expect(readLastSelection()).toBeNull();
   });
 
   it("does not offer a continuation row for malformed local data", () => {

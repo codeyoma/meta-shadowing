@@ -34,6 +34,7 @@ test("setup selects a group size and level 4 plays each highlighted phrase befor
   await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
   for (const index of [0, 1]) {
     await expect(phrases.nth(index)).toHaveAttribute("aria-current", "true");
+    await expect(phrases.nth(index)).toHaveCSS("border-left-width", "2px");
     await expect(page.getByRole("status")).toHaveText("다음 문장까지 잠시 기다립니다.");
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
     await page.clock.runFor(500);
@@ -160,5 +161,5 @@ test("Japanese grouped hints honor supplied spaces and automatic word boundaries
   await expect(phrases.nth(0)).toContainText("私は 七時に 起きます。");
   await expect(phrases.nth(1)).toContainText("顔を洗います。");
   await expect(phrases.nth(2)).toContainText("나는 이를 닦는다.");
-  await expect(page.getByLabel("현재 챕터").getByRole("separator", { name: "구간 경계" })).toBeVisible();
+  await expect(page.getByRole("separator", { name: "구간 경계" })).toHaveCount(0);
 });

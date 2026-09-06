@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getPublishedLesson } from "@/lib/published-lessons";
 import { requireLearner } from "@/lib/server-auth";
 import { firstPracticeToken } from "@/lib/practice-tokens";
-import { groupLessonPhrases } from "@/lib/phrase-groups";
+import { groupLessonPhrases, isGroupSize } from "@/lib/phrase-groups";
 import { PlayerShell } from "./player-shell";
 
 type PlayerPageProps = { searchParams: Promise<{ lesson?: string; level?: string; mode?: string; speed?: string; gap?: string; group?: string }> };
@@ -20,7 +20,7 @@ export default async function PlayerPage({ searchParams }: PlayerPageProps) {
     korean: firstPracticeToken(phrase.korean, "korean")
   })) : [];
   const requestedGroupSize = Number(params.group);
-  const groupSize = requestedGroupSize === 3 || requestedGroupSize === 4 ? requestedGroupSize : 2;
+  const groupSize = isGroupSize(requestedGroupSize) ? requestedGroupSize : 2;
   const groups = level === 4 || level === 5 ? groupLessonPhrases(lesson.entries, groupSize) : [];
   return <PlayerShell lesson={lesson} level={level} hints={hints} groups={groups} settings={{
     mode: params.mode === "automatic" ? "automatic" : "manual",

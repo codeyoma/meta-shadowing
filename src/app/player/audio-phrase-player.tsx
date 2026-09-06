@@ -73,10 +73,12 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups }: { 
           <i style={{ width: `${progress / progressCount * 100}%` }} />
         </div>
       </div>
-      <header className="chapter-header" aria-label={grouped ? "현재 챕터" : undefined}>
-        {grouped ? group.chapter ? <><strong>{group.chapter.target}</strong><span>{group.chapter.korean}</span></> : <hr className="section-divider" aria-label="구간 경계" /> : <><strong>{lesson.name}</strong><span>{lesson.localizedName}</span></>}
-        {grouped && group.chapter && group.startsSection ? <hr className="section-divider" aria-label="구간 경계" /> : null}
-      </header>
+      {!grouped || group.chapter || group.startsSection ? <header className="chapter-header" aria-label={grouped ? "현재 챕터" : undefined}>
+        {grouped ? <>
+          {group.chapter ? <><strong>{group.chapter.target}</strong><span>{group.chapter.korean}</span></> : null}
+          {group.startsSection ? <hr className="section-divider" aria-label="구간 경계" /> : null}
+        </> : <><strong>{lesson.name}</strong><span>{lesson.localizedName}</span></>}
+      </header> : null}
       <section className="practice-shell" aria-labelledby="player-title">
         <h1 id="player-title">메타쉐도잉 레벨 {level}</h1>
         <audio ref={audioRef} preload="none" />
