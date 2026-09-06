@@ -14,7 +14,7 @@ This is a single-context repo using root `CONTEXT.md` and `docs/adr/`. See `docs
 
 ### Git and releases
 
-Before starting a branch, opening or merging a PR, or changing deployment settings, read `docs/agents/git-workflow.md`. Feature PRs target `dev`; only user-approved release PRs from `dev` target `main`.
+Before starting a branch, publishing commits or issue/PR content, merging a PR, or changing deployment settings, read `docs/agents/git-workflow.md`, including its public repository privacy rules. Feature PRs target `dev`; only user-approved release PRs from `dev` target `main`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
