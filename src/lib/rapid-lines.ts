@@ -12,7 +12,7 @@ export function prepareRapidLines(entries: readonly LessonDraftEntry[], language
       chapter = { target: entry.target, korean: entry.korean };
       boundary = "chapter";
     } else if (entry.kind === "section") {
-      if (boundary !== "chapter") boundary = "section";
+      boundary = "section";
     } else {
       lines.push({ target: tokenizePracticeText(entry.target, language), korean: tokenizePracticeText(entry.korean, "korean"), chapter, boundary });
       boundary = null;

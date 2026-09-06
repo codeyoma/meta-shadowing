@@ -125,8 +125,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .rapid-session-controls select { width: 158px; }
 .rapid-settings-help { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; text-align: left; }
 .rapid-stage { min-height: 20px; margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.rapid-player .practice-shell h1 { font-size: 30px; }
 .rapid-player .rapid-canvas { border-width: 1px; min-height: 200px; }
-.rapid-player .rapid-canvas.current > span { font-size: 64px; }
+.rapid-player .rapid-canvas.single-token > span { font-size: 64px; }
 .rapid-player .rapid-canvas.cumulative > span { font-size: clamp(26px, 6vw, 38px); }
 .rapid-canvas > p { color: var(--muted); font-size: 24px; }
 .rapid-player .session-meta { display: flex; margin: 16px 0 0; }

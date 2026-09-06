@@ -32,8 +32,8 @@ test("only a complete private audio package can be published and played by a bet
   const adminEmail = `audio-admin-${randomUUID()}@example.com`;
   const learnerEmail = `audio-learner-${randomUUID()}@example.com`;
   const title = "게시 통합 테스트 레슨";
-  const targetSource = "## First chapter\nGood morning.\n\nI wash my face.\n";
-  const koreanSource = "## 첫 챕터\n좋은 아침입니다.\n\n세수합니다.\n";
+  const targetSource = "## First chapter\n\nGood morning.\n\nI wash my face.\n";
+  const koreanSource = "## 첫 챕터\n\n좋은 아침입니다.\n\n세수합니다.\n";
   const serviceClient = createClient(supabaseUrl, secretKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   });
@@ -276,6 +276,7 @@ test("only a complete private audio package can be published and played by a bet
       await page.waitForLoadState("networkidle");
       await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
       await expect(page.getByLabel("현재 챕터")).toHaveText("First chapter첫 챕터");
+      await expect(page.getByRole("separator", { name: "구간 경계" })).toBeVisible();
       await expect(page.locator("audio")).toHaveCount(0);
       const canvas = page.getByRole("region", { name: "속사포 학습" });
       await page.keyboard.press("Space");

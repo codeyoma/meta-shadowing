@@ -22,9 +22,10 @@ it("honors supplied token boundaries, including Japanese phrases that a dictiona
   expect(firstPracticeToken("   ", "japanese")).toBe("");
 });
 
-it("automatically finds the first Japanese word only when no token spaces were provided", () => {
+it("uses the same complete first token for hints and rapid practice, including Japanese punctuation", () => {
   expect(firstPracticeToken("私は七時に起きます。", "japanese")).toBe("私");
-  expect(firstPracticeToken("「東京に行きます。」", "japanese")).toBe("東京");
-  expect(firstPracticeToken("猫。", "japanese")).toBe("猫");
+  expect(firstPracticeToken("「東京に行きます。」", "japanese")).toBe("「東京");
+  expect(firstPracticeToken("猫。", "japanese")).toBe("猫。");
+  expect(firstPracticeToken("…", "japanese")).toBe("…");
   expect(firstPracticeToken("Hello!", "english")).toBe("Hello!");
 });

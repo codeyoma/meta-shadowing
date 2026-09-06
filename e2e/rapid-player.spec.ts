@@ -88,6 +88,7 @@ test("pause, restart, focused buttons, and arrows keep exact word progress and p
   const canvas = page.getByRole("region", { name: "속사포 학습" });
   const start = page.getByRole("button", { name: "문장 시작", exact: true });
   if (isMobile) await start.tap(); else await start.click();
+  await expect(canvas.locator("span")).toHaveCSS("font-size", "64px");
   await page.clock.runFor(200);
   await page.keyboard.press("Space");
   await expect(page.getByRole("status")).toHaveText("일시정지됨");
@@ -212,6 +213,7 @@ test("a hidden-document event pauses the speaking window until the learner expli
 test("mobile rapid controls remain above the dock and have touch-sized targets", async ({ page, isMobile }) => {
   test.skip(!isMobile, "Mobile layout assertion.");
   await openPlayer(page, 6, "daily-conversation");
+  await expect(page.getByRole("heading", { name: "메타쉐도잉 레벨 6" })).toHaveCSS("font-size", "30px");
   await page.keyboard.press("Space");
   const actions = await page.locator(".player-actions").boundingBox();
   const dock = await page.getByRole("navigation", { name: "재생 제어" }).boundingBox();

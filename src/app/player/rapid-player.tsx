@@ -13,6 +13,7 @@ export function RapidPlayer({ lesson, lines, level, settings }: { lesson: Lesson
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { session, send } = useRapidSession(lines, level, settings, !settingsOpen);
   const display = rapidDisplay(session);
+  const singleToken = display && (session.settings.display === "current" || display.position === 1);
   const line = lines[session.lineIndex];
   const complete = session.phase === "completed";
   const running = isRapidRunning(session);
@@ -57,7 +58,7 @@ export function RapidPlayer({ lesson, lines, level, settings }: { lesson: Lesson
         <button type="button" className="primary-button" onClick={() => router.push("/home")}>레슨 목록으로</button>
       </div> : <>
         <p className="rapid-stage">{display ? `${display.language === "korean" ? "한국어" : lesson.language === "english" ? "영어" : "일본어"} · ${display.position} / ${display.count}` : session.phase === "speaking" ? "말하기 시간" : "속사포 연습"}</p>
-        <div role="region" aria-label="속사포 학습" className={`practice-canvas rapid-canvas ${session.settings.display}`}>
+        <div role="region" aria-label="속사포 학습" className={`practice-canvas rapid-canvas ${singleToken ? "single-token" : "cumulative"}`}>
           {display ? <span lang={display.language === "korean" ? "ko" : lesson.language === "english" ? "en" : "ja"}>{display.text}</span> : <p>{placeholder}</p>}
         </div>
         <div className="session-meta">
