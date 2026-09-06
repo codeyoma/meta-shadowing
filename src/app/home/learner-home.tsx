@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getLesson, type Language, type Lesson } from "@/lib/lessons";
-import { readLastSelection, SessionSelection } from "@/lib/resume";
+import { getPlayerHref, readLastSelection, SessionSelection } from "@/lib/resume";
 import { ArrowIcon, Brand, Page, PlayIcon } from "../ui";
 
 function ResumeRow({ selection, catalog }: { selection: SessionSelection; catalog: Lesson[] }) {
@@ -12,7 +12,7 @@ function ResumeRow({ selection, catalog }: { selection: SessionSelection; catalo
   if (!lesson) return null;
 
   return (
-    <button className="continuation-row" onClick={() => router.push(`/player?lesson=${lesson.id}&level=${selection.level}`)}>
+    <button className="continuation-row" onClick={() => router.push(getPlayerHref(selection))}>
       <span className="round-icon"><PlayIcon /></span>
       <span className="continuation-copy">
         <strong>마지막 학습 계속하기</strong>

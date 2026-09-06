@@ -19,11 +19,16 @@ function isTestMode() {
 }
 
 function fixtureLesson(lesson: Lesson): PublishedLesson {
-  const target = lesson.language === "english" ? "I wake up at seven." : "私は 七時に 起きます。";
-  const korean = "나는 일곱 시에 일어난다.";
+  const targets = lesson.language === "english"
+    ? ["I wake up at seven.", "I wash my face.", "I brush my teeth."]
+    : ["私は 七時に 起きます。", "顔を 洗います。", "歯を 磨きます。"];
+  const korean = ["나는 일곱 시에 일어난다.", "나는 세수를 한다.", "나는 이를 닦는다."];
   return {
     ...lesson,
-    phrases: [{ kind: "phrase", sourceLine: 1, phraseNumber: 1, target, korean }]
+    phraseCount: targets.length,
+    phrases: targets.map((target, index) => ({
+      kind: "phrase", sourceLine: index + 1, phraseNumber: index + 1, target, korean: korean[index]
+    }))
   };
 }
 
@@ -50,7 +55,7 @@ function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {
 }
 
 export async function listPublishedLessons(): Promise<Lesson[]> {
-  if (isTestMode()) return lessons;
+  if (isTestMode()) return lessons.map(fixtureLesson);
   const supabase = createSecretSupabaseClient();
   if (!supabase) return [];
 

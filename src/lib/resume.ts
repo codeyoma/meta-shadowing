@@ -7,7 +7,19 @@ export type SessionSelection = {
   mode: "manual" | "automatic";
   display: "current" | "cumulative";
   speed: number;
+  advanceDelayMs?: number;
 };
+
+export function getPlayerHref(selection: SessionSelection): string {
+  const params = new URLSearchParams({
+    lesson: selection.lessonId,
+    level: String(selection.level),
+    mode: selection.mode,
+    speed: String(selection.speed),
+    gap: String((selection.advanceDelayMs ?? 1000) / 1000)
+  });
+  return `/player?${params}`;
+}
 
 function isSessionSelection(value: unknown): value is SessionSelection {
   if (!value || typeof value !== "object") return false;

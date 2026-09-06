@@ -221,6 +221,19 @@ test("only a complete private audio package can be published and played by a bet
         })
       )
       .toBe(true);
+    await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
+    for (const cycle of [2, 3]) {
+      await page.keyboard.press("Space");
+      await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
+    }
+    await page.keyboard.press("Space");
+    await expect(page.getByText("I wash my face.", { exact: true })).toBeVisible();
+    for (const cycle of [1, 2, 3]) {
+      await page.keyboard.press("Space");
+      await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
+    }
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("heading", { name: "레벨 1 학습 완료" })).toBeVisible();
   } finally {
     if (uploadedPaths.length) await serviceClient.storage.from("lesson-audio").remove(uploadedPaths);
     await serviceClient.auth.admin.deleteUser(createdAdmin.user.id);

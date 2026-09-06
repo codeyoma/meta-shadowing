@@ -2,9 +2,16 @@
 
 import { useRef, useState } from "react";
 import type { PublishedLesson } from "@/lib/lessons";
+import type { AudioSessionSettings } from "@/lib/audio-session";
 import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon } from "../ui";
+import { LevelOnePlayer } from "./level-one-player";
 
-export function PlayerShell({ lesson, level }: { lesson: PublishedLesson; level: number }) {
+export function PlayerShell({ lesson, level, settings }: { lesson: PublishedLesson; level: number; settings: AudioSessionSettings }) {
+  if (level === 1) return <LevelOnePlayer key={`${lesson.id}:${settings.mode}:${settings.playbackRate}:${settings.advanceDelayMs}`} lesson={lesson} settings={settings} />;
+  return <PreviewPlayer lesson={lesson} level={level} />;
+}
+
+function PreviewPlayer({ lesson, level }: { lesson: PublishedLesson; level: number }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [playbackError, setPlaybackError] = useState("");

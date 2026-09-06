@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { levelNames, type Lesson } from "@/lib/lessons";
-import { saveLastSelection, SessionSelection } from "@/lib/resume";
+import { getPlayerHref, saveLastSelection, SessionSelection } from "@/lib/resume";
+import { AudioSessionControls } from "../audio-session-controls";
 import { ArrowIcon, BackIcon, Brand, Page } from "../ui";
 
 export function SessionSetup({ lesson }: { lesson: Lesson }) {
@@ -13,10 +14,12 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
   const [mode, setMode] = useState<SessionSelection["mode"]>("manual");
   const [display, setDisplay] = useState<SessionSelection["display"]>("current");
   const [speed, setSpeed] = useState(1);
+  const [advanceDelayMs, setAdvanceDelayMs] = useState(1000);
 
   function start(): void {
-    saveLastSelection({ language, lessonId: lesson.id, level, mode, display, speed });
-    router.push(`/player?language=${language}&lesson=${lesson.id}&level=${level}`);
+    const selection = { language, lessonId: lesson.id, level, mode, display, speed, advanceDelayMs };
+    saveLastSelection(selection);
+    router.push(getPlayerHref(selection));
   }
 
   return (
@@ -45,17 +48,15 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
         <section className="setup-section" aria-labelledby="session-title">
           <h2 id="session-title">세션 설정</h2>
           <div className="session-controls">
-            <div className="segment-control" aria-label="학습 방식">
-              <button className={mode === "manual" ? "selected" : ""} onClick={() => setMode("manual")}>수동</button>
-              <button className={mode === "automatic" ? "selected" : ""} onClick={() => setMode("automatic")}>자동</button>
-            </div>
-            <div className="segment-control" aria-label="표시 방식">
+            <AudioSessionControls settings={{ mode, playbackRate: speed, advanceDelayMs }} onChange={(settings) => {
+              if (settings.mode !== undefined) setMode(settings.mode);
+              if (settings.playbackRate !== undefined) setSpeed(settings.playbackRate);
+              if (settings.advanceDelayMs !== undefined) setAdvanceDelayMs(settings.advanceDelayMs);
+            }} />
+            {level >= 6 ? <div className="segment-control" aria-label="표시 방식">
               <button className={display === "current" ? "selected" : ""} onClick={() => setDisplay("current")}>현재 단어</button>
               <button className={display === "cumulative" ? "selected" : ""} onClick={() => setDisplay("cumulative")}>누적 단어</button>
-            </div>
-            <div className="segment-control" aria-label="재생 속도">
-              <button onClick={() => setSpeed(speed === 1 ? 0.75 : 1)}>재생속도 {speed.toFixed(2).replace(".00", "")}×</button>
-            </div>
+            </div> : null}
           </div>
         </section>
         <button className="primary-button start-button" onClick={start}>학습 시작</button>
