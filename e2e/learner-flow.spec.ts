@@ -40,6 +40,8 @@ test("takes an authorized learner from password entry through session setup to t
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: /English 영어/ }).click();
   await page.getByRole("button", { name: /Morning Routine/ }).click();
+  await expect(page.getByText("Morning Routine", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "아침 일과", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /3 첫 단어 힌트/ }).click();
   await page.getByRole("button", { name: "학습 시작" }).click();
 

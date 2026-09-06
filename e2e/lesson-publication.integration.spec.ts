@@ -194,6 +194,17 @@ test("only a complete private audio package can be published and played by a bet
     await page.goto("/home");
     await expect(page.getByText(title)).toBeVisible();
 
+    await page.goto(`/setup?lesson=${draftId}`);
+    await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
+    await expect(page.getByText(title, { exact: true })).toHaveCount(1);
+    await page.screenshot({ path: test.info().outputPath("setup-title-desktop.png") });
+    const originalViewport = page.viewportSize();
+    await page.setViewportSize({ width: 393, height: 851 });
+    await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
+    await expect(page.getByText(title, { exact: true })).toHaveCount(1);
+    await page.screenshot({ path: test.info().outputPath("setup-title-mobile.png") });
+    if (originalViewport) await page.setViewportSize(originalViewport);
+
     const playback = await page.request.get(`/api/lessons/${draftId}/audio/1`, {
       maxRedirects: 0
     });
