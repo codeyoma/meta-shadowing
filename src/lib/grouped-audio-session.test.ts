@@ -19,8 +19,9 @@ it("resumes the first recording of a saved group with fresh cycles and a configu
   expect(session).toMatchObject({ phraseIndex: 2, remainingMs: 1500, phase: "gap" });
 });
 
-it("can explicitly pause manual speaking time after a completed recording", () => {
+it("pauses manual speaking after a recording but keeps an unstarted phrase ready", () => {
   let session = createAudioSession({ phraseCount: 1 });
+  expect(transitionAudioSession(session, { type: "pause" })).toEqual(session);
   session = finishRecording(transitionAudioSession(session, { type: "space" }), 2000);
   session = transitionAudioSession(session, { type: "pause" });
   expect(session.phase).toBe("paused");

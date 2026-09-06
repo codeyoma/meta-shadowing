@@ -30,7 +30,8 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
   const hintOnly = hintLevel && !session.subtitlesRevealed;
   const subtitle = hintOnly ? hints[session.phraseIndex] : phrase;
   const complete = session.phase === "completed";
-  const active = ["loading", "playing", "gap", "speaking", "countdown"].includes(session.phase);
+  const active = ["loading", "playing", "gap", "speaking", "countdown"].includes(session.phase)
+    || (session.phase === "ready" && session.completedCycles > 0);
   const playing = ["loading", "playing", "gap"].includes(session.phase);
   const highlightPhrase = playing || (session.phase === "paused" && ["loading", "playing", "gap"].includes(session.pausedPhase));
   const timed = hasSessionTimer(session);

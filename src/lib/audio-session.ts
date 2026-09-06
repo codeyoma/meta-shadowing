@@ -89,6 +89,7 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
     case "reveal-subtitles":
       return session.level === 3 || session.level === 5 ? { ...session, subtitlesRevealed: true } : session;
     case "pause":
+      if (session.phase === "ready" && session.completedCycles === 0) return session;
       if (!["ready", "loading", "playing", "gap", "speaking", "countdown"].includes(session.phase)) return session;
       return { ...session, phase: "paused", pausedPhase: session.phase as ActivePhase | "ready" };
     case "previous":

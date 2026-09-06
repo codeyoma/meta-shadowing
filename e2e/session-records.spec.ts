@@ -47,8 +47,15 @@ test("audio progress saves only after phrase advancement and manual speaking exc
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   for (let phrase = 0; phrase < 3; phrase++) {
     for (let cycle = 1; cycle <= 3; cycle++) {
-      await page.getByRole("button", { name: cycle === 1 ? "첫 원음 듣기" : "다음 원음 듣기", exact: true }).click();
+      const action = phrase === 1 && cycle === 2 ? "계속 재생" : cycle === 1 ? "첫 원음 듣기" : "다음 원음 듣기";
+      await page.getByRole("button", { name: action, exact: true }).click();
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
+      if (phrase === 1 && cycle === 1) {
+        await page.clock.runFor(2000);
+        await page.getByRole("button", { name: "재생 또는 일시정지", exact: true }).click();
+        await expect(page.getByRole("status")).toHaveText("일시정지됨");
+        await page.clock.runFor(7000);
+      }
     }
     if (phrase === 0) {
       await page.clock.runFor(5000);
@@ -75,7 +82,7 @@ test("audio progress saves only after phrase advancement and manual speaking exc
     } else await page.getByRole("button", { name: "다음 프레이즈", exact: true }).click();
   }
   await expect(page.getByRole("heading", { name: "레벨 1 학습 완료" })).toBeVisible();
-  await expect(page.getByLabel("활성 학습시간")).toHaveText("5.0초");
+  await expect(page.getByLabel("활성 학습시간")).toHaveText("7.0초");
   await page.getByText("설정 보기").click();
   await expect(page.getByText("수동 · 2×", { exact: true })).toBeVisible();
 });
