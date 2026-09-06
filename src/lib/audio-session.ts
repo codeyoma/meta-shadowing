@@ -1,6 +1,6 @@
-type ActivePhase = "loading" | "playing" | "speaking" | "countdown";
+type ActivePhase = "loading" | "playing" | "gap" | "speaking" | "countdown";
 
-export type AudioPracticeLevel = 1 | 2 | 3;
+export type AudioPracticeLevel = 1 | 2 | 3 | 4 | 5;
 
 export const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3];
 
@@ -15,6 +15,9 @@ export type AudioSession = {
   subtitlesRevealed: boolean;
   phraseCount: number;
   phraseIndex: number;
+  groupSizes: number[];
+  groupIndex: number;
+  groupDurationMs: number;
   completedCycles: number;
   attempt: number;
   phase: "ready" | ActivePhase | "paused" | "error" | "completed";
@@ -38,27 +41,40 @@ export function hasSessionTimer(session: AudioSession): boolean {
 }
 
 export function createAudioSession({
-  phraseCount, level = 1, mode = "manual", advanceDelayMs = 1000, playbackRate = 1
-}: { phraseCount: number; level?: AudioPracticeLevel } & Partial<AudioSessionSettings>): AudioSession {
+  phraseCount, groupSizes, level = 1, mode = "manual", advanceDelayMs = 1000, playbackRate = 1
+}: { phraseCount: number; groupSizes?: number[]; level?: AudioPracticeLevel } & Partial<AudioSessionSettings>): AudioSession {
+  const validGroups = level >= 4 && groupSizes?.every(size => Number.isInteger(size) && size > 0)
+    && groupSizes.reduce((sum, size) => sum + size, 0) === phraseCount;
   return {
     level, subtitlesRevealed: false, phraseCount, phraseIndex: 0, completedCycles: 0, attempt: 0, phase: "ready",
+    groupSizes: validGroups ? [...groupSizes!] : Array.from({ length: phraseCount }, () => 1),
+    groupIndex: 0, groupDurationMs: 0,
     pausedPhase: "loading", mode, remainingMs: 0,
     advanceDelayMs: Number.isFinite(advanceDelayMs) && advanceDelayMs >= 0 && advanceDelayMs <= 30000 ? advanceDelayMs : 1000,
     playbackRate: PLAYBACK_RATES.includes(playbackRate) ? playbackRate : 1
   };
 }
 
+function groupFirstPhrase(session: AudioSession): number {
+  return session.groupSizes.slice(0, session.groupIndex).reduce((sum, size) => sum + size, 0);
+}
+
 function startListen(session: AudioSession): AudioSession {
   const startsNewCycle = session.phase === "ready" || hasSessionTimer(session);
   return {
     ...session, phase: "loading", attempt: session.attempt + 1, remainingMs: 0,
+    phraseIndex: groupFirstPhrase(session), groupDurationMs: 0,
     subtitlesRevealed: startsNewCycle ? false : session.subtitlesRevealed
   };
 }
 
-function advancePhrase(session: AudioSession): AudioSession {
-  if (session.phraseIndex + 1 >= session.phraseCount) return { ...session, phase: "completed", attempt: session.attempt + 1 };
-  const next: AudioSession = { ...session, phase: "ready", phraseIndex: session.phraseIndex + 1, completedCycles: 0, attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false };
+function advanceGroup(session: AudioSession): AudioSession {
+  if (session.groupIndex + 1 >= session.groupSizes.length) return { ...session, phase: "completed", attempt: session.attempt + 1 };
+  const next: AudioSession = {
+    ...session, phase: "ready", groupIndex: session.groupIndex + 1,
+    phraseIndex: groupFirstPhrase(session) + session.groupSizes[session.groupIndex],
+    completedCycles: 0, attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
+  };
   return session.mode === "automatic" ? startListen(next) : next;
 }
 
@@ -66,42 +82,51 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
   if (session.phase === "completed") return session;
   switch (event.type) {
     case "reveal-subtitles":
-      return session.level === 3 ? { ...session, subtitlesRevealed: true } : session;
+      return session.level === 3 || session.level === 5 ? { ...session, subtitlesRevealed: true } : session;
     case "pause":
-      if (!["loading", "playing", "speaking", "countdown"].includes(session.phase)) return session;
+      if (!["loading", "playing", "gap", "speaking", "countdown"].includes(session.phase)) return session;
       return { ...session, phase: "paused", pausedPhase: session.phase as ActivePhase };
     case "previous":
-      if (session.phraseIndex === 0) return session;
-      return { ...session, phraseIndex: session.phraseIndex - 1, completedCycles: 0, phase: "ready", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false };
+      if (session.groupIndex === 0) return session;
+      return {
+        ...session, groupIndex: session.groupIndex - 1,
+        phraseIndex: groupFirstPhrase(session) - session.groupSizes[session.groupIndex - 1],
+        completedCycles: 0, phase: "ready", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
+      };
     case "next":
-      return session.completedCycles >= 3 ? advancePhrase(session) : session;
+      return session.completedCycles >= 3 ? advanceGroup(session) : session;
     case "space":
       if (session.phase === "error") return startListen(session);
-      if (["loading", "playing"].includes(session.phase)) {
+      if (["loading", "playing", "gap"].includes(session.phase)) {
         return { ...session, phase: "paused", pausedPhase: session.phase as ActivePhase };
       }
       if (session.phase === "paused") {
         return { ...session, phase: session.pausedPhase === "playing" ? "loading" : session.pausedPhase };
       }
-      if (session.completedCycles >= 3) return advancePhrase(session);
+      if (session.completedCycles >= 3) return advanceGroup(session);
       return startListen(session);
     case "retry":
-      if (session.completedCycles >= 5) return advancePhrase(session);
+      if (session.completedCycles >= 5) return advanceGroup(session);
       return startListen(session);
     case "audio-playing":
       if (event.attempt !== session.attempt || session.phase !== "loading") return session;
       return { ...session, phase: "playing" };
     case "audio-ended": {
       if (event.attempt !== session.attempt || session.phase !== "playing") return session;
-      const speakingWindow = session.level === 2
+      const groupDurationMs = session.groupDurationMs + event.durationMs;
+      if (session.phraseIndex + 1 < groupFirstPhrase(session) + session.groupSizes[session.groupIndex]) {
+        return { ...session, phase: "gap", groupDurationMs, remainingMs: 500 };
+      }
+      const speakingWindow = session.level === 2 || session.level === 4
         ? { multiplier: 2.25, paddingMs: 750 }
         : { multiplier: 1.25, paddingMs: 500 };
       return {
         ...session,
+        groupDurationMs,
         phase: session.mode === "automatic" ? "speaking" : "ready",
         completedCycles: session.completedCycles + 1,
         remainingMs: session.mode === "automatic"
-          ? event.durationMs / session.playbackRate * speakingWindow.multiplier + speakingWindow.paddingMs
+          ? groupDurationMs / session.playbackRate * speakingWindow.multiplier + speakingWindow.paddingMs
           : 0
       };
     }
@@ -109,10 +134,11 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       if (event.attempt !== session.attempt || !["loading", "playing", "paused"].includes(session.phase)) return session;
       return { ...session, phase: "error" };
     case "tick": {
-      if (event.attempt !== session.attempt || !["speaking", "countdown"].includes(session.phase)) return session;
+      if (event.attempt !== session.attempt || !["gap", "speaking", "countdown"].includes(session.phase)) return session;
       const remainingMs = Math.max(0, session.remainingMs - event.elapsedMs);
       if (remainingMs > 0) return { ...session, remainingMs };
-      if (session.phase === "countdown") return advancePhrase(session);
+      if (session.phase === "gap") return { ...session, phraseIndex: session.phraseIndex + 1, attempt: session.attempt + 1, phase: "loading", remainingMs: 0 };
+      if (session.phase === "countdown") return advanceGroup(session);
       if (session.completedCycles < 3) return startListen(session);
       return { ...session, phase: "countdown", remainingMs: session.advanceDelayMs };
     }

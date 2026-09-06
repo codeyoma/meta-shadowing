@@ -15,9 +15,10 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
   const [display, setDisplay] = useState<SessionSelection["display"]>("current");
   const [speed, setSpeed] = useState(1);
   const [advanceDelayMs, setAdvanceDelayMs] = useState(1000);
+  const [groupSize, setGroupSize] = useState(2);
 
   function start(): void {
-    const selection = { language, lessonId: lesson.id, level, mode, display, speed, advanceDelayMs };
+    const selection = { language, lessonId: lesson.id, level, mode, display, speed, advanceDelayMs, groupSize };
     saveLastSelection(selection);
     router.push(getPlayerHref(selection));
   }
@@ -48,6 +49,11 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
         <section className="setup-section" aria-labelledby="session-title">
           <h2 id="session-title">세션 설정</h2>
           <div className="session-controls">
+            {level === 4 || level === 5 ? <label className="audio-setting">묶음 크기
+              <select value={groupSize} onChange={(event) => setGroupSize(Number(event.target.value))}>
+                {[2, 3, 4].map(size => <option key={size} value={size}>{size}개</option>)}
+              </select>
+            </label> : null}
             <AudioSessionControls settings={{ mode, playbackRate: speed, advanceDelayMs }} onChange={(settings) => {
               if (settings.mode !== undefined) setMode(settings.mode);
               if (settings.playbackRate !== undefined) setSpeed(settings.playbackRate);

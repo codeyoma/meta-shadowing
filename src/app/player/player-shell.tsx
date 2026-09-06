@@ -4,11 +4,12 @@ import { useRef, useState } from "react";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { AudioSessionSettings } from "@/lib/audio-session";
 import type { SubtitleHint } from "@/lib/practice-tokens";
+import type { PhraseGroup } from "@/lib/phrase-groups";
 import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon } from "../ui";
 import { AudioPhrasePlayer } from "./audio-phrase-player";
 
-export function PlayerShell({ lesson, level, settings, hints }: { lesson: PublishedLesson; level: number; settings: AudioSessionSettings; hints: SubtitleHint[] }) {
-  if (level === 1 || level === 2 || level === 3) return <AudioPhrasePlayer key={`${lesson.id}:${level}:${settings.mode}:${settings.playbackRate}:${settings.advanceDelayMs}`} lesson={lesson} level={level} settings={settings} hints={hints} />;
+export function PlayerShell({ lesson, level, settings, hints, groups }: { lesson: PublishedLesson; level: number; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[] }) {
+  if (level === 1 || level === 2 || level === 3 || level === 4 || level === 5) return <AudioPhrasePlayer key={`${lesson.id}:${level}:${settings.mode}:${settings.playbackRate}:${settings.advanceDelayMs}:${groups.map(group => group.phrases.length).join(",")}`} lesson={lesson} level={level} settings={settings} hints={hints} groups={groups} />;
   return <PreviewPlayer lesson={lesson} level={level} />;
 }
 

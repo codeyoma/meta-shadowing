@@ -1,6 +1,7 @@
 import "server-only";
 
 import { decodeLessonDraftEntries } from "./lesson-entry-decoder";
+import { parseLessonDraft } from "./lesson-draft-parser";
 import { lessons, type Language, type Lesson, type LessonPhrase, type PublishedLesson } from "./lessons";
 import { LESSON_AUDIO_BUCKET } from "./lesson-audio";
 import type { PublishedAudioItem } from "./lesson-publication";
@@ -19,16 +20,25 @@ function isTestMode() {
 }
 
 function fixtureLesson(lesson: Lesson): PublishedLesson {
+  if (lesson.id === "daily-conversation") {
+    const target = "## At home\nI open the window.\nYou make breakfast.\nWe sit at the table.\nShe pours the tea.\nThey enjoy the morning.\n\nHe takes the bus.\nWe reach the office.\n## At work\nI read my messages.\nYou plan the day.\nWe start the meeting.";
+    const korean = "## 집에서\n나는 창문을 연다.\n너는 아침을 준비한다.\n우리는 식탁에 앉는다.\n그녀는 차를 따른다.\n그들은 아침을 즐긴다.\n\n그는 버스를 탄다.\n우리는 사무실에 도착한다.\n## 직장에서\n나는 메시지를 읽는다.\n너는 하루를 계획한다.\n우리는 회의를 시작한다.";
+    const { entries } = parseLessonDraft(target, korean);
+    const phrases = entries.filter((entry): entry is LessonPhrase => entry.kind === "phrase");
+    return { ...lesson, phraseCount: phrases.length, entries, phrases };
+  }
   const targets = lesson.language === "english"
     ? ["I wake up at seven.", "I wash my face.", "I brush my teeth."]
     : ["私は 七時に 起きます。", "顔を洗います。", "歯を 磨きます。"];
   const korean = ["나는 일곱 시에 일어난다.", "나는 세수를 한다.", "나는 이를 닦는다."];
+  const phrases: LessonPhrase[] = targets.map((target, index) => ({
+    kind: "phrase", sourceLine: index + 1, phraseNumber: index + 1, target, korean: korean[index]
+  }));
   return {
     ...lesson,
     phraseCount: targets.length,
-    phrases: targets.map((target, index) => ({
-      kind: "phrase", sourceLine: index + 1, phraseNumber: index + 1, target, korean: korean[index]
-    }))
+    entries: phrases,
+    phrases
   };
 }
 
@@ -50,6 +60,7 @@ function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {
     name: row.title,
     localizedName: chapter?.korean || row.title,
     phraseCount: row.phrase_count,
+    entries,
     phrases
   };
 }

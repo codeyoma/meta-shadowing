@@ -234,11 +234,11 @@ test("only a complete private audio package can be published and played by a bet
     }
     await page.keyboard.press("Space");
     await expect(page.getByRole("heading", { name: "레벨 1 학습 완료" })).toBeVisible();
-    for (const level of [2, 3]) {
+    for (const level of [2, 3, 4, 5]) {
       await page.goto(`/player?lesson=${draftId}&level=${level}`);
       await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
       const subtitles = page.getByRole("region", { name: "학습 자막" });
-      if (level === 3) {
+      if (level === 3 || level === 5) {
         await expect(subtitles.getByText("Good", { exact: true })).toBeVisible();
         await expect(subtitles.getByText("좋은", { exact: true })).toBeVisible();
         await page.getByRole("button", { name: "자막 보기", exact: true }).click();
@@ -247,7 +247,24 @@ test("only a complete private audio package can be published and played by a bet
       await expect(subtitles.getByText("좋은 아침입니다.", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
       await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
-      if (level === 3) await expect(subtitles.getByText("Good", { exact: true })).toBeVisible();
+      if (level === 3 || level === 5) await expect(subtitles.getByText("Good", { exact: true })).toBeVisible();
+      if (level >= 4) {
+        const chapter = page.getByLabel("현재 챕터");
+        await expect(chapter).toContainText("First chapter");
+        await expect(chapter).toContainText("첫 챕터");
+        await expect(subtitles.getByRole("listitem")).toHaveCount(1);
+        await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuemax", "2");
+        for (const cycle of [2, 3]) {
+          await page.keyboard.press("Space");
+          await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
+        }
+        await page.keyboard.press("Space");
+        await expect(chapter).toContainText("First chapter");
+        await expect(chapter.getByRole("separator", { name: "구간 경계" })).toBeVisible();
+        await expect(subtitles.getByRole("listitem")).toHaveCount(1);
+        if (level === 5) await page.getByRole("button", { name: "자막 보기", exact: true }).click();
+        await expect(subtitles.getByText("I wash my face.", { exact: true })).toBeVisible();
+      }
     }
   } finally {
     if (uploadedPaths.length) await serviceClient.storage.from("lesson-audio").remove(uploadedPaths);

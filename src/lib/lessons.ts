@@ -13,6 +13,7 @@ export type Lesson = {
 export type LessonPhrase = Extract<LessonDraftEntry, { kind: "phrase" }>;
 
 export type PublishedLesson = Lesson & {
+  entries: LessonDraftEntry[];
   phrases: LessonPhrase[];
 };
 

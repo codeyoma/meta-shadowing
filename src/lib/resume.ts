@@ -8,6 +8,7 @@ export type SessionSelection = {
   display: "current" | "cumulative";
   speed: number;
   advanceDelayMs?: number;
+  groupSize?: number;
 };
 
 export function getPlayerHref(selection: SessionSelection): string {
@@ -18,6 +19,7 @@ export function getPlayerHref(selection: SessionSelection): string {
     speed: String(selection.speed),
     gap: String((selection.advanceDelayMs ?? 1000) / 1000)
   });
+  if (selection.level === 4 || selection.level === 5) params.set("group", String(selection.groupSize ?? 2));
   return `/player?${params}`;
 }
 

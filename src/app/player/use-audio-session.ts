@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createAudioSession, transitionAudioSession, type AudioPracticeLevel, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
+import type { PhraseGroup } from "@/lib/phrase-groups";
 
 function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
   audio.ontimeupdate = audio.ondurationchange = null;
 }
 
-export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings) {
-  const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, level, ...settings }));
+export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[]) {
+  const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, groupSizes: groups.map(group => group.phrases.length), level, ...settings }));
   const currentSession = useRef(session);
   const audioRef = useRef<HTMLAudioElement>(null);
   const playRequest = useRef(0);
@@ -77,7 +78,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   }, [lesson]);
 
   useEffect(() => {
-    if (session.phase !== "speaking" && session.phase !== "countdown") return;
+    if (!["gap", "speaking", "countdown"].includes(session.phase)) return;
     let lastTick = performance.now();
     const timer = window.setInterval(() => {
       const now = performance.now();
