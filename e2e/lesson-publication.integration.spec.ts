@@ -22,6 +22,110 @@ async function signInWithEmailOtp(client: SupabaseClient, serviceClient: Supabas
   expect(error).toBeNull();
 }
 
+test("a saved 560-file draft recovers from a text timeout without reuploading any audio", async ({ page }) => {
+  test.setTimeout(120000);
+  const url = process.env.SUPABASE_INTEGRATION_URL!;
+  if (!["127.0.0.1", "localhost"].includes(new URL(url).hostname)) throw new Error("Local fixtures only");
+  const options = { auth: { persistSession: false, autoRefreshToken: false } };
+  const service = createClient(url, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, options);
+  const admin = createClient(url, process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!, options);
+  const email = `recovery-${randomUUID()}@example.com`;
+  const { data, error } = await service.auth.admin.createUser({ email, email_confirm: true, app_metadata: { role: "admin" } });
+  expect(error).toBeNull();
+  const owner = data.user!.id;
+  const paths: string[] = [];
+  try {
+    const { data: link } = await service.auth.admin.generateLink({ type: "magiclink", email });
+    expect((await page.request.post("/api/admin/auth/verify", { data: { email, token: link.properties!.email_otp } })).status()).toBe(200);
+    await signInWithEmailOtp(admin, service, email);
+    const source = Array.from({ length: 560 }, (_, index) => `Practice phrase ${index + 1}.\n연습 문장 ${index + 1}.`).join("\n");
+    const saved = await page.request.post("/api/admin/drafts", { multipart: {
+      title: "Large recovery fixture", language: "english",
+      scriptFile: { name: "script.txt", mimeType: "text/plain", buffer: Buffer.from(source) }
+    } });
+    expect(saved.status()).toBe(201);
+    const { draftId } = await saved.json();
+    const folder = `${owner}/${draftId}`;
+    const bytes = Buffer.from(TEST_WEBM_BASE64, "base64");
+    for (let offset = 0; offset < 560; offset += 8) {
+      await Promise.all(Array.from({ length: Math.min(8, 560 - offset) }, async (_, index) => {
+        const path = `${folder}/${String(offset + index + 1).padStart(3, "0")}.webm`;
+        paths.push(path);
+        expect((await admin.storage.from("lesson-audio").upload(path, bytes, { contentType: "audio/webm" })).error).toBeNull();
+      }));
+    }
+    // Characterize the exact authenticated Range request used by publication.
+    const rangeRequest = { headers: { Range: "bytes=0-11" }, cache: "no-store" as const };
+    const signature = await admin.storage.from("lesson-audio").download(paths[0], {}, rangeRequest);
+    expect(signature.error).toBeNull();
+    expect(signature.data!.size).toBe(12);
+    const before = await service.storage.from("lesson-audio").list(folder, { limit: 1000, sortBy: { column: "name", order: "asc" } });
+    expect(before.error).toBeNull();
+    expect(before.data).toHaveLength(560);
+    let browserStorageWrites = 0;
+    page.on("request", request => {
+      if (request.url().includes("/storage/v1/") && !["GET", "HEAD"].includes(request.method())) browserStorageWrites++;
+    });
+    await page.goto("/admin/lessons");
+    const row = page.getByRole("listitem").filter({ hasText: "Large recovery fixture" });
+    await page.route(`**/api/admin/drafts/${draftId}/publish`, route => route.fulfill({ status: 504, contentType: "text/plain", body: "An error occurred" }), { times: 1 });
+    await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toBeVisible();
+    await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
+    await expect(page.locator(".admin-form-error[role=alert]")).toContainText("시간");
+    await expect(page.locator(".admin-form-error[role=alert]")).not.toContainText("Unexpected");
+    const published = page.waitForResponse(response => response.url().endsWith(`/api/admin/drafts/${draftId}/publish`));
+    const started = Date.now();
+    await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
+    expect((await published).status()).toBe(200);
+    expect(Date.now() - started).toBeLessThan(30000);
+    await expect(row).toContainText("게시 중");
+    await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toHaveCount(0);
+    expect(browserStorageWrites).toBe(0);
+    const after = await service.storage.from("lesson-audio").list(folder, { limit: 1000, sortBy: { column: "name", order: "asc" } });
+    const immutableMetadata = (files: NonNullable<typeof before.data>) => files.map(file => [file.id, file.name, file.updated_at, file.metadata?.size]);
+    expect(after.error).toBeNull();
+    expect(immutableMetadata(after.data!)).toEqual(immutableMetadata(before.data!));
+    const result = await service.from("lesson_drafts").select("publication_status, audio_manifest").eq("id", draftId).single();
+    expect(result.data?.publication_status).toBe("published");
+    expect(result.data?.audio_manifest).toHaveLength(560);
+    // A pending replacement must remain recoverable while the old version stays published.
+    const replacement = await page.request.post("/api/admin/drafts", { multipart: {
+      title: "Recovered replacement", language: "english", replacementFor: draftId,
+      scriptFile: { name: "replacement.txt", mimeType: "text/plain", buffer: Buffer.from("Hello again.\n다시 안녕하세요.") }
+    } });
+    expect(replacement.status()).toBe(201);
+    const pendingId = (await replacement.json()).draftId;
+    const pendingPath = `${owner}/${pendingId}/001.webm`;
+    paths.push(pendingPath);
+    expect((await admin.storage.from("lesson-audio").upload(pendingPath, bytes, { contentType: "audio/webm" })).error).toBeNull();
+    const newerDraft = await page.request.post("/api/admin/drafts", { multipart: {
+      title: "Newer draft without audio", language: "english", replacementFor: draftId,
+      scriptFile: { name: "newer.txt", mimeType: "text/plain", buffer: Buffer.from("Try later.\n나중에 시도하세요.") }
+    } });
+    expect(newerDraft.status()).toBe(201);
+    await page.reload();
+    await expect(row).toContainText("게시 중");
+    await page.setViewportSize({ width: 393, height: 851 });
+    await expect(row.getByLabel("게시할 초안")).toBeVisible();
+    expect((await row.getByLabel("게시할 초안").boundingBox())!.height).toBeGreaterThanOrEqual(48);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await row.getByLabel("게시할 초안").selectOption(pendingId);
+    await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toBeVisible();
+    await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
+    const replaced = page.getByRole("listitem").filter({ hasText: "Recovered replacement" });
+    await expect(replaced).toContainText("게시 중");
+    await expect(replaced).toContainText("2개 버전");
+    expect(browserStorageWrites).toBe(0);
+    await page.setViewportSize({ width: 393, height: 851 });
+    await page.screenshot({ path: test.info().outputPath("publication-recovery-mobile.png") });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    if (paths.length) expect((await service.storage.from("lesson-audio").remove(paths)).error).toBeNull();
+    expect((await service.from("lesson_drafts").delete().eq("created_by", owner)).error).toBeNull();
+    expect((await service.auth.admin.deleteUser(owner)).error).toBeNull();
+  }
+});
+
 test("only a complete private audio package can be published and played by a beta learner", async ({
   page,
   request
@@ -32,8 +136,9 @@ test("only a complete private audio package can be published and played by a bet
   const adminEmail = `audio-admin-${randomUUID()}@example.com`;
   const learnerEmail = `audio-learner-${randomUUID()}@example.com`;
   const title = "게시 통합 테스트 레슨";
-  const targetSource = "## First chapter\n\nGood morning.\n\nI wash my face.\n";
-  const koreanSource = "## 첫 챕터\n\n좋은 아침입니다.\n\n세수합니다.\n";
+  const targetDialogue = "Good morning.\nWelcome home.";
+  const koreanDialogue = "좋은 아침입니다.\n어서 오세요.";
+  const scriptSource = `## First chapter\n\n${targetDialogue}\n${koreanDialogue}\n\n## Second chapter\nI wash my face.\n세수합니다.\n`;
   const serviceClient = createClient(supabaseUrl, secretKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   });
@@ -89,15 +194,10 @@ test("only a complete private audio package can be published and played by a bet
 
     await page.getByLabel("레슨 제목").fill(title);
     await page.getByLabel("언어").selectOption("english");
-    await page.getByLabel("목표어 텍스트").setInputFiles({
-      name: "target.txt",
+    await page.getByLabel("통합 스크립트", { exact: true }).setInputFiles({
+      name: "script.txt",
       mimeType: "text/plain",
-      buffer: Buffer.from(targetSource)
-    });
-    await page.getByLabel("한국어 텍스트").setInputFiles({
-      name: "ko.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from(koreanSource)
+      buffer: Buffer.from(scriptSource)
     });
     await page.getByLabel("문장별 음성 파일").setInputFiles({
       name: "001-first.webm",
@@ -173,10 +273,21 @@ test("only a complete private audio package can be published and played by a bet
       { name: "001-first.webm", mimeType: "audio/webm", buffer: audioBytes }
     ]);
     await expect(page.getByText("2 / 2 연결 · 게시 가능")).toBeVisible();
+    let uploadWrites = 0;
+    page.on("request", request => {
+      if (request.url().includes("/storage/v1/object/lesson-audio/") && request.method() === "POST") uploadWrites++;
+    });
+    await page.route(`**/api/admin/drafts/${draftId}/publish`, route => route.fulfill({
+      status: 504, contentType: "text/plain", body: "An error occurred: FUNCTION_INVOCATION_TIMEOUT"
+    }), { times: 1 });
+    await page.getByRole("button", { name: "음성 업로드 후 게시" }).click();
+    await expect(page.locator(".admin-form-error[role=alert]")).toContainText("시간");
+    await expect(page.locator(".admin-form-error[role=alert]")).not.toContainText("Unexpected token");
+    expect(uploadWrites).toBe(2);
     const publishedResponse = page.waitForResponse((response) =>
       response.url().endsWith(`/api/admin/drafts/${draftId}/publish`)
     );
-    await page.getByRole("button", { name: "음성 업로드 후 게시" }).click();
+    await page.getByRole("button", { name: "게시만 다시 시도" }).click();
     const publish = await publishedResponse;
     expect(publish.status()).toBe(200);
     await expect(publish.json()).resolves.toMatchObject({
@@ -184,6 +295,7 @@ test("only a complete private audio package can be published and played by a bet
       result: { publishReady: true }
     });
     await expect(page.getByRole("status")).toHaveText("레슨이 게시되었습니다.");
+    expect(uploadWrites).toBe(2);
 
     const unauthorizedPlayback = await request.get(`/api/lessons/${draftId}/audio/1`, {
       maxRedirects: 0
@@ -198,6 +310,17 @@ test("only a complete private audio package can be published and played by a bet
     await page.goto("/home");
     await expect(page.getByText(title)).toBeVisible();
 
+    await page.goto(`/setup?lesson=${draftId}`);
+    await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
+    await expect(page.getByText(title, { exact: true })).toHaveCount(1);
+    await page.screenshot({ path: test.info().outputPath("setup-title-desktop.png") });
+    const originalViewport = page.viewportSize();
+    await page.setViewportSize({ width: 393, height: 851 });
+    await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
+    await expect(page.getByText(title, { exact: true })).toHaveCount(1);
+    await page.screenshot({ path: test.info().outputPath("setup-title-mobile.png") });
+    if (originalViewport) await page.setViewportSize(originalViewport);
+
     const playback = await page.request.get(`/api/lessons/${draftId}/audio/1`, {
       maxRedirects: 0
     });
@@ -211,7 +334,9 @@ test("only a complete private audio package can be published and played by a bet
     expect(Buffer.from(await storedAudio.body())).toEqual(audioBytes);
 
     await page.goto(`/player?lesson=${draftId}&level=1`);
-    await expect(page.getByText("Good morning.")).toBeVisible();
+    await expect(page.locator(".chapter-header")).toHaveText(title);
+    await expect(page.getByText(targetDialogue, { exact: true })).toBeVisible();
+    await expect(page.getByText(targetDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
     await page.getByRole("button", { name: "첫 원음 듣기" }).click();
     await expect
       .poll(() =>
@@ -243,15 +368,16 @@ test("only a complete private audio package can be published and played by a bet
         await expect(subtitles.getByText("좋은", { exact: true })).toBeVisible();
         await page.getByRole("button", { name: "자막 보기", exact: true }).click();
       }
-      await expect(subtitles.getByText("Good morning.", { exact: true })).toBeVisible();
-      await expect(subtitles.getByText("좋은 아침입니다.", { exact: true })).toBeVisible();
+      await expect(subtitles.getByText(targetDialogue, { exact: true })).toBeVisible();
+      await expect(subtitles.getByText(koreanDialogue, { exact: true })).toBeVisible();
+      await expect(subtitles.getByText(targetDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
+      await expect(subtitles.getByText(koreanDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
       await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
       await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
       if (level === 3 || level === 5) await expect(subtitles.getByText("Good", { exact: true })).toBeVisible();
       if (level >= 4) {
         const chapter = page.getByLabel("현재 챕터");
         await expect(chapter).toContainText("First chapter");
-        await expect(chapter).toContainText("첫 챕터");
         await expect(subtitles.getByRole("listitem")).toHaveCount(1);
         await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuemax", "2");
         for (const cycle of [2, 3]) {
@@ -259,8 +385,8 @@ test("only a complete private audio package can be published and played by a bet
           await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
         }
         await page.keyboard.press("Space");
-        await expect(chapter).toContainText("First chapter");
-        await expect(chapter.getByRole("separator", { name: "구간 경계" })).toBeVisible();
+        await expect(chapter).toContainText("Second chapter");
+        await expect(chapter.getByRole("separator", { name: "구간 경계" })).toHaveCount(0);
         await expect(subtitles.getByRole("listitem")).toHaveCount(1);
         if (level === 5) await page.getByRole("button", { name: "자막 보기", exact: true }).click();
         await expect(subtitles.getByText("I wash my face.", { exact: true })).toBeVisible();
@@ -275,28 +401,29 @@ test("only a complete private audio package can be published and played by a bet
       await page.goto(`/player?lesson=${draftId}&level=${level}&wpm=6&mode=automatic&sectionGap=0.5`);
       await page.waitForLoadState("networkidle");
       await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
-      await expect(page.getByLabel("현재 챕터")).toHaveText("First chapter첫 챕터");
-      await expect(page.getByRole("separator", { name: "구간 경계" })).toBeVisible();
+      await expect(page.getByLabel("현재 챕터")).toHaveText("First chapter");
+      await expect(page.getByRole("separator", { name: "구간 경계" })).toHaveCount(0);
       await expect(page.locator("audio")).toHaveCount(0);
       const canvas = page.getByRole("region", { name: "속사포 학습" });
       await page.keyboard.press("Space");
       await expect(canvas).toHaveText(level === 6 ? "Good" : "좋은");
-      await page.clock.runFor(300);
+      await page.clock.runFor(600);
       if (level === 6) {
         await expect(canvas).toHaveText("좋은");
-        await page.clock.runFor(300);
+        await page.clock.runFor(600);
       } else {
-        await expect(page.getByRole("timer")).toHaveText("0.8초");
-        await page.clock.runFor(800);
+        await expect(page.getByRole("timer")).toHaveText("1.1초");
+        await page.clock.runFor(1100);
         if (level === 7) {
           await expect(canvas).toHaveText("Good");
-          await page.clock.runFor(300);
+          await page.clock.runFor(600);
         }
       }
       await expect(page.getByRole("timer")).toHaveText("0.5초");
       await page.clock.runFor(500);
       await expect(canvas).toHaveText(level === 6 ? "I" : "세수합니다.");
-      await expect(page.getByRole("separator", { name: "구간 경계" })).toBeVisible();
+      await expect(page.getByLabel("현재 챕터")).toHaveText("Second chapter");
+      await expect(page.getByRole("separator", { name: "구간 경계" })).toHaveCount(0);
       await page.clock.runFor(5000);
       await expect(page.getByRole("heading", { name: `레벨 ${level} 학습 완료` })).toBeVisible();
     }

@@ -82,6 +82,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .audio-phrase-player .practice-canvas { height: clamp(160px, 21dvh, 210px); min-height: 0; padding: 16px 20px; gap: 12px; overflow-y: auto; align-content: safe center; }
 .audio-phrase-player .practice-canvas > span { font-family: inherit; font-size: clamp(28px, 7vw, 42px); overflow-wrap: anywhere; }
 .audio-phrase-player .practice-canvas small { font-size: 18px; overflow-wrap: anywhere; }
+.audio-phrase-player .practice-canvas > span,
+.audio-phrase-player .practice-canvas > small,
+.audio-phrase-player .group-phrases > li > span,
+.audio-phrase-player .group-phrases > li > small { white-space: pre-wrap; }
 .audio-phrase-player .practice-canvas.hint-only > span { font-size: 64px; }
 .audio-phrase-player .playback-line { margin: 22px 0; font-variant-numeric: tabular-nums; }
 .audio-phrase-player .cycle-status { margin: 0; padding: 10px 18px; gap: 6px; font-size: 18px; }
@@ -197,6 +201,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .preview-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; }
 .preview-table { width: 100%; min-width: 900px; border-collapse: collapse; }
 .preview-table th, .preview-table td { padding: 14px 16px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; line-height: 1.45; }
+.preview-text-cell { white-space: pre-wrap; overflow-wrap: anywhere; }
 .preview-table th { color: var(--muted); background: var(--surface); font-size: 13px; }
 .preview-table th:first-child, .preview-table td:first-child { width: 68px; text-align: center; }
 .preview-table th:nth-child(2), .preview-table td:nth-child(2) { width: 96px; color: var(--muted); }

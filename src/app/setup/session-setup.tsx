@@ -35,7 +35,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS }: { 
       <section className="setup-shell" aria-labelledby="setup-title">
         <button className="back-link" onClick={() => router.push("/home")}><BackIcon /> 레슨</button>
         <div className="lesson-heading">
-          <p>{lesson.name}</p>
+          {lesson.name !== lesson.localizedName ? <p>{lesson.name}</p> : null}
           <h1 id="setup-title">{lesson.localizedName}</h1>
           <span>{lesson.phraseCount}개 프레이즈</span>
         </div>

@@ -29,3 +29,9 @@ it("uses the same complete first token for hints and rapid practice, including J
   expect(firstPracticeToken("…", "japanese")).toBe("…");
   expect(firstPracticeToken("Hello!", "english")).toBe("Hello!");
 });
+
+it("segments each Japanese dialogue line without mistaking line breaks for supplied word spaces", () => {
+  expect(tokenizePracticeText("東京に行きます。\n「猫。」", "japanese")).toEqual(["東京", "に", "行き", "ます。", "「猫。」"]);
+  expect(tokenizePracticeText("私は 七時に 起きます。\r\n東京に行きます。", "japanese")).toEqual(["私は", "七時に", "起きます。", "東京", "に", "行き", "ます。"]);
+  expect(firstPracticeToken("東京に行きます。\n私は 七時に 起きます。", "japanese")).toBe("東京");
+});

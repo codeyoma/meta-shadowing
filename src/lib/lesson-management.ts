@@ -11,6 +11,7 @@ import { createSecretSupabaseClient } from "./supabase/secret";
 export type ManagedLesson = {
   id: string;
   draftId: string;
+  pendingDrafts: { id: string; title: string }[];
   title: string;
   language: Language;
   status: "draft" | "published" | "unpublished" | "deleting";
@@ -62,7 +63,9 @@ export async function listManagedLessons(admin: AdminIdentity, lessonId?: string
     const root = versions.find(row => row.id === id)!;
     const current = versions.find(row => row.publication_status === "published")
       ?? versions.find(row => row.publication_status === "unpublished") ?? versions[0];
+    const pending = root.deletion_started_at ? [] : versions.filter(row => row.publication_status === "draft");
     return { id, draftId: current.id, title: current.title, language: current.language,
+      pendingDrafts: pending.map(row => ({ id: row.id, title: row.title })),
       status: root.deletion_started_at ? "deleting" : current.publication_status === "archived" ? "unpublished" : current.publication_status,
       versionCount: versions.filter(row => row.published_at).length, cleanupError: root.cleanup_error };
   });

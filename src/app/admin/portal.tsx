@@ -6,6 +6,7 @@ import type { AdminIdentity } from "@/lib/admin-auth";
 import type { ManagedLesson } from "@/lib/lesson-management";
 import { mapAudioPackage, type AudioPackageResult } from "@/lib/audio-package";
 import { hasSupportedAudioSignature } from "@/lib/audio-signature";
+import { requestLessonPublication } from "@/lib/request-lesson-publication";
 import {
   LESSON_AUDIO_BUCKET,
   getLessonAudioFolder,
@@ -19,13 +20,6 @@ type ImportResponse = {
   draftId?: string;
   error?: string;
   result?: LessonDraftParseResult;
-};
-
-type PublishResponse = {
-  error?: string;
-  message?: string;
-  lessonId?: string;
-  result?: AudioPackageResult;
 };
 
 function FileIcon() {
@@ -172,7 +166,7 @@ function DraftPreview({
             <strong className="preview-blocked">파일 선택 필요</strong>
           )}
         </div>
-        {!audioSelected ? <p>MP3, M4A, WebM 파일을 001부터 문장 순서대로 선택해 주세요.</p> : null}
+        {!audioSelected ? <p>MP3, M4A, WebM 파일을 001부터 프레이즈 순서대로 선택해 주세요. 여러 줄인 프레이즈에도 음성은 한 개입니다.</p> : null}
         {audioResult?.issues.length ? (
           <div className="validation-errors audio-errors" role="alert">
             <ul>
@@ -208,8 +202,8 @@ function DraftPreview({
                 <tr role="row" className={entry.kind === "chapter" ? "preview-chapter-row" : ""} key={`${entry.kind}-${entry.sourceLine}-${index}`}>
                   <td role="cell">{entry.kind === "phrase" ? entry.phraseNumber : "—"}</td>
                   <td role="cell">{entry.kind === "chapter" ? "챕터" : "프레이즈"}</td>
-                  <td role="cell">{entry.target || "(비어 있음)"}</td>
-                  <td role="cell">{entry.korean || "(비어 있음)"}</td>
+                  <td role="cell" className="preview-text-cell">{entry.target || "(비어 있음)"}</td>
+                  <td role="cell" className="preview-text-cell">{entry.korean || (entry.kind === "chapter" ? "—" : "(비어 있음)")}</td>
                   <td role="cell" className="preview-audio-cell">
                     {entry.kind === "phrase" ? audioByPhrase.get(entry.phraseNumber)?.originalName ?? "미연결" : "—"}
                   </td>
@@ -225,6 +219,7 @@ function DraftPreview({
 
 function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement?: ManagedLesson }) {
   const formRef = useRef<HTMLFormElement>(null);
+  const importRevisionRef = useRef(0);
   const [hydrated, setHydrated] = useState(false);
   const [result, setResult] = useState<LessonDraftParseResult | null>(null);
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
@@ -234,6 +229,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   const [draftId, setDraftId] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
+  const [audioUploaded, setAudioUploaded] = useState(false);
   const audioResult = useMemo(
     () => (result && audioFiles.length ? mapAudioPackage(result.entries, audioFiles) : null),
     [audioFiles, result]
@@ -242,6 +238,8 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   useEffect(() => setHydrated(true), []);
 
   function clearImportResult() {
+    setAudioUploaded(false);
+    importRevisionRef.current += 1;
     setResult(null);
     setSaved(false);
     setDraftId(null);
@@ -251,6 +249,8 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   }
 
   function clearSavedDraft() {
+    setAudioUploaded(false);
+    importRevisionRef.current += 1;
     setSaved(false);
     setDraftId(null);
     setPublished(false);
@@ -261,14 +261,17 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   async function submitImport(path: string, action: "validate" | "save") {
     if (!formRef.current) return;
     if (!formRef.current.reportValidity()) return;
+    const revision = importRevisionRef.current;
     setBusyAction(action);
     setError("");
     setSaved(false);
     setPublished(false);
     setUploadProgress("");
+    setAudioUploaded(false);
     try {
       const response = await fetch(path, { method: "POST", body: new FormData(formRef.current) });
       const payload = (await response.json()) as ImportResponse;
+      if (revision !== importRevisionRef.current) return;
       if (!response.ok || !payload.result) throw new Error(payload.error || "요청을 처리하지 못했습니다.");
       setResult(payload.result);
       if (action === "save" && payload.draftId) {
@@ -278,6 +281,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
         setDraftId(null);
       }
     } catch (reason) {
+      if (revision !== importRevisionRef.current) return;
       setError(reason instanceof Error ? reason.message : "요청을 처리하지 못했습니다.");
     } finally {
       setBusyAction(null);
@@ -285,6 +289,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   }
 
   function selectAudioFiles(files: FileList | null) {
+    setAudioUploaded(false);
     setAudioFiles(Array.from(files ?? []));
     setPublished(false);
     setUploadProgress("");
@@ -303,49 +308,48 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
     setError("");
     setPublished(false);
     try {
-      const folder = getLessonAudioFolder(admin.id, draftId);
-      const desiredNames = new Set(audioResult.items.map((item) => item.canonicalName));
-      const { data: existingFiles, error: listError } = await supabase.storage
-        .from(LESSON_AUDIO_BUCKET)
-        .list(folder, { limit: 1000 });
-      if (listError) throw new Error(`기존 음성을 확인하지 못했습니다: ${listError.message}`);
+      if (!audioUploaded) {
+        const folder = getLessonAudioFolder(admin.id, draftId);
+        const desiredNames = new Set(audioResult.items.map((item) => item.canonicalName));
+        const { data: existingFiles, error: listError } = await supabase.storage
+          .from(LESSON_AUDIO_BUCKET)
+          .list(folder, { limit: 1000 });
+        if (listError) throw new Error(`기존 음성을 확인하지 못했습니다: ${listError.message}`);
 
-      for (const [index, item] of audioResult.items.entries()) {
-        const file = audioFiles.find(
-          (candidate) => candidate.name === item.originalName && candidate.size === item.size
-        );
-        if (!file) throw new Error(`${item.originalName} 파일을 다시 선택해 주세요.`);
-        const signature = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-        if (!hasSupportedAudioSignature(item.canonicalName, signature)) {
-          throw new Error(`${item.originalName}의 실제 오디오 형식을 확인할 수 없습니다. 원본 파일을 다시 선택해 주세요.`);
+        for (const [index, item] of audioResult.items.entries()) {
+          const file = audioFiles.find(
+            (candidate) => candidate.name === item.originalName && candidate.size === item.size
+          );
+          if (!file) throw new Error(`${item.originalName} 파일을 다시 선택해 주세요.`);
+          const signature = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+          if (!hasSupportedAudioSignature(item.canonicalName, signature)) {
+            throw new Error(`${item.originalName}의 실제 오디오 형식을 확인할 수 없습니다. 원본 파일을 다시 선택해 주세요.`);
+          }
+          setUploadProgress(`${index + 1} / ${audioResult.items.length} 업로드 중`);
+          const { error: uploadError } = await supabase.storage
+            .from(LESSON_AUDIO_BUCKET)
+            .upload(getLessonAudioPath(admin.id, draftId, item.canonicalName), file, {
+              cacheControl: "3600",
+              contentType: item.contentType,
+              upsert: true
+            });
+          if (uploadError) throw new Error(`${item.originalName} 업로드 실패: ${uploadError.message}`);
         }
-        setUploadProgress(`${index + 1} / ${audioResult.items.length} 업로드 중`);
-        const { error: uploadError } = await supabase.storage
-          .from(LESSON_AUDIO_BUCKET)
-          .upload(getLessonAudioPath(admin.id, draftId, item.canonicalName), file, {
-            cacheControl: "3600",
-            contentType: item.contentType,
-            upsert: true
-          });
-        if (uploadError) throw new Error(`${item.originalName} 업로드 실패: ${uploadError.message}`);
-      }
 
-      const stalePaths = (existingFiles ?? [])
-        .filter((file: { name: string }) => !desiredNames.has(file.name))
-        .map((file: { name: string }) => getLessonAudioPath(admin.id, draftId, file.name));
-      if (stalePaths.length) {
-        const { error: removeError } = await supabase.storage
-          .from(LESSON_AUDIO_BUCKET)
-          .remove(stalePaths);
-        if (removeError) throw new Error(`이전 음성을 정리하지 못했습니다: ${removeError.message}`);
+        const stalePaths = (existingFiles ?? [])
+          .filter((file: { name: string }) => !desiredNames.has(file.name))
+          .map((file: { name: string }) => getLessonAudioPath(admin.id, draftId, file.name));
+        if (stalePaths.length) {
+          const { error: removeError } = await supabase.storage
+            .from(LESSON_AUDIO_BUCKET)
+            .remove(stalePaths);
+          if (removeError) throw new Error(`이전 음성을 정리하지 못했습니다: ${removeError.message}`);
+        }
+        setAudioUploaded(true);
       }
 
       setUploadProgress("게시 확인 중");
-      const response = await fetch(`/api/admin/drafts/${draftId}/publish`, { method: "POST" });
-      const payload = (await response.json()) as PublishResponse;
-      if (!response.ok || !payload.lessonId) {
-        throw new Error(payload.message || "레슨을 게시하지 못했습니다.");
-      }
+      await requestLessonPublication(draftId);
       setPublished(true);
       setUploadProgress("");
     } catch (reason) {
@@ -389,33 +393,24 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
           {replacement ? <input type="hidden" name="replacementFor" value={replacement.id} /> : null}
           <div className="import-metadata">
             <label htmlFor="lesson-title">레슨 제목</label>
-            <input id="lesson-title" name="title" defaultValue={replacement?.title} maxLength={120} required onChange={clearSavedDraft} />
+            <input id="lesson-title" name="title" defaultValue={replacement?.title} maxLength={120} required disabled={busyAction === "publish"} onChange={clearSavedDraft} />
             <label htmlFor="lesson-language">언어</label>
             {replacement ? <input type="hidden" name="language" value={replacement.language} /> : null}
-            <select id="lesson-language" name="language" defaultValue={replacement?.language ?? "english"} disabled={!!replacement} onChange={clearSavedDraft}>
+            <select id="lesson-language" name="language" defaultValue={replacement?.language ?? "english"} disabled={!!replacement || busyAction === "publish"} onChange={clearSavedDraft}>
               <option value="english">English 영어</option>
               <option value="japanese">日本語 일본어</option>
             </select>
           </div>
           <div className="import-files">
-            <label className="file-field" htmlFor="target-file">
-              <span><FileIcon /> 목표어 텍스트</span>
+            <label className="file-field" htmlFor="script-file">
+              <span><FileIcon /> 통합 스크립트</span>
               <input
-                id="target-file"
-                name="targetFile"
+                id="script-file"
+                disabled={busyAction === "publish"}
+                name="scriptFile"
                 type="file"
                 accept=".txt,text/plain"
-                required
-                onChange={clearImportResult}
-              />
-            </label>
-            <label className="file-field" htmlFor="korean-file">
-              <span><FileIcon /> 한국어 텍스트</span>
-              <input
-                id="korean-file"
-                name="koreanFile"
-                type="file"
-                accept=".txt,text/plain"
+                aria-describedby="script-format-help"
                 required
                 onChange={clearImportResult}
               />
@@ -424,13 +419,15 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
               <span><FileIcon /> 문장별 음성 파일</span>
               <input
                 id="audio-files"
+                disabled={busyAction === "publish"}
                 type="file"
                 accept=".mp3,.m4a,.webm,audio/mpeg,audio/mp4,audio/webm"
                 multiple
                 onChange={(event) => selectAudioFiles(event.currentTarget.files)}
               />
             </label>
-            <p>.txt · UTF-8 · 텍스트 파일당 최대 2MB<br />음성 · 001부터 세 자리 번호 · MP3, M4A, WebM · 파일당 최대 4MB</p>
+            <p id="script-format-help">TXT 한 파일에 목표어 묶음 → 한국어 묶음 순서로 넣어 주세요. 연속된 여러 줄도 한 프레이즈이며, 빈 줄은 무시합니다. 챕터 제목은 줄 맨 앞에 ## 을 붙여 주세요.<br />한국어는 한글 포함 여부로 구분합니다. 번역에 한글이 없거나 목표어에 한글이 섞이면 구분이 달라질 수 있으니 미리보기를 확인해 주세요.</p>
+            <p>.txt 한 개 · UTF-8 · 최대 2MB<br />음성 여러 개 · 프레이즈당 한 개 · 001부터 세 자리 번호 · MP3, M4A, WebM · 파일당 최대 4MB</p>
           </div>
           <button
             type="button"
@@ -472,8 +469,9 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
                 }
                 onClick={publishLesson}
               >
-                {busyAction === "publish" ? "업로드 중…" : "음성 업로드 후 게시"}
+                {busyAction === "publish" ? (audioUploaded ? "게시 확인 중…" : "업로드 중…") : (audioUploaded ? "게시만 다시 시도" : "음성 업로드 후 게시")}
               </button>
+              {audioUploaded && !published ? <p>음성 업로드가 완료되었습니다. 게시만 다시 시도하면 파일을 재업로드하지 않습니다. 화면을 닫았으면 <Link href="/admin/lessons">레슨 관리</Link>에서 이어서 게시할 수 있습니다.</p> : null}
             </div>
           </>
         ) : null}

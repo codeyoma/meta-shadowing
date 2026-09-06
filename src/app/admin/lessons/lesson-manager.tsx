@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ManagedLesson } from "@/lib/lesson-management";
+import { requestLessonPublication } from "@/lib/request-lesson-publication";
 import { Brand, Page } from "../../ui";
 
 const statusNames = { draft: "초안", published: "게시 중", unpublished: "게시 해제됨", deleting: "삭제 정리 필요" };
@@ -14,6 +15,11 @@ export function LessonManager({ initialLessons, initialError = "" }: { initialLe
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
   const [message, setMessage] = useState("");
+  const [selectedDraftIds, setSelectedDraftIds] = useState<Record<string, string>>({});
+
+  function selectedDraft(lesson: ManagedLesson) {
+    return lesson.pendingDrafts.find(draft => draft.id === selectedDraftIds[lesson.id]) ?? lesson.pendingDrafts[0];
+  }
 
   async function reloadLessons() {
     const response = await fetch("/api/admin/lessons", { cache: "no-store" });
@@ -51,6 +57,21 @@ export function LessonManager({ initialLessons, initialError = "" }: { initialLe
     } finally { setBusy(false); }
   }
 
+  async function publishUploadedDraft(lesson: ManagedLesson) {
+    const pending = selectedDraft(lesson);
+    if (!pending) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await requestLessonPublication(pending.id);
+      await reloadLessons();
+      setMessage("업로드된 음성을 확인하여 레슨을 게시했습니다. 파일은 재업로드하지 않았습니다.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "게시 상태를 확인한 뒤 다시 시도해 주세요.");
+    } finally { setBusy(false); }
+  }
+
   return <Page className="admin-page">
     <header className="admin-header"><Brand compact /><Link href="/admin">새 레슨 가져오기</Link></header>
     <section className="admin-workspace" aria-labelledby="management-title">
@@ -65,7 +86,18 @@ export function LessonManager({ initialLessons, initialError = "" }: { initialLe
             <p>{lesson.language === "english" ? "영어" : "일본어"} · {statusNames[lesson.status]} · {lesson.versionCount}개 버전</p>
           </div>
           {lesson.status === "deleting" ? <p className="admin-form-error">{lesson.cleanupError || "삭제가 중단되었습니다. 레슨은 숨김 상태입니다. 삭제 정리를 다시 시도해 주세요."}</p> : null}
+          {lesson.pendingDrafts.length > 1 ? <div className="import-metadata">
+            <label htmlFor={`pending-draft-${lesson.id}`}>게시할 초안</label>
+            <select id={`pending-draft-${lesson.id}`} disabled={busy} value={selectedDraft(lesson)?.id} onChange={event => setSelectedDraftIds({ ...selectedDraftIds, [lesson.id]: event.target.value })}>
+              {lesson.pendingDrafts.map((draft, index) => <option key={draft.id} value={draft.id}>{draft.title} — {index + 1}번 (최신순)</option>)}
+            </select>
+          </div> : null}
+          {selectedDraft(lesson) ? <p>
+            {selectedDraft(lesson)!.id !== lesson.draftId ? `대기 중인 새 버전 “${selectedDraft(lesson)!.title}”: ` : ""}
+            이미 올린 음성으로 검증과 게시만 진행합니다. 파일을 다시 선택하거나 업로드하지 않습니다.
+          </p> : null}
           <div className="management-actions">
+            {lesson.pendingDrafts.length ? <button className="primary-button" disabled={busy} onClick={() => publishUploadedDraft(lesson)}>{busy ? "처리 중…" : "업로드된 음성으로 게시"}</button> : null}
             {lesson.status !== "deleting" && lesson.versionCount > 0
               ? <Link className="secondary-button" href={`/admin?replace=${lesson.id}`}>새 버전 가져오기</Link> : null}
             {lesson.status === "published" ? <button className="secondary-button" disabled={busy} onClick={() => mutate(lesson, "unpublish")}>게시 해제</button> : null}

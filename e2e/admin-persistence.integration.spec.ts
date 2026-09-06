@@ -12,8 +12,7 @@ test("the administrator draft route persists the parsed import behind RLS", asyn
   const secretKey = process.env.SUPABASE_INTEGRATION_SECRET_KEY!;
   const email = `admin-integration-${randomUUID()}@example.com`;
   const title = "통합 테스트 아침 일과";
-  const targetSource = "## Morning Routine\nGood morning.\n\nI wash my face.\n";
-  const koreanSource = "## 아침 일과\n좋은 아침입니다.\n\n세수합니다.\n";
+  const scriptSource = '## Morning Routine\nおはよう ございます。\n좋은 아침입니다.\n\n「何を読みますか？」\n「小説です。」\n"무엇을 읽어요?"\n"소설이에요."\n';
 
   const serviceClient = createClient(supabaseUrl, secretKey, {
     auth: { autoRefreshToken: false, persistSession: false }
@@ -47,15 +46,10 @@ test("the administrator draft route persists the parsed import behind RLS", asyn
       multipart: {
         title,
         language: "japanese",
-        targetFile: {
-          name: "target.txt",
+        scriptFile: {
+          name: "script.txt",
           mimeType: "text/plain",
-          buffer: Buffer.from(targetSource)
-        },
-        koreanFile: {
-          name: "ko.txt",
-          mimeType: "text/plain",
-          buffer: Buffer.from(koreanSource)
+          buffer: Buffer.from(scriptSource)
         }
       }
     });
@@ -93,37 +87,36 @@ test("the administrator draft route persists the parsed import behind RLS", asyn
       created_by: created.user!.id,
       title,
       language: "japanese",
-      target_filename: "target.txt",
-      korean_filename: "ko.txt",
-      target_source: targetSource,
-      korean_source: koreanSource,
+      target_filename: "script.txt",
+      korean_filename: "script.txt",
+      target_source: scriptSource,
+      korean_source: "",
       validation_issues: [],
       validation_status: "validated",
       phrase_count: 2,
       chapter_count: 1,
-      section_count: 1
+      section_count: 0
     });
     expect(row.parsed_entries).toEqual([
       {
         kind: "chapter",
         sourceLine: 1,
         target: "Morning Routine",
-        korean: "아침 일과"
+        korean: ""
       },
       {
         kind: "phrase",
         sourceLine: 2,
         phraseNumber: 1,
-        target: "Good morning.",
+        target: "おはよう ございます。",
         korean: "좋은 아침입니다."
       },
-      { kind: "section", sourceLine: 3 },
       {
         kind: "phrase",
-        sourceLine: 4,
+        sourceLine: 5,
         phraseNumber: 2,
-        target: "I wash my face.",
-        korean: "세수합니다."
+        target: "「何を読みますか？」\n「小説です。」",
+        korean: '"무엇을 읽어요?"\n"소설이에요."'
       }
     ]);
   } finally {

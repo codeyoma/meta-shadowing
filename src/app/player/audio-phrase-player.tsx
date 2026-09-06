@@ -81,7 +81,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
         {grouped ? <>
           {group.chapter ? <><strong>{group.chapter.target}</strong><span>{group.chapter.korean}</span></> : null}
           {group.startsSection ? <hr className="section-divider" aria-label="구간 경계" /> : null}
-        </> : <><strong>{lesson.name}</strong><span>{lesson.localizedName}</span></>}
+        </> : <><strong>{lesson.name}</strong>{lesson.localizedName !== lesson.name ? <span>{lesson.localizedName}</span> : null}</>}
       </header> : null}
       <section className="practice-shell" aria-labelledby="player-title">
         <h1 id="player-title">메타쉐도잉 레벨 {level}</h1>

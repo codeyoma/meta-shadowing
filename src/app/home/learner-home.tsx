@@ -75,7 +75,7 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
             {visibleLessons.map((lesson) => (
               <button className="lesson-row" key={lesson.id} onClick={() => router.push(`/setup?language=${language}&lesson=${lesson.id}`)}>
                 <span className="round-icon"><LessonIcon /></span>
-                <span><strong>{lesson.name}</strong><em>{lesson.localizedName}</em><small>{lesson.phraseCount}개 프레이즈</small></span>
+                <span><strong>{lesson.name}</strong>{lesson.localizedName !== lesson.name ? <em>{lesson.localizedName}</em> : null}<small>{lesson.phraseCount}개 프레이즈</small></span>
                 <ArrowIcon />
               </button>
             ))}
