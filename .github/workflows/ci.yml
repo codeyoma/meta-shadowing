@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  ci-branch-policy:
+    name: ci-branch-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Check PR source and target
+        run: node scripts/check-branch-policy.mjs < "$GITHUB_EVENT_PATH"
+
+  ci-quality:
+    name: ci-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run typecheck
+
+  ci-browser:
+    name: ci-browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser -- --workers=2 --reporter=line --global-timeout=600000
+
+  ci-database:
+    name: ci-database
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start disposable local database
+        run: npx --yes supabase@2.116.0 start
+      - run: npm run test:db
+      - name: Test production build against local Supabase over HTTPS
+        run: npm run test:integration -- --reporter=line --global-timeout=600000
+        env:
+          PLAYWRIGHT_PRODUCTION: "1"
+      - name: Stop this runner's disposable database
+        if: always()
+        run: npx --yes supabase@2.116.0 stop --project-id meta-shadowing-mvp --no-backup
+
+  release-approval:
+    name: release-approval
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: [ci-branch-policy, ci-quality, ci-browser, ci-database]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: release-approval
+    steps:
+      - name: Record the human-approved candidate
+        run: echo "Release candidate approved for merge. This job does not deploy the application."

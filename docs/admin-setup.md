@@ -1,13 +1,13 @@
 # Administrator and Supabase setup
 
-Issues #3 and #4 add the administrator import, private sentence-audio upload, publication, catalog, and first-playback slices. This repository is not attached to an existing remote Supabase project. Create a dedicated project for Meta Shadowing before deployment; do not reuse an unrelated database.
+Issues #3 and #4 add the administrator import, private sentence-audio upload, publication, catalog, and first-playback slices. The user selected the existing **Yòmá's Projects** Supabase project (`zjfzrtzwegqmmhgwgrwp`, Seoul) for deployment. Inspect its existing Auth, Storage, migrations, and policies before applying this setup; preserve unrelated resources. Target selection does not mean migrations or credentials have been configured.
 
 ## 1. Apply the schema
 
 Use the CLI version verified for this migration:
 
 ```bash
-npx supabase@2.116.0 link --project-ref <meta-shadowing-project-ref>
+npx supabase@2.116.0 link --project-ref zjfzrtzwegqmmhgwgrwp
 npx supabase@2.116.0 db push
 ```
 
@@ -21,7 +21,7 @@ Issue #11 requires `20260906090138_release_explicit_grants.sql`. It removes inhe
 
 ## 2. Configure the one administrator
 
-1. Disable public email sign-ups in Supabase Auth.
+1. Inspect current Auth users, providers and sign-up settings. Disable public email sign-ups only after confirming that this project-wide change will not break another application; otherwise resolve that conflict with the user before deployment.
 2. Create or invite the administrator from the trusted Supabase dashboard.
 3. Set the administrator's **app metadata** to `{ "role": "admin" }`. Do not put authorization data in user metadata because users can modify that field themselves.
 4. Add `https://<your-vercel-domain>/auth/confirm` to the Auth redirect allow list.
@@ -33,7 +33,7 @@ The application calls `signInWithOtp` with `shouldCreateUser: false`, so enterin
 
 ## 3. Configure Vercel
 
-Set these environment values for Preview and Production:
+Follow [the branch workflow](agents/git-workflow.md): Vercel Production tracks `main`; development branches must remain Preview-only. Set these environment values independently for Preview and Production:
 
 ```text
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co

@@ -12,6 +12,10 @@ Use the canonical labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready
 
 This is a single-context repo using root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
 
+### Git and releases
+
+Before starting a branch, opening or merging a PR, or changing deployment settings, read `docs/agents/git-workflow.md`. Feature PRs target `dev`; only user-approved release PRs from `dev` target `main`.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
