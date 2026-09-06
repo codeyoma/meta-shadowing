@@ -1,5 +1,18 @@
 import { expect, it } from "vitest";
-import { firstPracticeToken } from "./practice-tokens";
+import { firstPracticeToken, tokenizePracticeText } from "./practice-tokens";
+
+it("uses supplied spaces as WPM boundaries without losing punctuation or inventing blank tokens", () => {
+  expect(tokenizePracticeText("  I wake\tup at seven.  ", "english")).toEqual(["I", "wake", "up", "at", "seven."]);
+  expect(tokenizePracticeText("私は 七時に　起きます。", "japanese")).toEqual(["私は", "七時に", "起きます。"]);
+  expect(tokenizePracticeText("나는  일곱 시에 일어난다.", "korean")).toEqual(["나는", "일곱", "시에", "일어난다."]);
+  expect(tokenizePracticeText("  ", "japanese")).toEqual([]);
+});
+
+it("segments unspaced Japanese into WPM words and keeps punctuation attached to the words", () => {
+  expect(tokenizePracticeText("東京に行きます。", "japanese")).toEqual(["東京", "に", "行き", "ます。"]);
+  expect(tokenizePracticeText("「猫。」", "japanese")).toEqual(["「猫。」"]);
+  expect(tokenizePracticeText("…", "japanese")).toEqual(["…"]);
+});
 
 it("honors supplied token boundaries, including Japanese phrases that a dictionary would split differently", () => {
   expect(firstPracticeToken("  私は 七時に 起きます。 ", "japanese")).toBe("私は");

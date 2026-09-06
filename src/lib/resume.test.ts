@@ -29,6 +29,19 @@ describe("last learner selection", () => {
     expect(readLastSelection()).toEqual(selection);
   });
 
+  it("retains WPM settings in a rapid session link without audio speed or grouping", () => {
+    const rapid = { ...selection, level: 7, mode: "automatic" as const, display: "cumulative" as const, wpmLevel: 5 as const, speakingExtraMs: 1500, lineGapMs: 500, sectionGapMs: 3000 };
+    saveLastSelection(rapid);
+    expect(readLastSelection()).toEqual(rapid);
+    const params = new URL(getPlayerHref(rapid), "http://localhost").searchParams;
+    expect(Object.fromEntries(params)).toEqual({ lesson: "morning-routine", level: "7", mode: "automatic", display: "cumulative", wpm: "5", speak: "1.5", lineGap: "0.5", sectionGap: "3" });
+  });
+
+  it.each([{ wpmLevel: 2 }, { speakingExtraMs: -1 }, { lineGapMs: "1000" }, { sectionGapMs: 30001 }])("rejects invalid saved rapid settings %j", invalid => {
+    window.localStorage.setItem("meta-shadowing:last-selection", JSON.stringify({ ...selection, level: 8, ...invalid }));
+    expect(readLastSelection()).toBeNull();
+  });
+
   it.each([2, 3, 4] as const)("retains group size %s in the saved selection and player URL", groupSize => {
     const grouped = { ...selection, level: 5, groupSize };
     saveLastSelection(grouped);

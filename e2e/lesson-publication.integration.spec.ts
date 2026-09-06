@@ -266,6 +266,40 @@ test("only a complete private audio package can be published and played by a bet
         await expect(subtitles.getByText("I wash my face.", { exact: true })).toBeVisible();
       }
     }
+
+    const rapidAudioRequests: string[] = [];
+    page.on("request", request => { if (request.url().includes("/audio/")) rapidAudioRequests.push(request.url()); });
+    await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+    for (const level of [6, 7, 8]) {
+      await page.goto(`/player?lesson=${draftId}&level=${level}&wpm=6&mode=automatic&sectionGap=0.5`);
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
+      await expect(page.getByLabel("현재 챕터")).toHaveText("First chapter첫 챕터");
+      await expect(page.locator("audio")).toHaveCount(0);
+      const canvas = page.getByRole("region", { name: "속사포 학습" });
+      await page.keyboard.press("Space");
+      await expect(canvas).toHaveText(level === 6 ? "Good" : "좋은");
+      await page.clock.runFor(300);
+      if (level === 6) {
+        await expect(canvas).toHaveText("좋은");
+        await page.clock.runFor(300);
+      } else {
+        await expect(page.getByRole("timer")).toHaveText("0.8초");
+        await page.clock.runFor(800);
+        if (level === 7) {
+          await expect(canvas).toHaveText("Good");
+          await page.clock.runFor(300);
+        }
+      }
+      await expect(page.getByRole("timer")).toHaveText("0.5초");
+      await page.clock.runFor(500);
+      await expect(canvas).toHaveText(level === 6 ? "I" : "세수합니다.");
+      await expect(page.getByRole("separator", { name: "구간 경계" })).toBeVisible();
+      await page.clock.runFor(5000);
+      await expect(page.getByRole("heading", { name: `레벨 ${level} 학습 완료` })).toBeVisible();
+    }
+    expect(rapidAudioRequests).toEqual([]);
   } finally {
     if (uploadedPaths.length) await serviceClient.storage.from("lesson-audio").remove(uploadedPaths);
     await serviceClient.auth.admin.deleteUser(createdAdmin.user.id);

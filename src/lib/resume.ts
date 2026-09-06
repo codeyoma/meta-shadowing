@@ -1,4 +1,5 @@
 import { isGroupSize, type GroupSize } from "./phrase-groups";
+import { isRapidDelay, isWpmLevel, normalizeRapidSettings, type RapidSettings } from "./rapid-session";
 
 const LAST_SELECTION_KEY = "meta-shadowing:last-selection";
 
@@ -11,16 +12,29 @@ export type SessionSelection = {
   speed: number;
   advanceDelayMs?: number;
   groupSize?: GroupSize;
+  wpmLevel?: RapidSettings["wpmLevel"];
+  speakingExtraMs?: number;
+  lineGapMs?: number;
+  sectionGapMs?: number;
 };
 
 export function getPlayerHref(selection: SessionSelection): string {
   const params = new URLSearchParams({
     lesson: selection.lessonId,
     level: String(selection.level),
-    mode: selection.mode,
-    speed: String(selection.speed),
-    gap: String((selection.advanceDelayMs ?? 1000) / 1000)
+    mode: selection.mode
   });
+  if (selection.level >= 6) {
+    const settings = normalizeRapidSettings(selection);
+    params.set("display", settings.display);
+    params.set("wpm", String(settings.wpmLevel));
+    params.set("speak", String(settings.speakingExtraMs / 1000));
+    params.set("lineGap", String(settings.lineGapMs / 1000));
+    params.set("sectionGap", String(settings.sectionGapMs / 1000));
+  } else {
+    params.set("speed", String(selection.speed));
+    params.set("gap", String((selection.advanceDelayMs ?? 1000) / 1000));
+  }
   if (selection.level === 4 || selection.level === 5) params.set("group", String(selection.groupSize ?? 2));
   return `/player?${params}`;
 }
@@ -39,7 +53,9 @@ function isSessionSelection(value: unknown): value is SessionSelection {
     (selection.mode === "manual" || selection.mode === "automatic") &&
     (selection.display === "current" || selection.display === "cumulative") &&
     typeof selection.speed === "number" &&
-    (selection.groupSize === undefined || isGroupSize(selection.groupSize))
+    (selection.groupSize === undefined || isGroupSize(selection.groupSize)) &&
+    (selection.wpmLevel === undefined || isWpmLevel(selection.wpmLevel)) &&
+    ["speakingExtraMs", "lineGapMs", "sectionGapMs"].every(key => selection[key] === undefined || isRapidDelay(selection[key]))
   );
 }
 

@@ -112,6 +112,8 @@ Acceptance criteria:
 - Supplied spaces and Japanese fallback segmentation determine tokens.
 - Tests cover schedule order, timing, pause, restart, manual stop, and display modes.
 
+Timing clarification approved on 2026-09-06: for levels 7–8, the speaking window is the target line's token count × 60,000 / selected WPM, plus an adjustable extra pause (default 500 ms). The Korean prompt's length does not determine this window. Automatic line gaps default to 1,000 ms; chapter/blank-section gaps default to 2,000 ms and replace the ordinary line gap.
+
 ## Task 8: Connect settings, progress, and completion history (GitHub #9)
 
 Let learners override global defaults, persist browser preferences and phrase-boundary progress, resume the last session, and append completion records with active time and the configuration snapshot.

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { levelNames, type Lesson } from "@/lib/lessons";
 import { getPlayerHref, saveLastSelection, SessionSelection } from "@/lib/resume";
 import { isGroupSize, type GroupSize } from "@/lib/phrase-groups";
+import { DEFAULT_RAPID_SETTINGS, normalizeRapidSettings } from "@/lib/rapid-session";
 import { AudioSessionControls } from "../audio-session-controls";
+import { RapidSessionControls } from "../rapid-session-controls";
 import { ArrowIcon, BackIcon, Brand, Page } from "../ui";
 
 export function SessionSetup({ lesson }: { lesson: Lesson }) {
@@ -13,13 +15,13 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
   const language = lesson.language;
   const [level, setLevel] = useState(1);
   const [mode, setMode] = useState<SessionSelection["mode"]>("manual");
-  const [display, setDisplay] = useState<SessionSelection["display"]>("current");
+  const [rapidSettings, setRapidSettings] = useState(DEFAULT_RAPID_SETTINGS);
   const [speed, setSpeed] = useState(1);
   const [advanceDelayMs, setAdvanceDelayMs] = useState(1000);
   const [groupSize, setGroupSize] = useState<GroupSize>(2);
 
   function start(): void {
-    const selection = { language, lessonId: lesson.id, level, mode, display, speed, advanceDelayMs, groupSize };
+    const selection = { ...rapidSettings, language, lessonId: lesson.id, level, mode: level >= 6 ? rapidSettings.mode : mode, speed, advanceDelayMs, groupSize };
     saveLastSelection(selection);
     router.push(getPlayerHref(selection));
   }
@@ -58,15 +60,11 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
                 {[2, 3, 4].map(size => <option key={size} value={size}>{size}개</option>)}
               </select>
             </label> : null}
-            <AudioSessionControls settings={{ mode, playbackRate: speed, advanceDelayMs }} onChange={(settings) => {
+            {level >= 6 ? <RapidSessionControls level={level} settings={rapidSettings} onChange={settings => setRapidSettings(previous => normalizeRapidSettings(settings, previous))} /> : <AudioSessionControls settings={{ mode, playbackRate: speed, advanceDelayMs }} onChange={(settings) => {
               if (settings.mode !== undefined) setMode(settings.mode);
               if (settings.playbackRate !== undefined) setSpeed(settings.playbackRate);
               if (settings.advanceDelayMs !== undefined) setAdvanceDelayMs(settings.advanceDelayMs);
-            }} />
-            {level >= 6 ? <div className="segment-control" aria-label="표시 방식">
-              <button className={display === "current" ? "selected" : ""} onClick={() => setDisplay("current")}>현재 단어</button>
-              <button className={display === "cumulative" ? "selected" : ""} onClick={() => setDisplay("cumulative")}>누적 단어</button>
-            </div> : null}
+            }} />}
           </div>
         </section>
         <button className="primary-button start-button" onClick={start}>학습 시작</button>

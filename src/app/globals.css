@@ -122,6 +122,17 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 
 .admin-header { min-height: 72px; padding: 12px max(20px, calc((100% - 72rem) / 2)); display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border); background: var(--bg); }
 .section-divider { width: 100%; margin: 0; border: 0; border-top: 1px solid var(--border); }
+.rapid-session-controls select { width: 158px; }
+.rapid-settings-help { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; text-align: left; }
+.rapid-stage { min-height: 20px; margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.rapid-player .rapid-canvas { border-width: 1px; min-height: 200px; }
+.rapid-player .rapid-canvas.current > span { font-size: 64px; }
+.rapid-player .rapid-canvas.cumulative > span { font-size: clamp(26px, 6vw, 38px); }
+.rapid-canvas > p { color: var(--muted); font-size: 24px; }
+.rapid-player .session-meta { display: flex; margin: 16px 0 0; }
+@media (max-width: 560px) and (max-height: 800px) {
+  .rapid-player .rapid-canvas { min-height: 160px; }
+}
 .audio-phrase-player .group-canvas { display: block; height: clamp(160px, 24dvh, 260px); min-height: 0; padding: 12px 16px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .group-phrases { padding: 0; margin: 0; list-style: none; text-align: left; }
 .group-phrases > li { display: grid; gap: 8px; padding: 12px 8px; border-left: 2px solid transparent; border-bottom: 1px solid var(--border); }
