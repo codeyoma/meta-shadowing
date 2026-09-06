@@ -22,6 +22,110 @@ async function signInWithEmailOtp(client: SupabaseClient, serviceClient: Supabas
   expect(error).toBeNull();
 }
 
+test("a saved 560-file draft recovers from a text timeout without reuploading any audio", async ({ page }) => {
+  test.setTimeout(120000);
+  const url = process.env.SUPABASE_INTEGRATION_URL!;
+  if (!["127.0.0.1", "localhost"].includes(new URL(url).hostname)) throw new Error("Local fixtures only");
+  const options = { auth: { persistSession: false, autoRefreshToken: false } };
+  const service = createClient(url, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, options);
+  const admin = createClient(url, process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!, options);
+  const email = `recovery-${randomUUID()}@example.com`;
+  const { data, error } = await service.auth.admin.createUser({ email, email_confirm: true, app_metadata: { role: "admin" } });
+  expect(error).toBeNull();
+  const owner = data.user!.id;
+  const paths: string[] = [];
+  try {
+    const { data: link } = await service.auth.admin.generateLink({ type: "magiclink", email });
+    expect((await page.request.post("/api/admin/auth/verify", { data: { email, token: link.properties!.email_otp } })).status()).toBe(200);
+    await signInWithEmailOtp(admin, service, email);
+    const source = Array.from({ length: 560 }, (_, index) => `Practice phrase ${index + 1}.\n연습 문장 ${index + 1}.`).join("\n");
+    const saved = await page.request.post("/api/admin/drafts", { multipart: {
+      title: "Large recovery fixture", language: "english",
+      scriptFile: { name: "script.txt", mimeType: "text/plain", buffer: Buffer.from(source) }
+    } });
+    expect(saved.status()).toBe(201);
+    const { draftId } = await saved.json();
+    const folder = `${owner}/${draftId}`;
+    const bytes = Buffer.from(TEST_WEBM_BASE64, "base64");
+    for (let offset = 0; offset < 560; offset += 8) {
+      await Promise.all(Array.from({ length: Math.min(8, 560 - offset) }, async (_, index) => {
+        const path = `${folder}/${String(offset + index + 1).padStart(3, "0")}.webm`;
+        paths.push(path);
+        expect((await admin.storage.from("lesson-audio").upload(path, bytes, { contentType: "audio/webm" })).error).toBeNull();
+      }));
+    }
+    // Characterize the exact authenticated Range request used by publication.
+    const rangeRequest = { headers: { Range: "bytes=0-11" }, cache: "no-store" as const };
+    const signature = await admin.storage.from("lesson-audio").download(paths[0], {}, rangeRequest);
+    expect(signature.error).toBeNull();
+    expect(signature.data!.size).toBe(12);
+    const before = await service.storage.from("lesson-audio").list(folder, { limit: 1000, sortBy: { column: "name", order: "asc" } });
+    expect(before.error).toBeNull();
+    expect(before.data).toHaveLength(560);
+    let browserStorageWrites = 0;
+    page.on("request", request => {
+      if (request.url().includes("/storage/v1/") && !["GET", "HEAD"].includes(request.method())) browserStorageWrites++;
+    });
+    await page.goto("/admin/lessons");
+    const row = page.getByRole("listitem").filter({ hasText: "Large recovery fixture" });
+    await page.route(`**/api/admin/drafts/${draftId}/publish`, route => route.fulfill({ status: 504, contentType: "text/plain", body: "An error occurred" }), { times: 1 });
+    await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toBeVisible();
+    await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
+    await expect(page.locator(".admin-form-error[role=alert]")).toContainText("시간");
+    await expect(page.locator(".admin-form-error[role=alert]")).not.toContainText("Unexpected");
+    const published = page.waitForResponse(response => response.url().endsWith(`/api/admin/drafts/${draftId}/publish`));
+    const started = Date.now();
+    await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
+    expect((await published).status()).toBe(200);
+    expect(Date.now() - started).toBeLessThan(30000);
+    await expect(row).toContainText("게시 중");
+    await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toHaveCount(0);
+    expect(browserStorageWrites).toBe(0);
+    const after = await service.storage.from("lesson-audio").list(folder, { limit: 1000, sortBy: { column: "name", order: "asc" } });
+    const immutableMetadata = (files: NonNullable<typeof before.data>) => files.map(file => [file.id, file.name, file.updated_at, file.metadata?.size]);
+    expect(after.error).toBeNull();
+    expect(immutableMetadata(after.data!)).toEqual(immutableMetadata(before.data!));
+    const result = await service.from("lesson_drafts").select("publication_status, audio_manifest").eq("id", draftId).single();
+    expect(result.data?.publication_status).toBe("published");
+    expect(result.data?.audio_manifest).toHaveLength(560);
+    // A pending replacement must remain recoverable while the old version stays published.
+    const replacement = await page.request.post("/api/admin/drafts", { multipart: {
+      title: "Recovered replacement", language: "english", replacementFor: draftId,
+      scriptFile: { name: "replacement.txt", mimeType: "text/plain", buffer: Buffer.from("Hello again.\n다시 안녕하세요.") }
+    } });
+    expect(replacement.status()).toBe(201);
+    const pendingId = (await replacement.json()).draftId;
+    const pendingPath = `${owner}/${pendingId}/001.webm`;
+    paths.push(pendingPath);
+    expect((await admin.storage.from("lesson-audio").upload(pendingPath, bytes, { contentType: "audio/webm" })).error).toBeNull();
+    const newerDraft = await page.request.post("/api/admin/drafts", { multipart: {
+      title: "Newer draft without audio", language: "english", replacementFor: draftId,
+      scriptFile: { name: "newer.txt", mimeType: "text/plain", buffer: Buffer.from("Try later.\n나중에 시도하세요.") }
+    } });
+    expect(newerDraft.status()).toBe(201);
+    await page.reload();
+    await expect(row).toContainText("게시 중");
+    await page.setViewportSize({ width: 393, height: 851 });
+    await expect(row.getByLabel("게시할 초안")).toBeVisible();
+    expect((await row.getByLabel("게시할 초안").boundingBox())!.height).toBeGreaterThanOrEqual(48);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await row.getByLabel("게시할 초안").selectOption(pendingId);
+    await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toBeVisible();
+    await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
+    const replaced = page.getByRole("listitem").filter({ hasText: "Recovered replacement" });
+    await expect(replaced).toContainText("게시 중");
+    await expect(replaced).toContainText("2개 버전");
+    expect(browserStorageWrites).toBe(0);
+    await page.setViewportSize({ width: 393, height: 851 });
+    await page.screenshot({ path: test.info().outputPath("publication-recovery-mobile.png") });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    if (paths.length) expect((await service.storage.from("lesson-audio").remove(paths)).error).toBeNull();
+    expect((await service.from("lesson_drafts").delete().eq("created_by", owner)).error).toBeNull();
+    expect((await service.auth.admin.deleteUser(owner)).error).toBeNull();
+  }
+});
+
 test("only a complete private audio package can be published and played by a beta learner", async ({
   page,
   request
@@ -169,10 +273,21 @@ test("only a complete private audio package can be published and played by a bet
       { name: "001-first.webm", mimeType: "audio/webm", buffer: audioBytes }
     ]);
     await expect(page.getByText("2 / 2 연결 · 게시 가능")).toBeVisible();
+    let uploadWrites = 0;
+    page.on("request", request => {
+      if (request.url().includes("/storage/v1/object/lesson-audio/") && request.method() === "POST") uploadWrites++;
+    });
+    await page.route(`**/api/admin/drafts/${draftId}/publish`, route => route.fulfill({
+      status: 504, contentType: "text/plain", body: "An error occurred: FUNCTION_INVOCATION_TIMEOUT"
+    }), { times: 1 });
+    await page.getByRole("button", { name: "음성 업로드 후 게시" }).click();
+    await expect(page.locator(".admin-form-error[role=alert]")).toContainText("시간");
+    await expect(page.locator(".admin-form-error[role=alert]")).not.toContainText("Unexpected token");
+    expect(uploadWrites).toBe(2);
     const publishedResponse = page.waitForResponse((response) =>
       response.url().endsWith(`/api/admin/drafts/${draftId}/publish`)
     );
-    await page.getByRole("button", { name: "음성 업로드 후 게시" }).click();
+    await page.getByRole("button", { name: "게시만 다시 시도" }).click();
     const publish = await publishedResponse;
     expect(publish.status()).toBe(200);
     await expect(publish.json()).resolves.toMatchObject({
@@ -180,6 +295,7 @@ test("only a complete private audio package can be published and played by a bet
       result: { publishReady: true }
     });
     await expect(page.getByRole("status")).toHaveText("레슨이 게시되었습니다.");
+    expect(uploadWrites).toBe(2);
 
     const unauthorizedPlayback = await request.get(`/api/lessons/${draftId}/audio/1`, {
       maxRedirects: 0

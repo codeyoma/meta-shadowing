@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { AdminIdentity } from "./admin-auth";
-import { hasSupportedAudioSignature } from "./audio-signature";
+import { AudioContentValidationError, validateAudioContent } from "./audio-content-validation";
 import {
   mapAudioPackage,
   type AudioPackageResult,
@@ -84,25 +84,20 @@ export async function publishLessonDraft(admin: AdminIdentity, draftId: string) 
     );
   }
 
-  const contentIssues = [];
-  for (const item of result.items) {
+  const contentIssues = await validateAudioContent(result.items, async (item, signal) => {
     const path = getLessonAudioPath(admin.id, draftId, item.canonicalName);
+    const request = { headers: { Range: "bytes=0-11" }, cache: "no-store" as const, signal };
     const { data: audio, error: downloadError } = await supabase.storage
       .from(LESSON_AUDIO_BUCKET)
-      .download(path);
-    if (downloadError) {
-      throw new LessonPublicationError(500, "audio-read-failed", downloadError.message);
+      .download(path, {}, request);
+    if (downloadError || !audio) {
+      throw downloadError ?? new Error("Empty audio response");
     }
-    const signature = new Uint8Array(await audio.slice(0, 12).arrayBuffer());
-    if (!hasSupportedAudioSignature(item.canonicalName, signature)) {
-      contentIssues.push({
-        code: "invalid-audio-content",
-        phraseNumber: item.phraseNumber,
-        fileName: item.originalName,
-        message: `${item.originalName}의 실제 오디오 형식을 확인할 수 없습니다. 원본 파일을 다시 업로드해 주세요.`
-      });
-    }
-  }
+    return new Uint8Array(await audio.slice(0, 12).arrayBuffer());
+  }).catch(error => {
+    if (error instanceof AudioContentValidationError) throw new LessonPublicationError(503, error.code, error.message);
+    throw error;
+  });
   if (contentIssues.length) {
     throw new LessonPublicationError(
       422,
