@@ -76,10 +76,12 @@ Run only one `next dev` for this worktree at a time. Reuse the known server for 
 Local checks use Node 24.19.0, Next.js 16.3.4, Playwright 1.58.2, installed Chrome 152, and Supabase CLI 2.116.0:
 
 - Unit suite: 104 tests passed. Typecheck and optimized production build passed.
+- Final mobile/desktop browser suite: 109 tests passed and 23 were intentionally skipped (20 cases gated on the separate local-Supabase integration setup, plus three mobile-only assertions skipped in the desktop project). The focused PWA/accessibility suite passed all 14 checks.
 - Database suite: 41 assertions passed; all five migrations are applied locally.
 - Real-Supabase production integration: 10 tests passed over loopback HTTPS, including publication, version replacement, denial, unpublish and deletion recovery.
 - Viewport/state screenshots covered entry, home, setup, audio/rapid players and administrator import, including native-size tall player proportions and short-phone controls. No app console errors/warnings, framework overlays, blank screens or horizontal overflow were observed. Regular-profile Chromium reported no installability errors; a physical installation is still required.
 - Local advisors reported zero errors and six existing `auth_rls_initplan` performance warnings. The policy definitions already wrap Auth reads in scalar subqueries. Read-only `EXPLAIN` as `authenticated` confirmed `InitPlan` nodes for both application tables' read policies. These warnings are recorded, not represented as a clean advisor result or suppressed by changing authorization.
 - The hosted environment preflight correctly fails in this unconfigured checkout: all five required values are absent. Its four isolated configuration tests pass without printing values.
+- Required review against the pre-#11 commit `edbb670`: Standards has zero remaining findings. Spec has one remaining P1 finding for the incomplete hosted-release acceptance below; the keyboard-scroll and native tall-player findings were fixed and rechecked.
 
 The connected account inventory contains **no dedicated Meta Shadowing Vercel project or clearly identified Supabase project**, and this checkout has no deployment link. No hosted project was created or reused; no push, merge or deployment was performed. Hosted environment validation, a Vercel deployment URL, real email delivery and physical iPhone/Android installation remain **pending**, so #11's hosted-release acceptance remains open.
