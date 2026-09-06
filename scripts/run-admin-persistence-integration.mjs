@@ -32,6 +32,7 @@ const result = spawnSync(
     "e2e/admin-persistence.integration.spec.ts",
     "e2e/lesson-publication.integration.spec.ts",
     "e2e/session-defaults.integration.spec.ts",
+    "e2e/lesson-lifecycle.integration.spec.ts",
     "--project=desktop",
     "--workers=1",
     `--output=${join(tmpdir(), `meta-shadowing-integration-${process.pid}`)}`,

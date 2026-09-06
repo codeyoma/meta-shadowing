@@ -15,6 +15,7 @@ export class DraftRequestError extends Error {
 }
 
 export type LessonDraftImport = {
+  replacementFor?: string;
   title: string;
   language: "english" | "japanese";
   targetFilename: string;
@@ -67,6 +68,10 @@ export async function readLessonDraftImport(request: Request): Promise<LessonDra
   }
 
   const title = readField(formData, "title");
+  const replacementFor = readField(formData, "replacementFor");
+  if (replacementFor && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(replacementFor)) {
+    throw new DraftRequestError("교체할 레슨을 다시 선택해 주세요.", 400);
+  }
   if (!title || title.length > 120) {
     throw new DraftRequestError("레슨 제목을 120자 이내로 입력해 주세요.", 400);
   }
@@ -81,6 +86,7 @@ export async function readLessonDraftImport(request: Request): Promise<LessonDra
   const parseResult = parseLessonDraft(target.source, korean.source);
 
   return {
+    replacementFor: replacementFor || undefined,
     title,
     language,
     targetFilename: target.filename,

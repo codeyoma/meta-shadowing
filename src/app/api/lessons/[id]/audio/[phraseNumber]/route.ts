@@ -5,7 +5,7 @@ import { hasLearnerAccess } from "@/lib/server-auth";
 type RouteContext = { params: Promise<{ id: string; phraseNumber: string }> };
 const privateHeaders = { "Cache-Control": "private, no-store" };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   if (!(await hasLearnerAccess())) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: privateHeaders });
   }
@@ -17,7 +17,7 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   try {
-    const signedUrl = await createPublishedAudioUrl(id, phraseNumber);
+    const signedUrl = await createPublishedAudioUrl(id, phraseNumber, new URL(request.url).searchParams.get("version"));
     if (!signedUrl) {
       return NextResponse.json({ error: "audio-not-found" }, { status: 404, headers: privateHeaders });
     }

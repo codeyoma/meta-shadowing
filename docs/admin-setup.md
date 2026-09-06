@@ -11,9 +11,11 @@ npx supabase@2.116.0 link --project-ref <meta-shadowing-project-ref>
 npx supabase@2.116.0 db push
 ```
 
-The migrations create `public.lesson_drafts`, publication completeness constraints, and the private `lesson-audio` Storage bucket. Database drafts and Storage objects are protected by RLS. Only an authenticated owner whose signed `app_metadata.role` is `admin` can upload, replace, list, or delete objects under their own user-ID folder.
+The migrations create `public.lesson_drafts`, publication completeness constraints, and the private `lesson-audio` Storage bucket. Database drafts and Storage objects are protected by RLS. An authenticated owner whose signed `app_metadata.role` is `admin` can list their objects and upload, replace, or remove files in their own **mutable draft** folders. Published-version text and audio cannot be changed in place. Permanent deletion goes through the server's authenticated lifecycle API, not direct table deletion.
 
 Issue #9 also requires migration `20260906072641_session_defaults.sql`. It creates the single RLS-protected `session_defaults` row used by `/admin/settings`. Administrator defaults apply to every lesson; a learner's explicit browser-local overrides take precedence. Apply all migrations before running a configured Supabase deployment. The settings page does not change an already running learner session.
+
+Issue #10 requires `20260906080425_lesson_lifecycle.sql`. It backfills a stable `lesson_id` for existing drafts without changing their existing publication-version timestamps. A lesson's first row anchors that ID; later version rows refer to it. The publication validator now lives in the non-exposed `private` schema; the public lifecycle functions are executable only by `service_role`, with the application checking administrator identity and the functions checking ownership. Apply this migration before deploying the #10 application changes.
 
 ## 2. Configure the one administrator
 
@@ -41,6 +43,17 @@ The publishable key is intentionally usable by the browser-facing application an
 
 The bucket remains private. Learners receive only a short-lived signed redirect from `/api/lessons/:id/audio/:phraseNumber`; no permanent public object URL is stored or rendered.
 
+## Lesson management
+
+Open `/admin/lessons` (also linked from the import screen).
+
+- **New version:** choose `새 버전 가져오기`, supply corrected source text and a complete numbered audio package, validate, save, then publish. English/Japanese lessons retain their language. The old version stays live until the replacement publishes atomically. Version audio stays in separate folders; historical versions remain stored until permanent deletion. There is no inline transcript editor or version rollback UI.
+- **Unpublish:** choose `게시 해제`. The lesson leaves the learner catalog and stops issuing new audio URLs. Text, drafts, all versions, and audio stay stored. An already issued signed audio URL may remain valid for up to 60 seconds.
+- **Permanent deletion:** choose `영구 삭제`, enter the displayed lesson title, and confirm. The server checks that the lesson/version still matches the confirmation, hides it, removes every version's Storage folder through the Storage API, and finally deletes the lesson rows. This cannot be undone.
+- **Interrupted deletion:** the hidden lesson remains in the management list as `삭제 정리 필요`. Some files may already be gone. Reload the list, choose `삭제 정리 다시 시도`, and confirm the title again. Do not restore publication or manually delete rows; retry continues cleanup without losing the folder identities. If the API response was lost, reload before retrying.
+
+At home or on a saved player URL, a changed version clears unfinished local progress and displays a reset notice. Practice starts at the first phrase with a fresh run ID. Completion history and session preferences are preserved. Audio requests include the loaded version to avoid playing new-version audio against an old transcript; reload a stale player to use the new version.
+
 ## 4. Verify before release
 
 Run the local policy test and application suite:
@@ -57,5 +70,7 @@ npm run build
 `test:integration` creates temporary local administrator and non-admin users, signs in through the real OTP route, exercises Storage RLS, verifies incomplete publication is rejected, uploads a complete package through the administrator UI, confirms the published-only catalog, follows a learner-authorized signed playback URL, and cleans up its objects and users.
 
 It also verifies administrator default updates, malformed/cross-origin request rejection, learner inheritance, and browser-override precedence. It restores the previous global defaults after the test. Tests run serially; pass Playwright filters when needed, for example `npm run test:integration -- --grep 'admin defaults'`.
+
+The lifecycle integration tests cover replacement, both resume entry points, preserved history, desktop/mobile administrator controls, ownership, cross-origin rejection, and full cleanup. The partial-deletion test installs a temporary, path-scoped trigger in the **local test database** to make the real Storage API fail for one fixture file, then removes the trigger and verifies retry. Never run these tests against production. Screenshots are written to the OS temporary directory, not the repository.
 
 Official references: [passwordless email auth](https://supabase.com/docs/guides/auth/auth-email-passwordless), [server-side Supabase clients](https://supabase.com/docs/guides/auth/server-side/creating-a-client), [Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security), [Storage access control](https://supabase.com/docs/guides/storage/security/access-control), and [serving private assets](https://supabase.com/docs/guides/storage/serving/downloads).

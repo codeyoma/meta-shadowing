@@ -9,6 +9,7 @@ import { createSecretSupabaseClient } from "./supabase/secret";
 
 type PublishedLessonRow = {
   id: string;
+  lesson_id: string;
   title: string;
   language: string;
   phrase_count: number;
@@ -56,7 +57,7 @@ function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {
   const chapter = entries.find((entry) => entry.kind === "chapter");
 
   return {
-    id: row.id,
+    id: row.lesson_id,
     version: row.published_at,
     language,
     name: row.title,
@@ -74,7 +75,7 @@ export async function listPublishedLessons(): Promise<Lesson[]> {
 
   const { data, error } = await supabase
     .from("lesson_drafts")
-    .select("id, title, language, phrase_count, parsed_entries, published_at")
+    .select("id, lesson_id, title, language, phrase_count, parsed_entries, published_at")
     .eq("publication_status", "published")
     .order("published_at", { ascending: false });
 
@@ -96,8 +97,8 @@ export async function getPublishedLesson(id: string | null): Promise<PublishedLe
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("lesson_drafts")
-    .select("id, title, language, phrase_count, parsed_entries, published_at")
-    .eq("id", id)
+    .select("id, lesson_id, title, language, phrase_count, parsed_entries, published_at")
+    .eq("lesson_id", id)
     .eq("publication_status", "published")
     .maybeSingle();
 
@@ -115,18 +116,19 @@ function readAudioManifest(value: unknown): PublishedAudioItem[] {
   });
 }
 
-export async function createPublishedAudioUrl(lessonId: string, phraseNumber: number) {
+export async function createPublishedAudioUrl(lessonId: string, phraseNumber: number, version?: string | null) {
   const supabase = createSecretSupabaseClient();
   if (!supabase) return null;
 
   const { data: lesson, error: lessonError } = await supabase
     .from("lesson_drafts")
-    .select("audio_manifest")
-    .eq("id", lessonId)
+    .select("audio_manifest, published_at")
+    .eq("lesson_id", lessonId)
     .eq("publication_status", "published")
     .maybeSingle();
   if (lessonError) throw new Error(`Published lesson audio read failed: ${lessonError.message}`);
   if (!lesson) return null;
+  if (version && lesson.published_at !== version) return null;
 
   const audio = readAudioManifest(lesson.audio_manifest).find((item) => item.phraseNumber === phraseNumber);
   if (!audio) return null;

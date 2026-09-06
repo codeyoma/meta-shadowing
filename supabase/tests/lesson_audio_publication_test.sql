@@ -18,6 +18,16 @@ insert into public.lesson_drafts (
   '[]', 'validated', 1, 0, 0
 );
 
+-- Uploads now require an existing, mutable draft, not just an owned prefix.
+insert into public.lesson_drafts (
+  id, created_by, title, language, target_filename, korean_filename,
+  target_source, korean_source, parsed_entries, validation_issues,
+  validation_status, phrase_count, chapter_count, section_count
+) select '55555555-5555-4555-8555-555555555555', created_by, 'Unpublished draft', language,
+  target_filename, korean_filename, target_source, korean_source, parsed_entries,
+  validation_issues, validation_status, phrase_count, chapter_count, section_count
+from public.lesson_drafts where id = '44444444-4444-4444-8444-444444444444';
+
 select results_eq(
   $$select public, file_size_limit from storage.buckets where id = 'lesson-audio'$$,
   $$values (false, 4194304::bigint)$$,
@@ -84,7 +94,7 @@ select lives_ok(
       '11111111-1111-4111-8111-111111111111/55555555-5555-4555-8555-555555555555/001.webm',
       '11111111-1111-4111-8111-111111111111'
     )$$,
-  'an administrator can upload under their own user folder'
+  'an administrator can upload into their own mutable draft folder'
 );
 select throws_ok(
   $$insert into storage.objects (bucket_id, name, owner_id) values (

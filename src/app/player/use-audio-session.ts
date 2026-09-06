@@ -52,7 +52,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
 
       const attempt = next.attempt;
       const phrase = lesson.phrases[next.phraseIndex];
-      audio.src = `/api/lessons/${lesson.id}/audio/${phrase.phraseNumber}?attempt=${attempt}`;
+      audio.src = `/api/lessons/${lesson.id}/audio/${phrase.phraseNumber}?attempt=${attempt}&version=${encodeURIComponent(lesson.version)}`;
       audio.load();
       audio.onplaying = () => {
         if (!audio.paused) send({ type: "audio-playing", attempt });

@@ -10,6 +10,16 @@ export type AdminIdentity = {
   email: string;
 };
 
+export function hasTrustedAdminOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return true; // Non-browser clients still require administrator authentication.
+  try {
+    const url = new URL(origin);
+    // Compare the browser-facing Host, not Next's internal bind URL behind a proxy.
+    return ["http:", "https:"].includes(url.protocol) && url.host === request.headers.get("host");
+  } catch { return false; }
+}
+
 export async function getAdminIdentity(): Promise<AdminIdentity | null> {
   const testEnvironment = readAdminTestEnvironment();
   if (testEnvironment) {

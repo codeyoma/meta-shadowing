@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getLesson, type Language, type Lesson } from "@/lib/lessons";
-import { getPlayerHref, readLastSelection, SessionSelection } from "@/lib/resume";
-import { readLearningJournal, type ProgressRecord, type CompletionRecord } from "@/lib/learning-records";
+import { getPlayerHref, readLastSelection, saveLastSelection, SessionSelection } from "@/lib/resume";
+import { reconcileLearningJournal, type ProgressRecord, type CompletionRecord } from "@/lib/learning-records";
+import { VersionNotice } from "../version-notice";
 import { RecordDetails } from "../completion-summary";
 import { ArrowIcon, Brand, Page, PlayIcon } from "../ui";
 
@@ -31,14 +32,22 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
   const [resume, setResume] = useState<SessionSelection | null>(null);
   const [progress, setProgress] = useState<ProgressRecord | null>(null);
   const [history, setHistory] = useState<CompletionRecord[]>([]);
+  const [versionReset, setVersionReset] = useState<{ storageFailed: boolean } | null>(null);
 
   useEffect(() => {
     const selection = readLastSelection();
-    const journal = readLearningJournal();
+    const journal = reconcileLearningJournal(catalog);
+    if (journal.resetLessonId) {
+      setVersionReset({ storageFailed: journal.storageFailed });
+      if (selection?.lessonId === journal.resetLessonId) {
+        selection.runId = crypto.randomUUID();
+        saveLastSelection(selection);
+      }
+    }
     setResume(selection && !journal.history.some(record => record.runId === selection.runId) ? selection : null);
     setProgress(journal.progress?.runId === selection?.runId ? journal.progress : null);
     setHistory(journal.history.toReversed());
-  }, []);
+  }, [catalog]);
   const visibleLessons = catalog.filter((lesson) => lesson.language === language);
 
   return (
@@ -46,6 +55,7 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
       <section className="learner-shell" aria-labelledby="home-title">
         <Brand compact />
         <h1 id="home-title">오늘도 한 프레이즈부터.</h1>
+        {versionReset ? <VersionNotice storageFailed={versionReset.storageFailed} /> : null}
         {resume ? <ResumeRow selection={resume} catalog={catalog} progress={progress} /> : null}
         <section className="home-section" aria-labelledby="language-title">
           <h2 id="language-title">언어 선택</h2>

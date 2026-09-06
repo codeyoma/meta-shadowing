@@ -1,19 +1,10 @@
-import { getAdminIdentity } from "@/lib/admin-auth";
+import { getAdminIdentity, hasTrustedAdminOrigin } from "@/lib/admin-auth";
 import { isSessionSettings } from "@/lib/session-settings";
 import { updateSessionDefaults } from "@/lib/session-defaults-repository";
 
 export async function PUT(request: Request) {
   if (!await getAdminIdentity()) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const origin = request.headers.get("origin");
-  // Next's internal request URL can use its bind hostname (localhost) behind a proxy.
-  // Compare to the browser-facing Host header, which browser JavaScript cannot override.
-  if (origin) {
-    let originUrl: URL;
-    try { originUrl = new URL(origin); } catch { return Response.json({ error: "invalid-origin" }, { status: 403 }); }
-    if (!["http:", "https:"].includes(originUrl.protocol) || originUrl.host !== request.headers.get("host")) {
-      return Response.json({ error: "invalid-origin" }, { status: 403 });
-    }
-  }
+  if (!hasTrustedAdminOrigin(request)) return Response.json({ error: "invalid-origin" }, { status: 403 });
   if (!request.headers.get("content-type")?.startsWith("application/json")) return Response.json({ error: "invalid-content-type" }, { status: 415 });
   const body = await request.text();
   if (body.length > 4096) return Response.json({ error: "settings-too-large" }, { status: 413 });

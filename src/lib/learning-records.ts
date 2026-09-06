@@ -45,6 +45,22 @@ export function readLearningJournal(): Journal {
   }
 }
 
+export function reconcileLearningJournal(catalog: Lesson[]) {
+  const journal = readLearningJournal();
+  const saved = journal.progress;
+  const current = saved && catalog.find(lesson => lesson.id === saved.lessonId);
+  const resetLessonId = current && saved.lessonVersion !== current.version ? current.id : null;
+  let storageFailed = false;
+  if (resetLessonId) {
+    journal.progress = null;
+    try {
+      // Completion history describes past work and retains its original version.
+      window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(journal));
+    } catch { storageFailed = true; }
+  }
+  return { ...journal, resetLessonId, storageFailed };
+}
+
 export function saveLearningBoundary(record: ProgressRecord | CompletionRecord): boolean {
   const journal = readLearningJournal();
   if (isCompletion(record)) {

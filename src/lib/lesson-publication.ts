@@ -42,7 +42,7 @@ export async function publishLessonDraft(admin: AdminIdentity, draftId: string) 
 
   const { data: draft, error: draftError } = await supabase
     .from("lesson_drafts")
-    .select("id, created_by, parsed_entries, validation_issues, validation_status")
+    .select("id, lesson_id, created_by, parsed_entries, validation_issues, validation_status")
     .eq("id", draftId)
     .eq("created_by", admin.id)
     .maybeSingle();
@@ -130,5 +130,5 @@ export async function publishLessonDraft(admin: AdminIdentity, draftId: string) 
     throw new LessonPublicationError(500, "publish-failed", publishError.message);
   }
 
-  return { lessonId: draftId, result };
+  return { lessonId: draft.lesson_id as string, result };
 }

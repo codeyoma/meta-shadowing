@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { AdminIdentity } from "@/lib/admin-auth";
+import type { ManagedLesson } from "@/lib/lesson-management";
 import { mapAudioPackage, type AudioPackageResult } from "@/lib/audio-package";
 import { hasSupportedAudioSignature } from "@/lib/audio-signature";
 import {
@@ -222,7 +223,7 @@ function DraftPreview({
   );
 }
 
-function AdminImport({ admin }: { admin: AdminIdentity }) {
+function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement?: ManagedLesson }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [hydrated, setHydrated] = useState(false);
   const [result, setResult] = useState<LessonDraftParseResult | null>(null);
@@ -368,6 +369,7 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
           <span>관리자</span>
         </div>
         <div className="admin-account">
+          <Link href="/admin/lessons">레슨 관리</Link>
           <Link href="/admin/settings">전역 학습 기본값</Link>
           <span>{admin.email}</span>
           <button type="button" onClick={logout}>로그아웃</button>
@@ -376,7 +378,8 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
       <div className="admin-workspace">
         <div className="admin-page-title">
           <p>관리자</p>
-          <h1>새 레슨 가져오기</h1>
+          <h1>{replacement ? "레슨 새 버전 가져오기" : "새 레슨 가져오기"}</h1>
+          {replacement ? <p className="replacement-note">새 파일을 검증하고 게시하면 “{replacement.title}”을 교체합니다. 그전까지 현재 레슨은 유지됩니다.</p> : null}
         </div>
         <form
           ref={formRef}
@@ -384,11 +387,13 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
           data-admin-ready={hydrated ? "true" : "false"}
           onSubmit={(event) => event.preventDefault()}
         >
+          {replacement ? <input type="hidden" name="replacementFor" value={replacement.id} /> : null}
           <div className="import-metadata">
             <label htmlFor="lesson-title">레슨 제목</label>
-            <input id="lesson-title" name="title" maxLength={120} required onChange={clearSavedDraft} />
+            <input id="lesson-title" name="title" defaultValue={replacement?.title} maxLength={120} required onChange={clearSavedDraft} />
             <label htmlFor="lesson-language">언어</label>
-            <select id="lesson-language" name="language" defaultValue="english" onChange={clearSavedDraft}>
+            {replacement ? <input type="hidden" name="language" value={replacement.language} /> : null}
+            <select id="lesson-language" name="language" defaultValue={replacement?.language ?? "english"} disabled={!!replacement} onChange={clearSavedDraft}>
               <option value="english">English 영어</option>
               <option value="japanese">日本語 일본어</option>
             </select>
@@ -461,6 +466,7 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
                 disabled={
                   !hydrated ||
                   busyAction !== null ||
+                  published ||
                   !draftId ||
                   !result.publishReady ||
                   !audioResult?.publishReady
@@ -477,6 +483,6 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
   );
 }
 
-export function AdminPortal({ initialAdmin }: { initialAdmin: AdminIdentity | null }) {
-  return initialAdmin ? <AdminImport admin={initialAdmin} /> : <AdminLogin />;
+export function AdminPortal({ initialAdmin, replacement }: { initialAdmin: AdminIdentity | null; replacement?: ManagedLesson }) {
+  return initialAdmin ? <AdminImport key={replacement?.id ?? "new"} admin={initialAdmin} replacement={replacement} /> : <AdminLogin />;
 }

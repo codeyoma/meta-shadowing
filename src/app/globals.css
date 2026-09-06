@@ -200,6 +200,22 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .secondary-button { min-height: 52px; padding: 0 24px; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); color: var(--text); font-size: 17px; font-weight: 750; }
 .secondary-button:hover { background: var(--hover); }
 .secondary-button:disabled { cursor: wait; opacity: .6; }
+.version-notice { width: min(calc(100% - 32px), 40rem); margin: 20px auto; padding: 16px; border: 1px solid var(--green); border-radius: 12px; background: var(--surface); color: var(--text); line-height: 1.6; }
+.version-notice p { margin: 0; }
+.version-notice p + p { margin-top: 12px; color: var(--error); }
+.managed-lessons { list-style: none; padding: 0; margin: 24px 0; }
+.admin-header > a { display: inline-flex; align-items: center; min-height: 48px; color: var(--text); font-weight: 650; }
+.managed-lessons > li { padding: 24px 0; border-bottom: 1px solid var(--border); }
+.managed-lesson-heading h2 { margin: 0 0 8px; font-size: 24px; overflow-wrap: anywhere; }
+.managed-lesson-heading p, .management-message { color: var(--muted); line-height: 1.6; }
+.management-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.management-actions a { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.danger-button { color: var(--error); border-color: var(--error); }
+.delete-confirmation { margin-top: 24px; }
+.delete-confirmation fieldset { margin: 0; padding: 20px; min-width: 0; border: 1px solid var(--error); border-radius: 12px; }
+.delete-confirmation p { line-height: 1.6; overflow-wrap: anywhere; }
+.delete-confirmation input { width: 100%; min-height: 52px; margin-top: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; }
+.admin-page-title .replacement-note { margin-top: 20px; color: var(--muted); font-weight: 400; line-height: 1.6; }
 .publish-button { min-height: 52px; padding: 0 24px; font-size: 17px; }
 
 @media (min-width: 720px) { .entry-page { padding-inline: 48px; }.entry-shell { min-height: calc(100dvh - 96px); }.home-page { padding-top: 40px; }.learner-shell, .setup-shell, .practice-shell { width: min(100%, 42rem); }.setup-shell { padding-inline: 0; }.practice-shell { width: min(100%, 48rem); }.player-actions button { min-height: 112px; }.import-form { grid-template-columns: minmax(260px, .8fr) minmax(340px, 1.2fr); padding: 28px; }.validate-button { grid-column: 1 / -1; justify-self: end; width: min(100%, 360px); } }
