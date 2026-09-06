@@ -62,7 +62,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
   }, [grouped, session.phraseIndex, session.groupIndex, hintOnly]);
 
   return (
-    <Page className={`player-page audio-phrase-player${grouped ? " grouped-player" : ""}`}>
+    <Page className={`player-page audio-phrase-player${grouped ? " grouped-player" : ""}${!complete && !settingsOpen ? " practice-open" : ""}`}>
       <header className="player-topbar">
         <button type="button" aria-label="레슨으로 돌아가기" className="icon-button" onClick={() => router.push("/home")}><BackIcon /></button>
         <Brand />
@@ -93,7 +93,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
         </section> : null}
         {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => router.push("/home")} /> : !settingsOpen ? (
           <>
-            <div ref={canvasRef} id="practice-subtitles" role="region" aria-label="학습 자막" className={`practice-canvas${hintOnly ? " hint-only" : ""}${grouped ? " group-canvas" : ""}`}>
+            <div ref={canvasRef} id="practice-subtitles" role="region" aria-label="학습 자막" tabIndex={0} className={`practice-canvas${hintOnly ? " hint-only" : ""}${grouped ? " group-canvas" : ""}`}>
               {grouped ? <ol className="group-phrases" aria-label="묶음 프레이즈">
                 {group.phrases.map(line => {
                   const text = hintOnly ? hints[line.phraseNumber - 1] : line;

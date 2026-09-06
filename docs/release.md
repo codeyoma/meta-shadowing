@@ -78,7 +78,7 @@ Local checks use Node 24.19.0, Next.js 16.3.4, Playwright 1.58.2, installed Chro
 - Unit suite: 104 tests passed. Typecheck and optimized production build passed.
 - Database suite: 41 assertions passed; all five migrations are applied locally.
 - Real-Supabase production integration: 10 tests passed over loopback HTTPS, including publication, version replacement, denial, unpublish and deletion recovery.
-- Fourteen viewport/state screenshots covered entry, home, setup, audio/rapid players and administrator import. No app console errors/warnings, framework overlays, blank screens or horizontal overflow were observed. Regular-profile Chromium reported no installability errors; a physical installation is still required.
+- Viewport/state screenshots covered entry, home, setup, audio/rapid players and administrator import, including native-size tall player proportions and short-phone controls. No app console errors/warnings, framework overlays, blank screens or horizontal overflow were observed. Regular-profile Chromium reported no installability errors; a physical installation is still required.
 - Local advisors reported zero errors and six existing `auth_rls_initplan` performance warnings. The policy definitions already wrap Auth reads in scalar subqueries. Read-only `EXPLAIN` as `authenticated` confirmed `InitPlan` nodes for both application tables' read policies. These warnings are recorded, not represented as a clean advisor result or suppressed by changing authorization.
 - The hosted environment preflight correctly fails in this unconfigured checkout: all five required values are absent. Its four isolated configuration tests pass without printing values.
 

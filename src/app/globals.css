@@ -22,7 +22,7 @@ html, body { min-height: 100%; margin: 0; background: var(--bg); }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
-button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--green-focus); outline-offset: 3px; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible, .practice-canvas:focus-visible { outline: 3px solid var(--green-focus); outline-offset: 3px; }
 
 .online-install-help { margin-top: 24px; color: var(--muted); font-size: 15px; line-height: 1.6; }
 .online-install-help summary { min-height: 48px; padding-block: 12px; cursor: pointer; }
@@ -247,6 +247,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   .file-field > span { font-size: 16px; }
   .file-field input { min-width: 0; }
   .validate-button { grid-column: 1; grid-row: 2; align-self: start; justify-self: stretch; width: 100%; }
+}
+/* Tall portrait views retain the concept's large practice canvas and balanced
+   action/dock composition; normal and short phones keep their compact layout. */
+@media (min-width: 720px) and (min-height: 1200px) {
+  .audio-phrase-player.practice-open { display: flex; flex-direction: column; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .practice-open .player-topbar, .practice-open .player-progress { width: min(100%, 48rem); flex: none; }
+  .practice-open .player-topbar { height: 120px; }
+  .practice-open .player-topbar .brand { font-size: 32px; }
+  .practice-open .player-progress { padding-bottom: 32px; }
+  .practice-open .player-progress > span { font-size: 26px; margin-bottom: 20px; }
+  .practice-open .player-progress > div { height: 12px; }
+  .practice-open .chapter-header { flex: none; padding-block: 32px; }
+  .practice-open .chapter-header strong { font-size: 32px; }
+  .practice-open .chapter-header span { font-size: 20px; }
+  .practice-open .practice-shell { flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding-top: 64px; padding-bottom: 24px; }
+  .practice-open .practice-shell h1 { font-size: 28px; }
+  .practice-open .practice-canvas { height: clamp(340px, 21dvh, 420px); flex: none; }
+  .practice-open .practice-canvas.hint-only > span, .practice-open .rapid-canvas.single-token > span { font-size: clamp(64px, 8dvh, 128px); }
+  .practice-open .practice-canvas small { font-size: 26px; }
+  .practice-open .playback-line { margin-block: 32px; font-size: 22px; }
+  .practice-open .cycle-status { align-self: center; font-size: 22px; padding: 14px 24px; }
+  .practice-open .session-meta { margin-block: 16px; min-height: 48px; }
+  .practice-open .session-mode { font-size: 20px; }
+  .practice-open .player-actions { margin-top: 24px; }
+  .practice-open .player-actions button { min-height: 128px; font-size: 20px; }
+  .practice-open .playback-dock { position: static; flex: none; transform: none; margin: 24px auto 0; padding: 24px; border-radius: 20px; }
+  .practice-open .dock-play { width: 88px; height: 88px; }
 }
 /* Issue #9: real browser-local study records, below the existing lesson list. */
 .completion-history ol { list-style: none; padding: 0; margin: 0; }

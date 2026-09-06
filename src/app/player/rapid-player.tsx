@@ -32,7 +32,7 @@ export function RapidPlayer({ lesson, lines, level, settings, start }: { lesson:
     : "준비되면 문장을 시작하세요. 음성은 재생되지 않습니다.";
   const placeholder = session.phase === "speaking" ? "말해 보세요" : session.phase === "gap" ? "잠시 쉬어 가세요" : session.phase === "line-complete" ? "한 문장 완료" : "준비되셨나요?";
 
-  return <Page className="player-page audio-phrase-player rapid-player">
+  return <Page className={`player-page audio-phrase-player rapid-player${!complete && !settingsOpen ? " practice-open" : ""}`}>
     <header className="player-topbar">
       <button type="button" aria-label="레슨으로 돌아가기" className="icon-button" onClick={() => router.push("/home")}><BackIcon /></button>
       <Brand />
@@ -57,7 +57,7 @@ export function RapidPlayer({ lesson, lines, level, settings, start }: { lesson:
         <button type="button" className="secondary-button" onClick={() => setSettingsOpen(false)}>설정 닫기</button>
       </section> : completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => router.push("/home")} /> : <>
         <p className="rapid-stage">{display ? `${display.language === "korean" ? "한국어" : lesson.language === "english" ? "영어" : "일본어"} · ${display.position} / ${display.count}` : session.phase === "speaking" ? "말하기 시간" : "속사포 연습"}</p>
-        <div role="region" aria-label="속사포 학습" className={`practice-canvas rapid-canvas ${singleToken ? "single-token" : "cumulative"}`}>
+        <div role="region" aria-label="속사포 학습" tabIndex={0} className={`practice-canvas rapid-canvas ${singleToken ? "single-token" : "cumulative"}`}>
           {display ? <span lang={display.language === "korean" ? "ko" : lesson.language === "english" ? "en" : "ja"}>{display.text}</span> : <p>{placeholder}</p>}
         </div>
         <div className="session-meta">

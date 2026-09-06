@@ -93,3 +93,52 @@ test("administrator header navigation has touch-sized targets and visible keyboa
   await page.getByRole("button", { name: "로그아웃" }).click();
   await expect(page.getByRole("heading", { name: "관리자 로그인" })).toBeVisible();
 });
+
+test("overflowing bilingual subtitles are an explicit keyboard stop and scroll without advancing practice", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
+  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.goto("/player?lesson=daily-conversation&level=5&group=4");
+  await page.getByRole("button", { name: "자막 보기", exact: true }).click();
+  const canvas = page.getByRole("region", { name: "학습 자막", exact: true });
+  await expect(canvas).toHaveAttribute("tabindex", "0");
+  await page.getByRole("button", { name: "학습 설정", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(canvas).toBeFocused();
+  await expect(canvas).toHaveCSS("outline-style", "solid");
+  expect(await canvas.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  await page.keyboard.press("PageDown");
+  await expect.poll(() => canvas.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
+  await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "0");
+  await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toHaveAttribute("aria-expanded", "true");
+
+  await page.goto("/player?lesson=morning-routine&level=8&display=cumulative");
+  const rapid = page.getByRole("region", { name: "속사포 학습" });
+  await expect(rapid).toHaveAttribute("tabindex", "0");
+  await page.getByRole("button", { name: "학습 설정", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(rapid).toBeFocused();
+  await expect(rapid).toHaveCSS("outline-style", "solid");
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("button", { name: "문장 시작", exact: true })).toBeVisible();
+});
+
+test("the native tall player keeps the reference canvas proportions and actions near the dock", async ({ page }) => {
+  await page.setViewportSize({ width: 853, height: 1844 });
+  await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
+  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  for (const level of [3, 8]) {
+    await page.goto(`/player?lesson=morning-routine&level=${level}`);
+    const canvas = page.locator(".practice-canvas");
+    await expect(canvas).toBeVisible();
+    const box = (await canvas.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(340);
+    expect(box.height).toBeLessThanOrEqual(450);
+    const actions = (await page.locator(".player-actions").boundingBox())!;
+    const dock = (await page.getByRole("navigation", { name: "재생 제어" }).boundingBox())!;
+    expect(dock.y - actions.y - actions.height).toBeGreaterThanOrEqual(16);
+    expect(dock.y - actions.y - actions.height).toBeLessThanOrEqual(200);
+    expect(actions.y + actions.height).toBeLessThanOrEqual(1844);
+  }
+});
