@@ -1,13 +1,13 @@
 # Administrator and Supabase setup
 
-Issues #3 and #4 add the administrator import, private sentence-audio upload, publication, catalog, and first-playback slices. The user selected the existing **Yòmá's Projects** Supabase project (`zjfzrtzwegqmmhgwgrwp`, Seoul) for deployment. Inspect its existing Auth, Storage, migrations, and policies before applying this setup; preserve unrelated resources. Target selection does not mean migrations or credentials have been configured.
+Issues #3 and #4 add the administrator import, private sentence-audio upload, publication, catalog, and first-playback slices. Use the existing Supabase project explicitly approved by the owner and confirm its identity privately through the authenticated dashboard. Inspect its existing Auth, Storage, migrations, and policies before applying this setup; preserve unrelated resources. Target selection does not mean migrations or credentials have been configured.
 
 ## 1. Apply the schema
 
-Use the CLI version verified for this migration:
+Use the CLI version verified for this migration. Replace `<SUPABASE_PROJECT_REF>` locally with the privately confirmed project ref; keep the substituted command out of this public repository and its issue/PR comments.
 
 ```bash
-npx supabase@2.116.0 link --project-ref zjfzrtzwegqmmhgwgrwp
+npx supabase@2.116.0 link --project-ref "<SUPABASE_PROJECT_REF>"
 npx supabase@2.116.0 db push
 ```
 
