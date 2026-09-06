@@ -1,6 +1,6 @@
 # Meta Shadowing release checklist
 
-Issue #11 prepares an **online-only** mobile PWA. Passing local checks is not a hosted release. Do not close the release gate until the exact Vercel deployment and dedicated Supabase project pass the hosted checklist below. Do not merge as part of this workflow.
+Issue #11 prepares an **online-only** mobile PWA. Passing local checks is not a hosted release. Do not close the release gate until the exact Vercel deployment and approved Supabase project pass the hosted checklist below. Follow [the Git workflow](agents/git-workflow.md): feature PRs target `dev`; releases reach `main` only with explicit user approval and passing release gates.
 
 ## Runtime and environment
 
@@ -12,7 +12,7 @@ Configure these independently for Vercel Preview and Production:
 | --- | --- | --- |
 | `BETA_PASSWORD` | Shared learner entrance password, at least 12 characters | Server only |
 | `LEARNER_COOKIE_SECRET` | At least 32 random characters for signing the 30-day learner cookie | Server only |
-| `NEXT_PUBLIC_SUPABASE_URL` | Dedicated project's HTTPS API origin | Public |
+| `NEXT_PUBLIC_SUPABASE_URL` | Approved project's HTTPS API origin | Public |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Modern `sb_publishable_` key | Public, RLS constrained |
 | `SUPABASE_SECRET_KEY` | Modern `sb_secret_` key for server catalog/signing/lifecycle operations | Server only |
 
@@ -20,16 +20,16 @@ Keep local values in ignored `.env.local`, not source control, logs, screenshots
 
 Run `npm run verify:env` in the intended environment. It checks missing values, key placement, signing-secret length, URL shape, and test-only variables without printing values or contacting a hosted project. A pass checks **configuration shape**, not credential validity or RLS. An unconfigured checkout must fail this command. After changing Vercel values, create a new deployment; existing deployments do not inherit the change. See [Vercel environment variables](https://vercel.com/docs/environment-variables).
 
-Recommended Vercel settings: Next.js framework, repository root, Node 24, install command `npm ci`, build command `npm run verify:env && npm run build`, default Next.js output directory. Preview must use an isolated beta/test database if uploads or destructive lifecycle checks will be exercised. Never run fixture-creating integration tests against a hosted production database.
+Recommended Vercel settings: Next.js framework, repository root, Node 24, Production Branch `main`, install command `npm ci`, build command `npm run verify:env && npm run build`, default Next.js output directory. Hosted Preview checks must use explicitly disposable lesson data and preserve other consumers of the selected database. Automated destructive integration tests run only against local Supabase, never a hosted database.
 
 ## Database and administrator gate
 
-Follow [administrator setup](admin-setup.md) on a **dedicated Meta Shadowing** project. Review and apply every migration, including `20260906090138_release_explicit_grants.sql`.
+Follow [administrator setup](admin-setup.md) on the user-selected **Yòmá's Projects** project (`zjfzrtzwegqmmhgwgrwp`, Seoul). Inspect existing Auth, Storage and migration history before applying changes; the empty `public` table inventory alone does not establish that the whole project is unused. Review and apply every migration, including `20260906090138_release_explicit_grants.sql`, only after conflicts with other consumers are resolved.
 
 - New-project Data API access must use explicit grants; do not enable broad automatic exposure to work around a `42501` error. Both grants and RLS are required. See [Supabase's default-grant change](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically).
 - `lesson_drafts` and `session_defaults` must have RLS enabled. Anonymous users have no application-table grants. Authenticated draft access remains owner + signed `app_metadata.role = admin`, with only the existing draft-content column-update whitelist. No browser role may delete/truncate drafts, attach triggers, or invoke lifecycle RPCs. Server lifecycle functions retain explicit `service_role` execute grants.
 - `lesson-audio` must be private, with 4 MB per-file and MP3/M4A/WebM MIME restrictions. Storage policies allow the administrator's mutable draft folders only. Validate anonymous and non-admin denial as well as successful administrator upload; RLS enabled alone is not enough.
-- Disable public sign-ups; provision the single administrator through a trusted dashboard. Authorization belongs in `app_metadata`, never user-editable metadata. Allow only the intended `/auth/confirm` URLs and verify real email delivery in that environment.
+- Provision the single administrator through a trusted dashboard. Resolve any conflicting existing application use before changing project-wide sign-up settings. Authorization belongs in `app_metadata`, never user-editable metadata. Add only the intended `/auth/confirm` URLs, preserve unrelated applications' required redirects, and verify real email delivery in that environment.
 - For new free projects using default SMTP, email template customization may be unavailable. Use the default Magic Link flow, or configure supported SMTP before choosing a customized typed-OTP template. See [Supabase email-template limits](https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier).
 
 ## Repeatable local verification
@@ -64,12 +64,12 @@ Run only one `next dev` for this worktree at a time. Reuse the known server for 
 
 ## Hosted release gate — requires an approved target
 
-1. Confirm the dedicated Supabase project, Vercel team/project, preview environment, and exact commit. Confirm whether connecting Git will enable auto-deploy; do not merge or enable production auto-deployment without approval.
+1. Confirm the selected Supabase project, Vercel team/project, Preview environment, and exact commit. Set Vercel Production Branch explicitly to `main` before enabling Git auto-deploy; other branches must remain Preview-only. Creating a Vercel project or incurring costs requires approval. Do not trigger an initial Production import of the planning-only `main` branch.
 2. Apply reviewed migrations, configure Auth/Storage and the five environment values, and run the configuration check in the build. Record the commit SHA, deployment URL, build result and environment name, **never values**.
 3. Deploy a Preview and wait for Vercel `READY`. Check runtime logs, not only build logs. Verify unauthorized learner/admin routes remain protected, beta password success/failure, true admin Magic Link/OTP, and non-admin rejection.
 4. With authorized disposable data in the isolated preview environment, validate bilingual text/audio, publish, open the learner catalog, play a signed recording, run all eight levels, resume, and check history. Verify version replacement and unpublish. Permanent deletion needs an explicitly disposable target and confirmation.
 5. Run the physical-device/PWA gate above. Reopen from the home screen, background/resume, disconnect/reconnect, and test a failed recording without incrementing completed cycles.
-6. Record results and any blockers. Only after approval should the chosen deployment be promoted to Production and the production smoke checks repeated. A successful local build or a Vercel `READY` status alone is insufficient.
+6. Record results and any blockers. After explicit release authorization, open the `dev -> main` PR, pass CI and the human `release-approval` gate, then merge. Vercel's approved Git integration deploys `main` automatically; verify that deployment and repeat production smoke checks. A successful local build or a Vercel `READY` status alone is insufficient.
 
 ## Verification status (2026-09-06)
 
@@ -84,4 +84,4 @@ Local checks use Node 24.19.0, Next.js 16.3.4, Playwright 1.58.2, installed Chro
 - The hosted environment preflight correctly fails in this unconfigured checkout: all five required values are absent. Its four isolated configuration tests pass without printing values.
 - Required review against the pre-#11 commit `edbb670`: Standards has zero remaining findings. Spec has one remaining P1 finding for the incomplete hosted-release acceptance below; the keyboard-scroll and native tall-player findings were fixed and rechecked.
 
-The connected account inventory contains **no dedicated Meta Shadowing Vercel project or clearly identified Supabase project**, and this checkout has no deployment link. No hosted project was created or reused; no push, merge or deployment was performed. Hosted environment validation, a Vercel deployment URL, real email delivery and physical iPhone/Android installation remain **pending**, so #11's hosted-release acceptance remains open.
+The initial local verification did not create, link or deploy hosted resources. The user subsequently selected **Yòmá's Projects** as the Supabase target and approved the `main`/`dev` workflow. Vercel project setup, hosted credentials/migrations, a deployment URL, real email delivery and physical iPhone/Android installation remain **pending**, so #11's hosted-release acceptance remains open.
