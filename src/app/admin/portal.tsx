@@ -172,7 +172,7 @@ function DraftPreview({
             <strong className="preview-blocked">파일 선택 필요</strong>
           )}
         </div>
-        {!audioSelected ? <p>MP3, M4A, WebM 파일을 001부터 문장 순서대로 선택해 주세요.</p> : null}
+        {!audioSelected ? <p>MP3, M4A, WebM 파일을 001부터 프레이즈 순서대로 선택해 주세요. 여러 줄인 프레이즈에도 음성은 한 개입니다.</p> : null}
         {audioResult?.issues.length ? (
           <div className="validation-errors audio-errors" role="alert">
             <ul>
@@ -208,8 +208,8 @@ function DraftPreview({
                 <tr role="row" className={entry.kind === "chapter" ? "preview-chapter-row" : ""} key={`${entry.kind}-${entry.sourceLine}-${index}`}>
                   <td role="cell">{entry.kind === "phrase" ? entry.phraseNumber : "—"}</td>
                   <td role="cell">{entry.kind === "chapter" ? "챕터" : "프레이즈"}</td>
-                  <td role="cell">{entry.target || "(비어 있음)"}</td>
-                  <td role="cell">{entry.korean || "(비어 있음)"}</td>
+                  <td role="cell" className="preview-text-cell">{entry.target || "(비어 있음)"}</td>
+                  <td role="cell" className="preview-text-cell">{entry.korean || (entry.kind === "chapter" ? "—" : "(비어 있음)")}</td>
                   <td role="cell" className="preview-audio-cell">
                     {entry.kind === "phrase" ? audioByPhrase.get(entry.phraseNumber)?.originalName ?? "미연결" : "—"}
                   </td>
@@ -225,6 +225,7 @@ function DraftPreview({
 
 function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement?: ManagedLesson }) {
   const formRef = useRef<HTMLFormElement>(null);
+  const importRevisionRef = useRef(0);
   const [hydrated, setHydrated] = useState(false);
   const [result, setResult] = useState<LessonDraftParseResult | null>(null);
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
@@ -242,6 +243,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   useEffect(() => setHydrated(true), []);
 
   function clearImportResult() {
+    importRevisionRef.current += 1;
     setResult(null);
     setSaved(false);
     setDraftId(null);
@@ -251,6 +253,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   }
 
   function clearSavedDraft() {
+    importRevisionRef.current += 1;
     setSaved(false);
     setDraftId(null);
     setPublished(false);
@@ -261,6 +264,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   async function submitImport(path: string, action: "validate" | "save") {
     if (!formRef.current) return;
     if (!formRef.current.reportValidity()) return;
+    const revision = importRevisionRef.current;
     setBusyAction(action);
     setError("");
     setSaved(false);
@@ -269,6 +273,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
     try {
       const response = await fetch(path, { method: "POST", body: new FormData(formRef.current) });
       const payload = (await response.json()) as ImportResponse;
+      if (revision !== importRevisionRef.current) return;
       if (!response.ok || !payload.result) throw new Error(payload.error || "요청을 처리하지 못했습니다.");
       setResult(payload.result);
       if (action === "save" && payload.draftId) {
@@ -278,6 +283,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
         setDraftId(null);
       }
     } catch (reason) {
+      if (revision !== importRevisionRef.current) return;
       setError(reason instanceof Error ? reason.message : "요청을 처리하지 못했습니다.");
     } finally {
       setBusyAction(null);
@@ -398,24 +404,14 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
             </select>
           </div>
           <div className="import-files">
-            <label className="file-field" htmlFor="target-file">
-              <span><FileIcon /> 목표어 텍스트</span>
+            <label className="file-field" htmlFor="script-file">
+              <span><FileIcon /> 통합 스크립트</span>
               <input
-                id="target-file"
-                name="targetFile"
+                id="script-file"
+                name="scriptFile"
                 type="file"
                 accept=".txt,text/plain"
-                required
-                onChange={clearImportResult}
-              />
-            </label>
-            <label className="file-field" htmlFor="korean-file">
-              <span><FileIcon /> 한국어 텍스트</span>
-              <input
-                id="korean-file"
-                name="koreanFile"
-                type="file"
-                accept=".txt,text/plain"
+                aria-describedby="script-format-help"
                 required
                 onChange={clearImportResult}
               />
@@ -430,7 +426,8 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
                 onChange={(event) => selectAudioFiles(event.currentTarget.files)}
               />
             </label>
-            <p>.txt · UTF-8 · 텍스트 파일당 최대 2MB<br />음성 · 001부터 세 자리 번호 · MP3, M4A, WebM · 파일당 최대 4MB</p>
+            <p id="script-format-help">TXT 한 파일에 목표어 묶음 → 한국어 묶음 순서로 넣어 주세요. 연속된 여러 줄도 한 프레이즈이며, 빈 줄은 무시합니다. 챕터 제목은 줄 맨 앞에 ## 을 붙여 주세요.<br />한국어는 한글 포함 여부로 구분합니다. 번역에 한글이 없거나 목표어에 한글이 섞이면 구분이 달라질 수 있으니 미리보기를 확인해 주세요.</p>
+            <p>.txt 한 개 · UTF-8 · 최대 2MB<br />음성 여러 개 · 프레이즈당 한 개 · 001부터 세 자리 번호 · MP3, M4A, WebM · 파일당 최대 4MB</p>
           </div>
           <button
             type="button"

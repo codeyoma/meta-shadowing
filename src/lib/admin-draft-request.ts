@@ -1,6 +1,7 @@
 import "server-only";
 
-import { parseLessonDraft, type LessonDraftParseResult } from "./lesson-draft-parser";
+import type { LessonDraftParseResult } from "./lesson-draft-parser";
+import { parseCombinedLessonDraft } from "./combined-script-parser";
 
 const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 5 * 1024 * 1024;
@@ -81,18 +82,20 @@ export async function readLessonDraftImport(request: Request): Promise<LessonDra
     throw new DraftRequestError("지원하는 언어를 선택해 주세요.", 400);
   }
 
-  const target = await readUtf8TextFile(formData, "targetFile", "목표어 텍스트");
-  const korean = await readUtf8TextFile(formData, "koreanFile", "한국어 텍스트");
-  const parseResult = parseLessonDraft(target.source, korean.source);
-
+  if (formData.getAll("scriptFile").length > 1) {
+    throw new DraftRequestError("통합 스크립트는 TXT 파일 한 개만 선택해 주세요.", 400);
+  }
+  const script = await readUtf8TextFile(formData, "scriptFile", "통합 스크립트");
   return {
     replacementFor: replacementFor || undefined,
     title,
     language,
-    targetFilename: target.filename,
-    koreanFilename: korean.filename,
-    targetSource: target.source,
-    koreanSource: korean.source,
-    parseResult
+    // Keep the existing storage shape: one source file supplies both languages.
+    // Learning and publication consume parsed_entries, including older two-file lessons.
+    targetFilename: script.filename,
+    koreanFilename: script.filename,
+    targetSource: script.source,
+    koreanSource: "",
+    parseResult: parseCombinedLessonDraft(script.source)
   };
 }

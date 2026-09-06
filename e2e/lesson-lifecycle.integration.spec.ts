@@ -31,8 +31,7 @@ async function lifecycleFixture(page: Page) {
   async function draft(title: string, replacementFor?: string) {
     const response = await page.request.post("/api/admin/drafts", { multipart: {
       title, language: "english", ...(replacementFor ? { replacementFor } : {}),
-      targetFile: { name: "en.txt", mimeType: "text/plain", buffer: Buffer.from("Hello there.\nGood morning.") },
-      koreanFile: { name: "ko.txt", mimeType: "text/plain", buffer: Buffer.from("안녕하세요.\n좋은 아침입니다.") }
+      scriptFile: { name: "script.txt", mimeType: "text/plain", buffer: Buffer.from("Hello there.\n안녕하세요.\nGood morning.\n좋은 아침입니다.") }
     } });
     expect(response.status()).toBe(201);
     return (await response.json()).draftId as string;
@@ -148,8 +147,7 @@ test(`an administrator replaces from files, unpublishes without loss, and confir
     await row.getByRole("link", { name: "새 버전 가져오기" }).click();
     await expect(page.getByRole("heading", { name: "레슨 새 버전 가져오기" })).toBeVisible();
     await page.getByLabel("레슨 제목").fill("Managed replacement");
-    await page.getByLabel("목표어 텍스트").setInputFiles({ name: "en.txt", mimeType: "text/plain", buffer: Buffer.from("Welcome home.") });
-    await page.getByLabel("한국어 텍스트").setInputFiles({ name: "ko.txt", mimeType: "text/plain", buffer: Buffer.from("어서 오세요.") });
+    await page.getByLabel("통합 스크립트", { exact: true }).setInputFiles({ name: "script.txt", mimeType: "text/plain", buffer: Buffer.from("Welcome home.\n어서 오세요.") });
     await page.getByLabel("문장별 음성 파일").setInputFiles({ name: "001.webm", mimeType: "audio/webm", buffer: testRecording });
     await page.getByRole("button", { name: "파일 검증", exact: true }).click();
     const saved = page.waitForResponse(response => response.url().endsWith("/api/admin/drafts") && response.request().method() === "POST");
@@ -262,8 +260,7 @@ test("another administrator cannot replace, unpublish or delete an owned lesson 
     })).status()).toBe(404);
     const replacement = await otherPage.request.post("/api/admin/drafts", { multipart: {
       title: "Unauthorized replacement", language: "english", replacementFor: original,
-      targetFile: { name: "en.txt", mimeType: "text/plain", buffer: Buffer.from("Hello.") },
-      koreanFile: { name: "ko.txt", mimeType: "text/plain", buffer: Buffer.from("안녕.") }
+      scriptFile: { name: "script.txt", mimeType: "text/plain", buffer: Buffer.from("Hello.\n안녕.") }
     } });
     expect(replacement.status()).toBe(404);
     expect((await otherPage.request.get("/api/admin/lessons")).status()).toBe(200);

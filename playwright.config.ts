@@ -48,7 +48,12 @@ export default defineConfig({
     baseURL,
     ignoreHTTPSErrors: productionBuild,
     trace: "on-first-retry",
-    launchOptions: chromeExecutable ? { executablePath: chromeExecutable } : undefined
+    launchOptions: chromeExecutable ? {
+      executablePath: chromeExecutable,
+      // Chrome's macOS updater can inherit stdio and keep worker teardown waiting.
+      // Match newer Playwright's test-only switch; leave system update settings alone.
+      args: process.platform === "darwin" ? ["--disable-updater-scheduler"] : []
+    } : undefined
   },
   projects: [
     { name: "mobile", use: { ...devices["Pixel 5"] } },

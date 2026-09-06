@@ -36,8 +36,7 @@ test("admin defaults persist behind authorization and reach learners without ove
 
     const draft = await page.request.post("/api/admin/drafts", { multipart: {
       title: "Defaults integration lesson", language: "english",
-      targetFile: { name: "en.txt", mimeType: "text/plain", buffer: Buffer.from("Hello.") },
-      koreanFile: { name: "ko.txt", mimeType: "text/plain", buffer: Buffer.from("안녕.") }
+      scriptFile: { name: "script.txt", mimeType: "text/plain", buffer: Buffer.from("Hello.\n안녕.") }
     } });
     expect(draft.status()).toBe(201);
     const { draftId } = await draft.json();

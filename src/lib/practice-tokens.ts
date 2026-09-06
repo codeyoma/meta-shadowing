@@ -4,6 +4,9 @@ export type SubtitleHint = { target: string; korean: string };
 
 export function tokenizePracticeText(text: string, language: Language | "korean"): string[] {
   const trimmed = text.trim();
+  if (language === "japanese" && /[\r\n]/u.test(trimmed)) {
+    return trimmed.split(/\r\n?|\n/u).flatMap(line => tokenizePracticeText(line, language));
+  }
   if (language === "japanese" && trimmed && !/\s/u.test(trimmed)) {
     const tokens: string[] = [];
     let prefix = "";
