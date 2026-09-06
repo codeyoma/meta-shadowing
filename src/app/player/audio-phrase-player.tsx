@@ -6,7 +6,7 @@ import { hasSessionTimer, type AudioPracticeLevel, type AudioSessionSettings } f
 import type { PublishedLesson } from "@/lib/lessons";
 import type { SubtitleHint } from "@/lib/practice-tokens";
 import { AudioSessionControls } from "../audio-session-controls";
-import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon } from "../ui";
+import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon, SubtitleIcon } from "../ui";
 import { useAudioSession } from "./use-audio-session";
 
 function formatTime(seconds: number) {
@@ -86,7 +86,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints }: { lesson: 
               <div className="playback-error" role="alert" aria-label="원음 재생 오류"><p>원음을 재생할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.</p><button type="button" className="secondary-button" onClick={() => send({ type: "retry" })}>다시 시도</button></div>
             ) : <p className="session-status" role="status">{status}</p>}
             <div className={`player-actions${level === 3 ? " with-subtitles" : ""}`} data-player-shortcuts>
-              {level === 3 ? <button type="button" aria-label="자막 보기" aria-expanded={session.subtitlesRevealed} aria-controls="practice-subtitles" onClick={() => send({ type: "reveal-subtitles" })}>자막 보기<kbd>S</kbd></button> : null}
+              {level === 3 ? <button type="button" aria-label="자막 보기" aria-expanded={session.subtitlesRevealed} aria-controls="practice-subtitles" onClick={() => send({ type: "reveal-subtitles" })}><span className="subtitle-label"><SubtitleIcon />자막 보기</span><kbd>S</kbd></button> : null}
               <button type="button" onClick={() => send({ type: "retry" })}>{session.completedCycles >= 5 ? "다음 프레이즈" : "다시 듣기"}<kbd>R</kbd></button>
               <button type="button" className="continue" aria-label={actionLabel} onClick={() => send({ type: "space" })}>{actionLabel}<kbd>Space</kbd></button>
             </div>

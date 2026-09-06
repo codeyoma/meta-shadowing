@@ -5,6 +5,7 @@ async function openPlayer(page: Page, level: number, lesson = "morning-routine",
   await page.route("**/api/lessons/*/audio/*", (route) => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto(`/player?lesson=${lesson}&level=${level}${query}`);
+  await page.waitForLoadState("networkidle");
 }
 
 test("level 3 reveals both subtitles with S or touch and resets them on the next cycle and phrase", async ({ page, isMobile }) => {
@@ -41,18 +42,19 @@ test("level 3 reveals both subtitles with S or touch and resets them on the next
 });
 
 test("level 2 keeps full bilingual subtitles and allows two speaking turns without hiding the text", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await openPlayer(page, 2, "morning-routine", "&mode=automatic&speed=0.5");
+  await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
   const subtitles = page.getByRole("region", { name: "학습 자막" });
   await expect(subtitles.getByText("I wake up at seven.", { exact: true })).toBeVisible();
   await expect(subtitles.getByText("나는 일곱 시에 일어난다.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("자막을 보며 말하고, 눈을 감고 한 번 더 말해 보세요.");
-  await page.getByRole("button", { name: "재생 또는 일시정지" }).click();
-  const remainingSeconds = Number.parseFloat((await page.getByRole("timer").textContent())!);
   // The 0.357-second recording at 0.5x allows about 2.36s for Level 2, versus 1.39s for Level 1.
-  expect(remainingSeconds).toBeGreaterThan(1.6);
-  expect(remainingSeconds).toBeLessThanOrEqual(2.4);
+  await expect(page.getByRole("timer")).toHaveText("2.4초");
+  await page.clock.runFor(2000);
+  await expect(page.getByRole("timer")).toHaveText("0.4초");
   await expect(subtitles.getByText("I wake up at seven.", { exact: true })).toBeVisible();
   await page.keyboard.press("s");
   await expect(subtitles.getByText("나는 일곱 시에 일어난다.", { exact: true })).toBeVisible();

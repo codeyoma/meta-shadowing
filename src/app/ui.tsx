@@ -50,6 +50,15 @@ export function PlayIcon() {
   );
 }
 
+export function SubtitleIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M7 11h3m4 0h3M7 15h10" />
+    </svg>
+  );
+}
+
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand ${compact ? "brand-compact" : ""}`}>

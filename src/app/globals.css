@@ -84,6 +84,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .audio-phrase-player .player-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .audio-phrase-player .player-actions.with-subtitles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .audio-phrase-player .player-actions button { min-height: 76px; padding: 12px; }
+.subtitle-label { display: grid; justify-items: center; gap: 4px; }
+.subtitle-label svg { width: 20px; height: 20px; }
 .audio-phrase-player kbd { display: block; margin-top: 6px; font: 12px system-ui, sans-serif; opacity: .8; }
 .audio-phrase-player .playback-dock { left: 50%; transform: translateX(-50%); max-width: 48rem; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 .audio-phrase-player .playback-dock button:disabled { color: var(--disabled); }
@@ -115,6 +117,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .audio-phrase-player .cycle-status { padding: 8px 12px; font-size: 16px; vertical-align: middle; }
   .audio-phrase-player .session-meta { display: inline-flex; vertical-align: middle; margin: 0 0 0 12px; gap: 12px; }
   .audio-phrase-player .session-status { margin-block: 8px; }
+  .audio-phrase-player .player-actions.with-subtitles button { padding-block: 6px; }
 }
 
 .admin-header { min-height: 72px; padding: 12px max(20px, calc((100% - 72rem) / 2)); display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border); background: var(--bg); }

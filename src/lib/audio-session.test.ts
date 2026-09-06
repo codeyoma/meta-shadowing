@@ -54,7 +54,7 @@ it.each([2, 3] as const)("level %s retains the three required plus two extra lim
   session = transitionAudioSession(session, { type: "audio-error", attempt: session.attempt });
   expect(session.completedCycles).toBe(0);
   for (let cycle = 1; cycle <= 5; cycle++) {
-    session = transitionAudioSession(session, { type: "reveal-subtitles" });
+    if (session.phase === "ready") session = transitionAudioSession(session, { type: "reveal-subtitles" });
     session = transitionAudioSession(session, { type: cycle <= 3 ? "space" : "retry" });
     expect(session).toMatchObject({ phase: "loading", subtitlesRevealed: false, phraseIndex: 0 });
     session = finishListen(session);
@@ -72,6 +72,19 @@ it("hides level 3 subtitles when an automatic speaking window starts the next cy
   expect(session).toMatchObject({ phase: "speaking", subtitlesRevealed: true });
   session = transitionAudioSession(session, { type: "tick", attempt: session.attempt, elapsedMs: 100 });
   expect(session).toMatchObject({ phase: "loading", subtitlesRevealed: false, completedCycles: 1 });
+});
+
+it.each(["playing", "error"] as const)("preserves level 3 reveal when restarting a %s attempt, until the next completed cycle", (phase) => {
+  let session = createAudioSession({ phraseCount: 2, level: 3 });
+  session = transitionAudioSession(session, { type: "space" });
+  session = transitionAudioSession(session, { type: "audio-playing", attempt: session.attempt });
+  session = transitionAudioSession(session, { type: "reveal-subtitles" });
+  if (phase === "error") session = transitionAudioSession(session, { type: "audio-error", attempt: session.attempt });
+  session = transitionAudioSession(session, { type: phase === "error" ? "space" : "retry" });
+  expect(session).toMatchObject({ phase: "loading", completedCycles: 0, subtitlesRevealed: true });
+  session = finishListen(session);
+  session = transitionAudioSession(session, { type: "space" });
+  expect(session).toMatchObject({ phase: "loading", completedCycles: 1, subtitlesRevealed: false });
 });
 
 describe("level 1 audio session", () => {

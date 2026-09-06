@@ -49,7 +49,11 @@ export function createAudioSession({
 }
 
 function startListen(session: AudioSession): AudioSession {
-  return { ...session, phase: "loading", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false };
+  const startsNewCycle = session.phase === "ready" || hasSessionTimer(session);
+  return {
+    ...session, phase: "loading", attempt: session.attempt + 1, remainingMs: 0,
+    subtitlesRevealed: startsNewCycle ? false : session.subtitlesRevealed
+  };
 }
 
 function advancePhrase(session: AudioSession): AudioSession {
@@ -87,16 +91,20 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
     case "audio-playing":
       if (event.attempt !== session.attempt || session.phase !== "loading") return session;
       return { ...session, phase: "playing" };
-    case "audio-ended":
+    case "audio-ended": {
       if (event.attempt !== session.attempt || session.phase !== "playing") return session;
+      const speakingWindow = session.level === 2
+        ? { multiplier: 2.25, paddingMs: 750 }
+        : { multiplier: 1.25, paddingMs: 500 };
       return {
         ...session,
         phase: session.mode === "automatic" ? "speaking" : "ready",
         completedCycles: session.completedCycles + 1,
         remainingMs: session.mode === "automatic"
-          ? event.durationMs / session.playbackRate * (session.level === 2 ? 2.25 : 1.25) + (session.level === 2 ? 750 : 500)
+          ? event.durationMs / session.playbackRate * speakingWindow.multiplier + speakingWindow.paddingMs
           : 0
       };
+    }
     case "audio-error":
       if (event.attempt !== session.attempt || !["loading", "playing", "paused"].includes(session.phase)) return session;
       return { ...session, phase: "error" };

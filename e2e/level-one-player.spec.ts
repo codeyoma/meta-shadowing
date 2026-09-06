@@ -7,6 +7,8 @@ async function openPlayer(page: Page, query = "") {
   }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto(`/player?lesson=morning-routine&level=1${query}`);
+  // Keyboard input does not auto-wait for the streamed page's client listeners.
+  await page.waitForLoadState("networkidle");
 }
 
 test("keyboard practice counts three required and two extra listens before R advances", async ({ page }) => {

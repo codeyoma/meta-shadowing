@@ -37,6 +37,7 @@ test("takes an authorized learner from password entry through session setup to t
   await page.getByRole("button", { name: "입장하기" }).click();
 
   await expect(page).toHaveURL(/\/home$/);
+  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: /English 영어/ }).click();
   await page.getByRole("button", { name: /Morning Routine/ }).click();
   await page.getByRole("button", { name: /3 첫 단어 힌트/ }).click();
