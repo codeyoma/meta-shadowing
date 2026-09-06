@@ -1,5 +1,7 @@
 type ActivePhase = "loading" | "playing" | "speaking" | "countdown";
 
+export type AudioPracticeLevel = 1 | 2 | 3;
+
 export const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3];
 
 export type AudioSessionSettings = {
@@ -9,6 +11,8 @@ export type AudioSessionSettings = {
 };
 
 export type AudioSession = {
+  level: AudioPracticeLevel;
+  subtitlesRevealed: boolean;
   phraseCount: number;
   phraseIndex: number;
   completedCycles: number;
@@ -22,7 +26,7 @@ export type AudioSession = {
 };
 
 export type AudioSessionEvent =
-  | { type: "space" | "retry" | "pause" | "previous" | "next" }
+  | { type: "space" | "retry" | "pause" | "previous" | "next" | "reveal-subtitles" }
   | { type: "audio-playing" | "audio-error"; attempt: number }
   | { type: "tick"; elapsedMs: number; attempt: number }
   | ({ type: "settings" } & Partial<AudioSessionSettings>)
@@ -34,10 +38,10 @@ export function hasSessionTimer(session: AudioSession): boolean {
 }
 
 export function createAudioSession({
-  phraseCount, mode = "manual", advanceDelayMs = 1000, playbackRate = 1
-}: { phraseCount: number } & Partial<AudioSessionSettings>): AudioSession {
+  phraseCount, level = 1, mode = "manual", advanceDelayMs = 1000, playbackRate = 1
+}: { phraseCount: number; level?: AudioPracticeLevel } & Partial<AudioSessionSettings>): AudioSession {
   return {
-    phraseCount, phraseIndex: 0, completedCycles: 0, attempt: 0, phase: "ready",
+    level, subtitlesRevealed: false, phraseCount, phraseIndex: 0, completedCycles: 0, attempt: 0, phase: "ready",
     pausedPhase: "loading", mode, remainingMs: 0,
     advanceDelayMs: Number.isFinite(advanceDelayMs) && advanceDelayMs >= 0 && advanceDelayMs <= 30000 ? advanceDelayMs : 1000,
     playbackRate: PLAYBACK_RATES.includes(playbackRate) ? playbackRate : 1
@@ -45,24 +49,26 @@ export function createAudioSession({
 }
 
 function startListen(session: AudioSession): AudioSession {
-  return { ...session, phase: "loading", attempt: session.attempt + 1, remainingMs: 0 };
+  return { ...session, phase: "loading", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false };
 }
 
 function advancePhrase(session: AudioSession): AudioSession {
   if (session.phraseIndex + 1 >= session.phraseCount) return { ...session, phase: "completed", attempt: session.attempt + 1 };
-  const next: AudioSession = { ...session, phase: "ready", phraseIndex: session.phraseIndex + 1, completedCycles: 0, attempt: session.attempt + 1, remainingMs: 0 };
+  const next: AudioSession = { ...session, phase: "ready", phraseIndex: session.phraseIndex + 1, completedCycles: 0, attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false };
   return session.mode === "automatic" ? startListen(next) : next;
 }
 
 export function transitionAudioSession(session: AudioSession, event: AudioSessionEvent): AudioSession {
   if (session.phase === "completed") return session;
   switch (event.type) {
+    case "reveal-subtitles":
+      return session.level === 3 ? { ...session, subtitlesRevealed: true } : session;
     case "pause":
       if (!["loading", "playing", "speaking", "countdown"].includes(session.phase)) return session;
       return { ...session, phase: "paused", pausedPhase: session.phase as ActivePhase };
     case "previous":
       if (session.phraseIndex === 0) return session;
-      return { ...session, phraseIndex: session.phraseIndex - 1, completedCycles: 0, phase: "ready", attempt: session.attempt + 1, remainingMs: 0 };
+      return { ...session, phraseIndex: session.phraseIndex - 1, completedCycles: 0, phase: "ready", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false };
     case "next":
       return session.completedCycles >= 3 ? advancePhrase(session) : session;
     case "space":
@@ -87,7 +93,9 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
         ...session,
         phase: session.mode === "automatic" ? "speaking" : "ready",
         completedCycles: session.completedCycles + 1,
-        remainingMs: session.mode === "automatic" ? event.durationMs / session.playbackRate * 1.25 + 500 : 0
+        remainingMs: session.mode === "automatic"
+          ? event.durationMs / session.playbackRate * (session.level === 2 ? 2.25 : 1.25) + (session.level === 2 ? 750 : 500)
+          : 0
       };
     case "audio-error":
       if (event.attempt !== session.attempt || !["loading", "playing", "paused"].includes(session.phase)) return session;

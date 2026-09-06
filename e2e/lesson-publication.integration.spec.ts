@@ -234,6 +234,21 @@ test("only a complete private audio package can be published and played by a bet
     }
     await page.keyboard.press("Space");
     await expect(page.getByRole("heading", { name: "레벨 1 학습 완료" })).toBeVisible();
+    for (const level of [2, 3]) {
+      await page.goto(`/player?lesson=${draftId}&level=${level}`);
+      await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
+      const subtitles = page.getByRole("region", { name: "학습 자막" });
+      if (level === 3) {
+        await expect(subtitles.getByText("Good", { exact: true })).toBeVisible();
+        await expect(subtitles.getByText("좋은", { exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "자막 보기", exact: true }).click();
+      }
+      await expect(subtitles.getByText("Good morning.", { exact: true })).toBeVisible();
+      await expect(subtitles.getByText("좋은 아침입니다.", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
+      await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
+      if (level === 3) await expect(subtitles.getByText("Good", { exact: true })).toBeVisible();
+    }
   } finally {
     if (uploadedPaths.length) await serviceClient.storage.from("lesson-audio").remove(uploadedPaths);
     await serviceClient.auth.admin.deleteUser(createdAdmin.user.id);

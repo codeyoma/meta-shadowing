@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { AudioSessionSettings } from "@/lib/audio-session";
+import type { SubtitleHint } from "@/lib/practice-tokens";
 import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon } from "../ui";
-import { LevelOnePlayer } from "./level-one-player";
+import { AudioPhrasePlayer } from "./audio-phrase-player";
 
-export function PlayerShell({ lesson, level, settings }: { lesson: PublishedLesson; level: number; settings: AudioSessionSettings }) {
-  if (level === 1) return <LevelOnePlayer key={`${lesson.id}:${settings.mode}:${settings.playbackRate}:${settings.advanceDelayMs}`} lesson={lesson} settings={settings} />;
+export function PlayerShell({ lesson, level, settings, hints }: { lesson: PublishedLesson; level: number; settings: AudioSessionSettings; hints: SubtitleHint[] }) {
+  if (level === 1 || level === 2 || level === 3) return <AudioPhrasePlayer key={`${lesson.id}:${level}:${settings.mode}:${settings.playbackRate}:${settings.advanceDelayMs}`} lesson={lesson} level={level} settings={settings} hints={hints} />;
   return <PreviewPlayer lesson={lesson} level={level} />;
 }
 

@@ -62,30 +62,32 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .audio-session-controls { display: grid; gap: 16px; }
 .audio-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 16px; text-align: left; }
 .audio-setting select, .audio-setting input { width: 104px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface); color: var(--text); }
-.level-one-player .player-topbar { height: 80px; max-width: 48rem; margin-inline: auto; padding-inline: 16px; }
-.level-one-player .player-progress { max-width: 48rem; margin-inline: auto; padding-bottom: 20px; }
-.level-one-player .player-progress > span { font-size: 20px; margin-bottom: 12px; }
-.level-one-player .player-progress > div { height: 8px; }
-.level-one-player .chapter-header { padding: 18px max(24px, calc((100% - 45rem) / 2)); }
-.level-one-player .chapter-header strong { font-size: 22px; overflow-wrap: anywhere; }
-.level-one-player .chapter-header span { font-size: 16px; }
-.level-one-player .practice-shell { padding-top: 28px; }
-.level-one-player .practice-shell h1 { margin-bottom: 24px; font-size: 22px; }
-.level-one-player .practice-canvas { min-height: 210px; padding: 28px 20px; gap: 18px; }
-.level-one-player .practice-canvas > span { font-family: inherit; font-size: clamp(28px, 7vw, 42px); overflow-wrap: anywhere; }
-.level-one-player .practice-canvas small { font-size: 18px; overflow-wrap: anywhere; }
-.level-one-player .playback-line { margin: 22px 0; font-variant-numeric: tabular-nums; }
-.level-one-player .cycle-status { margin: 0; padding: 10px 18px; gap: 6px; font-size: 18px; }
+.audio-phrase-player .player-topbar { height: 80px; max-width: 48rem; margin-inline: auto; padding-inline: 16px; }
+.audio-phrase-player .player-progress { max-width: 48rem; margin-inline: auto; padding-bottom: 20px; }
+.audio-phrase-player .player-progress > span { font-size: 20px; margin-bottom: 12px; }
+.audio-phrase-player .player-progress > div { height: 8px; }
+.audio-phrase-player .chapter-header { padding: 18px max(24px, calc((100% - 45rem) / 2)); }
+.audio-phrase-player .chapter-header strong { font-size: 22px; overflow-wrap: anywhere; }
+.audio-phrase-player .chapter-header span { font-size: 16px; }
+.audio-phrase-player .practice-shell { padding-top: 28px; }
+.audio-phrase-player .practice-shell h1 { margin-bottom: 24px; font-size: 22px; }
+.audio-phrase-player .practice-canvas { min-height: 210px; padding: 28px 20px; gap: 18px; }
+.audio-phrase-player .practice-canvas > span { font-family: inherit; font-size: clamp(28px, 7vw, 42px); overflow-wrap: anywhere; }
+.audio-phrase-player .practice-canvas small { font-size: 18px; overflow-wrap: anywhere; }
+.audio-phrase-player .practice-canvas.hint-only > span { font-size: 64px; }
+.audio-phrase-player .playback-line { margin: 22px 0; font-variant-numeric: tabular-nums; }
+.audio-phrase-player .cycle-status { margin: 0; padding: 10px 18px; gap: 6px; font-size: 18px; }
 .session-meta { display: flex; justify-content: center; align-items: center; gap: 20px; min-height: 32px; margin-top: 12px; }
 .session-mode { margin: 0; color: var(--muted); font-size: 16px; }
 .session-status { min-height: 44px; margin: 16px 0; color: var(--muted); line-height: 1.5; }
 .session-timer { margin: 0; font-size: 24px; font-weight: 750; color: var(--green-focus); font-variant-numeric: tabular-nums; }
-.level-one-player .player-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.level-one-player .player-actions button { min-height: 76px; padding: 12px; }
-.level-one-player kbd { display: block; margin-top: 6px; font: 12px system-ui, sans-serif; opacity: .8; }
-.level-one-player .playback-dock { left: 50%; transform: translateX(-50%); max-width: 48rem; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-.level-one-player .playback-dock button:disabled { color: var(--disabled); }
-.level-one-player .playback-error { margin: 18px 0; line-height: 1.5; }
+.audio-phrase-player .player-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.audio-phrase-player .player-actions.with-subtitles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.audio-phrase-player .player-actions button { min-height: 76px; padding: 12px; }
+.audio-phrase-player kbd { display: block; margin-top: 6px; font: 12px system-ui, sans-serif; opacity: .8; }
+.audio-phrase-player .playback-dock { left: 50%; transform: translateX(-50%); max-width: 48rem; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.audio-phrase-player .playback-dock button:disabled { color: var(--disabled); }
+.audio-phrase-player .playback-error { margin: 18px 0; line-height: 1.5; }
 .player-settings { margin-bottom: 24px; padding: 20px; border: 1px solid var(--border); border-radius: 20px; background: var(--elevated); }
 .player-settings h2 { margin: 0 0 20px; font-size: 20px; }
 .player-settings > button { margin-top: 20px; width: 100%; }
@@ -93,13 +95,26 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .completion-canvas p { color: var(--muted); line-height: 1.5; }
 .completion-canvas button { padding: 12px 20px; }
 @media (max-width: 560px) {
-  .level-one-player .player-topbar { height: 64px; }
-  .level-one-player .chapter-header { padding-block: 14px; }
-  .level-one-player .practice-shell { padding-top: 20px; }
-  .level-one-player .practice-shell h1 { margin-bottom: 18px; }
-  .level-one-player .practice-canvas { min-height: 180px; }
-  .level-one-player .playback-line { margin-block: 16px; }
-  .level-one-player .session-status { margin-block: 12px; }
+  .audio-phrase-player .player-topbar { height: 64px; }
+  .audio-phrase-player .chapter-header { padding-block: 14px; }
+  .audio-phrase-player .practice-shell { padding-top: 20px; }
+  .audio-phrase-player .practice-shell h1 { margin-bottom: 18px; }
+  .audio-phrase-player .practice-canvas { min-height: 180px; }
+  .audio-phrase-player .playback-line { margin-block: 16px; }
+  .audio-phrase-player .session-status { margin-block: 12px; }
+}
+@media (max-width: 560px) and (max-height: 800px) {
+  .audio-phrase-player .player-topbar { height: 56px; }
+  .audio-phrase-player .player-progress { padding-bottom: 12px; }
+  .audio-phrase-player .player-progress > span { margin-bottom: 8px; }
+  .audio-phrase-player .chapter-header { padding-block: 12px; }
+  .audio-phrase-player .practice-shell { padding-top: 12px; }
+  .audio-phrase-player .practice-shell h1 { margin-bottom: 12px; }
+  .audio-phrase-player .practice-canvas { min-height: 160px; padding: 12px 16px; gap: 12px; }
+  .audio-phrase-player .playback-line { margin-block: 12px; }
+  .audio-phrase-player .cycle-status { padding: 8px 12px; font-size: 16px; vertical-align: middle; }
+  .audio-phrase-player .session-meta { display: inline-flex; vertical-align: middle; margin: 0 0 0 12px; gap: 12px; }
+  .audio-phrase-player .session-status { margin-block: 8px; }
 }
 
 .admin-header { min-height: 72px; padding: 12px max(20px, calc((100% - 72rem) / 2)); display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border); background: var(--bg); }

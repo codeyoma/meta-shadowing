@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { hasSessionTimer, type AudioSessionSettings } from "@/lib/audio-session";
+import { hasSessionTimer, type AudioPracticeLevel, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
+import type { SubtitleHint } from "@/lib/practice-tokens";
 import { AudioSessionControls } from "../audio-session-controls";
 import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon } from "../ui";
 import { useAudioSession } from "./use-audio-session";
@@ -12,11 +13,13 @@ function formatTime(seconds: number) {
   return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 }
 
-export function LevelOnePlayer({ lesson, settings }: { lesson: PublishedLesson; settings: AudioSessionSettings }) {
+export function AudioPhrasePlayer({ lesson, level, settings, hints }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[] }) {
   const router = useRouter();
-  const { session, send, audioRef, mediaTime } = useAudioSession(lesson, settings);
+  const { session, send, audioRef, mediaTime } = useAudioSession(lesson, level, settings);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const phrase = lesson.phrases[session.phraseIndex];
+  const hintOnly = level === 3 && !session.subtitlesRevealed;
+  const subtitle = hintOnly ? hints[session.phraseIndex] : phrase;
   const complete = session.phase === "completed";
   const active = ["loading", "playing", "speaking", "countdown"].includes(session.phase);
   const playing = ["loading", "playing"].includes(session.phase);
@@ -27,14 +30,14 @@ export function LevelOnePlayer({ lesson, settings }: { lesson: PublishedLesson; 
   const status = session.phase === "loading" ? "원음을 불러오는 중"
     : session.phase === "playing" ? "원음을 듣고 따라 말해 보세요."
     : session.phase === "paused" ? "일시정지됨"
-    : session.phase === "speaking" ? "들은 문장을 말해 보세요."
+    : session.phase === "speaking" ? (level === 2 ? "자막을 보며 말하고, 눈을 감고 한 번 더 말해 보세요." : "들은 문장을 말해 보세요.")
     : session.phase === "countdown" ? "곧 다음 프레이즈로 이동합니다."
     : session.completedCycles >= 3 ? "말하기를 마쳤다면 다음으로, 더 연습하려면 다시 듣기."
-    : "듣고 말한 뒤 다음 원음을 시작하세요.";
+    : level === 2 ? "듣고, 자막을 보며 말한 뒤 눈을 감고 한 번 더 말해 보세요." : "듣고 말한 뒤 다음 원음을 시작하세요.";
   const progress = complete ? lesson.phrases.length : session.phraseIndex;
 
   return (
-    <Page className="player-page level-one-player">
+    <Page className="player-page audio-phrase-player">
       <header className="player-topbar">
         <button type="button" aria-label="레슨으로 돌아가기" className="icon-button" onClick={() => router.push("/home")}><BackIcon /></button>
         <Brand />
@@ -51,7 +54,7 @@ export function LevelOnePlayer({ lesson, settings }: { lesson: PublishedLesson; 
       </div>
       <header className="chapter-header"><strong>{lesson.name}</strong><span>{lesson.localizedName}</span></header>
       <section className="practice-shell" aria-labelledby="player-title">
-        <h1 id="player-title">메타쉐도잉 레벨 1</h1>
+        <h1 id="player-title">메타쉐도잉 레벨 {level}</h1>
         <audio ref={audioRef} preload="none" />
         {settingsOpen ? <section id="player-settings" className="player-settings" aria-label="학습 설정">
           <h2>세션 설정</h2>
@@ -60,13 +63,13 @@ export function LevelOnePlayer({ lesson, settings }: { lesson: PublishedLesson; 
         </section> : null}
         {complete ? (
           <div className="practice-canvas completion-canvas">
-            <h2>레벨 1 학습 완료</h2>
+            <h2>레벨 {level} 학습 완료</h2>
             <p>{lesson.phrases.length}개 프레이즈를 모두 연습했어요.</p>
             <button type="button" className="primary-button" onClick={() => router.push("/home")}>레슨 목록으로</button>
           </div>
         ) : (
           <>
-            <div className="practice-canvas"><span lang={lesson.language === "english" ? "en" : "ja"}>{phrase.target}</span><small lang="ko">{phrase.korean}</small></div>
+            <div id="practice-subtitles" role="region" aria-label="학습 자막" className={`practice-canvas${hintOnly ? " hint-only" : ""}`}><span lang={lesson.language === "english" ? "en" : "ja"}>{subtitle.target}</span><small lang="ko">{subtitle.korean}</small></div>
             <div className="playback-line">
               <span>{formatTime(mediaTime.elapsed)}</span>
               <div role="progressbar" aria-label="원음 재생 진행" aria-valuemin={0} aria-valuemax={100} aria-valuenow={mediaTime.duration ? Math.round(mediaTime.elapsed / mediaTime.duration * 100) : 0}>
@@ -82,7 +85,8 @@ export function LevelOnePlayer({ lesson, settings }: { lesson: PublishedLesson; 
             {session.phase === "error" ? (
               <div className="playback-error" role="alert" aria-label="원음 재생 오류"><p>원음을 재생할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.</p><button type="button" className="secondary-button" onClick={() => send({ type: "retry" })}>다시 시도</button></div>
             ) : <p className="session-status" role="status">{status}</p>}
-            <div className="player-actions" data-player-shortcuts>
+            <div className={`player-actions${level === 3 ? " with-subtitles" : ""}`} data-player-shortcuts>
+              {level === 3 ? <button type="button" aria-label="자막 보기" aria-expanded={session.subtitlesRevealed} aria-controls="practice-subtitles" onClick={() => send({ type: "reveal-subtitles" })}>자막 보기<kbd>S</kbd></button> : null}
               <button type="button" onClick={() => send({ type: "retry" })}>{session.completedCycles >= 5 ? "다음 프레이즈" : "다시 듣기"}<kbd>R</kbd></button>
               <button type="button" className="continue" aria-label={actionLabel} onClick={() => send({ type: "space" })}>{actionLabel}<kbd>Space</kbd></button>
             </div>

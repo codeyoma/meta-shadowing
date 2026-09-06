@@ -6,6 +6,74 @@ function finishListen(session: ReturnType<typeof createAudioSession>, durationMs
   return transitionAudioSession(session, { type: "audio-ended", attempt: session.attempt, durationMs });
 }
 
+it.each([
+  { level: 1 as const, playbackRate: 1, expectedMs: 5500 },
+  { level: 2 as const, playbackRate: 1, expectedMs: 9750 },
+  { level: 2 as const, playbackRate: 2, expectedMs: 5250 },
+  { level: 3 as const, playbackRate: 1, expectedMs: 5500 },
+  { level: 3 as const, playbackRate: 2, expectedMs: 3000 }
+])("level $level at $playbackRate× allows $expectedMs ms to speak after a four-second recording", ({ level, playbackRate, expectedMs }) => {
+  const session = createAudioSession({ phraseCount: 2, level, playbackRate, mode: "automatic" });
+  expect(finishListen(transitionAudioSession(session, { type: "space" }))).toMatchObject({
+    phase: "speaking", remainingMs: expectedMs, completedCycles: 1
+  });
+});
+
+it("keeps level 3 subtitles revealed through pause and the end of a listen, then hides them for the next cycle", () => {
+  let session = createAudioSession({ phraseCount: 2, level: 3 });
+  expect(session.subtitlesRevealed).toBe(false);
+  session = transitionAudioSession(session, { type: "space" });
+  session = transitionAudioSession(session, { type: "audio-playing", attempt: session.attempt });
+  session = transitionAudioSession(session, { type: "reveal-subtitles" });
+  session = transitionAudioSession(session, { type: "space" });
+  expect(session).toMatchObject({ phase: "paused", subtitlesRevealed: true });
+  session = transitionAudioSession(session, { type: "space" });
+  session = finishListen(session);
+  expect(session).toMatchObject({ phase: "ready", subtitlesRevealed: true, completedCycles: 1 });
+  session = transitionAudioSession(session, { type: "space" });
+  expect(session).toMatchObject({ phase: "loading", subtitlesRevealed: false });
+});
+
+it.each(["space", "next"] as const)("resets level 3 hints when %s advances to another phrase and when returning to the previous phrase", (type) => {
+  let session = createAudioSession({ phraseCount: 2, level: 3 });
+  for (let cycle = 0; cycle < 3; cycle++) session = finishListen(transitionAudioSession(session, { type: "space" }));
+  session = transitionAudioSession(session, { type: "reveal-subtitles" });
+  session = transitionAudioSession(session, { type });
+  expect(session).toMatchObject({ phraseIndex: 1, subtitlesRevealed: false, completedCycles: 0 });
+  session = transitionAudioSession(session, { type: "reveal-subtitles" });
+  session = transitionAudioSession(session, { type: "previous" });
+  expect(session).toMatchObject({ phraseIndex: 0, subtitlesRevealed: false, completedCycles: 0 });
+});
+
+it.each([2, 3] as const)("level %s retains the three required plus two extra limit and does not count a restarted or failed attempt", (level) => {
+  let session = createAudioSession({ phraseCount: 2, level });
+  session = transitionAudioSession(session, { type: "space" });
+  const interrupted = session.attempt;
+  session = transitionAudioSession(session, { type: "retry" });
+  session = transitionAudioSession(session, { type: "audio-ended", attempt: interrupted, durationMs: 4000 });
+  session = transitionAudioSession(session, { type: "audio-error", attempt: session.attempt });
+  expect(session.completedCycles).toBe(0);
+  for (let cycle = 1; cycle <= 5; cycle++) {
+    session = transitionAudioSession(session, { type: "reveal-subtitles" });
+    session = transitionAudioSession(session, { type: cycle <= 3 ? "space" : "retry" });
+    expect(session).toMatchObject({ phase: "loading", subtitlesRevealed: false, phraseIndex: 0 });
+    session = finishListen(session);
+    expect(session).toMatchObject({ phase: "ready", completedCycles: cycle, remainingMs: 0 });
+  }
+  session = transitionAudioSession(session, { type: "retry" });
+  expect(session).toMatchObject({ phraseIndex: 1, completedCycles: 0, subtitlesRevealed: false });
+});
+
+it("hides level 3 subtitles when an automatic speaking window starts the next cycle", () => {
+  let session = createAudioSession({ phraseCount: 2, level: 3, mode: "automatic" });
+  session = finishListen(transitionAudioSession(session, { type: "space" }));
+  session = transitionAudioSession(session, { type: "reveal-subtitles" });
+  session = transitionAudioSession(session, { type: "tick", attempt: session.attempt, elapsedMs: 5400 });
+  expect(session).toMatchObject({ phase: "speaking", subtitlesRevealed: true });
+  session = transitionAudioSession(session, { type: "tick", attempt: session.attempt, elapsedMs: 100 });
+  expect(session).toMatchObject({ phase: "loading", subtitlesRevealed: false, completedCycles: 1 });
+});
+
 describe("level 1 audio session", () => {
   it("counts only a finished listen, then lets Space and R start the remaining required listens", () => {
     let session = createAudioSession({ phraseCount: 2 });

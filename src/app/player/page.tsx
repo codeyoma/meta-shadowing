@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPublishedLesson } from "@/lib/published-lessons";
 import { requireLearner } from "@/lib/server-auth";
+import { firstPracticeToken } from "@/lib/practice-tokens";
 import { PlayerShell } from "./player-shell";
 
 type PlayerPageProps = { searchParams: Promise<{ lesson?: string; level?: string; mode?: string; speed?: string; gap?: string }> };
@@ -12,7 +13,12 @@ export default async function PlayerPage({ searchParams }: PlayerPageProps) {
   if (!lesson) redirect("/home");
   const requestedLevel = Number(params.level);
   const level = Number.isInteger(requestedLevel) && requestedLevel >= 1 && requestedLevel <= 8 ? requestedLevel : 1;
-  return <PlayerShell lesson={lesson} level={level} settings={{
+  // Segment once on the server so browser ICU versions cannot change the initial hints during hydration.
+  const hints = level === 3 ? lesson.phrases.map((phrase) => ({
+    target: firstPracticeToken(phrase.target, lesson.language),
+    korean: firstPracticeToken(phrase.korean, "korean")
+  })) : [];
+  return <PlayerShell lesson={lesson} level={level} hints={hints} settings={{
     mode: params.mode === "automatic" ? "automatic" : "manual",
     playbackRate: Number(params.speed ?? 1),
     advanceDelayMs: Number(params.gap ?? 1) * 1000

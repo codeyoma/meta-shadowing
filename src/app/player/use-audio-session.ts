@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createAudioSession, transitionAudioSession, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
+import { createAudioSession, transitionAudioSession, type AudioPracticeLevel, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 
 function detachAudioListeners(audio: HTMLAudioElement) {
@@ -9,8 +9,8 @@ function detachAudioListeners(audio: HTMLAudioElement) {
   audio.ontimeupdate = audio.ondurationchange = null;
 }
 
-export function useAudioSession(lesson: PublishedLesson, settings: AudioSessionSettings) {
-  const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, ...settings }));
+export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings) {
+  const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, level, ...settings }));
   const currentSession = useRef(session);
   const audioRef = useRef<HTMLAudioElement>(null);
   const playRequest = useRef(0);
@@ -88,24 +88,36 @@ export function useAudioSession(lesson: PublishedLesson, settings: AudioSessionS
   }, [session.phase, session.attempt, send]);
 
   useEffect(() => {
+    let handledSpace = false;
     function onKeyDown(event: KeyboardEvent) {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.code === "Space") handledSpace = false;
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("input, select, textarea, [contenteditable=true], [role=dialog]")) return;
       if (target instanceof HTMLElement && target.closest("button, a") && !target.closest("[data-player-shortcuts]")) return;
       const type = event.code === "Space" ? "space" : event.key.toLowerCase() === "r" ? "retry"
+        : event.key.toLowerCase() === "s" ? "reveal-subtitles"
         : event.key === "ArrowLeft" ? "previous" : event.key === "ArrowRight" ? "next" : null;
       if (!type) return;
       event.preventDefault();
+      if (event.code === "Space") handledSpace = true;
       send({ type });
+    }
+    function onKeyUp(event: KeyboardEvent) {
+      if (event.code !== "Space" || !handledSpace) return;
+      // Mobile Chrome can still activate a focused button on keyup after a consumed keydown.
+      event.preventDefault();
+      handledSpace = false;
     }
     function onVisibilityChange() {
       if (document.hidden) send({ type: "pause" });
     }
     window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [send]);

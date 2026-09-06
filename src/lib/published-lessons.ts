@@ -21,7 +21,7 @@ function isTestMode() {
 function fixtureLesson(lesson: Lesson): PublishedLesson {
   const targets = lesson.language === "english"
     ? ["I wake up at seven.", "I wash my face.", "I brush my teeth."]
-    : ["私は 七時に 起きます。", "顔を 洗います。", "歯を 磨きます。"];
+    : ["私は 七時に 起きます。", "顔を洗います。", "歯を 磨きます。"];
   const korean = ["나는 일곱 시에 일어난다.", "나는 세수를 한다.", "나는 이를 닦는다."];
   return {
     ...lesson,
