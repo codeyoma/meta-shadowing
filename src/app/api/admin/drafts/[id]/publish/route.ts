@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getAdminIdentity, hasTrustedAdminOrigin } from "@/lib/admin-auth";
+import { authorizeAdminMutation } from "@/lib/admin-auth";
 import { LessonPublicationError, publishLessonDraft } from "@/lib/lesson-publication";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
-  const admin = await getAdminIdentity();
-  if (!admin) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!hasTrustedAdminOrigin(request)) return NextResponse.json({ error: "invalid-origin" }, { status: 403 });
+  const admin = await authorizeAdminMutation(request);
+  if (admin instanceof Response) return admin;
 
   try {
     const { id } = await context.params;

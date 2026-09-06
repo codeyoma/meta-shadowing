@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getAdminIdentity, hasTrustedAdminOrigin } from "@/lib/admin-auth";
+import { authorizeAdminMutation } from "@/lib/admin-auth";
 import { deleteLesson, LessonManagementError } from "@/lib/lesson-management";
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   const headers = { "Cache-Control": "private, no-store" };
-  const admin = await getAdminIdentity();
-  if (!admin) return NextResponse.json({ error: "unauthorized" }, { status: 401, headers });
-  if (!hasTrustedAdminOrigin(request)) return NextResponse.json({ error: "invalid-origin" }, { status: 403, headers });
+  const admin = await authorizeAdminMutation(request);
+  if (admin instanceof Response) return admin;
   if (!request.headers.get("content-type")?.startsWith("application/json")) return NextResponse.json({ error: "invalid-content-type" }, { status: 415, headers });
   try {
     const { id } = await context.params;

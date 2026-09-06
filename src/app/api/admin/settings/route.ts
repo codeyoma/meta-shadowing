@@ -1,10 +1,10 @@
-import { getAdminIdentity, hasTrustedAdminOrigin } from "@/lib/admin-auth";
+import { authorizeAdminMutation } from "@/lib/admin-auth";
 import { isSessionSettings } from "@/lib/session-settings";
 import { updateSessionDefaults } from "@/lib/session-defaults-repository";
 
 export async function PUT(request: Request) {
-  if (!await getAdminIdentity()) return Response.json({ error: "unauthorized" }, { status: 401 });
-  if (!hasTrustedAdminOrigin(request)) return Response.json({ error: "invalid-origin" }, { status: 403 });
+  const admin = await authorizeAdminMutation(request);
+  if (admin instanceof Response) return admin;
   if (!request.headers.get("content-type")?.startsWith("application/json")) return Response.json({ error: "invalid-content-type" }, { status: 415 });
   const body = await request.text();
   if (body.length > 4096) return Response.json({ error: "settings-too-large" }, { status: 413 });

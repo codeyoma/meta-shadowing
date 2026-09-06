@@ -10,7 +10,7 @@ export type AdminIdentity = {
   email: string;
 };
 
-export function hasTrustedAdminOrigin(request: Request): boolean {
+function hasTrustedAdminOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return true; // Non-browser clients still require administrator authentication.
   try {
@@ -18,6 +18,14 @@ export function hasTrustedAdminOrigin(request: Request): boolean {
     // Compare the browser-facing Host, not Next's internal bind URL behind a proxy.
     return ["http:", "https:"].includes(url.protocol) && url.host === request.headers.get("host");
   } catch { return false; }
+}
+
+export async function authorizeAdminMutation(request: Request): Promise<AdminIdentity | Response> {
+  const headers = { "Cache-Control": "private, no-store" };
+  const admin = await getAdminIdentity();
+  if (!admin) return Response.json({ error: "unauthorized" }, { status: 401, headers });
+  if (!hasTrustedAdminOrigin(request)) return Response.json({ error: "invalid-origin" }, { status: 403, headers });
+  return admin;
 }
 
 export async function getAdminIdentity(): Promise<AdminIdentity | null> {

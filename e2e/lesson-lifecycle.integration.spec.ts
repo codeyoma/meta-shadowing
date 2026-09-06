@@ -254,6 +254,8 @@ test("another administrator cannot replace, unpublish or delete an owned lesson 
     expect((await page.request.post(`/api/admin/lessons/${original}/unpublish`, { headers: { origin: "https://untrusted.example" } })).status()).toBe(403);
     expect((await page.request.delete(`/api/admin/lessons/${original}`, { headers: { origin: "https://untrusted.example" },
       data: { confirmTitle: "Owner protected lesson", expectedDraftId: original } })).status()).toBe(403);
+    expect((await page.request.delete(`/api/admin/lessons/${original}`, { headers: { "content-type": "application/json" }, data: "not-json" })).status()).toBe(400);
+    expect((await page.request.delete(`/api/admin/lessons/${original}`, { headers: { "content-type": "text/plain" }, data: "{}" })).status()).toBe(415);
     expect((await otherPage.request.post(`/api/admin/lessons/${original}/unpublish`)).status()).toBe(404);
     expect((await otherPage.request.delete(`/api/admin/lessons/${original}`, {
       data: { confirmTitle: "Owner protected lesson", expectedDraftId: original }

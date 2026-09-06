@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getAdminIdentity, hasTrustedAdminOrigin } from "@/lib/admin-auth";
+import { authorizeAdminMutation } from "@/lib/admin-auth";
 import { DraftRequestError, readLessonDraftImport } from "@/lib/admin-draft-request";
 import { saveLessonDraft } from "@/lib/lesson-draft-repository";
 
 export async function POST(request: Request) {
-  const admin = await getAdminIdentity();
-  if (!admin) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!hasTrustedAdminOrigin(request)) return NextResponse.json({ error: "invalid-origin" }, { status: 403 });
+  const admin = await authorizeAdminMutation(request);
+  if (admin instanceof Response) return admin;
 
   try {
     const draft = await readLessonDraftImport(request);
