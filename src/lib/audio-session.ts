@@ -8,6 +8,7 @@ export type AudioSessionSettings = {
   mode: "manual" | "automatic";
   playbackRate: number;
   advanceDelayMs: number;
+  groupGapMs?: number;
 };
 
 export type AudioSession = {
@@ -21,10 +22,11 @@ export type AudioSession = {
   completedCycles: number;
   attempt: number;
   phase: "ready" | ActivePhase | "paused" | "error" | "completed";
-  pausedPhase: ActivePhase;
+  pausedPhase: ActivePhase | "ready";
   mode: "manual" | "automatic";
   playbackRate: number;
   advanceDelayMs: number;
+  groupGapMs: number;
   remainingMs: number;
 };
 
@@ -41,16 +43,19 @@ export function hasSessionTimer(session: AudioSession): boolean {
 }
 
 export function createAudioSession({
-  phraseCount, groupSizes, level = 1, mode = "manual", advanceDelayMs = 1000, playbackRate = 1
-}: { phraseCount: number; groupSizes?: number[]; level?: AudioPracticeLevel } & Partial<AudioSessionSettings>): AudioSession {
+  phraseCount, groupSizes, level = 1, mode = "manual", advanceDelayMs = 1000, playbackRate = 1, groupGapMs = 500, initialGroupIndex = 0
+}: { phraseCount: number; groupSizes?: number[]; level?: AudioPracticeLevel; initialGroupIndex?: number } & Partial<AudioSessionSettings>): AudioSession {
   const validGroups = level >= 4 && groupSizes?.every(size => Number.isInteger(size) && size > 0)
     && groupSizes.reduce((sum, size) => sum + size, 0) === phraseCount;
+  const sizes = validGroups ? [...groupSizes!] : Array.from({ length: phraseCount }, () => 1);
+  const groupIndex = Number.isInteger(initialGroupIndex) && initialGroupIndex >= 0 && initialGroupIndex < sizes.length ? initialGroupIndex : 0;
   return {
-    level, subtitlesRevealed: false, phraseCount, phraseIndex: 0, completedCycles: 0, attempt: 0, phase: "ready",
-    groupSizes: validGroups ? [...groupSizes!] : Array.from({ length: phraseCount }, () => 1),
-    groupIndex: 0, groupDurationMs: 0,
+    level, subtitlesRevealed: false, phraseCount, phraseIndex: sizes.slice(0, groupIndex).reduce((a, b) => a + b, 0), completedCycles: 0, attempt: 0, phase: "ready",
+    groupSizes: sizes,
+    groupIndex, groupDurationMs: 0,
     pausedPhase: "loading", mode, remainingMs: 0,
     advanceDelayMs: Number.isFinite(advanceDelayMs) && advanceDelayMs >= 0 && advanceDelayMs <= 30000 ? advanceDelayMs : 1000,
+    groupGapMs: Number.isFinite(groupGapMs) && groupGapMs >= 0 && groupGapMs <= 30000 ? groupGapMs : 500,
     playbackRate: PLAYBACK_RATES.includes(playbackRate) ? playbackRate : 1
   };
 }
@@ -84,8 +89,8 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
     case "reveal-subtitles":
       return session.level === 3 || session.level === 5 ? { ...session, subtitlesRevealed: true } : session;
     case "pause":
-      if (!["loading", "playing", "gap", "speaking", "countdown"].includes(session.phase)) return session;
-      return { ...session, phase: "paused", pausedPhase: session.phase as ActivePhase };
+      if (!["ready", "loading", "playing", "gap", "speaking", "countdown"].includes(session.phase)) return session;
+      return { ...session, phase: "paused", pausedPhase: session.phase as ActivePhase | "ready" };
     case "previous":
       if (session.groupIndex === 0) return session;
       return {
@@ -101,6 +106,7 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
         return { ...session, phase: "paused", pausedPhase: session.phase as ActivePhase };
       }
       if (session.phase === "paused") {
+        if (session.pausedPhase === "ready") return transitionAudioSession({ ...session, phase: "ready" }, event);
         return { ...session, phase: session.pausedPhase === "playing" ? "loading" : session.pausedPhase };
       }
       if (session.completedCycles >= 3) return advanceGroup(session);
@@ -115,7 +121,7 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       if (event.attempt !== session.attempt || session.phase !== "playing") return session;
       const groupDurationMs = session.groupDurationMs + event.durationMs;
       if (session.phraseIndex + 1 < groupFirstPhrase(session) + session.groupSizes[session.groupIndex]) {
-        return { ...session, phase: "gap", groupDurationMs, remainingMs: 500 };
+        return { ...session, phase: "gap", groupDurationMs, remainingMs: session.groupGapMs };
       }
       const speakingWindow = session.level === 2 || session.level === 4
         ? { multiplier: 2.25, paddingMs: 750 }
@@ -146,6 +152,7 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       const next = {
         ...session,
         mode: event.mode ?? session.mode,
+        groupGapMs: event.groupGapMs !== undefined && Number.isFinite(event.groupGapMs) && event.groupGapMs >= 0 && event.groupGapMs <= 30000 ? event.groupGapMs : session.groupGapMs,
         playbackRate: event.playbackRate !== undefined && PLAYBACK_RATES.includes(event.playbackRate)
           ? event.playbackRate : session.playbackRate,
         advanceDelayMs: event.advanceDelayMs !== undefined && Number.isFinite(event.advanceDelayMs)

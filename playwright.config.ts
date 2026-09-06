@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const chromeExecutable = process.env.PLAYWRIGHT_CHROME_EXECUTABLE;
 const runSupabaseIntegration = process.env.ADMIN_SUPABASE_INTEGRATION === "1";
-const port = runSupabaseIntegration ? 3010 : 3000;
+const port = Number(process.env.PLAYWRIGHT_PORT ?? (runSupabaseIntegration ? 3010 : 3000));
 const integrationUrl = process.env.SUPABASE_INTEGRATION_URL;
 const integrationPublishableKey = process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY;
 
@@ -49,7 +49,7 @@ export default defineConfig({
     { name: "desktop", use: { ...devices["Desktop Chrome"] } }
   ],
   webServer: {
-    command: `npm run dev -- --port ${port}`,
+    command: `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
     env: serverEnvironment,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: runSupabaseIntegration ? false : !process.env.CI

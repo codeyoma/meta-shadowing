@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { AdminIdentity } from "@/lib/admin-auth";
 import { mapAudioPackage, type AudioPackageResult } from "@/lib/audio-package";
 import { hasSupportedAudioSignature } from "@/lib/audio-signature";
@@ -367,6 +368,7 @@ function AdminImport({ admin }: { admin: AdminIdentity }) {
           <span>관리자</span>
         </div>
         <div className="admin-account">
+          <Link href="/admin/settings">전역 학습 기본값</Link>
           <span>{admin.email}</span>
           <button type="button" onClick={logout}>로그아웃</button>
         </div>

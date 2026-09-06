@@ -4,6 +4,7 @@ export type Language = "english" | "japanese";
 
 export type Lesson = {
   id: string;
+  version: string;
   language: Language;
   name: string;
   localizedName: string;
@@ -20,6 +21,7 @@ export type PublishedLesson = Lesson & {
 export const lessons: Lesson[] = [
   {
     id: "morning-routine",
+    version: "fixture-v1",
     language: "english",
     name: "Morning Routine",
     localizedName: "아침 일과",
@@ -27,6 +29,7 @@ export const lessons: Lesson[] = [
   },
   {
     id: "daily-conversation",
+    version: "fixture-v1",
     language: "english",
     name: "Daily Conversation",
     localizedName: "일상 회화",
@@ -34,6 +37,7 @@ export const lessons: Lesson[] = [
   },
   {
     id: "tokyo-walk",
+    version: "fixture-v1",
     language: "japanese",
     name: "東京の散歩",
     localizedName: "도쿄 산책",

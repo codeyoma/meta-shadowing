@@ -6,6 +6,14 @@ const lines = [
   { target: ["Welcome."], korean: ["환영합니다."], boundary: null, chapter: null }
 ] as const;
 
+it("resumes at the next complete line and counts only consumed active time, even on a late final tick", () => {
+  let session = createRapidSession({ lines, level: 6, initialLineIndex: 1 });
+  expect(session).toMatchObject({ lineIndex: 1, phase: "ready", activeElapsedMs: 0 });
+  session = transitionRapidSession(session, { type: "space" });
+  session = tick(session, 10000);
+  expect(session).toMatchObject({ phase: "completed", activeElapsedMs: 600, checkpointIndex: 2, boundaryCount: 1 });
+});
+
 function tick(session: ReturnType<typeof createRapidSession>, elapsedMs: number) {
   return transitionRapidSession(session, { type: "tick", elapsedMs, runId: session.runId });
 }

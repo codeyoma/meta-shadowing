@@ -1,4 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const status = execFileSync(
   "npx",
@@ -29,7 +31,11 @@ const result = spawnSync(
     "test",
     "e2e/admin-persistence.integration.spec.ts",
     "e2e/lesson-publication.integration.spec.ts",
-    "--project=desktop"
+    "e2e/session-defaults.integration.spec.ts",
+    "--project=desktop",
+    "--workers=1",
+    `--output=${join(tmpdir(), `meta-shadowing-integration-${process.pid}`)}`,
+    ...process.argv.slice(2)
   ],
   {
     stdio: "inherit",

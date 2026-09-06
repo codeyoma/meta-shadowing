@@ -1,27 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { levelNames, type Lesson } from "@/lib/lessons";
-import { getPlayerHref, saveLastSelection, SessionSelection } from "@/lib/resume";
-import { isGroupSize, type GroupSize } from "@/lib/phrase-groups";
-import { DEFAULT_RAPID_SETTINGS, normalizeRapidSettings } from "@/lib/rapid-session";
+import { getPlayerHref, saveLastSelection } from "@/lib/resume";
+import { isGroupSize } from "@/lib/phrase-groups";
+import { DEFAULT_SESSION_SETTINGS, readSessionPreferences, resolveSessionSettings, saveSessionPreferences, type SessionSettings } from "@/lib/session-settings";
 import { AudioSessionControls } from "../audio-session-controls";
 import { RapidSessionControls } from "../rapid-session-controls";
 import { ArrowIcon, BackIcon, Brand, Page } from "../ui";
 
-export function SessionSetup({ lesson }: { lesson: Lesson }) {
+export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS }: { lesson: Lesson; defaults?: SessionSettings }) {
   const router = useRouter();
   const language = lesson.language;
   const [level, setLevel] = useState(1);
-  const [mode, setMode] = useState<SessionSelection["mode"]>("manual");
-  const [rapidSettings, setRapidSettings] = useState(DEFAULT_RAPID_SETTINGS);
-  const [speed, setSpeed] = useState(1);
-  const [advanceDelayMs, setAdvanceDelayMs] = useState(1000);
-  const [groupSize, setGroupSize] = useState<GroupSize>(2);
+  const [settings, setSettings] = useState(defaults);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { setSettings(readSessionPreferences(defaults)); setReady(true); }, [defaults]);
+
+  function changeSettings(changes: Partial<SessionSettings>) {
+    setSettings(previous => resolveSessionSettings(changes, previous));
+    saveSessionPreferences(changes);
+  }
 
   function start(): void {
-    const selection = { ...rapidSettings, language, lessonId: lesson.id, level, mode: level >= 6 ? rapidSettings.mode : mode, speed, advanceDelayMs, groupSize };
+    const selection = { ...settings, language, lessonId: lesson.id, level, runId: crypto.randomUUID() };
     saveLastSelection(selection);
     router.push(getPlayerHref(selection));
   }
@@ -53,21 +56,20 @@ export function SessionSetup({ lesson }: { lesson: Lesson }) {
           <h2 id="session-title">세션 설정</h2>
           <div className="session-controls">
             {level === 4 || level === 5 ? <label className="audio-setting">묶음 크기
-              <select value={groupSize} onChange={(event) => {
+              <select value={settings.groupSize} onChange={(event) => {
                 const size = Number(event.target.value);
-                if (isGroupSize(size)) setGroupSize(size);
+                if (isGroupSize(size)) changeSettings({ groupSize: size });
               }}>
                 {[2, 3, 4].map(size => <option key={size} value={size}>{size}개</option>)}
               </select>
             </label> : null}
-            {level >= 6 ? <RapidSessionControls level={level} settings={rapidSettings} onChange={settings => setRapidSettings(previous => normalizeRapidSettings(settings, previous))} /> : <AudioSessionControls settings={{ mode, playbackRate: speed, advanceDelayMs }} onChange={(settings) => {
-              if (settings.mode !== undefined) setMode(settings.mode);
-              if (settings.playbackRate !== undefined) setSpeed(settings.playbackRate);
-              if (settings.advanceDelayMs !== undefined) setAdvanceDelayMs(settings.advanceDelayMs);
+            {level >= 6 ? <RapidSessionControls level={level} settings={settings} onChange={changeSettings} /> : <AudioSessionControls level={level} settings={{ ...settings, playbackRate: settings.speed }} onChange={(changes) => {
+              const { playbackRate, ...rest } = changes;
+              changeSettings({ ...rest, ...(playbackRate !== undefined ? { speed: playbackRate } : {}) });
             }} />}
           </div>
         </section>
-        <button className="primary-button start-button" onClick={start}>학습 시작</button>
+        <button className="primary-button start-button" disabled={!ready} onClick={start}>학습 시작</button>
       </section>
     </Page>
   );

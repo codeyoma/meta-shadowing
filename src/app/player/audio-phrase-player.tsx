@@ -9,15 +9,17 @@ import type { PhraseGroup } from "@/lib/phrase-groups";
 import { AudioSessionControls } from "../audio-session-controls";
 import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon, SubtitleIcon } from "../ui";
 import { useAudioSession } from "./use-audio-session";
+import type { LearningStart } from "./use-learning-record";
+import { CompletionSummary } from "../completion-summary";
 
 function formatTime(seconds: number) {
   return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 }
 
-export function AudioPhrasePlayer({ lesson, level, settings, hints, groups }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[] }) {
+export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, start }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[]; start: LearningStart }) {
   const router = useRouter();
-  const { session, send, audioRef, mediaTime } = useAudioSession(lesson, level, settings, groups);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { session, send, audioRef, mediaTime, completion, storageFailed } = useAudioSession(lesson, level, settings, groups, !settingsOpen, start);
   const canvasRef = useRef<HTMLDivElement>(null);
   const currentLineRef = useRef<HTMLLIElement>(null);
   const grouped = level === 4 || level === 5;
@@ -84,16 +86,10 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups }: { 
         <audio ref={audioRef} preload="none" />
         {settingsOpen ? <section id="player-settings" className="player-settings" aria-label="학습 설정">
           <h2>세션 설정</h2>
-          <AudioSessionControls settings={session} onChange={(value) => send({ type: "settings", ...value })} />
+          <AudioSessionControls level={level} settings={session} onChange={(value) => send({ type: "settings", ...value })} />
           <button type="button" className="secondary-button" onClick={() => setSettingsOpen(false)}>설정 닫기</button>
         </section> : null}
-        {complete ? (
-          <div className="practice-canvas completion-canvas">
-            <h2>레벨 {level} 학습 완료</h2>
-            <p>{lesson.phrases.length}개 프레이즈를 모두 연습했어요.</p>
-            <button type="button" className="primary-button" onClick={() => router.push("/home")}>레슨 목록으로</button>
-          </div>
-        ) : (
+        {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => router.push("/home")} /> : !settingsOpen ? (
           <>
             <div ref={canvasRef} id="practice-subtitles" role="region" aria-label="학습 자막" className={`practice-canvas${hintOnly ? " hint-only" : ""}${grouped ? " group-canvas" : ""}`}>
               {grouped ? <ol className="group-phrases" aria-label="묶음 프레이즈">
@@ -126,9 +122,9 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups }: { 
               <button type="button" className="continue" aria-label={actionLabel} onClick={() => send({ type: "space" })}>{actionLabel}<kbd>Space</kbd></button>
             </div>
           </>
-        )}
+        ) : null}
       </section>
-      {!complete ? <nav className="playback-dock" aria-label="재생 제어" data-player-shortcuts>
+      {!complete && !settingsOpen ? <nav className="playback-dock" aria-label="재생 제어" data-player-shortcuts>
         <button type="button" disabled={session.groupIndex === 0} onClick={() => send({ type: "previous" })}>이전<kbd>←</kbd></button>
         <button type="button" className="dock-play" aria-label="재생 또는 일시정지" onClick={() => send({ type: active ? "pause" : "space" })}>{active ? <PauseIcon /> : <PlayIcon />}</button>
         <button type="button" disabled={session.completedCycles < 3} onClick={() => send({ type: "next" })}>다음<kbd>→</kbd></button>

@@ -12,6 +12,22 @@ function finishPair(session: AudioSession) {
   return finishRecording(session, 4000);
 }
 
+it("resumes the first recording of a saved group with fresh cycles and a configurable recording gap", () => {
+  let session = createAudioSession({ phraseCount: 5, level: 4, groupSizes: [2, 3], initialGroupIndex: 1, groupGapMs: 1500 });
+  expect(session).toMatchObject({ groupIndex: 1, phraseIndex: 2, completedCycles: 0, phase: "ready" });
+  session = finishRecording(transitionAudioSession(session, { type: "space" }), 2000);
+  expect(session).toMatchObject({ phraseIndex: 2, remainingMs: 1500, phase: "gap" });
+});
+
+it("can explicitly pause manual speaking time after a completed recording", () => {
+  let session = createAudioSession({ phraseCount: 1 });
+  session = finishRecording(transitionAudioSession(session, { type: "space" }), 2000);
+  session = transitionAudioSession(session, { type: "pause" });
+  expect(session.phase).toBe("paused");
+  session = transitionAudioSession(session, { type: "space" });
+  expect(session).toMatchObject({ phase: "loading", completedCycles: 1 });
+});
+
 it("counts a group only after both recordings finish with a half-second gap", () => {
   let session = createAudioSession({ phraseCount: 3, level: 4, groupSizes: [2, 1] });
   session = transitionAudioSession(session, { type: "space" });

@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRapidSession, isRapidRunning, transitionRapidSession, type RapidEvent, type RapidLevel, type RapidLine, type RapidSettings } from "@/lib/rapid-session";
+import type { Lesson } from "@/lib/lessons";
+import { useLearningRecord, type LearningStart } from "./use-learning-record";
 
 type ControlEvent = Exclude<RapidEvent, { type: "tick" }>;
 
-export function useRapidSession(lines: RapidLine[], level: RapidLevel, settings: RapidSettings, shortcutsEnabled: boolean) {
-  const [session, setSession] = useState(() => createRapidSession({ lines, level, settings }));
+export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: RapidLevel, settings: RapidSettings, shortcutsEnabled: boolean, start: LearningStart) {
+  const { completion, storageFailed, updateRecord } = useLearningRecord(lesson, start);
+  const [session, setSession] = useState(() => createRapidSession({ lines, level, settings, initialLineIndex: start.progress?.nextUnit }));
   const current = useRef(session);
   const clockAnchor = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -19,7 +22,12 @@ export function useRapidSession(lines: RapidLine[], level: RapidLevel, settings:
     let next = isRapidRunning(previous) ? transitionRapidSession(previous, {
       type: "tick", elapsedMs: now - clockAnchor.current, runId: previous.runId
     }) : previous;
+    if (next.boundaryCount !== previous.boundaryCount) {
+      updateRecord({ elapsedMs: next.checkpointActiveMs - previous.activeElapsedMs, checkpoint: { unit: next.checkpointIndex, phrase: next.checkpointIndex }, finished: next.phase === "completed" });
+      updateRecord({ elapsedMs: next.activeElapsedMs - next.checkpointActiveMs });
+    } else updateRecord({ elapsedMs: next.activeElapsedMs - previous.activeElapsedMs });
     if (event) next = transitionRapidSession(next, event);
+    if (event?.type === "settings") updateRecord({ settings: event.settings });
     clockAnchor.current = now;
     current.current = next;
     if (next !== previous) setSession(next);
@@ -27,7 +35,7 @@ export function useRapidSession(lines: RapidLine[], level: RapidLevel, settings:
       // Re-arm from the engine's remaining duration, not the React render or a rounded WPM interval.
       timer.current = setTimeout(() => send(), Math.max(1, Math.min(100, next.remainingMs)));
     }
-  }, []);
+  }, [updateRecord]);
 
   useEffect(() => {
     let handledSpace = false;
@@ -64,5 +72,5 @@ export function useRapidSession(lines: RapidLine[], level: RapidLevel, settings:
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  return { session, send };
+  return { session, send, completion, storageFailed };
 }

@@ -105,6 +105,8 @@ test("group navigation preserves the pinned chapter and marks an unnamed section
   await expect(phrases.nth(0)).toContainText("I read my messages.");
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect(page.getByLabel("재생속도")).toBeVisible();
+  // Settings replaces the canvas; a short viewport makes this page scroll far enough to pin the chapter.
+  await page.setViewportSize({ width: page.viewportSize()!.width, height: 480 });
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   expect((await chapter.boundingBox())!.y).toBe(0);
 });

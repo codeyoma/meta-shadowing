@@ -48,14 +48,20 @@ export type RapidSession = {
   remainingMs: number;
   runId: number;
   paused: boolean;
+  activeElapsedMs: number;
+  boundaryCount: number;
+  checkpointIndex: number;
+  checkpointActiveMs: number;
 };
 
 export type RapidEvent = { type: "space" | "pause" | "restart" | "previous" | "next" }
   | { type: "tick"; elapsedMs: number; runId: number }
   | { type: "settings"; settings: Partial<RapidSettings> };
 
-export function createRapidSession({ lines, level, settings = {} }: { lines: readonly RapidLine[]; level: RapidLevel; settings?: Partial<RapidSettings> }): RapidSession {
-  return { lines, level, settings: normalizeRapidSettings(settings), lineIndex: 0, tokenIndex: 0, phase: lines.length ? "ready" : "completed", remainingMs: 0, runId: 0, paused: false };
+export function createRapidSession({ lines, level, settings = {}, initialLineIndex = 0 }: { lines: readonly RapidLine[]; level: RapidLevel; settings?: Partial<RapidSettings>; initialLineIndex?: number }): RapidSession {
+  const lineIndex = Number.isInteger(initialLineIndex) && initialLineIndex >= 0 && initialLineIndex < lines.length ? initialLineIndex : 0;
+  return { lines, level, settings: normalizeRapidSettings(settings), lineIndex, tokenIndex: 0, phase: lines.length ? "ready" : "completed", remainingMs: 0, runId: 0, paused: false,
+    activeElapsedMs: 0, boundaryCount: 0, checkpointIndex: lineIndex, checkpointActiveMs: 0 };
 }
 
 function isActive(session: RapidSession) {
@@ -104,14 +110,15 @@ export function transitionRapidSession(session: RapidSession, event: RapidEvent)
   let next = session;
   let elapsedMs = event.elapsedMs;
   while (next.phase === "target" || next.phase === "korean" || next.phase === "speaking" || next.phase === "gap") {
-    if (elapsedMs + 1e-7 < next.remainingMs) return { ...next, remainingMs: next.remainingMs - elapsedMs };
+    if (elapsedMs + 1e-7 < next.remainingMs) return { ...next, remainingMs: next.remainingMs - elapsedMs, activeElapsedMs: next.activeElapsedMs + elapsedMs };
     elapsedMs -= next.remainingMs;
+    next = { ...next, activeElapsedMs: next.activeElapsedMs + next.remainingMs };
     if (next.phase === "gap") {
       next = startLine(next, next.lineIndex + 1);
       continue;
     }
     const line = next.lines[next.lineIndex];
-    if (next.phase !== "speaking" && next.tokenIndex + 1 < line[next.phase].length) {
+    if ((next.phase === "target" || next.phase === "korean") && next.tokenIndex + 1 < line[next.phase].length) {
       next = { ...next, tokenIndex: next.tokenIndex + 1, remainingMs: tokenMs };
     } else if (next.phase === "target" && next.level === 6) {
       next = { ...next, phase: "korean", tokenIndex: 0, remainingMs: tokenMs };
@@ -120,6 +127,7 @@ export function transitionRapidSession(session: RapidSession, event: RapidEvent)
     } else if (next.phase === "speaking" && next.level === 7) {
       next = { ...next, phase: "target", tokenIndex: 0, remainingMs: tokenMs };
     } else {
+      next = { ...next, boundaryCount: next.boundaryCount + 1, checkpointIndex: next.lineIndex + 1, checkpointActiveMs: next.activeElapsedMs };
       const following = next.lines[next.lineIndex + 1];
       if (!following) next = { ...next, phase: "completed", remainingMs: 0 };
       else if (next.settings.mode === "manual") next = { ...next, phase: "line-complete", remainingMs: 0 };

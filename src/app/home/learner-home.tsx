@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getLesson, type Language, type Lesson } from "@/lib/lessons";
 import { getPlayerHref, readLastSelection, SessionSelection } from "@/lib/resume";
+import { readLearningJournal, type ProgressRecord, type CompletionRecord } from "@/lib/learning-records";
+import { RecordDetails } from "../completion-summary";
 import { ArrowIcon, Brand, Page, PlayIcon } from "../ui";
 
-function ResumeRow({ selection, catalog }: { selection: SessionSelection; catalog: Lesson[] }) {
+function ResumeRow({ selection, catalog, progress }: { selection: SessionSelection; catalog: Lesson[]; progress: ProgressRecord | null }) {
   const router = useRouter();
   const lesson = getLesson(selection.lessonId, catalog);
   if (!lesson) return null;
@@ -16,7 +18,7 @@ function ResumeRow({ selection, catalog }: { selection: SessionSelection; catalo
       <span className="round-icon"><PlayIcon /></span>
       <span className="continuation-copy">
         <strong>마지막 학습 계속하기</strong>
-        <small>{selection.language === "english" ? "영어" : "일본어"} · {lesson.name} · 레벨 {selection.level} · {lesson.phraseCount}개 프레이즈</small>
+        <small>{selection.language === "english" ? "영어" : "일본어"} · {lesson.name} · 레벨 {selection.level} · 프레이즈 {progress && progress.lessonVersion === lesson.version ? progress.nextPhrase + 1 : 1} / {lesson.phraseCount}</small>
       </span>
       <ArrowIcon />
     </button>
@@ -27,8 +29,16 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
   const router = useRouter();
   const [language, setLanguage] = useState<Language>("english");
   const [resume, setResume] = useState<SessionSelection | null>(null);
+  const [progress, setProgress] = useState<ProgressRecord | null>(null);
+  const [history, setHistory] = useState<CompletionRecord[]>([]);
 
-  useEffect(() => setResume(readLastSelection()), []);
+  useEffect(() => {
+    const selection = readLastSelection();
+    const journal = readLearningJournal();
+    setResume(selection && !journal.history.some(record => record.runId === selection.runId) ? selection : null);
+    setProgress(journal.progress?.runId === selection?.runId ? journal.progress : null);
+    setHistory(journal.history.toReversed());
+  }, []);
   const visibleLessons = catalog.filter((lesson) => lesson.language === language);
 
   return (
@@ -36,7 +46,7 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
       <section className="learner-shell" aria-labelledby="home-title">
         <Brand compact />
         <h1 id="home-title">오늘도 한 프레이즈부터.</h1>
-        {resume ? <ResumeRow selection={resume} catalog={catalog} /> : null}
+        {resume ? <ResumeRow selection={resume} catalog={catalog} progress={progress} /> : null}
         <section className="home-section" aria-labelledby="language-title">
           <h2 id="language-title">언어 선택</h2>
           <div className="open-list">
@@ -63,6 +73,13 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
             ) : null}
           </div>
         </section>
+        {history.length ? <section className="home-section completion-history" aria-label="완료 기록">
+          <h2>완료 기록</h2>
+          <ol>{history.map(record => <li key={record.runId}>
+            <h3>{record.lessonName} · 레벨 {record.level}</h3>
+            <RecordDetails record={record} />
+          </li>)}</ol>
+        </section> : null}
       </section>
     </Page>
   );

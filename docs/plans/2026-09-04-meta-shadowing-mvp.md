@@ -128,6 +128,15 @@ Acceptance criteria:
 - Show completion progress, date, and level duration.
 - Browser tests cover local persistence, resume, repeated completions, and active-time accounting.
 
+Implementation notes for #9:
+
+- `/admin/settings` edits a single RLS-protected `session_defaults` row. Apply `20260906072641_session_defaults.sql` alongside the earlier migrations before using a configured Supabase deployment. Nothing in this ticket deploys or modifies hosted data.
+- Untouched settings inherit administrator defaults; explicit learner overrides persist browser-wide. Group size is chosen before a run so it cannot remap a partially practiced group.
+- An audio phrase/group commits when the learner advances after the required cycles (or the automatic countdown ends). Rapid lines commit when their full sequence ends. Resume starts the next committed unit with fresh cycles/tokens; abandoned partial-unit time is not carried into the resumed run.
+- Active audio time includes manual speaking after playback, but excludes loading, errors, settings pauses, explicit pauses, and background time. Rapid timing counts consumed playback/speaking/gap time and excludes manual between-line waits. No time is counted before starting.
+- The existing publication timestamp is the lesson's version identifier until #10 supplies its content-version lifecycle. History keeps this identifier and the final settings snapshot; a run ID prevents refreshes from duplicating a completion. Starting again from setup creates a distinct run.
+- Local records contain metadata and settings, never recordings or full lesson transcripts. Unavailable/full browser storage leaves practice usable and displays a warning if a completion could not be saved.
+
 ## Task 9: Support lesson versions, unpublish, and permanent deletion (GitHub #10)
 
 Let the administrator replace published content with a new version, unpublish it, or permanently delete its rows and audio, while learners safely discard stale local progress.

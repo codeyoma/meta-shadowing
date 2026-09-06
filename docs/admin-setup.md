@@ -13,6 +13,8 @@ npx supabase@2.116.0 db push
 
 The migrations create `public.lesson_drafts`, publication completeness constraints, and the private `lesson-audio` Storage bucket. Database drafts and Storage objects are protected by RLS. Only an authenticated owner whose signed `app_metadata.role` is `admin` can upload, replace, list, or delete objects under their own user-ID folder.
 
+Issue #9 also requires migration `20260906072641_session_defaults.sql`. It creates the single RLS-protected `session_defaults` row used by `/admin/settings`. Administrator defaults apply to every lesson; a learner's explicit browser-local overrides take precedence. Apply all migrations before running a configured Supabase deployment. The settings page does not change an already running learner session.
+
 ## 2. Configure the one administrator
 
 1. Disable public email sign-ups in Supabase Auth.
@@ -53,5 +55,7 @@ npm run build
 ```
 
 `test:integration` creates temporary local administrator and non-admin users, signs in through the real OTP route, exercises Storage RLS, verifies incomplete publication is rejected, uploads a complete package through the administrator UI, confirms the published-only catalog, follows a learner-authorized signed playback URL, and cleans up its objects and users.
+
+It also verifies administrator default updates, malformed/cross-origin request rejection, learner inheritance, and browser-override precedence. It restores the previous global defaults after the test. Tests run serially; pass Playwright filters when needed, for example `npm run test:integration -- --grep 'admin defaults'`.
 
 Official references: [passwordless email auth](https://supabase.com/docs/guides/auth/auth-email-passwordless), [server-side Supabase clients](https://supabase.com/docs/guides/auth/server-side/creating-a-client), [Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security), [Storage access control](https://supabase.com/docs/guides/storage/security/access-control), and [serving private assets](https://supabase.com/docs/guides/storage/serving/downloads).

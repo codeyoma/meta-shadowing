@@ -16,6 +16,8 @@ export type SessionSelection = {
   speakingExtraMs?: number;
   lineGapMs?: number;
   sectionGapMs?: number;
+  groupGapMs?: number;
+  runId?: string;
 };
 
 export function getPlayerHref(selection: SessionSelection): string {
@@ -36,6 +38,8 @@ export function getPlayerHref(selection: SessionSelection): string {
     params.set("gap", String((selection.advanceDelayMs ?? 1000) / 1000));
   }
   if (selection.level === 4 || selection.level === 5) params.set("group", String(selection.groupSize ?? 2));
+  if (selection.groupGapMs !== undefined && selection.level <= 5) params.set("groupGap", String(selection.groupGapMs / 1000));
+  if (selection.runId) params.set("run", selection.runId);
   return `/player?${params}`;
 }
 
@@ -55,7 +59,8 @@ function isSessionSelection(value: unknown): value is SessionSelection {
     typeof selection.speed === "number" &&
     (selection.groupSize === undefined || isGroupSize(selection.groupSize)) &&
     (selection.wpmLevel === undefined || isWpmLevel(selection.wpmLevel)) &&
-    ["speakingExtraMs", "lineGapMs", "sectionGapMs"].every(key => selection[key] === undefined || isRapidDelay(selection[key]))
+    (selection.runId === undefined || typeof selection.runId === "string") &&
+    ["speakingExtraMs", "lineGapMs", "sectionGapMs", "groupGapMs", "advanceDelayMs"].every(key => selection[key] === undefined || isRapidDelay(selection[key]))
   );
 }
 

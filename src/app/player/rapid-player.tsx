@@ -7,11 +7,13 @@ import { isRapidRunning, rapidDisplay, RAPID_WPM, type RapidLevel, type RapidLin
 import { BackIcon, Brand, GearIcon, Page, PauseIcon, PlayIcon } from "../ui";
 import { RapidSessionControls } from "../rapid-session-controls";
 import { useRapidSession } from "./use-rapid-session";
+import type { LearningStart } from "./use-learning-record";
+import { CompletionSummary } from "../completion-summary";
 
-export function RapidPlayer({ lesson, lines, level, settings }: { lesson: Lesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings }) {
+export function RapidPlayer({ lesson, lines, level, settings, start }: { lesson: Lesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings; start: LearningStart }) {
   const router = useRouter();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { session, send } = useRapidSession(lines, level, settings, !settingsOpen);
+  const { session, send, completion, storageFailed } = useRapidSession(lesson, lines, level, settings, !settingsOpen, start);
   const display = rapidDisplay(session);
   const singleToken = display && (session.settings.display === "current" || display.position === 1);
   const line = lines[session.lineIndex];
@@ -52,11 +54,7 @@ export function RapidPlayer({ lesson, lines, level, settings }: { lesson: Lesson
         <h2>세션 설정</h2>
         <RapidSessionControls level={level} settings={session.settings} onChange={settings => send({ type: "settings", settings })} />
         <button type="button" className="secondary-button" onClick={() => setSettingsOpen(false)}>설정 닫기</button>
-      </section> : complete ? <div className="practice-canvas completion-canvas">
-        <h2>레벨 {level} 학습 완료</h2>
-        <p>{lines.length}개 문장을 모두 연습했어요.</p>
-        <button type="button" className="primary-button" onClick={() => router.push("/home")}>레슨 목록으로</button>
-      </div> : <>
+      </section> : completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => router.push("/home")} /> : <>
         <p className="rapid-stage">{display ? `${display.language === "korean" ? "한국어" : lesson.language === "english" ? "영어" : "일본어"} · ${display.position} / ${display.count}` : session.phase === "speaking" ? "말하기 시간" : "속사포 연습"}</p>
         <div role="region" aria-label="속사포 학습" className={`practice-canvas rapid-canvas ${singleToken ? "single-token" : "cumulative"}`}>
           {display ? <span lang={display.language === "korean" ? "ko" : lesson.language === "english" ? "en" : "ja"}>{display.text}</span> : <p>{placeholder}</p>}

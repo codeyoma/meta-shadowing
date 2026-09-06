@@ -4,14 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createAudioSession, transitionAudioSession, type AudioPracticeLevel, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { PhraseGroup } from "@/lib/phrase-groups";
+import { useLearningRecord, type LearningStart } from "./use-learning-record";
 
 function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
   audio.ontimeupdate = audio.ondurationchange = null;
 }
 
-export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[]) {
-  const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, groupSizes: groups.map(group => group.phrases.length), level, ...settings }));
+export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart) {
+  const { completion, storageFailed, updateRecord } = useLearningRecord(lesson, start);
+  const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, groupSizes: groups.map(group => group.phrases.length), level, ...settings, initialGroupIndex: start.progress?.nextUnit }));
   const currentSession = useRef(session);
   const audioRef = useRef<HTMLAudioElement>(null);
   const playRequest = useRef(0);
@@ -21,6 +23,16 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     const previous = currentSession.current;
     const next = transitionAudioSession(previous, event);
     if (next === previous) return;
+    const finished = next.phase === "completed";
+    const boundary = finished || next.groupIndex > previous.groupIndex;
+    updateRecord({
+      active: shortcutsEnabled && !document.hidden && (["playing", "gap", "speaking", "countdown"].includes(next.phase) || (next.phase === "ready" && next.completedCycles > 0)),
+      ...(boundary ? { checkpoint: { unit: finished ? next.groupSizes.length : next.groupIndex, phrase: finished ? lesson.phrases.length : next.phraseIndex }, finished } : {}),
+      ...(event.type === "settings" ? { settings: {
+        ...(event.mode !== undefined ? { mode: next.mode } : {}), ...(event.playbackRate !== undefined ? { speed: next.playbackRate } : {}),
+        ...(event.advanceDelayMs !== undefined ? { advanceDelayMs: next.advanceDelayMs } : {}), ...(event.groupGapMs !== undefined ? { groupGapMs: next.groupGapMs } : {})
+      } } : {})
+    });
     currentSession.current = next;
     setSession(next);
 
@@ -75,7 +87,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       playRequest.current++;
       audio.pause();
     }
-  }, [lesson]);
+  }, [lesson, shortcutsEnabled, updateRecord]);
 
   useEffect(() => {
     if (!["gap", "speaking", "countdown"].includes(session.phase)) return;
@@ -91,7 +103,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   useEffect(() => {
     let handledSpace = false;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!shortcutsEnabled || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.code === "Space") handledSpace = false;
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("input, select, textarea, [contenteditable=true], [role=dialog]")) return;
@@ -121,7 +133,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       window.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [send]);
+  }, [send, shortcutsEnabled]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -135,5 +147,5 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     };
   }, []);
 
-  return { session, send, audioRef, mediaTime };
+  return { session, send, audioRef, mediaTime, completion, storageFailed };
 }

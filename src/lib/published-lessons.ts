@@ -13,6 +13,7 @@ type PublishedLessonRow = {
   language: string;
   phrase_count: number;
   parsed_entries: unknown;
+  published_at: string;
 };
 
 function isTestMode() {
@@ -56,6 +57,7 @@ function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {
 
   return {
     id: row.id,
+    version: row.published_at,
     language,
     name: row.title,
     localizedName: chapter?.korean || row.title,
@@ -72,7 +74,7 @@ export async function listPublishedLessons(): Promise<Lesson[]> {
 
   const { data, error } = await supabase
     .from("lesson_drafts")
-    .select("id, title, language, phrase_count, parsed_entries")
+    .select("id, title, language, phrase_count, parsed_entries, published_at")
     .eq("publication_status", "published")
     .order("published_at", { ascending: false });
 
@@ -94,7 +96,7 @@ export async function getPublishedLesson(id: string | null): Promise<PublishedLe
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("lesson_drafts")
-    .select("id, title, language, phrase_count, parsed_entries")
+    .select("id, title, language, phrase_count, parsed_entries, published_at")
     .eq("id", id)
     .eq("publication_status", "published")
     .maybeSingle();
