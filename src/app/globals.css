@@ -27,7 +27,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .online-install-help { margin-top: 24px; color: var(--muted); font-size: 15px; line-height: 1.6; }
 .online-install-help summary { min-height: 48px; padding-block: 12px; cursor: pointer; }
 .online-install-help p { margin: 8px 0 16px; }
-.wake-note { width: min(100%, 30rem); margin: 16px auto 0; padding-inline: 24px; color: var(--muted); font-size: 15px; line-height: 1.6; text-align: center; }
 .back-link { min-height: 48px; }
 .level-row.selected > span { color: #071006; }
 .round-icon > svg { width: 28px; height: 28px; }

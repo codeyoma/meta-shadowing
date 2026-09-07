@@ -123,8 +123,10 @@ it.each([
   session = transitionAudioSession(session, { type: "tick", attempt: session.attempt, elapsedMs: expectedMs });
   session = finishPair(session);
   session = transitionAudioSession(session, { type: "tick", attempt: session.attempt, elapsedMs: expectedMs });
-  expect(session).toMatchObject({ phase: "countdown", remainingMs: 1000, completedCycles: 3 });
+  expect(session).toMatchObject({ phase: "ready", remainingMs: 0, completedCycles: 3 });
   expect(transitionAudioSession(session, { type: "retry" })).toMatchObject({ phase: "loading", groupIndex: 0, phraseIndex: 0 });
+  expect(transitionAudioSession(session, { type: "tick", attempt: session.attempt, elapsedMs: 60000 })).toEqual(session);
+  session = transitionAudioSession(session, { type: "next" });
   session = transitionAudioSession(session, { type: "tick", attempt: session.attempt, elapsedMs: 1000 });
   expect(session).toMatchObject({ phase: "loading", groupIndex: 1, phraseIndex: 2, completedCycles: 0 });
 });

@@ -95,12 +95,12 @@ for (const entry of ["home", "player"] as const) {
       await page.goto(`/player?lesson=${original}&level=6&mode=automatic&lineGap=0`);
       await page.waitForLoadState("networkidle");
       await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
-      await page.getByRole("button", { name: "문장 시작", exact: true }).click();
+      await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
       await page.clock.runFor(2100);
       await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
       await page.goto(`/player?lesson=${original}&level=6&mode=manual`);
       await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "문장 시작", exact: true }).click();
+      await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
       await page.clock.runFor(900);
       await page.keyboard.press("Space");
       await expect(page.getByText("문장 2 / 2", { exact: true })).toBeVisible();

@@ -26,7 +26,11 @@ export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: Rapid
       updateRecord({ elapsedMs: next.checkpointActiveMs - previous.activeElapsedMs, checkpoint: { unit: next.checkpointIndex, phrase: next.checkpointIndex }, finished: next.phase === "completed" });
       updateRecord({ elapsedMs: next.activeElapsedMs - next.checkpointActiveMs });
     } else updateRecord({ elapsedMs: next.activeElapsedMs - previous.activeElapsedMs });
+    const beforeEvent = next;
     if (event) next = transitionRapidSession(next, event);
+    if (event?.type === "jump" && next !== beforeEvent) {
+      updateRecord({ restartCompleted: true, checkpoint: { unit: next.lineIndex, phrase: next.lineIndex } });
+    }
     if (event?.type === "settings") updateRecord({ settings: event.settings });
     clockAnchor.current = now;
     current.current = next;

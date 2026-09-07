@@ -41,7 +41,7 @@ test("setup exposes large touch targets, visible keyboard focus and a legible se
   await page.getByRole("button", { name: /3 첫 단어 힌트/ }).click();
   await expect(page.getByRole("button", { name: /1 자막 쉐도잉/ })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("button", { name: /3 첫 단어 힌트/ })).toHaveAttribute("aria-pressed", "true");
-  const contrast = await page.locator(".level-row.selected > span").evaluate(element => {
+  const contrast = await page.getByRole("button", { name: /3 첫 단어 힌트/ }).locator("span").evaluate(element => {
     const luminance = (color: string) => {
       const channels = color.match(/[\d.]+/g)!.slice(0, 3).map(value => {
         const channel = Number(value) / 255;
@@ -50,7 +50,7 @@ test("setup exposes large touch targets, visible keyboard focus and a legible se
       return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
     };
     const fg = luminance(getComputedStyle(element).color);
-    const bg = luminance(getComputedStyle(element.parentElement!).backgroundColor);
+    const bg = luminance(getComputedStyle(element).backgroundColor);
     return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
   });
   expect(contrast).toBeGreaterThanOrEqual(4.5);
@@ -66,13 +66,13 @@ for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto("/player?lesson=morning-routine&level=3");
-  await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   await page.evaluate(() => window.scrollTo(0, 0));
-  const actions = await page.locator(".player-actions").boundingBox();
-  const dock = await page.getByRole("navigation", { name: "재생 제어" }).boundingBox();
+  const actions = await page.getByRole("button", { name: "자막 보기", exact: true }).boundingBox();
+  const dock = await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox();
   expect(actions!.y + actions!.height).toBeLessThanOrEqual(dock!.y);
-  await page.getByRole("button", { name: "다음 원음 듣기", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 다음 원음 듣기", exact: true }).click();
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 2 / 3");
 });
 
@@ -104,6 +104,8 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await expect(canvas).toHaveAttribute("tabindex", "0");
   await page.getByRole("button", { name: "학습 설정", exact: true }).focus();
   await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "재생 또는 일시정지", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(canvas).toBeFocused();
   await expect(canvas).toHaveCSS("outline-style", "solid");
   expect(await canvas.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
@@ -121,24 +123,23 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await expect(rapid).toBeFocused();
   await expect(rapid).toHaveCSS("outline-style", "solid");
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("button", { name: "문장 시작", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true })).toBeVisible();
 });
 
-test("the native tall player keeps the reference canvas proportions and actions near the dock", async ({ page }) => {
+test("a tall player keeps a compact canvas and a bottom-aligned action", async ({ page }) => {
   await page.setViewportSize({ width: 853, height: 1844 });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   for (const level of [3, 8]) {
     await page.goto(`/player?lesson=morning-routine&level=${level}`);
-    const canvas = page.locator(".practice-canvas");
+    const canvas = page.getByRole("region", { name: level === 3 ? "학습 자막" : "속사포 학습" });
     await expect(canvas).toBeVisible();
     const box = (await canvas.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(340);
-    expect(box.height).toBeLessThanOrEqual(450);
-    const actions = (await page.locator(".player-actions").boundingBox())!;
-    const dock = (await page.getByRole("navigation", { name: "재생 제어" }).boundingBox())!;
-    expect(dock.y - actions.y - actions.height).toBeGreaterThanOrEqual(16);
-    expect(dock.y - actions.y - actions.height).toBeLessThanOrEqual(200);
+    expect(box.height).toBeGreaterThanOrEqual(104);
+    expect(box.height).toBeLessThanOrEqual(280);
+    const actions = (await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox())!;
+    expect(box.y + box.height).toBeLessThan(actions.y);
+    expect(1844 - actions.y - actions.height).toBeLessThanOrEqual(32);
     expect(actions.y + actions.height).toBeLessThanOrEqual(1844);
   }
 });

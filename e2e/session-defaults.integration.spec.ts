@@ -45,16 +45,24 @@ test("admin defaults persist behind authorization and reach learners without ove
     expect(publication.error).toBeNull();
     await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
     await page.goto(`/setup?lesson=${draftId}`);
+    await page.getByRole("button", { name: "세션 설정", exact: true }).click();
     await expect(page.getByLabel("재생속도")).toHaveValue("2");
     await page.getByLabel("재생속도").selectOption("3");
+    await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
     await page.getByRole("button", { name: /4 다문장 암기/ }).click();
+    await page.getByRole("button", { name: "세션 설정", exact: true }).click();
     await expect(page.getByLabel("묶음 크기")).toHaveValue("3");
+    await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
     await page.getByRole("button", { name: /6 속사포 영한/ }).click();
+    await page.getByRole("button", { name: "세션 설정", exact: true }).click();
     await expect(page.getByLabel("단어 속도")).toHaveValue("5");
     expect((await page.request.put("/api/admin/settings", { data: { ...saved.data?.settings, speed: 1.5, wpmLevel: 6 } })).status()).toBe(200);
     await page.goto(`/setup?lesson=${draftId}`);
+    await page.getByRole("button", { name: "세션 설정", exact: true }).click();
     await expect(page.getByLabel("재생속도")).toHaveValue("3");
+    await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
     await page.getByRole("button", { name: /6 속사포 영한/ }).click();
+    await page.getByRole("button", { name: "세션 설정", exact: true }).click();
     await expect(page.getByLabel("단어 속도")).toHaveValue("6");
   } finally {
     if (original.data) await service.from("session_defaults").update({ settings: original.data.settings }).eq("id", true);

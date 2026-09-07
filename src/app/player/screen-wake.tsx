@@ -1,17 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 export function ScreenWake({ active }: { active: boolean }) {
-  const [unavailable, setUnavailable] = useState(false);
-
   useEffect(() => {
-    setUnavailable(false);
-    if (!active) return;
-    if (!navigator.wakeLock) {
-      setUnavailable(true);
-      return;
-    }
+    if (!active || !navigator.wakeLock) return;
     let disposed = false;
     let generation = 0;
     let lock: WakeLockSentinel | undefined;
@@ -34,14 +27,12 @@ export function ScreenWake({ active }: { active: boolean }) {
           return;
         }
         lock = acquired;
-        setUnavailable(false);
         acquired.addEventListener("release", () => {
           if (lock !== acquired) return;
           lock = undefined;
-          if (!disposed && !document.hidden) setUnavailable(true);
         });
       } catch {
-        if (!disposed && request === generation) setUnavailable(true);
+        // Screen wake is best-effort; denial must not interrupt practice.
       }
     }
 
@@ -58,7 +49,5 @@ export function ScreenWake({ active }: { active: boolean }) {
     };
   }, [active]);
 
-  return unavailable ? <p className="wake-note" role="note" aria-label="화면 유지 안내">
-    화면 자동 꺼짐을 막을 수 없습니다. 기기의 화면 꺼짐 설정을 확인해 주세요.
-  </p> : null;
+  return null;
 }

@@ -334,10 +334,10 @@ test("only a complete private audio package can be published and played by a bet
     expect(Buffer.from(await storedAudio.body())).toEqual(audioBytes);
 
     await page.goto(`/player?lesson=${draftId}&level=1`);
-    await expect(page.locator(".chapter-header")).toHaveText(title);
+    await expect(page.getByRole("main").getByText(title, { exact: true })).toBeVisible();
     await expect(page.getByText(targetDialogue, { exact: true })).toBeVisible();
     await expect(page.getByText(targetDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
-    await page.getByRole("button", { name: "첫 원음 듣기" }).click();
+    await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기" }).click();
     await expect
       .poll(() =>
         page.locator("audio").evaluate((audio) => {
@@ -372,7 +372,7 @@ test("only a complete private audio package can be published and played by a bet
       await expect(subtitles.getByText(koreanDialogue, { exact: true })).toBeVisible();
       await expect(subtitles.getByText(targetDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
       await expect(subtitles.getByText(koreanDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
-      await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
+      await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
       await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
       if (level === 3 || level === 5) await expect(subtitles.getByText("Good", { exact: true })).toBeVisible();
       if (level >= 4) {

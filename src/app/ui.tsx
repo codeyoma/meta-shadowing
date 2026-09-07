@@ -26,6 +26,18 @@ export function BackIcon() {
   );
 }
 
+export function MenuIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M4 6h16M4 12h16M4 18h16" />
+  </svg>;
+}
+
+export function CloseIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="m6 6 12 12M6 18 18 6" />
+  </svg>;
+}
+
 export function GearIcon() {
   return (
     <svg aria-hidden="true" className="gear-icon" viewBox="0 0 24 24" fill="none">
@@ -57,6 +69,18 @@ export function SubtitleIcon() {
       <path d="M7 11h3m4 0h3M7 15h10" />
     </svg>
   );
+}
+
+export function SpeakerIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m11 4-6 5H2v6h3l6 5V4Zm5 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" />
+  </svg>;
+}
+
+export function RepeatIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 10a9 9 0 1 1 2 8M3 4v6h6" />
+  </svg>;
 }
 
 export function LessonIcon() {

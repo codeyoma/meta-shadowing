@@ -21,7 +21,7 @@ test("level 6 plays target then Korean words and stops at each manual line witho
   await page.clock.runFor(1200);
   await expect(canvas).toHaveText("나는");
   await page.clock.runFor(1200);
-  await expect(page.getByRole("button", { name: "다음 문장", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "CONTINUE · 다음 문장", exact: true })).toBeVisible();
   await page.clock.runFor(10000);
   await expect(page.getByRole("progressbar", { name: "문장 진행" })).toHaveAttribute("aria-valuenow", "1");
   await page.keyboard.press("Space");
@@ -36,6 +36,7 @@ test("setup offers four WPM speeds, display modes, and separate speaking and bou
   await page.goto("/setup?lesson=morning-routine");
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: /7 속사포 한영/ }).click();
+  await page.getByRole("button", { name: "세션 설정", exact: true }).click();
   await expect(page.getByLabel("단어 속도")).toBeVisible();
   await expect(page.getByLabel("단어 속도").locator("option")).toHaveText(["3 · 200 WPM", "4 · 267 WPM", "5 · 333 WPM", "6 · 400 WPM"]);
   await expect(page.getByLabel("재생속도", { exact: true })).toHaveCount(0);
@@ -49,6 +50,7 @@ test("setup offers four WPM speeds, display modes, and separate speaking and bou
   await expect(speakingTime).toHaveValue("1.5");
   await page.getByLabel("문장 간격 (초)").fill("0.5");
   await page.getByLabel("구간 간격 (초)").fill("3");
+  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
   await page.getByRole("button", { name: "학습 시작", exact: true }).click();
   await expect(page).toHaveURL(/wpm=5/);
   await expect(page).toHaveURL(/display=cumulative/);
@@ -86,12 +88,12 @@ for (const level of [7, 8]) test(`level ${level} times speaking from the target 
 test("pause, restart, focused buttons, and arrows keep exact word progress and playback intent", async ({ page, isMobile }) => {
   await openPlayer(page, 6, "morning-routine", "&display=cumulative");
   const canvas = page.getByRole("region", { name: "속사포 학습" });
-  const start = page.getByRole("button", { name: "문장 시작", exact: true });
+  const start = page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true });
   if (isMobile) await start.tap(); else await start.click();
-  await expect(canvas.locator("span")).toHaveCSS("font-size", "64px");
+  expect(await canvas.locator("span").evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(28);
   await page.clock.runFor(200);
   await page.keyboard.press("Space");
-  await expect(page.getByRole("status")).toHaveText("일시정지됨");
+  await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
   await page.clock.runFor(5000);
   await expect(canvas).toHaveText("I");
   await page.keyboard.press("Space");
@@ -106,9 +108,11 @@ test("pause, restart, focused buttons, and arrows keep exact word progress and p
   await page.keyboard.press("ArrowLeft");
   await page.clock.runFor(10000);
   await expect(canvas).toHaveText("I");
-  await expect(page.getByRole("status")).toHaveText("일시정지됨");
-  const restart = page.getByRole("button", { name: "다시 하기 R", exact: true });
-  if (isMobile) await restart.tap(); else await restart.click();
+  await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
+  const menu = page.getByRole("button", { name: "문장 목록", exact: true });
+  if (isMobile) await menu.tap(); else await menu.click();
+  await page.getByRole("dialog", { name: "문장 목록", exact: true }).getByRole("button", { name: /^1번 문장/ }).click();
+  await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await page.clock.runFor(300);
   await expect(canvas).toHaveText("I wake");
 });
@@ -126,10 +130,10 @@ test("settings pause the timer, preserve partial-token progress, and do not cons
   await page.keyboard.press("Space");
   await page.clock.runFor(5000);
   await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("일시정지됨");
+  await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
   const canvas = page.getByRole("region", { name: "속사포 학습" });
   await expect(canvas).toHaveText("I");
-  await page.getByRole("button", { name: "계속 재생", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
   await page.clock.runFor(50);
   await expect(canvas).toHaveText("I wake");
 });
@@ -197,7 +201,7 @@ test("a hidden-document event pauses the speaking window until the learner expli
     Object.defineProperty(document, "hidden", { configurable: true, value: true });
     document.dispatchEvent(new Event("visibilitychange"));
   });
-  await expect(page.getByRole("status")).toHaveText("일시정지됨");
+  await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
   await expect(page.getByRole("timer")).toHaveText("1.9초");
   await page.clock.runFor(10000);
   await page.evaluate(() => {
@@ -213,15 +217,15 @@ test("a hidden-document event pauses the speaking window until the learner expli
 test("mobile rapid controls remain above the dock and have touch-sized targets", async ({ page, isMobile }) => {
   test.skip(!isMobile, "Mobile layout assertion.");
   await openPlayer(page, 6, "daily-conversation");
-  await expect(page.getByRole("heading", { name: "메타쉐도잉 레벨 6" })).toHaveCSS("font-size", "30px");
+  await expect(page.getByRole("heading", { name: "메타쉐도잉 레벨 6" })).toHaveCSS("font-size", "16px");
   await page.keyboard.press("Space");
-  const actions = await page.locator(".player-actions").boundingBox();
-  const dock = await page.getByRole("navigation", { name: "재생 제어" }).boundingBox();
+  const actions = await page.getByRole("region", { name: "속사포 학습" }).boundingBox();
+  const dock = await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox();
   expect(actions!.y + actions!.height).toBeLessThanOrEqual(dock!.y);
-  for (const button of await page.locator(".player-actions button, .playback-dock button").all()) {
+  for (const button of await page.locator("main button").all()) {
     const box = await button.boundingBox();
-    expect(box!.height).toBeGreaterThanOrEqual(48);
-    expect(box!.width).toBeGreaterThanOrEqual(48);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
   }
-  await expect(page.getByRole("region", { name: "속사포 학습" }).locator("span")).toHaveCSS("font-size", "64px");
+  expect(await page.getByRole("region", { name: "속사포 학습" }).locator("span").evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(28);
 });

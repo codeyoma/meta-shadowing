@@ -105,7 +105,7 @@ describe("level 1 audio session", () => {
     expect(session).toMatchObject({ phase: "ready", completedCycles: 3, phraseIndex: 0 });
   });
 
-  it("allows exactly two extra listens, with Space advancing after three and either key after five", () => {
+  it("allows skipping extras after three but uses Space to finish an added pair before advancing", () => {
     let session = createAudioSession({ phraseCount: 2 });
     for (let cycle = 0; cycle < 3; cycle++) {
       session = finishListen(transitionAudioSession(session, { type: "space" }));
@@ -115,8 +115,8 @@ describe("level 1 audio session", () => {
     });
     session = finishListen(transitionAudioSession(session, { type: "retry" }));
     expect(session.completedCycles).toBe(4);
-    expect(transitionAudioSession(session, { type: "space" }).phraseIndex).toBe(1);
-    session = finishListen(transitionAudioSession(session, { type: "retry" }));
+    expect(transitionAudioSession(session, { type: "space" })).toMatchObject({ phraseIndex: 0, phase: "loading" });
+    session = finishListen(transitionAudioSession(session, { type: "space" }));
     expect(session.completedCycles).toBe(5);
     for (const type of ["space", "retry"] as const) {
       expect(transitionAudioSession(session, { type })).toMatchObject({
@@ -163,7 +163,7 @@ describe("level 1 audio session", () => {
     expect(finishListen(session)).toMatchObject({ phase: "ready", completedCycles: 1, phraseIndex: 0 });
   });
 
-  it("automatically allows speaking time, then offers a cancellable countdown after the third listen", () => {
+  it("waits for a choice after three automatic listens and starts the delay only after Next", () => {
     let session = createAudioSession({ phraseCount: 2, mode: "automatic", advanceDelayMs: 2000 });
     session = transitionAudioSession(session, { type: "space" });
     for (let cycle = 1; cycle <= 3; cycle++) {
@@ -171,7 +171,10 @@ describe("level 1 audio session", () => {
       expect(session).toMatchObject({ phase: "speaking", remainingMs: 5500, completedCycles: cycle });
       session = transitionAudioSession(session, { type: "tick", elapsedMs: 5500, attempt: session.attempt });
     }
-    expect(session).toMatchObject({ phase: "countdown", remainingMs: 2000, completedCycles: 3 });
+    expect(session).toMatchObject({ phase: "ready", remainingMs: 0, completedCycles: 3 });
+    expect(transitionAudioSession(session, { type: "tick", elapsedMs: 60000, attempt: session.attempt })).toEqual(session);
+    session = transitionAudioSession(session, { type: "next" });
+    expect(session).toMatchObject({ phase: "countdown", remainingMs: 2000, phraseIndex: 0 });
     session = transitionAudioSession(session, { type: "tick", elapsedMs: 750, attempt: session.attempt });
     session = transitionAudioSession(session, { type: "pause" });
     expect(session).toMatchObject({ phase: "paused", remainingMs: 1250 });
@@ -184,6 +187,10 @@ describe("level 1 audio session", () => {
     expect(transitionAudioSession(session, { type: "tick", elapsedMs: 5000, attempt: cancelledTimer })).toEqual(session);
     session = finishListen(session);
     session = transitionAudioSession(session, { type: "tick", elapsedMs: 5500, attempt: session.attempt });
+    expect(session).toMatchObject({ phase: "loading", completedCycles: 4, phraseIndex: 0 });
+    session = finishListen(session);
+    session = transitionAudioSession(session, { type: "tick", elapsedMs: 5500, attempt: session.attempt });
+    expect(session).toMatchObject({ phase: "countdown", completedCycles: 5, remainingMs: 2000 });
     session = transitionAudioSession(session, { type: "tick", elapsedMs: 2000, attempt: session.attempt });
     expect(session).toMatchObject({ phase: "loading", phraseIndex: 1, completedCycles: 0 });
   });
@@ -218,8 +225,8 @@ describe("level 1 audio session", () => {
     expect(finishListen(session).completedCycles).toBe(0);
   });
 
-  it("lets Space advance immediately from the automatic countdown after the required listens", () => {
-    let session = createAudioSession({ phraseCount: 2, mode: "automatic" });
+  it("lets Space explicitly advance from the automatic choice when the delay is zero", () => {
+    let session = createAudioSession({ phraseCount: 2, mode: "automatic", advanceDelayMs: 0 });
     session = transitionAudioSession(session, { type: "space" });
     for (let cycle = 0; cycle < 3; cycle++) {
       session = finishListen(session);

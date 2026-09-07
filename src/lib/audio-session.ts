@@ -20,6 +20,7 @@ export type AudioSession = {
   groupIndex: number;
   groupDurationMs: number;
   completedCycles: number;
+  cycleTarget: 3 | 5;
   attempt: number;
   phase: "ready" | ActivePhase | "paused" | "error" | "completed";
   pausedPhase: ActivePhase | "ready";
@@ -32,6 +33,7 @@ export type AudioSession = {
 
 export type AudioSessionEvent =
   | { type: "space" | "retry" | "pause" | "previous" | "next" | "reveal-subtitles" }
+  | { type: "jump"; phraseIndex: number }
   | { type: "audio-playing" | "audio-error"; attempt: number }
   | { type: "tick"; elapsedMs: number; attempt: number }
   | ({ type: "settings" } & Partial<AudioSessionSettings>)
@@ -50,7 +52,7 @@ export function createAudioSession({
   const sizes = validGroups ? [...groupSizes!] : Array.from({ length: phraseCount }, () => 1);
   const groupIndex = Number.isInteger(initialGroupIndex) && initialGroupIndex >= 0 && initialGroupIndex < sizes.length ? initialGroupIndex : 0;
   return {
-    level, subtitlesRevealed: false, phraseCount, phraseIndex: sizes.slice(0, groupIndex).reduce((a, b) => a + b, 0), completedCycles: 0, attempt: 0, phase: "ready",
+    level, subtitlesRevealed: false, phraseCount, phraseIndex: sizes.slice(0, groupIndex).reduce((a, b) => a + b, 0), completedCycles: 0, cycleTarget: 3, attempt: 0, phase: "ready",
     groupSizes: sizes,
     groupIndex, groupDurationMs: 0,
     pausedPhase: "loading", mode, remainingMs: 0,
@@ -65,7 +67,7 @@ function groupFirstPhrase(session: AudioSession): number {
 }
 
 function startListen(session: AudioSession): AudioSession {
-  const startsNewCycle = session.phase === "ready" || hasSessionTimer(session);
+  const startsNewCycle = session.phase === "ready" || (session.phase === "paused" && session.pausedPhase === "ready") || hasSessionTimer(session);
   return {
     ...session, phase: "loading", attempt: session.attempt + 1, remainingMs: 0,
     phraseIndex: groupFirstPhrase(session), groupDurationMs: 0,
@@ -78,12 +80,31 @@ function advanceGroup(session: AudioSession): AudioSession {
   const next: AudioSession = {
     ...session, phase: "ready", groupIndex: session.groupIndex + 1,
     phraseIndex: groupFirstPhrase(session) + session.groupSizes[session.groupIndex],
-    completedCycles: 0, attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
+    completedCycles: 0, cycleTarget: 3, attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
   };
   return session.mode === "automatic" ? startListen(next) : next;
 }
 
+function requestAdvance(session: AudioSession): AudioSession {
+  if (session.mode === "automatic" && session.advanceDelayMs > 0
+    && session.phase !== "countdown" && session.groupIndex + 1 < session.groupSizes.length) {
+    return { ...session, phase: "countdown", remainingMs: session.advanceDelayMs, attempt: session.attempt + 1 };
+  }
+  return advanceGroup(session);
+}
+
 export function transitionAudioSession(session: AudioSession, event: AudioSessionEvent): AudioSession {
+  if (event.type === "jump") {
+    if (!Number.isInteger(event.phraseIndex) || event.phraseIndex < 0 || event.phraseIndex >= session.phraseCount) return session;
+    let phraseIndex = 0;
+    const groupIndex = session.groupSizes.findIndex(size => {
+      if (event.phraseIndex < phraseIndex + size) return true;
+      phraseIndex += size;
+      return false;
+    });
+    return { ...session, groupIndex, phraseIndex, phase: "ready", pausedPhase: "loading", completedCycles: 0, cycleTarget: 3,
+      attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0 };
+  }
   if (session.phase === "completed") return session;
   switch (event.type) {
     case "reveal-subtitles":
@@ -97,10 +118,10 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       return {
         ...session, groupIndex: session.groupIndex - 1,
         phraseIndex: groupFirstPhrase(session) - session.groupSizes[session.groupIndex - 1],
-        completedCycles: 0, phase: "ready", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
+        completedCycles: 0, cycleTarget: 3, phase: "ready", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
       };
     case "next":
-      return session.completedCycles >= 3 ? advanceGroup(session) : session;
+      return session.completedCycles >= session.cycleTarget ? requestAdvance(session) : session;
     case "space":
       if (session.phase === "error") return startListen(session);
       if (["loading", "playing", "gap"].includes(session.phase)) {
@@ -110,11 +131,11 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
         if (session.pausedPhase === "ready") return transitionAudioSession({ ...session, phase: "ready" }, event);
         return { ...session, phase: session.pausedPhase === "playing" ? "loading" : session.pausedPhase };
       }
-      if (session.completedCycles >= 3) return advanceGroup(session);
+      if (session.completedCycles >= session.cycleTarget) return requestAdvance(session);
       return startListen(session);
     case "retry":
-      if (session.completedCycles >= 5) return advanceGroup(session);
-      return startListen(session);
+      if (session.completedCycles >= 5) return requestAdvance(session);
+      return startListen({ ...session, cycleTarget: session.completedCycles >= 3 ? 5 : session.cycleTarget });
     case "audio-playing":
       if (event.attempt !== session.attempt || session.phase !== "loading") return session;
       return { ...session, phase: "playing" };
@@ -146,8 +167,9 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       if (remainingMs > 0) return { ...session, remainingMs };
       if (session.phase === "gap") return { ...session, phraseIndex: session.phraseIndex + 1, attempt: session.attempt + 1, phase: "loading", remainingMs: 0 };
       if (session.phase === "countdown") return advanceGroup(session);
-      if (session.completedCycles < 3) return startListen(session);
-      return { ...session, phase: "countdown", remainingMs: session.advanceDelayMs };
+      if (session.completedCycles < session.cycleTarget) return startListen(session);
+      if (session.cycleTarget === 5) return requestAdvance(session);
+      return { ...session, phase: "ready", remainingMs: 0 };
     }
     case "settings": {
       const next = {

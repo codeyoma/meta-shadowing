@@ -50,11 +50,11 @@ export function LearningPlayer({ lesson, level, hints, lines, defaults, override
   </section></Page>;
   const settings = start.selection;
   const groups = level === 4 || level === 5 ? groupLessonPhrases(lesson.entries, settings.groupSize) : [];
+  const notice = versionReset ? <VersionNotice storageFailed={versionReset.storageFailed} /> : null;
   return <>
-    {versionReset ? <VersionNotice storageFailed={versionReset.storageFailed} /> : null}
     {level === 6 || level === 7 || level === 8
-      ? <RapidPlayer lesson={lesson} lines={lines} level={level} settings={settings} start={start} />
+      ? <RapidPlayer lesson={lesson} lines={lines} level={level} settings={settings} start={start} notice={notice} />
       : <AudioPhrasePlayer lesson={lesson} level={level === 2 || level === 3 || level === 4 || level === 5 ? level : 1} hints={hints} groups={groups}
-        settings={{ mode: settings.mode, playbackRate: settings.speed, advanceDelayMs: settings.advanceDelayMs, groupGapMs: settings.groupGapMs }} start={start} />}
+        settings={{ mode: settings.mode, playbackRate: settings.speed, advanceDelayMs: settings.advanceDelayMs, groupGapMs: settings.groupGapMs }} start={start} notice={notice} />}
   </>;
 }
