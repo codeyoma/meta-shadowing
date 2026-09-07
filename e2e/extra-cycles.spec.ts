@@ -1,6 +1,32 @@
 import { expect, test } from "@playwright/test";
 import { testRecording } from "./fixtures/audio";
 
+for (const level of [1, 4]) test(`level ${level} waits for the final automatic speaking window before offering choices`, async ({ page }) => {
+  await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
+  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.goto(`/player?lesson=morning-routine&level=${level}&mode=automatic&speed=3&group=2`);
+  const cycles = page.getByLabel("완료한 듣기");
+  const finalSpeaking = cycles.evaluate(el => new Promise<{ timer: boolean; choices: string[] }>(resolve => {
+    const observer = new MutationObserver(() => {
+      if (el.textContent?.trim() !== "필수 3 / 3") return;
+      observer.disconnect();
+      resolve({ timer: !!document.querySelector('[role="timer"]'), choices: [...document.querySelectorAll('button')].map(button => button.getAttribute('aria-label') ?? '').filter(label => /^(REPEAT|NEXT)/.test(label)) });
+    });
+    observer.observe(el, { childList: true, characterData: true, subtree: true });
+  }));
+  await page.getByRole("button", { name: /^CONTINUE/ }).click();
+  expect(await finalSpeaking).toEqual({ timer: true, choices: [] });
+  await expect(page.getByRole("button", { name: /^REPEAT/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^NEXT/ })).toBeVisible();
+  await expect(page.getByRole("timer")).toHaveCount(0);
+  // Even beyond the default next-phrase delay, automatic mode waits for a choice.
+  await page.waitForTimeout(1500);
+  await expect(cycles).toHaveText("필수 3 / 3");
+  await expect(page.getByRole("button", { name: /^REPEAT/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^NEXT/ })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: level === 4 ? "묶음 진행" : "프레이즈 진행", exact: true })).toHaveAttribute("aria-valuenow", "0");
+});
+
 for (const level of [3, 5]) test(`level ${level} preserves manual bilingual reveal and speaking control in the extra pair`, async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });

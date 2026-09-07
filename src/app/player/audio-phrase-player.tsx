@@ -46,7 +46,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
   const actionLabel = playing ? "일시정지" : session.phase === "paused" ? "계속 재생"
     : session.phase === "error" ? "다시 시도" : session.completedCycles >= session.cycleTarget ? nextLabel
     : session.completedCycles === 0 ? "첫 원음 듣기" : "다음 원음 듣기";
-  const choosing = session.completedCycles >= session.cycleTarget && (session.phase === "ready" || session.phase === "speaking");
+  const choosing = session.completedCycles >= session.cycleTarget && session.phase === "ready";
   const actionText = playing ? "PAUSE" : session.phase === "error" ? "RETRY" : "CONTINUE";
   const progressCount = grouped ? groups.length : lesson.phrases.length;
   const progressIndex = grouped ? session.groupIndex : session.phraseIndex;
