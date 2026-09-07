@@ -38,7 +38,8 @@ test("only current and next recordings preload, and the buffered next recording 
   expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
   expect(await page.evaluate(() => caches.keys())).toEqual([]);
   expect(await page.evaluate(() => (window as typeof window & { liveAudioBuffers: number }).liveAudioBuffers)).toBeLessThanOrEqual(2);
-  await page.getByRole("button", { name: "레슨으로 돌아가기", exact: true }).click();
+  await page.getByRole("button", { name: "문장 목록", exact: true }).click();
+  await page.getByRole("button", { name: "첫 화면으로", exact: true }).click();
   await expect(page).toHaveURL(/\/home/);
   await expect.poll(() => page.evaluate(() => (window as typeof window & { liveAudioBuffers: number }).liveAudioBuffers)).toBe(0);
 });

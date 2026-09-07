@@ -49,8 +49,8 @@ test("level 2 keeps full bilingual subtitles and allows two speaking turns witho
   await expect(subtitles.getByText("I wake up at seven.", { exact: true })).toBeVisible();
   await expect(subtitles.getByText("나는 일곱 시에 일어난다.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("자막을 보며 말하고, 눈을 감고 한 번 더 말해 보세요.");
+  await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
+  await expect(page.getByLabel("학습 방법", { exact: true })).toHaveText("자막을 보며 따라 말하고, 눈을 감고 한 번 더 말하세요.");
   // The 0.357-second recording at 0.5x allows about 2.36s for Level 2, versus 1.39s for Level 1.
   await expect(page.getByRole("timer")).toHaveText("2.4초");
   await page.clock.runFor(2000);
@@ -68,15 +68,16 @@ test("Japanese hints preserve supplied spaces and segment an unspaced phrase aft
   await expect(subtitles.getByText("나는", { exact: true })).toBeVisible();
   const activate = async (button: ReturnType<Page["getByRole"]>) => isMobile ? button.tap() : button.click();
   for (let cycle = 1; cycle <= 3; cycle++) {
-    await activate(page.getByRole("button", { name: cycle === 1 ? "첫 원음 듣기" : "다음 원음 듣기", exact: true }));
+    await activate(page.getByRole("button", { name: cycle === 1 ? "CONTINUE · 첫 원음 듣기" : "CONTINUE · 다음 원음 듣기", exact: true }));
     await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
   }
-  await activate(page.getByRole("button", { name: "다음 프레이즈", exact: true }));
+  await activate(page.getByRole("button", { name: "NEXT · 다음 프레이즈", exact: true }));
   await expect(subtitles.getByText("顔", { exact: true })).toBeVisible();
   await activate(page.getByRole("button", { name: "자막 보기", exact: true }));
   await expect(subtitles.getByText("顔を洗います。", { exact: true })).toBeVisible();
   await expect(subtitles.getByText("나는 세수를 한다.", { exact: true })).toBeVisible();
-  await activate(page.getByRole("button", { name: "이전 ←", exact: true }));
+  await activate(page.getByRole("button", { name: "문장 목록", exact: true }));
+  await activate(page.getByRole("dialog", { name: "문장 목록", exact: true }).getByRole("button", { name: /^1번 문장/ }));
   await expect(subtitles.getByText("私は", { exact: true })).toBeVisible();
 });
 
@@ -84,12 +85,12 @@ test("short mobile screens expose subtitle and practice actions above the dock w
   test.skip(!isMobile, "Short-screen layout uses the mobile viewport.");
   await openPlayer(page, 3);
   await expect(page.getByRole("region", { name: "학습 자막" }).getByText("I", { exact: true })).toBeVisible();
-  const actions = await page.locator(".player-actions").boundingBox();
-  const dock = await page.getByRole("navigation", { name: "재생 제어" }).boundingBox();
+  const actions = await page.getByRole("button", { name: "자막 보기", exact: true }).boundingBox();
+  const dock = await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox();
   expect(actions!.y + actions!.height).toBeLessThanOrEqual(dock!.y);
-  for (const button of await page.locator(".player-actions button").all()) {
+  for (const button of await page.locator("main button").all()) {
     const box = await button.boundingBox();
-    expect(box!.height).toBeGreaterThanOrEqual(48);
-    expect(box!.width).toBeGreaterThanOrEqual(48);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
   }
 });

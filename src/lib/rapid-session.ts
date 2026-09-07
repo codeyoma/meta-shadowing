@@ -55,6 +55,7 @@ export type RapidSession = {
 };
 
 export type RapidEvent = { type: "space" | "pause" | "restart" | "previous" | "next" }
+  | { type: "jump"; lineIndex: number }
   | { type: "tick"; elapsedMs: number; runId: number }
   | { type: "settings"; settings: Partial<RapidSettings> };
 
@@ -86,6 +87,10 @@ function stageDuration(session: RapidSession): number {
 export function transitionRapidSession(session: RapidSession, event: RapidEvent): RapidSession {
   const tokenMs = 60000 / RAPID_WPM[session.settings.wpmLevel];
   if (!session.lines.length) return session;
+  if (event.type === "jump") {
+    if (!Number.isInteger(event.lineIndex) || event.lineIndex < 0 || event.lineIndex >= session.lines.length) return session;
+    return { ...session, lineIndex: event.lineIndex, phase: "ready", tokenIndex: 0, remainingMs: 0, paused: false, runId: session.runId + 1 };
+  }
   if (event.type === "settings") {
     const next = { ...session, settings: normalizeRapidSettings(event.settings, session.settings), runId: session.runId + 1 };
     if (next.settings.mode === "manual" && next.phase === "gap") return { ...next, phase: "line-complete", remainingMs: 0, paused: false };

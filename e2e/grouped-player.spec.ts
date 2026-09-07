@@ -17,10 +17,12 @@ test("setup selects a group size and level 4 plays each highlighted phrase befor
   await page.goto("/setup?lesson=morning-routine");
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: /4 다문장 암기/ }).click();
+  await page.getByRole("button", { name: "세션 설정", exact: true }).click();
   for (const size of [4, 2, 3]) {
     await page.getByLabel("묶음 크기").selectOption(String(size));
     await expect(page.getByLabel("묶음 크기")).toHaveValue(String(size));
   }
+  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
   await page.getByRole("button", { name: "학습 시작", exact: true }).click();
   await expect(page).toHaveURL(/group=3/);
   await page.waitForLoadState("networkidle");
@@ -29,11 +31,11 @@ test("setup selects a group size and level 4 plays each highlighted phrase befor
   await expect(phrases).toHaveCount(3);
   await expect(phrases.nth(0)).toContainText("I wake up at seven.");
   await expect(phrases.nth(1)).toContainText("나는 세수를 한다.");
-  await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   for (const index of [0, 1]) {
     await expect(phrases.nth(index)).toHaveAttribute("aria-current", "true");
     await expect(phrases.nth(index)).toHaveCSS("border-left-width", "2px");
-    await expect(page.getByRole("status")).toHaveText("다음 문장까지 잠시 기다립니다.");
+    await expect.poll(() => page.locator("audio").evaluate(element => (element as HTMLAudioElement).ended)).toBe(true);
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
     await page.clock.runFor(500);
   }
@@ -70,7 +72,7 @@ test("level 5 reveals every bilingual phrase with S or touch and resets for the 
   await expect(phrases.nth(0).getByText("I", { exact: true })).toBeVisible();
 });
 
-test("group navigation preserves the pinned chapter and marks an unnamed section without grouping across it", async ({ page }) => {
+test("group navigation follows the chapter and marks an unnamed section without grouping across it", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await openGroupedPlayer(page, 4, 4);
   await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
@@ -84,7 +86,7 @@ test("group navigation preserves the pinned chapter and marks an unnamed section
       await page.keyboard.press("Space");
       for (let index = 1; index < phraseCount; index++) {
         await expect(phrases.nth(index - 1)).toHaveAttribute("aria-current", "true");
-        await expect(page.getByRole("status")).toHaveText("다음 문장까지 잠시 기다립니다.");
+        await expect.poll(() => page.locator("audio").evaluate(element => (element as HTMLAudioElement).ended)).toBe(true);
         await page.clock.runFor(500);
       }
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
@@ -103,10 +105,14 @@ test("group navigation preserves the pinned chapter and marks an unnamed section
   await expect(phrases.nth(0)).toContainText("I read my messages.");
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect(page.getByLabel("재생속도")).toBeVisible();
-  // Settings replaces the canvas; a short viewport makes this page scroll far enough to pin the chapter.
+  // Settings overlays the retained lesson and keeps its close action accessible on short screens.
   await page.setViewportSize({ width: page.viewportSize()!.width, height: 480 });
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  expect((await chapter.boundingBox())!.y).toBe(0);
+  const settings = page.getByRole("dialog", { name: "세션 설정", exact: true });
+  await expect(settings).toBeInViewport();
+  await expect(settings.getByRole("button", { name: "설정 닫기", exact: true })).toBeInViewport();
+  await expect(page.locator('[aria-label="현재 챕터"]')).toContainText("At work");
+  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
+  await expect(chapter).toContainText("At work");
 });
 
 test("a long level 5 group keeps the first hint and touch actions accessible in the initial mobile viewport", async ({ page, isMobile }) => {
@@ -114,14 +120,15 @@ test("a long level 5 group keeps the first hint and touch actions accessible in 
   await openGroupedPlayer(page, 5, 4);
   const canvas = page.getByRole("region", { name: "학습 자막" });
   await expect(canvas.getByRole("listitem")).toHaveCount(5);
-  const actions = await page.locator(".player-actions").boundingBox();
-  const dock = await page.getByRole("navigation", { name: "재생 제어" }).boundingBox();
+  const actions = await canvas.boundingBox();
+  const dock = await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox();
   expect(actions!.y + actions!.height).toBeLessThanOrEqual(dock!.y);
   const firstHint = canvas.getByRole("listitem").first().locator("span");
-  expect(await firstHint.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(64);
-  for (const button of await page.locator(".player-actions button").all()) {
+  expect(await firstHint.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(22);
+  expect(await firstHint.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(28);
+  for (const button of await page.locator("main button").all()) {
     const box = await button.boundingBox();
-    expect(Math.min(box!.width, box!.height)).toBeGreaterThanOrEqual(48);
+    expect(Math.min(box!.width, box!.height)).toBeGreaterThanOrEqual(44);
   }
 });
 

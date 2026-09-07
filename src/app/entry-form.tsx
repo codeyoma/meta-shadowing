@@ -39,8 +39,7 @@ export function EntryForm() {
       <section className="entry-shell" aria-labelledby="entry-title">
         <Brand />
         <div className="entry-copy">
-          <h1 id="entry-title">나만의 문장으로,<br />여덟 번 다르게.</h1>
-          <p>헤드폰을 끼고 오늘의 레슨을 시작하세요.</p>
+          <h1 id="entry-title">엄선된 문장으로,<br />여덟 번 다르게.</h1>
         </div>
         <form className="entry-form" onSubmit={submit}>
           <label htmlFor="beta-password">베타 비밀번호</label>
@@ -60,7 +59,6 @@ export function EntryForm() {
             입장하기
           </button>
         </form>
-        <p className="entry-footer">개인 학습 자료를 위한 비공개 베타</p>
         <OnlineInstallHelp />
       </section>
     </Page>

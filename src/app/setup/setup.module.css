@@ -1,0 +1,62 @@
+.page {
+  padding: max(16px, env(safe-area-inset-top)) 20px max(32px, env(safe-area-inset-bottom));
+  color-scheme: dark;
+}
+
+.page ::selection { background: #305e38; color: var(--text); }
+.page button { touch-action: manipulation; }
+.shell { width: min(100%, 640px); margin-inline: auto; }
+.header { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px; align-items: center; column-gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.backLink { display: inline-flex; align-items: center; gap: 4px; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px; color: var(--muted); background: transparent; font-size: 14px; font-weight: 650; }
+.backLink svg { width: 20px; height: 20px; color: currentColor; flex: none; }
+.header h1 { margin: 0; min-width: 0; font-size: 20px; font-weight: 700; line-height: 1.4; letter-spacing: -.025em; overflow-wrap: anywhere; text-wrap: balance; }
+.titleBlock { min-width: 0; display: grid; gap: 4px; }
+.lessonMeta { display: flex; flex-wrap: wrap; gap: 4px 12px; min-width: 0; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.optionsButton { width: 44px; height: 44px; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--muted); }
+.optionsButton svg { width: 22px; height: 22px; }
+.sectionTitle { margin: 0 0 20px; color: var(--text); font-size: 16px; line-height: 1.5; font-weight: 650; letter-spacing: -.02em; }
+.stageSection { width: min(100%, 360px); margin: 24px auto 32px; }
+.levelPath { --path-step: 24px; --node-size: 56px; --row-gap: 16px; margin: 0; padding: 0; display: grid; gap: var(--row-gap); list-style: none; }
+.levelItem { position: relative; min-width: 0; }
+.connector { position: absolute; z-index: 0; top: calc(var(--node-size) / 2); left: calc(var(--node-size) / 2); width: calc(2 * var(--path-step)); height: calc(100% + var(--row-gap)); overflow: visible; pointer-events: none; }
+.connector line { stroke: var(--border-strong); stroke-width: 3px; }
+.levelButton { position: relative; z-index: 1; display: grid; grid-template-columns: var(--node-size) minmax(0, 1fr); align-items: center; gap: 16px; width: calc(100% - var(--path-offset) * var(--path-step)); min-height: var(--node-size); margin-left: calc(var(--path-offset) * var(--path-step)); padding: 0; border: 0; border-radius: 12px; color: var(--text); background: transparent; text-align: left; }
+.levelNode { display: grid; place-items: center; align-self: start; width: var(--node-size); height: var(--node-size); border: 2px solid var(--border-strong); border-radius: 50%; background: var(--surface); box-shadow: 0 4px 0 var(--border); color: var(--text); font-size: 20px; font-weight: 750; font-variant-numeric: tabular-nums; transition: transform 120ms ease-out, box-shadow 120ms ease-out; }
+.levelName { font-size: 16px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; word-break: keep-all; }
+.levelButton[aria-pressed="true"] .levelNode { color: #071006; background: var(--green); border-color: var(--green); box-shadow: 0 4px 0 var(--green-pressed); }
+.levelButton[aria-pressed="true"] .levelName { color: var(--green); }
+.levelButton:active .levelNode { transform: translateY(3px); box-shadow: 0 1px 0 var(--border); }
+.levelButton[aria-pressed="true"]:active .levelNode { box-shadow: 0 1px 0 var(--green-pressed); }
+.startArea { width: min(100%, 480px); margin-inline: auto; }
+.optionsDialog { width: min(calc(100% - 32px), 480px); max-width: none; max-height: calc(100dvh - max(32px, env(safe-area-inset-top)) - max(32px, env(safe-area-inset-bottom))); padding: 0; margin: auto; border: 1px solid var(--border-strong); border-radius: 16px; background: var(--bg); color: var(--text); overflow: hidden; }
+.optionsDialog[open] { display: flex; flex-direction: column; }
+.optionsDialog::backdrop { background: rgb(0 0 0 / .65); }
+.optionsHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 8px 20px; flex: none; }
+.optionsHeading h2 { margin: 0; font-size: 18px; line-height: 1.5; }
+.optionsBody { padding: 8px 20px 20px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--border-strong) var(--bg); scrollbar-width: thin; }
+.optionsFooter { padding: 12px 20px; border-top: 1px solid var(--border); flex: none; }
+.closeButton { width: 100%; min-height: 44px; border: 1px solid var(--green); border-radius: 12px; background: #192d1b; color: #c5efc1; font-size: 14px; font-weight: 650; }
+.page .controls { padding: 0; border: 0; border-radius: 0; gap: 12px; }
+.page :global(.segment-control) button { min-height: 44px; font-size: 14px; }
+.page :global(.audio-session-controls) { gap: 12px; }
+.page :global(.audio-setting) { font-size: 14px; }
+.page :global(.audio-setting) input, .page :global(.audio-setting) select { min-height: 44px; font-size: 16px; }
+.page :global(.rapid-settings-help) { font-size: 13px; line-height: 1.6; }
+.page .startButton { width: 100%; min-height: 52px; font-size: 16px; border-radius: 14px; box-shadow: 0 4px 0 var(--green-pressed); }
+
+@media (hover: hover) {
+  .backLink:hover { color: var(--text); }
+  .optionsButton:hover { color: var(--text); background: var(--surface); }
+  .closeButton:hover { color: #d9ffd4; background: #244429; }
+  .levelButton:hover .levelNode { background: var(--hover); }
+  .levelButton[aria-pressed="true"]:hover .levelNode { background: var(--green-focus); border-color: var(--green-focus); }
+}
+@media (max-width: 359px) {
+  .header { column-gap: 12px; }
+  .header h1 { font-size: 18px; }
+  .levelPath { --path-step: 16px; }
+  .levelButton { gap: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .levelNode { transition: none; }
+}

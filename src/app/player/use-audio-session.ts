@@ -9,7 +9,6 @@ import { createAudioPreloader } from "@/lib/audio-preloader";
 
 function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
-  audio.ontimeupdate = audio.ondurationchange = null;
 }
 
 export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart) {
@@ -19,7 +18,6 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   const audioRef = useRef<HTMLAudioElement>(null);
   const preloader = useRef<ReturnType<typeof createAudioPreloader> | null>(null);
   const playRequest = useRef(0);
-  const [mediaTime, setMediaTime] = useState({ elapsed: 0, duration: 0 });
 
   const prepareAudio = useCallback((index: number, refresh = false) => {
     if (!audioRef.current) return;
@@ -33,8 +31,9 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     const next = transitionAudioSession(previous, event);
     if (next === previous) return;
     const finished = next.phase === "completed";
-    const boundary = finished || next.groupIndex > previous.groupIndex;
+    const boundary = finished || event.type === "jump" || next.groupIndex > previous.groupIndex;
     updateRecord({
+      restartCompleted: event.type === "jump",
       active: shortcutsEnabled && !document.hidden && (["playing", "gap", "speaking", "countdown"].includes(next.phase) || (next.phase === "ready" && next.completedCycles > 0)),
       ...(boundary ? { checkpoint: { unit: finished ? next.groupSizes.length : next.groupIndex, phrase: finished ? lesson.phrases.length : next.phraseIndex }, finished } : {}),
       ...(event.type === "settings" ? { settings: {
@@ -51,7 +50,6 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       playRequest.current++;
       detachAudioListeners(audio);
       audio.pause();
-      setMediaTime({ elapsed: 0, duration: 0 });
 
       if (next.phase !== "loading") {
         if (finished) {
@@ -78,11 +76,6 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       audio.onpause = () => {
         if (!audio.ended && audio.paused && currentSession.current.attempt === attempt) send({ type: "pause" });
       };
-      const updateTime = () => {
-        if (currentSession.current.attempt !== attempt) return;
-        setMediaTime({ elapsed: audio.currentTime, duration: Number.isFinite(audio.duration) ? audio.duration : 0 });
-      };
-      audio.ontimeupdate = audio.ondurationchange = updateTime;
     }
 
     audio.playbackRate = next.playbackRate;
@@ -156,5 +149,5 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     };
   }, [prepareAudio]);
 
-  return { session, send, audioRef, mediaTime, completion, storageFailed };
+  return { session, send, audioRef, completion, storageFailed };
 }

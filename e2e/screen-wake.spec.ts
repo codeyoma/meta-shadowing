@@ -35,19 +35,20 @@ test("screen wake covers manual speaking and releases on pause, settings, backgr
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto("/player?lesson=morning-routine&level=1");
-  await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).waitFor();
+  await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).waitFor();
   expect(await activeLocks(page)).toBe(0);
   await page.keyboard.press("Space");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   await expect.poll(() => activeLocks(page)).toBe(1);
-  await page.getByRole("button", { name: "재생 또는 일시정지", exact: true }).click();
+  await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(0);
-  await page.keyboard.press("Space");
+  await page.getByRole("button", { name: "문장 목록 닫기", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(0);
   await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
-  await page.getByRole("button", { name: "계속 재생", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
   await page.evaluate(() => {
     Object.defineProperty(document, "hidden", { configurable: true, value: true });
@@ -59,9 +60,11 @@ test("screen wake covers manual speaking and releases on pause, settings, backgr
     document.dispatchEvent(new Event("visibilitychange"));
   });
   expect(await activeLocks(page)).toBe(0);
-  await page.getByRole("button", { name: "계속 재생", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
-  await page.getByRole("button", { name: "레슨으로 돌아가기", exact: true }).click();
+  await page.getByRole("button", { name: "문장 목록", exact: true }).click();
+  await expect.poll(() => activeLocks(page)).toBe(0);
+  await page.getByRole("button", { name: "첫 화면으로", exact: true }).click();
   await expect(page).toHaveURL(/\/home/);
   await expect.poll(() => activeLocks(page)).toBe(0);
 });
@@ -73,7 +76,7 @@ test("rapid practice keeps the screen awake while running and releases it on com
   await page.goto("/player?lesson=morning-routine&level=6&mode=automatic&lineGap=0");
   await page.waitForLoadState("networkidle");
   await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
-  await page.getByRole("button", { name: "문장 시작", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
   await page.clock.runFor(6900);
   await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
@@ -81,7 +84,7 @@ test("rapid practice keeps the screen awake while running and releases it on com
 });
 
 for (const support of ["unsupported", "denied"] as const) {
-  test(`screen wake ${support} explains the fallback without blocking practice`, async ({ page }) => {
+  test(`screen wake ${support} stays silent without blocking practice`, async ({ page }) => {
     await page.addInitScript(support => {
       Object.defineProperty(navigator, "wakeLock", { configurable: true, value: support === "unsupported" ? undefined : {
         request: async () => { throw new DOMException("Power saving", "NotAllowedError"); }
@@ -90,24 +93,25 @@ for (const support of ["unsupported", "denied"] as const) {
     await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
     await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
     await page.goto("/player?lesson=morning-routine&level=1");
-    await page.getByRole("button", { name: "첫 원음 듣기", exact: true }).click();
-    await expect(page.getByLabel("화면 유지 안내")).toContainText("기기의 화면 꺼짐 설정");
+    await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
-    await page.getByRole("button", { name: "재생 또는 일시정지", exact: true }).click();
     await expect(page.getByLabel("화면 유지 안내")).toHaveCount(0);
+    await page.getByRole("button", { name: "CONTINUE · 다음 원음 듣기", exact: true }).click();
+    await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 2 / 3");
   });
 }
 
-test("a system-released screen wake shows the fallback and an explicit resume requests it again", async ({ page }) => {
+test("a system-released screen wake stays silent and an explicit resume requests it again", async ({ page }) => {
   await supportedWakeLock(page);
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto("/player?lesson=morning-routine&level=6");
-  await page.getByRole("button", { name: "문장 시작", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
   await page.evaluate(() => (window as typeof window & { testScreenWake: { release: () => Promise<void> } }).testScreenWake.release());
-  await expect(page.getByLabel("화면 유지 안내")).toBeVisible();
-  await page.getByRole("button", { name: "일시정지", exact: true }).click();
-  await page.getByRole("button", { name: "계속 재생", exact: true }).click();
+  await expect.poll(() => activeLocks(page)).toBe(0);
+  await expect(page.getByLabel("화면 유지 안내")).toHaveCount(0);
+  await page.getByRole("button", { name: "PAUSE · 일시정지", exact: true }).click();
+  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
   await expect(page.getByLabel("화면 유지 안내")).toHaveCount(0);
 });
