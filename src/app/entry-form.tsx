@@ -1,8 +1,14 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Brand, Page } from "./ui";
 import { OnlineInstallHelp } from "./online-install-help";
+import styles from "./learner.module.css";
 
 export function EntryForm() {
   const [password, setPassword] = useState("");
@@ -35,32 +41,36 @@ export function EntryForm() {
   }
 
   return (
-    <Page className="entry-page">
-      <section className="entry-shell" aria-labelledby="entry-title">
+    <Page className={styles.entryPage}>
+      <ScrollArea className={styles.entryScroll} viewportProps={{ className: styles.entryViewport, role: "region", "aria-label": "입장 안내" }}>
+      <section className={styles.entryShell} aria-labelledby="entry-title">
         <Brand />
-        <div className="entry-copy">
-          <h1 id="entry-title">엄선된 문장으로,<br />여덟 번 다르게.</h1>
-        </div>
-        <form className="entry-form" onSubmit={submit}>
-          <label htmlFor="beta-password">베타 비밀번호</label>
-          <input
-            id="beta-password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            aria-invalid={status === "wrong-password"}
-            aria-describedby={errorMessage ? "password-error" : undefined}
-            required
-          />
-          {errorMessage ? <p id="password-error" className="password-error" role="alert">{errorMessage}</p> : null}
-          <button className="primary-button" type="submit" disabled={status === "submitting"}>
-            입장하기
-          </button>
+        <h1 id="entry-title" className={styles.entryTitle}>엄선된 문장으로,<br />여덟 번 다르게.</h1>
+        <form onSubmit={submit} aria-busy={status === "submitting"}>
+          <FieldGroup>
+            <Field data-invalid={status === "wrong-password"}>
+              <FieldLabel htmlFor="beta-password">베타 비밀번호</FieldLabel>
+              <Input
+                id="beta-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                aria-invalid={status === "wrong-password"}
+                aria-describedby={errorMessage ? "password-error" : undefined}
+                required
+              />
+              {errorMessage ? <Alert id="password-error" variant="destructive"><AlertDescription>{errorMessage}</AlertDescription></Alert> : null}
+            </Field>
+            <Button size="lg" className="w-full" type="submit" disabled={status === "submitting"}>
+              입장하기
+            </Button>
+          </FieldGroup>
         </form>
         <OnlineInstallHelp />
       </section>
+      </ScrollArea>
     </Page>
   );
 }

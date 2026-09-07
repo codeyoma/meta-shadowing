@@ -37,6 +37,7 @@ it("keeps level 3 subtitles revealed through pause and the end of a listen, then
 it.each(["space", "next"] as const)("resets level 3 hints when %s advances to another phrase and when returning to the previous phrase", (type) => {
   let session = createAudioSession({ phraseCount: 2, level: 3 });
   for (let cycle = 0; cycle < 3; cycle++) session = finishListen(transitionAudioSession(session, { type: "space" }));
+  session = transitionAudioSession(session, { type: "space" }); // Confirm the third listen before choosing Next.
   session = transitionAudioSession(session, { type: "reveal-subtitles" });
   session = transitionAudioSession(session, { type });
   expect(session).toMatchObject({ phraseIndex: 1, subtitlesRevealed: false, completedCycles: 0 });
@@ -55,10 +56,11 @@ it.each([2, 3] as const)("level %s retains the three required plus two extra lim
   expect(session.completedCycles).toBe(0);
   for (let cycle = 1; cycle <= 5; cycle++) {
     if (session.phase === "ready") session = transitionAudioSession(session, { type: "reveal-subtitles" });
-    session = transitionAudioSession(session, { type: cycle <= 3 ? "space" : "retry" });
+    session = transitionAudioSession(session, { type: cycle === 4 ? "retry" : "space" });
     expect(session).toMatchObject({ phase: "loading", subtitlesRevealed: false, phraseIndex: 0 });
     session = finishListen(session);
     expect(session).toMatchObject({ phase: "ready", completedCycles: cycle, remainingMs: 0 });
+    if (cycle === 3 || cycle === 5) session = transitionAudioSession(session, { type: "space" });
   }
   session = transitionAudioSession(session, { type: "retry" });
   expect(session).toMatchObject({ phraseIndex: 1, completedCycles: 0, subtitlesRevealed: false });
@@ -88,7 +90,7 @@ it.each(["playing", "error"] as const)("preserves level 3 reveal when restarting
 });
 
 describe("level 1 audio session", () => {
-  it("counts only a finished listen, then lets Space and R start the remaining required listens", () => {
+  it("records finished listens and uses Space to confirm them before starting the remaining listens", () => {
     let session = createAudioSession({ phraseCount: 2 });
     session = transitionAudioSession(session, { type: "space" });
     expect(session).toMatchObject({ phase: "loading", completedCycles: 0 });
@@ -97,12 +99,13 @@ describe("level 1 audio session", () => {
     session = transitionAudioSession(session, { type: "audio-ended", attempt: session.attempt, durationMs: 4000 });
     expect(session).toMatchObject({ phase: "ready", completedCycles: 1, phraseIndex: 0 });
 
-    for (const action of ["space", "retry"] as const) {
+    for (const action of ["space", "space"] as const) {
       session = transitionAudioSession(session, { type: action });
       session = transitionAudioSession(session, { type: "audio-playing", attempt: session.attempt });
       session = transitionAudioSession(session, { type: "audio-ended", attempt: session.attempt, durationMs: 4000 });
     }
     expect(session).toMatchObject({ phase: "ready", completedCycles: 3, phraseIndex: 0 });
+    expect(session.confirmedCycles).toBe(2);
   });
 
   it("allows skipping extras after three but uses Space to finish an added pair before advancing", () => {
@@ -110,6 +113,7 @@ describe("level 1 audio session", () => {
     for (let cycle = 0; cycle < 3; cycle++) {
       session = finishListen(transitionAudioSession(session, { type: "space" }));
     }
+    session = transitionAudioSession(session, { type: "space" });
     expect(transitionAudioSession(session, { type: "space" })).toMatchObject({
       phase: "ready", phraseIndex: 1, completedCycles: 0
     });
@@ -118,6 +122,7 @@ describe("level 1 audio session", () => {
     expect(transitionAudioSession(session, { type: "space" })).toMatchObject({ phraseIndex: 0, phase: "loading" });
     session = finishListen(transitionAudioSession(session, { type: "space" }));
     expect(session.completedCycles).toBe(5);
+    session = transitionAudioSession(session, { type: "space" });
     for (const type of ["space", "retry"] as const) {
       expect(transitionAudioSession(session, { type })).toMatchObject({
         phraseIndex: 1, completedCycles: 0, phase: "ready"
@@ -130,6 +135,7 @@ describe("level 1 audio session", () => {
     for (let cycle = 0; cycle < 3; cycle++) {
       session = finishListen(transitionAudioSession(session, { type: "space" }));
     }
+    session = transitionAudioSession(session, { type: "space" });
     session = transitionAudioSession(session, { type: "space" });
     expect(session).toMatchObject({ phase: "completed", phraseIndex: 0, completedCycles: 3 });
     expect(transitionAudioSession(session, { type: "retry" })).toEqual(session);
@@ -215,6 +221,7 @@ describe("level 1 audio session", () => {
     for (let cycle = 0; cycle < 3; cycle++) {
       session = finishListen(transitionAudioSession(session, { type: "space" }));
     }
+    session = transitionAudioSession(session, { type: "space" });
     session = transitionAudioSession(session, { type: "next" });
     session = transitionAudioSession(session, { type: "space" });
     session = transitionAudioSession(session, { type: "audio-playing", attempt: session.attempt });
@@ -242,6 +249,7 @@ describe("level 1 audio session", () => {
     for (let cycle = 0; cycle < 3; cycle++) {
       session = finishListen(transitionAudioSession(session, { type: "space" }));
     }
+    session = transitionAudioSession(session, { type: "space" });
     session = transitionAudioSession(session, { type: "retry" });
     session = transitionAudioSession(session, { type: "audio-error", attempt: session.attempt });
     session = transitionAudioSession(session, { type: "space" });

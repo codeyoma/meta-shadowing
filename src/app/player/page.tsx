@@ -6,6 +6,7 @@ import { prepareRapidLines } from "@/lib/rapid-lines";
 import { validSettingOverrides } from "@/lib/session-settings";
 import { getSessionDefaults } from "@/lib/session-defaults-repository";
 import { LearningPlayer } from "./learning-player";
+import { stageForLevel } from "@/lib/learning-stages";
 
 type PlayerPageProps = { searchParams: Promise<Record<string, string | undefined>> };
 
@@ -16,6 +17,7 @@ export default async function PlayerPage({ searchParams }: PlayerPageProps) {
   if (!lesson) redirect("/home");
   const requestedLevel = Number(params.level);
   const level = Number.isInteger(requestedLevel) && requestedLevel >= 1 && requestedLevel <= 8 ? requestedLevel : 1;
+  const stage = stageForLevel(level, Number(params.stage));
   const milliseconds = (value?: string) => value === undefined ? undefined : Number(value) * 1000;
   const overrides = validSettingOverrides({
     mode: params.mode, display: params.display, speed: Number(params.speed), groupSize: Number(params.group), wpmLevel: Number(params.wpm),
@@ -26,6 +28,6 @@ export default async function PlayerPage({ searchParams }: PlayerPageProps) {
   const hints = level === 3 || level === 5 ? lesson.phrases.map(phrase => ({
     target: firstPracticeToken(phrase.target, lesson.language), korean: firstPracticeToken(phrase.korean, "korean")
   })) : [];
-  return <LearningPlayer key={JSON.stringify([lesson.id, lesson.version, level, params])} lesson={lesson} level={level} hints={hints}
+  return <LearningPlayer key={JSON.stringify([lesson.id, lesson.version, level, params])} lesson={lesson} level={level} stage={stage} hints={hints}
     lines={level >= 6 ? prepareRapidLines(lesson.entries, lesson.language) : []} defaults={defaults} overrides={overrides} requestedRun={params.run} />;
 }

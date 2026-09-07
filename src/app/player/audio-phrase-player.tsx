@@ -2,11 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { hasSessionTimer, type AudioPracticeLevel, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { SubtitleHint } from "@/lib/practice-tokens";
 import type { PhraseGroup } from "@/lib/phrase-groups";
 import { lessonSectionAt } from "@/lib/lesson-section";
+import { browseHref } from "@/lib/browse-navigation";
 import { AudioSessionControls } from "../audio-session-controls";
 import { Page, PauseIcon, PlayIcon, RepeatIcon, SubtitleIcon } from "../ui";
 import { useAudioSession } from "./use-audio-session";
@@ -16,15 +20,29 @@ import { ScreenWake } from "./screen-wake";
 import { CycleProgress, PracticeContext, PracticeFooter, PracticeHeader, PracticeProgress, PracticeSection } from "./practice-layout";
 import { AudioPlaybackButton } from "./audio-playback-button";
 import { PracticeSubtitles } from "./practice-subtitles";
-import { PlayerSettings } from "./player-settings";
-import { SentenceMenu } from "./sentence-menu";
+import { DictionaryPopup, useDictionaryPopup } from "./dictionary-popup";
+import type { DictionaryWordSelect } from "./dictionary-words";
+import { SentenceAnalysisButton, SentenceAnalysisPopup, useSentenceAnalysis } from "./sentence-analysis-popup";
+import { PlayerDrawer, type DrawerView } from "./player-drawer";
 import styles from "./practice.module.css";
 
 export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, start, notice }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[]; start: LearningStart; notice?: ReactNode }) {
   const router = useRouter();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const { session, send, audioRef, completion, storageFailed } = useAudioSession(lesson, level, settings, groups, !settingsOpen && !menuOpen, start);
+  const [surface, setSurface] = useState<"menu" | "settings" | "help" | null>(null);
+  const [drawerView, setDrawerView] = useState<DrawerView>("menu");
+  const menuOpen = surface === "menu" || surface === "settings";
+  const dictionary = useDictionaryPopup();
+  const analysis = useSentenceAnalysis();
+  const { session, send, audioRef, completion, storageFailed } = useAudioSession(lesson, level, settings, groups, surface === null && !dictionary.open && !analysis.open, start);
+  const openDictionary: DictionaryWordSelect = (word, trigger) => {
+    send({ type: "pause" });
+    dictionary.openWord(word, trigger);
+  };
+  function openSurface(view: "menu" | "settings" | "help") {
+    send({ type: "pause" });
+    if (view !== "help") setDrawerView(view);
+    setSurface(view);
+  }
   const canvasRef = useRef<HTMLDivElement>(null);
   const currentLineRef = useRef<HTMLLIElement>(null);
   const grouped = level === 4 || level === 5;
@@ -43,10 +61,14 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
   const highlightPhrase = playing || audioPaused;
   const timed = hasSessionTimer(session);
   const nextLabel = grouped ? "다음 묶음" : "다음 프레이즈";
-  const actionLabel = playing ? "일시정지" : session.phase === "paused" ? "계속 재생"
-    : session.phase === "error" ? "다시 시도" : session.completedCycles >= session.cycleTarget ? nextLabel
+  const pendingConfirmation = session.mode === "manual" && session.completedCycles > session.confirmedCycles
+    && (session.phase === "ready" || (session.phase === "paused" && session.pausedPhase === "ready"));
+  const confirmExtraListen = session.cycleTarget === 5 && pendingConfirmation;
+  const actionLabel = playing ? "일시정지" : pendingConfirmation ? "듣기 완료 확인" : session.phase === "paused" ? "계속 재생"
+    : session.phase === "error" ? "다시 시도" : session.confirmedCycles >= session.cycleTarget ? nextLabel
     : session.completedCycles === 0 ? "첫 원음 듣기" : "다음 원음 듣기";
-  const choosing = session.completedCycles >= session.cycleTarget && session.phase === "ready";
+  const choosing = session.confirmedCycles >= session.cycleTarget
+    && (session.phase === "ready" || (session.phase === "paused" && session.pausedPhase === "ready"));
   const actionText = playing ? "PAUSE" : session.phase === "error" ? "RETRY" : "CONTINUE";
   const progressCount = grouped ? groups.length : lesson.phrases.length;
   const progressIndex = grouped ? session.groupIndex : session.phraseIndex;
@@ -63,54 +85,55 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
 
   return (
     <Page className={styles.player}>
-      <PracticeHeader sessionLabel={`${session.mode === "automatic" ? "자동" : "수동"} · ${session.playbackRate}×`} settingsOpen={settingsOpen} settingsId="player-settings" menuOpen={menuOpen} onMenu={() => {
-          send({ type: "pause" });
-          setSettingsOpen(false);
-          setMenuOpen(true);
-        }} onSettings={() => {
-          if (!settingsOpen) send({ type: "pause" });
-          setSettingsOpen(!settingsOpen);
-        }} />
+      <PracticeHeader menuOpen={menuOpen} onMenu={() => openSurface("menu")}>
+        <PracticeProgress index={progressIndex} count={progressCount} progress={progress} progressLabel={grouped ? "묶음 진행" : "프레이즈 진행"} unitLabel={grouped ? "묶음 " : undefined} />
+      </PracticeHeader>
       <div className={styles.content}>
       {notice}
-      <PracticeContext name={lesson.name} localizedName={lesson.localizedName} level={level}>
-        <PracticeProgress index={progressIndex} count={progressCount} progress={progress} progressLabel={grouped ? "묶음 진행" : "프레이즈 진행"} unitLabel={grouped ? "묶음 " : undefined} />
-      </PracticeContext>
-      {!complete ? <CycleProgress completed={session.completedCycles} target={session.cycleTarget} /> : null}
-      <section className={styles.practice} aria-labelledby="player-title" aria-describedby="practice-instruction">
+      <PracticeContext name={lesson.name} localizedName={lesson.localizedName} level={level}
+        sessionLabel={`${session.mode === "automatic" ? "자동" : "수동"} · ${session.playbackRate}×`}
+        helpOpen={surface === "help"} settingsOpen={menuOpen && drawerView === "settings"} onHelp={() => openSurface("help")}
+        onCloseHelp={() => setSurface(null)} onSettings={() => openSurface("settings")} />
+      <section className={styles.practice} aria-labelledby="player-title">
         <audio ref={audioRef} preload="auto" />
-        {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => router.push("/home")} /> : (
+        {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => router.push(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : (
           <>
-            <PracticeSection {...section} />
+            <PracticeSection {...section} action={<SentenceAnalysisButton disabled={hintOnly} onClick={trigger => {
+              send({ type: "pause" });
+              analysis.show(phrase.phraseNumber, trigger);
+            }} />} />
             <PracticeSubtitles
               lines={grouped ? group.phrases.map(line => hintOnly ? hints[line.phraseNumber - 1] : line) : [subtitle]}
               language={lesson.language} grouped={grouped} currentIndex={grouped ? group.phrases.findIndex(line => line.phraseNumber === phrase.phraseNumber) : 0}
               highlight={highlightPhrase} canvasRef={canvasRef} currentLineRef={currentLineRef}
-              playback={<AudioPlaybackButton audioRef={audioRef} playing={playing} disabled={session.completedCycles >= 5} onClick={() => send({ type: !playing && !audioPaused && session.completedCycles >= 3 ? "retry" : "space" })} />}
+              onWordSelect={openDictionary}
             />
             {grouped || timed ? <div className={styles.meta}>
               {grouped ? <p>{group.phrases.length}문장</p> : null}
               {timed ? <p className={styles.timer} role="timer" aria-label="남은 시간">{(session.remainingMs / 1000).toFixed(1)}초</p> : null}
             </div> : null}
             {session.phase === "error" ? (
-              <div className={styles.error} role="alert" aria-label="원음 재생 오류"><p>원음을 재생할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.</p><button type="button" className="secondary-button" onClick={() => send({ type: "retry" })}>다시 시도</button></div>
+              <Alert variant="destructive" className={styles.error} aria-label="원음 재생 오류"><AlertDescription><p>원음을 재생할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.</p><Button type="button" variant="outline" onClick={() => send({ type: "retry" })}>다시 시도</Button></AlertDescription></Alert>
             ) : null}
           </>
         )}
       </section>
-      <ScreenWake active={active && !settingsOpen && !menuOpen && !complete} />
+      <ScreenWake active={active && surface === null && !dictionary.open && !analysis.open && !complete} />
       </div>
-      {!complete ? <PracticeFooter utilities={hintLevel ? <button type="button" className={styles.tool} aria-label="자막 보기" aria-expanded={session.subtitlesRevealed} aria-controls="practice-subtitles" onClick={() => send({ type: "reveal-subtitles" })}><SubtitleIcon />자막 보기<kbd>S</kbd></button> : undefined}>
+      {!complete ? <PracticeFooter
+        playback={<AudioPlaybackButton audioRef={audioRef} playing={playing} disabled={session.confirmedCycles >= 5} onClick={() => send({ type: playing || audioPaused || confirmExtraListen ? "space" : "retry" })} />}
+        cycles={<CycleProgress completed={session.confirmedCycles} target={session.cycleTarget} />} utilities={hintLevel ? <Button type="button" variant="ghost" size="sm" aria-label="자막 보기" aria-expanded={session.subtitlesRevealed} aria-controls="practice-subtitles" onClick={() => send({ type: "reveal-subtitles" })}><SubtitleIcon data-icon="inline-start" />자막 보기<Kbd>S</Kbd></Button> : undefined}>
         {choosing ? <>
-          {session.cycleTarget === 3 ? <button type="button" className={styles.action} aria-label="REPEAT · 다시 듣기" title="2회 더 연습" onClick={() => send({ type: "retry" })}><RepeatIcon />REPEAT<kbd>R</kbd></button> : null}
-          <button type="button" className={`${styles.action} ${styles.primary}`} aria-label={`NEXT · ${nextLabel}`} onClick={() => send({ type: "next" })}><PlayIcon />NEXT<kbd>Space</kbd></button>
-        </> : <button type="button" className={`${styles.action} ${styles.primary}`} aria-label={`${actionText} · ${actionLabel}`} onClick={() => send({ type: "space" })}>{playing ? <PauseIcon /> : <PlayIcon />}{actionText}<kbd>Space</kbd></button>}
+          {session.cycleTarget === 3 ? <Button type="button" variant="outline" size="lg" className={styles.action} aria-label="REPEAT · 다시 듣기" title="2회 더 연습" onClick={() => send({ type: "retry" })}><RepeatIcon data-icon="inline-start" />REPEAT<Kbd>R</Kbd></Button> : null}
+          <Button type="button" variant="practice" size="lg" className={styles.action} aria-label={`NEXT · ${nextLabel}`} onClick={() => send({ type: "next" })}><PlayIcon data-icon="inline-start" />NEXT<Kbd>Space</Kbd></Button>
+        </> : <Button type="button" variant="practice" size="lg" className={styles.action} aria-label={`${actionText} · ${actionLabel}`} onClick={() => send({ type: "space" })}>{playing ? <PauseIcon data-icon="inline-start" /> : <PlayIcon data-icon="inline-start" />}{actionText}<Kbd>Space</Kbd></Button>}
       </PracticeFooter> : null}
-      {settingsOpen ? <PlayerSettings id="player-settings" onClose={() => setSettingsOpen(false)}>
-        <AudioSessionControls level={level} settings={session} onChange={value => send({ type: "settings", ...value })} />
-      </PlayerSettings> : null}
-      {menuOpen ? <SentenceMenu lesson={lesson} grouped={grouped} currentPhraseNumbers={grouped ? group.phrases.map(line => line.phraseNumber) : [phrase.phraseNumber]}
-        onSelect={phraseIndex => send({ type: "jump", phraseIndex })} onClose={() => setMenuOpen(false)} onHome={() => router.push("/home")} /> : null}
+      <PlayerDrawer open={menuOpen} lesson={lesson} grouped={grouped} currentPhraseNumbers={grouped ? group.phrases.map(line => line.phraseNumber) : [phrase.phraseNumber]}
+        initialView={surface === "settings" ? "settings" : "menu"} onViewChange={setDrawerView}
+        settings={<AudioSessionControls level={level} settings={session} onChange={value => send({ type: "settings", ...value })} />}
+        onSelect={phraseIndex => send({ type: "jump", phraseIndex })} onClose={() => setSurface(null)} onHome={() => router.push("/home")} />
+      {dictionary.selection ? <DictionaryPopup selection={dictionary.selection} language={lesson.language} onClose={dictionary.close} /> : null}
+      {analysis.selection ? <SentenceAnalysisPopup lesson={lesson} selection={analysis.selection} onClose={analysis.close} /> : null}
     </Page>
   );
 }

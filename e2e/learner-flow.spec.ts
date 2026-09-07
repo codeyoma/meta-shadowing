@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { startSelectedStage } from "./fixtures/stage-preview";
 
 test("rejects an incorrect password without revealing learner content", async ({ page }) => {
   await page.goto("/");
@@ -36,14 +37,14 @@ test("takes an authorized learner from password entry through session setup to t
   await page.getByLabel("베타 비밀번호").fill("test-beta-password");
   await page.getByRole("button", { name: "입장하기" }).click();
 
-  await expect(page).toHaveURL(/\/home$/);
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: /English 영어/ }).click();
-  await page.getByRole("button", { name: /Morning Routine/ }).click();
+  await expect(page).toHaveURL(/\/languages$/);
+  await expect(page.getByRole("heading", { name: "언어 선택" })).toBeVisible();
+  await page.getByRole("link", { name: /영어 English/ }).click();
+  await page.getByRole("link", { name: /Morning Routine/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Morning Routine", exact: true })).toBeVisible();
   await expect(page.getByText("아침 일과", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: /3 첫 단어 힌트/ }).click();
-  await page.getByRole("button", { name: "학습 시작" }).click();
+  await page.getByRole("radio", { name: /5 첫 단어 힌트/ }).click();
+  await startSelectedStage(page);
 
   await expect(page).toHaveURL(/\/player/);
   await expect(page.getByRole("heading", { name: "메타쉐도잉 레벨 3" })).toBeVisible();
@@ -53,7 +54,7 @@ test("defaults invalid player levels to level 1", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("베타 비밀번호").fill("test-beta-password");
   await page.getByRole("button", { name: "입장하기" }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/\/languages$/);
 
   for (const level of ["9", "-1", "1.5", "nope", ""]) {
     await page.goto(`/player?lesson=morning-routine${level ? `&level=${level}` : ""}`);

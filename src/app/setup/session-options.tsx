@@ -1,41 +1,66 @@
 "use client";
 
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
-import { CloseIcon } from "../ui";
-import { useDialogBackdrop } from "../use-dialog-backdrop";
-import styles from "./setup.module.css";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 
-export function SessionOptions({ children, onClose }: { children: ReactNode; onClose: () => void }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+export function SessionOptions({ children, open, onOpenChange, triggerRef }: {
+  children: ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+}) {
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Preserve text-selection drags: only gestures beginning and ending outside dismiss.
+  // Capture pointer events directly because Radix defers touch outside events until click.
   useEffect(() => {
-    const dialog = dialogRef.current!;
-    dialog.showModal();
-    return () => dialog.close();
-  }, []);
+    if (!open) return;
+    let pointer: number | null = null;
+    const outside = (event: PointerEvent) => {
+      const content = contentRef.current;
+      if (!content || (event.target instanceof Node && content.contains(event.target))) return false;
+      const box = content.getBoundingClientRect();
+      return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+    };
+    const down = (event: PointerEvent) => {
+      pointer = event.isPrimary && event.button === 0 && outside(event) ? event.pointerId : null;
+    };
+    const up = (event: PointerEvent) => {
+      const dismiss = pointer === event.pointerId && outside(event);
+      pointer = null;
+      if (dismiss) onOpenChange(false);
+    };
+    const cancel = () => { pointer = null; };
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("pointerup", up, true);
+    document.addEventListener("pointercancel", cancel, true);
+    return () => {
+      document.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("pointerup", up, true);
+      document.removeEventListener("pointercancel", cancel, true);
+    };
+  }, [open, onOpenChange]);
 
-  function close() {
-    dialogRef.current?.close();
-    onClose();
-  }
-  const backdrop = useDialogBackdrop(close);
-
-  function containTab(event: KeyboardEvent<HTMLDialogElement>) {
-    if (event.key !== "Tab") return;
-    const controls = event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled)");
-    const first = controls[0], last = controls[controls.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault(); last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault(); first?.focus();
-    }
-  }
-
-  return <dialog {...backdrop} ref={dialogRef} id="session-options" className={styles.optionsDialog} aria-labelledby="session-title" onKeyDown={containTab} onCancel={event => { event.preventDefault(); close(); }}>
-    <div className={styles.optionsHeading}>
-      <h2 id="session-title">세션 설정</h2>
-      <button type="button" className={styles.optionsButton} aria-label="세션 설정 닫기" onClick={close}><CloseIcon /></button>
-    </div>
-    <div className={styles.optionsBody}>{children}</div>
-    <div className={styles.optionsFooter}><button type="button" className={styles.closeButton} onClick={close}>설정 닫기</button></div>
-  </dialog>;
+  return <Drawer open={open} onOpenChange={onOpenChange} autoFocus handleOnly>
+    <DrawerContent ref={contentRef} id="session-options" aria-labelledby="session-title" aria-describedby={undefined} className="mx-auto w-full max-w-lg" onPointerDownOutside={event => event.preventDefault()} onKeyDownCapture={event => {
+      // With no header action, a roving-focus group is the first tab stop.
+      // Radix's outer focus scope sees the group, not its focused child, so
+      // explicitly wrap its backward edge instead of refocusing that same child.
+      if (event.key !== "Tab" || !event.shiftKey) return;
+      const group = event.currentTarget.querySelector('[data-slot="toggle-group"]');
+      if (!group?.contains(event.target as Node)) return;
+      const controls = [...event.currentTarget.querySelectorAll<HTMLElement>("button, input, select, [tabindex]")]
+        .filter(element => element.tabIndex >= 0 && !element.matches(":disabled") && element.getClientRects().length > 0);
+      event.preventDefault();
+      controls.at(-1)?.focus();
+    }} onCloseAutoFocus={event => {
+      event.preventDefault();
+      triggerRef.current?.focus();
+    }}>
+      <DrawerHeader className="flex-row items-center justify-between">
+        <DrawerTitle id="session-title">세션 설정</DrawerTitle>
+      </DrawerHeader>
+      <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">{children}</div>
+    </DrawerContent>
+  </Drawer>;
 }

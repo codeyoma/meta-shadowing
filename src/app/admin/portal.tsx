@@ -2,6 +2,17 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { SyntaxAnalysisStatus } from "./syntax-analysis-status";
+import { FileTextIcon } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Spinner } from "@/components/ui/spinner";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AdminIdentity } from "@/lib/admin-auth";
 import type { ManagedLesson } from "@/lib/lesson-management";
 import { mapAudioPackage, type AudioPackageResult } from "@/lib/audio-package";
@@ -15,21 +26,13 @@ import {
 import type { LessonDraftParseResult } from "@/lib/lesson-draft-parser";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { Brand, Page } from "../ui";
+import styles from "./admin.module.css";
 
 type ImportResponse = {
   draftId?: string;
   error?: string;
   result?: LessonDraftParseResult;
 };
-
-function FileIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-      <path d="M7 3h7l4 4v14H7V3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M14 3v5h5M10 12h5M10 16h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -76,49 +79,66 @@ function AdminLogin() {
   }
 
   return (
-    <Page className="admin-login-page">
-      <section className="admin-login-shell">
+    <Page className="px-4 py-8 sm:px-8">
+      <ScrollArea className="mx-auto w-full max-w-md flex-1" viewportProps={{ role: "region", "aria-label": "관리자 로그인" }}>
+      <section className="mx-auto flex w-full max-w-md flex-col gap-12">
         <Brand />
-        <div className="admin-login-panel">
-          <p className="admin-kicker">관리자</p>
-          <h1>관리자 로그인</h1>
-          <p>등록된 관리자 이메일로 일회용 코드를 받으세요.</p>
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
+            <h1 className="font-heading text-3xl font-bold text-display">관리자 로그인</h1>
+            <p className="text-muted-foreground">등록된 관리자 이메일로 일회용 코드를 받으세요.</p>
+          </div>
           {step === "email" ? (
-            <form onSubmit={requestCode} className="admin-auth-form">
-              <label htmlFor="admin-email">이메일</label>
-              <input
+            <form onSubmit={requestCode}>
+              <FieldGroup>
+              <Field data-invalid={!!error}>
+              <FieldLabel htmlFor="admin-email">이메일</FieldLabel>
+              <Input
                 id="admin-email"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
+                aria-invalid={!!error}
+                aria-describedby={error ? "admin-auth-error" : undefined}
                 required
               />
-              <button className="primary-button" type="submit" disabled={busy}>
+              </Field>
+              <Button type="submit" disabled={busy}>
+                {busy ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
                 로그인 코드 받기
-              </button>
+              </Button>
+              </FieldGroup>
             </form>
           ) : (
-            <form onSubmit={verifyCode} className="admin-auth-form">
-              <span className="auth-email">{email}</span>
-              <label htmlFor="admin-token">인증 코드</label>
-              <input
+            <form onSubmit={verifyCode}>
+              <FieldGroup>
+              <Field data-invalid={!!error}>
+              <FieldDescription>{email}</FieldDescription>
+              <FieldLabel htmlFor="admin-token">인증 코드</FieldLabel>
+              <Input
                 id="admin-token"
                 name="token"
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="[0-9]{6,8}"
+                aria-invalid={!!error}
+                aria-describedby={error ? "admin-auth-error" : undefined}
                 required
               />
-              <button className="primary-button" type="submit" disabled={busy}>
+              </Field>
+              <Button type="submit" disabled={busy}>
+                {busy ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
                 확인하고 계속
-              </button>
+              </Button>
+              </FieldGroup>
             </form>
           )}
-          {error ? <p className="admin-form-error" role="alert">{error}</p> : null}
+          {error ? <Alert variant="destructive" id="admin-auth-error"><AlertDescription>{error}</AlertDescription></Alert> : null}
         </div>
       </section>
+      </ScrollArea>
     </Page>
   );
 }
@@ -136,83 +156,81 @@ function DraftPreview({
   const audioByPhrase = new Map(audioResult?.items.map((item) => [item.phraseNumber, item]));
 
   return (
-    <section className="draft-preview" aria-labelledby="preview-title">
-      <div className="preview-title-row">
-        <h2 id="preview-title">검증 미리보기</h2>
-        <strong className={result.publishReady ? "preview-ready" : "preview-blocked"}>
+    <section className="flex min-w-0 flex-col gap-6" aria-labelledby="preview-title">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="preview-title" className="font-heading text-2xl font-bold">검증 미리보기</h2>
+        <Badge variant={result.publishReady ? "secondary" : "destructive"}>
           {result.publishReady ? "검증 완료" : "게시 준비 불가"}
-        </strong>
+        </Badge>
       </div>
-      <p className={`validation-summary ${result.publishReady ? "is-valid" : "is-invalid"}`}>
-        {summary} · {result.issues.length ? `${result.issues.length}개 오류` : "오류 없음"}
-      </p>
+      <Alert role="note" variant={result.publishReady ? "default" : "destructive"}>
+        <AlertDescription>{summary} · {result.issues.length ? `${result.issues.length}개 오류` : "오류 없음"}</AlertDescription>
+      </Alert>
       {result.issues.length ? (
-        <div className="validation-errors" role="alert">
-          <ul>
+        <Alert variant="destructive">
+          <AlertDescription><ul className="flex list-disc flex-col gap-2 pl-4">
             {result.issues.map((issue, index) => (
               <li key={`${issue.code}-${issue.sourceLine}-${index}`}>{issue.message}</li>
             ))}
-          </ul>
-        </div>
+          </ul></AlertDescription>
+        </Alert>
       ) : null}
-      <section className="audio-package-summary" aria-labelledby="audio-package-title">
-        <div>
-          <h3 id="audio-package-title">문장별 음성</h3>
+      <section className="flex flex-col gap-4" aria-labelledby="audio-package-title">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 id="audio-package-title" className="text-lg font-bold">문장별 음성</h3>
           {audioResult ? (
-            <strong className={audioResult.publishReady ? "preview-ready" : "preview-blocked"}>
+            <Badge variant={audioResult.publishReady ? "secondary" : "destructive"}>
               {audioResult.items.length} / {result.summary.phrases} 연결 · {audioResult.publishReady ? "게시 가능" : "확인 필요"}
-            </strong>
+            </Badge>
           ) : (
-            <strong className="preview-blocked">파일 선택 필요</strong>
+            <Badge variant="outline">파일 선택 필요</Badge>
           )}
         </div>
-        {!audioSelected ? <p>MP3, M4A, WebM 파일을 001부터 프레이즈 순서대로 선택해 주세요. 여러 줄인 프레이즈에도 음성은 한 개입니다.</p> : null}
+        {!audioSelected ? <p className="text-muted-foreground">MP3, M4A, WebM 파일을 001부터 프레이즈 순서대로 선택해 주세요. 여러 줄인 프레이즈에도 음성은 한 개입니다.</p> : null}
         {audioResult?.issues.length ? (
-          <div className="validation-errors audio-errors" role="alert">
-            <ul>
+          <Alert variant="destructive">
+            <AlertDescription><ul className="flex list-disc flex-col gap-2 pl-4">
               {audioResult.issues.map((issue, index) => (
                 <li key={`${issue.code}-${issue.fileName ?? issue.phraseNumber}-${index}`}>{issue.message}</li>
               ))}
-            </ul>
-          </div>
+            </ul></AlertDescription>
+          </Alert>
         ) : null}
       </section>
-      <div className="preview-table-wrap">
-        <table className="preview-table" role="table">
-          <thead role="rowgroup">
-            <tr role="row">
-              <th scope="col" role="columnheader">순서</th>
-              <th scope="col" role="columnheader">구분</th>
-              <th scope="col" role="columnheader">목표어</th>
-              <th scope="col" role="columnheader">한국어</th>
-              <th scope="col" role="columnheader">음성</th>
-            </tr>
-          </thead>
-          <tbody role="rowgroup">
+        <Table className={styles.previewTable} role="table">
+          <TableHeader role="rowgroup">
+            <TableRow role="row">
+              <TableHead scope="col" role="columnheader" className="w-16">순서</TableHead>
+              <TableHead scope="col" role="columnheader" className="w-24">구분</TableHead>
+              <TableHead scope="col" role="columnheader">목표어</TableHead>
+              <TableHead scope="col" role="columnheader">한국어</TableHead>
+              <TableHead scope="col" role="columnheader" className="w-32">음성</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody role="rowgroup">
             {result.entries.map((entry, index) => {
               if (entry.kind === "section") {
                 return (
-                  <tr className="preview-section-row" role="row" key={`section-${entry.sourceLine}-${index}`}>
-                    <td role="cell">—</td>
-                    <td role="cell" colSpan={4}>이름 없는 구간</td>
-                  </tr>
+                  <TableRow role="row" key={`section-${entry.sourceLine}-${index}`}>
+                    <TableCell role="cell" data-label="순서">—</TableCell>
+                    <TableCell role="cell" colSpan={4}><Badge variant="outline">이름 없는 구간</Badge></TableCell>
+                  </TableRow>
                 );
               }
               return (
-                <tr role="row" className={entry.kind === "chapter" ? "preview-chapter-row" : ""} key={`${entry.kind}-${entry.sourceLine}-${index}`}>
-                  <td role="cell">{entry.kind === "phrase" ? entry.phraseNumber : "—"}</td>
-                  <td role="cell">{entry.kind === "chapter" ? "챕터" : "프레이즈"}</td>
-                  <td role="cell" className="preview-text-cell">{entry.target || "(비어 있음)"}</td>
-                  <td role="cell" className="preview-text-cell">{entry.korean || (entry.kind === "chapter" ? "—" : "(비어 있음)")}</td>
-                  <td role="cell" className="preview-audio-cell">
+                <TableRow role="row" key={`${entry.kind}-${entry.sourceLine}-${index}`}>
+                  <TableCell role="cell" data-label="순서">{entry.kind === "phrase" ? entry.phraseNumber : "—"}</TableCell>
+                  <TableCell role="cell" data-label="구분">{entry.kind === "chapter" ? <Badge variant="secondary">챕터</Badge> : "프레이즈"}</TableCell>
+                  <TableCell role="cell" data-label="목표어">{entry.target || "(비어 있음)"}</TableCell>
+                  <TableCell role="cell" data-label="한국어">{entry.korean || (entry.kind === "chapter" ? "—" : "(비어 있음)")}</TableCell>
+                  <TableCell role="cell" data-label="음성">
                     {entry.kind === "phrase" ? audioByPhrase.get(entry.phraseNumber)?.originalName ?? "미연결" : "—"}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
     </section>
   );
 }
@@ -366,45 +384,50 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
   }
 
   return (
-    <Page className="admin-page">
-      <header className="admin-header">
-        <div className="admin-brand-row">
+    <Page className="px-4 pb-4 sm:px-8">
+      <header className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4 py-6">
+        <div className="flex items-center gap-3">
           <Brand compact />
-          <span>관리자</span>
+          <Badge variant="outline">관리자</Badge>
         </div>
-        <div className="admin-account">
-          <Link href="/admin/lessons">레슨 관리</Link>
-          <Link href="/admin/settings">전역 학습 기본값</Link>
-          <span>{admin.email}</span>
-          <button type="button" onClick={logout}>로그아웃</button>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Button variant="ghost" asChild><Link href="/admin/lessons">레슨 관리</Link></Button>
+          <Button variant="ghost" asChild><Link href="/admin/settings">전역 학습 기본값</Link></Button>
+          <span className="max-w-full break-all text-sm text-muted-foreground">{admin.email}</span>
+          <Button variant="outline" type="button" onClick={logout}>로그아웃</Button>
         </div>
       </header>
-      <div className="admin-workspace">
-        <div className="admin-page-title">
-          <h1>{replacement ? "레슨 새 버전 가져오기" : "새 레슨 가져오기"}</h1>
-          {replacement ? <p className="replacement-note">새 파일을 검증하고 게시하면 “{replacement.title}”을 교체합니다. 그전까지 현재 레슨은 유지됩니다.</p> : null}
+      <ScrollArea className="mx-auto w-full max-w-5xl flex-1" viewportProps={{ role: "region", "aria-label": "레슨 가져오기" }}>
+      <div className="flex min-w-0 flex-col gap-8 px-2 pt-6 pb-4">
+        <div className="flex flex-col gap-3">
+          <h1 className="font-heading text-3xl font-bold text-display">{replacement ? "레슨 새 버전 가져오기" : "새 레슨 가져오기"}</h1>
+          {replacement ? <Alert role="note"><AlertDescription>새 파일을 검증하고 게시하면 “{replacement.title}”을 교체합니다. 그전까지 현재 레슨은 유지됩니다.</AlertDescription></Alert> : null}
         </div>
         <form
           ref={formRef}
-          className="import-form"
+          className="flex flex-col gap-8"
           data-admin-ready={hydrated ? "true" : "false"}
           onSubmit={(event) => event.preventDefault()}
         >
-          {replacement ? <input type="hidden" name="replacementFor" value={replacement.id} /> : null}
-          <div className="import-metadata">
-            <label htmlFor="lesson-title">레슨 제목</label>
-            <input id="lesson-title" name="title" defaultValue={replacement?.title} maxLength={120} required disabled={busyAction === "publish"} onChange={clearSavedDraft} />
-            <label htmlFor="lesson-language">언어</label>
-            {replacement ? <input type="hidden" name="language" value={replacement.language} /> : null}
-            <select id="lesson-language" name="language" defaultValue={replacement?.language ?? "english"} disabled={!!replacement || busyAction === "publish"} onChange={clearSavedDraft}>
-              <option value="english">English 영어</option>
-              <option value="japanese">日本語 일본어</option>
-            </select>
-          </div>
-          <div className="import-files">
-            <label className="file-field" htmlFor="script-file">
-              <span><FileIcon /> 통합 스크립트</span>
-              <input
+          {replacement ? <Input type="hidden" name="replacementFor" value={replacement.id} /> : null}
+          <FieldGroup className="md:grid md:grid-cols-[minmax(0,1fr)_minmax(12rem,1fr)]">
+            <Field data-disabled={busyAction === "publish"}>
+            <FieldLabel htmlFor="lesson-title">레슨 제목</FieldLabel>
+            <Input id="lesson-title" name="title" defaultValue={replacement?.title} maxLength={120} required disabled={busyAction === "publish"} onChange={clearSavedDraft} />
+            </Field>
+            <Field data-disabled={!!replacement || busyAction === "publish"}>
+            <FieldLabel htmlFor="lesson-language">언어</FieldLabel>
+            {replacement ? <Input type="hidden" name="language" value={replacement.language} /> : null}
+            <NativeSelect id="lesson-language" name="language" defaultValue={replacement?.language ?? "english"} disabled={!!replacement || busyAction === "publish"} onChange={clearSavedDraft}>
+              <NativeSelectOption value="english">English 영어</NativeSelectOption>
+              <NativeSelectOption value="japanese">日本語 일본어</NativeSelectOption>
+            </NativeSelect>
+            </Field>
+          </FieldGroup>
+          <FieldGroup className="md:grid md:grid-cols-2">
+            <Field data-disabled={busyAction === "publish"}>
+              <FieldLabel htmlFor="script-file"><FileTextIcon aria-hidden="true" /> 통합 스크립트</FieldLabel>
+              <Input
                 id="script-file"
                 disabled={busyAction === "publish"}
                 name="scriptFile"
@@ -414,51 +437,56 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
                 required
                 onChange={clearImportResult}
               />
-            </label>
-            <label className="file-field audio-file-field" htmlFor="audio-files">
-              <span><FileIcon /> 문장별 음성 파일</span>
-              <input
+              <FieldDescription id="script-format-help">TXT 한 파일에 목표어 묶음 → 한국어 묶음 순서로 넣어 주세요. 연속된 여러 줄도 한 프레이즈이며, 빈 줄은 무시합니다. 챕터 제목은 줄 맨 앞에 ## 을 붙여 주세요.<br />한국어는 한글 포함 여부로 구분합니다. 번역에 한글이 없거나 목표어에 한글이 섞이면 구분이 달라질 수 있으니 미리보기를 확인해 주세요.</FieldDescription>
+              <FieldDescription>.txt 한 개 · UTF-8 · 최대 2MB</FieldDescription>
+            </Field>
+            <Field data-disabled={busyAction === "publish"}>
+              <FieldLabel htmlFor="audio-files"><FileTextIcon aria-hidden="true" /> 문장별 음성 파일</FieldLabel>
+              <Input
                 id="audio-files"
                 disabled={busyAction === "publish"}
                 type="file"
                 accept=".mp3,.m4a,.webm,audio/mpeg,audio/mp4,audio/webm"
                 multiple
+                aria-describedby="audio-format-help"
                 onChange={(event) => selectAudioFiles(event.currentTarget.files)}
               />
-            </label>
-            <p id="script-format-help">TXT 한 파일에 목표어 묶음 → 한국어 묶음 순서로 넣어 주세요. 연속된 여러 줄도 한 프레이즈이며, 빈 줄은 무시합니다. 챕터 제목은 줄 맨 앞에 ## 을 붙여 주세요.<br />한국어는 한글 포함 여부로 구분합니다. 번역에 한글이 없거나 목표어에 한글이 섞이면 구분이 달라질 수 있으니 미리보기를 확인해 주세요.</p>
-            <p>.txt 한 개 · UTF-8 · 최대 2MB<br />음성 여러 개 · 프레이즈당 한 개 · 001부터 세 자리 번호 · MP3, M4A, WebM · 파일당 최대 4MB</p>
-          </div>
-          <button
+              <FieldDescription id="audio-format-help">음성 여러 개 · 프레이즈당 한 개 · 001부터 세 자리 번호 · MP3, M4A, WebM · 파일당 최대 4MB</FieldDescription>
+            </Field>
+          </FieldGroup>
+          <Button
             type="button"
-            className="primary-button validate-button"
+            className="w-full sm:w-fit"
             disabled={!hydrated || busyAction !== null}
             onClick={() => submitImport("/api/admin/drafts/validate", "validate")}
           >
+            {busyAction === "validate" ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
             {busyAction === "validate" ? "검증 중…" : "파일 검증"}
-          </button>
+          </Button>
         </form>
-        {error ? <p className="admin-form-error" role="alert">{error}</p> : null}
+        {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
         {result ? (
           <>
             <DraftPreview result={result} audioResult={audioResult} audioSelected={audioFiles.length > 0} />
-            <div className="draft-actions">
+            {draftId ? <SyntaxAnalysisStatus key={draftId} draftId={draftId} autoStart /> : null}
+            <div className="flex flex-col gap-4">
               {saved ? (
-                <p role="status">
+                <Alert role="status"><AlertDescription>
                   {published ? "레슨이 게시되었습니다." : uploadProgress || "초안이 저장되었습니다."}
-                </p>
-              ) : <span />}
-              <button
+                </AlertDescription></Alert>
+              ) : null}
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <Button
                 type="button"
-                className="secondary-button"
+                variant="outline"
                 disabled={!hydrated || busyAction !== null}
                 onClick={() => submitImport("/api/admin/drafts", "save")}
               >
+                {busyAction === "save" ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
                 {busyAction === "save" ? "저장 중…" : "초안 저장"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="primary-button publish-button"
                 disabled={
                   !hydrated ||
                   busyAction !== null ||
@@ -469,13 +497,16 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
                 }
                 onClick={publishLesson}
               >
+                {busyAction === "publish" ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}
                 {busyAction === "publish" ? (audioUploaded ? "게시 확인 중…" : "업로드 중…") : (audioUploaded ? "게시만 다시 시도" : "음성 업로드 후 게시")}
-              </button>
-              {audioUploaded && !published ? <p>음성 업로드가 완료되었습니다. 게시만 다시 시도하면 파일을 재업로드하지 않습니다. 화면을 닫았으면 <Link href="/admin/lessons">레슨 관리</Link>에서 이어서 게시할 수 있습니다.</p> : null}
+              </Button>
+              </div>
+              {audioUploaded && !published ? <Alert role="note"><AlertDescription>음성 업로드가 완료되었습니다. 게시만 다시 시도하면 파일을 재업로드하지 않습니다. 화면을 닫았으면 <Button asChild variant="link"><Link href="/admin/lessons">레슨 관리</Link></Button>에서 이어서 게시할 수 있습니다.</AlertDescription></Alert> : null}
             </div>
           </>
         ) : null}
       </div>
+      </ScrollArea>
     </Page>
   );
 }

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openSelectedStageSettings, startSelectedStage } from "./fixtures/stage-preview";
 
 async function openPlayer(page: Page, level: number, lesson = "morning-routine", query = "") {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
@@ -22,6 +23,9 @@ test("level 6 plays target then Korean words and stops at each manual line witho
   await expect(canvas).toHaveText("나는");
   await page.clock.runFor(1200);
   await expect(page.getByRole("button", { name: "CONTINUE · 다음 문장", exact: true })).toBeVisible();
+  const journal = await page.evaluate(() => JSON.parse(localStorage.getItem("meta-shadowing:learning:v1")!));
+  expect(journal.studyDays).toHaveLength(1);
+  expect(journal.progress.nextPhrase).toBe(1);
   await page.clock.runFor(10000);
   await expect(page.getByRole("progressbar", { name: "문장 진행" })).toHaveAttribute("aria-valuenow", "1");
   await page.keyboard.press("Space");
@@ -35,14 +39,14 @@ test("setup offers four WPM speeds, display modes, and separate speaking and bou
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto("/setup?lesson=morning-routine");
   await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: /7 속사포 한영/ }).click();
-  await page.getByRole("button", { name: "세션 설정", exact: true }).click();
+  await page.getByRole("radio", { name: /13 속사포 한영/ }).click();
+  await openSelectedStageSettings(page);
   await expect(page.getByLabel("단어 속도")).toBeVisible();
   await expect(page.getByLabel("단어 속도").locator("option")).toHaveText(["3 · 200 WPM", "4 · 267 WPM", "5 · 333 WPM", "6 · 400 WPM"]);
   await expect(page.getByLabel("재생속도", { exact: true })).toHaveCount(0);
   await page.getByLabel("단어 속도").selectOption("5");
-  await page.getByRole("button", { name: "자동", exact: true }).click();
-  await page.getByRole("button", { name: "누적 단어", exact: true }).click();
+  await page.getByRole("radio", { name: "자동", exact: true }).click();
+  await page.getByRole("radio", { name: "누적 단어", exact: true }).click();
   const speakingTime = page.getByLabel("말하기 추가 시간 (초)");
   await speakingTime.focus();
   await speakingTime.press("ControlOrMeta+A");
@@ -50,10 +54,11 @@ test("setup offers four WPM speeds, display modes, and separate speaking and bou
   await expect(speakingTime).toHaveValue("1.5");
   await page.getByLabel("문장 간격 (초)").fill("0.5");
   await page.getByLabel("구간 간격 (초)").fill("3");
-  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
-  await page.getByRole("button", { name: "학습 시작", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await startSelectedStage(page);
   await expect(page).toHaveURL(/wpm=5/);
   await expect(page).toHaveURL(/display=cumulative/);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await expect(page.getByText("자동 · 333 WPM", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("1.5");
@@ -85,12 +90,12 @@ for (const level of [7, 8]) test(`level ${level} times speaking from the target 
   await expect(canvas).toHaveText("나는");
 });
 
-test("pause, restart, focused buttons, and arrows keep exact word progress and playback intent", async ({ page, isMobile }) => {
+test("pause, restart and Right Arrow work while Left Arrow preserves word progress", async ({ page, isMobile }) => {
   await openPlayer(page, 6, "morning-routine", "&display=cumulative");
   const canvas = page.getByRole("region", { name: "속사포 학습" });
   const start = page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true });
   if (isMobile) await start.tap(); else await start.click();
-  expect(await canvas.locator("span").evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(28);
+  expect(await canvas.locator("[lang]").evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(28);
   await page.clock.runFor(200);
   await page.keyboard.press("Space");
   await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
@@ -107,9 +112,11 @@ test("pause, restart, focused buttons, and arrows keep exact word progress and p
   await page.keyboard.press("Space");
   await page.keyboard.press("ArrowLeft");
   await page.clock.runFor(10000);
-  await expect(canvas).toHaveText("I");
+  await expect(canvas).toHaveText("I wash");
+  await expect(page.getByRole("progressbar", { name: "문장 진행", exact: true })).toHaveAttribute("aria-valuenow", "1");
   await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
   const menu = page.getByRole("button", { name: "문장 목록", exact: true });
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   if (isMobile) await menu.tap(); else await menu.click();
   await page.getByRole("dialog", { name: "문장 목록", exact: true }).getByRole("button", { name: /^1번 문장/ }).click();
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
@@ -121,15 +128,16 @@ test("settings pause the timer, preserve partial-token progress, and do not cons
   await openPlayer(page, 6);
   await page.keyboard.press("Space");
   await page.clock.runFor(200);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await page.getByLabel("단어 속도").selectOption("6");
-  await page.getByRole("button", { name: "누적 단어", exact: true }).click();
+  await page.getByRole("radio", { name: "누적 단어", exact: true }).click();
   await page.getByRole("heading", { name: "세션 설정", exact: true }).click();
   await page.keyboard.press("r");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Space");
   await page.clock.runFor(5000);
-  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
   const canvas = page.getByRole("region", { name: "속사포 학습" });
   await expect(canvas).toHaveText("I");
@@ -184,12 +192,13 @@ test("Japanese words respect provided spaces and use server segmentation on an u
 
 test("invalid rapid query settings fall back safely and keep audio speed controls absent", async ({ page }) => {
   await openPlayer(page, 8, "morning-routine", "&wpm=9&speak=-1&lineGap=NaN&sectionGap=99&display=invalid&mode=automatic");
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect(page.getByLabel("단어 속도")).toHaveValue("3");
   await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("0.5");
   await expect(page.getByLabel("문장 간격 (초)")).toHaveValue("1");
   await expect(page.getByLabel("구간 간격 (초)")).toHaveValue("2");
-  await expect(page.getByRole("button", { name: "현재 단어", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("radio", { name: "현재 단어", exact: true })).toHaveAttribute("aria-checked", "true");
 });
 
 test("a hidden-document event pauses the speaking window until the learner explicitly resumes", async ({ page }) => {
@@ -217,7 +226,8 @@ test("a hidden-document event pauses the speaking window until the learner expli
 test("mobile rapid controls remain above the dock and have touch-sized targets", async ({ page, isMobile }) => {
   test.skip(!isMobile, "Mobile layout assertion.");
   await openPlayer(page, 6, "daily-conversation");
-  await expect(page.getByRole("heading", { name: "메타쉐도잉 레벨 6" })).toHaveCSS("font-size", "16px");
+  await expect(page.getByRole("heading", { name: "메타쉐도잉 레벨 6", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 6", exact: true })).toHaveCSS("font-size", "15px");
   await page.keyboard.press("Space");
   const actions = await page.getByRole("region", { name: "속사포 학습" }).boundingBox();
   const dock = await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox();
@@ -227,5 +237,5 @@ test("mobile rapid controls remain above the dock and have touch-sized targets",
     expect(box!.height).toBeGreaterThanOrEqual(44);
     expect(box!.width).toBeGreaterThanOrEqual(44);
   }
-  expect(await page.getByRole("region", { name: "속사포 학습" }).locator("span").evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(28);
+  expect(await page.getByRole("region", { name: "속사포 학습" }).locator("[lang]").evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(28);
 });

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openSelectedStageSettings, startSelectedStage } from "./fixtures/stage-preview";
 import { testRecording } from "./fixtures/audio";
+import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, query = "") {
   await page.route("**/api/lessons/*/audio/*", (route) => route.fulfill({
@@ -15,12 +17,20 @@ test("keyboard practice counts three required and two extra listens before R adv
   await openPlayer(page);
   const cycles = page.getByLabel("완료한 듣기");
   await expect(cycles).toHaveText("필수 0 / 3");
-  for (const [index, key] of ["Space", "r", "Space"].entries()) {
-    await page.keyboard.press(key);
-    await expect(cycles).toHaveText(`필수 ${index + 1} / 3`);
+  await page.keyboard.press("Space");
+  for (const cycle of [1, 2, 3]) {
+    await waitForManualListen(page);
+    if (cycle === 2) {
+      await page.keyboard.press("r");
+      await waitForManualListen(page);
+      await expect(cycles).toHaveText("필수 1 / 3");
+    }
+    await confirmManualListen(page, "keyboard");
+    await expect(cycles).toHaveText(`필수 ${cycle} / 3`);
   }
+  await page.keyboard.press("r");
   for (const extra of [1, 2]) {
-    await page.keyboard.press("r");
+    await confirmManualListen(page, "keyboard");
     await expect(cycles).toHaveText(`필수 3 / 3 · 추가 ${extra} / 2`);
   }
   await page.keyboard.press("r");
@@ -32,13 +42,15 @@ test("keyboard practice counts three required and two extra listens before R adv
 test("automatic mode waits after three, then R runs both extras with speaking windows and advances", async ({ page }) => {
   await openPlayer(page);
   await page.goto("/setup?lesson=morning-routine");
-  await page.getByRole("button", { name: "세션 설정", exact: true }).click();
-  await page.getByRole("button", { name: "자동", exact: true }).click();
+  await openSelectedStageSettings(page);
+  await page.getByRole("radio", { name: "자동", exact: true }).click();
   await page.getByLabel("재생속도").selectOption("0.5");
   await page.getByLabel("다음 이동 대기 (초)").fill("3");
-  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
-  await page.getByRole("button", { name: "학습 시작" }).click();
+  await page.keyboard.press("Escape");
+  await startSelectedStage(page);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await expect(page.getByText("자동 · 0.5×")).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   await expect(page.getByRole("timer", { name: "남은 시간" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^REPEAT/ })).toBeVisible({ timeout: 15000 });
@@ -69,6 +81,9 @@ test("Space pauses live audio and R restarts the unfinished listen without incre
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   expect(await page.locator("audio").evaluate((audio) => (audio as HTMLAudioElement).currentTime)).toBe(pausedTime);
   await page.keyboard.press("r");
+  await waitForManualListen(page);
+  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
+  await confirmManualListen(page, "keyboard");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });
 
@@ -88,10 +103,12 @@ test("touch controls recover a failed recording and complete every phrase withou
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   failPlayback = false;
   await activate(playbackError.getByRole("button", { name: "다시 시도", exact: true }));
+  await confirmManualListen(page, isMobile ? "touch" : "click");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   for (let phrase = 0; phrase < 3; phrase++) {
+    if (phrase > 0) await activate(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }));
     for (let cycle = phrase === 0 ? 2 : 1; cycle <= 3; cycle++) {
-      await activate(page.getByRole("button", { name: cycle === 1 ? "CONTINUE · 첫 원음 듣기" : "CONTINUE · 다음 원음 듣기", exact: true }));
+      await confirmManualListen(page, isMobile ? "touch" : "click");
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
     }
     await activate(page.getByRole("button", { name: "NEXT · 다음 프레이즈", exact: true }));
@@ -102,13 +119,17 @@ test("touch controls recover a failed recording and complete every phrase withou
 
 test("keyboard focus keeps settings operable and speed choices reach the actual audio element", async ({ page }) => {
   await openPlayer(page);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "학습 설정", exact: true }).focus();
   await page.keyboard.press("Space");
   await expect(page.getByLabel("재생속도")).toBeVisible();
   await page.getByLabel("재생속도").selectOption("3");
-  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await expect(page.getByText("수동 · 3×")).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   expect(await page.locator("audio").evaluate((element) => (element as HTMLAudioElement).playbackRate)).toBe(3);
+  await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });

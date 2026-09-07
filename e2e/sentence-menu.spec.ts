@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { testRecording } from "./fixtures/audio";
+import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function open(page: Page, level: number, lesson = "daily-conversation") {
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
@@ -9,39 +10,88 @@ async function open(page: Page, level: number, lesson = "daily-conversation") {
 }
 
 async function selectSentence(page: Page, number: number) {
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
-  await page.getByRole("dialog", { name: "문장 목록", exact: true }).getByRole("button", { name: new RegExp(`^${number}번 문장`) }).click();
+  const menu = page.getByRole("dialog", { name: "문장 목록", exact: true });
+  for (const section of await menu.locator('button[aria-expanded="false"]').all()) await section.click();
+  await menu.getByRole("button", { name: new RegExp(`^${number}번 문장`) }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
-test("the green menu header has Home at the top-right and Close below the sentences", async ({ page }) => {
+test("selected sentences center after expansion without scrolling the sheet header", async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 932 });
   await open(page, 1);
+  for (const number of [1, 5, 10]) {
+    await selectSentence(page, number);
+    await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+    await page.getByRole("button", { name: "문장 목록", exact: true }).click();
+    const sheet = page.locator("#player-menu");
+    await sheet.click({ trial: true });
+    const selected = sheet.getByRole("button", { name: new RegExp(`^${number}번 문장`) });
+    await expect(selected).toBeFocused();
+    const selectedBox = (await selected.boundingBox())!;
+    const listBox = (await sheet.locator('[data-slot="sentence-list"]').boundingBox())!;
+    expect(selectedBox.y).toBeGreaterThanOrEqual(listBox.y - 1);
+    expect(selectedBox.y + selectedBox.height).toBeLessThanOrEqual(listBox.y + listBox.height + 1);
+    if (number === 5) expect(selectedBox.y + selectedBox.height / 2).toBeCloseTo(listBox.y + listBox.height / 2, 0);
+    for (const view of ["sentences", "menu"]) {
+      if (view === "menu") {
+        await sheet.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
+        await sheet.click({ trial: true });
+      }
+      const bounds = (await sheet.boundingBox())!;
+      const header = (await sheet.locator('[data-slot="drawer-header"]').boundingBox())!;
+      expect.soft(header.y, `${number}: ${view} header stays inside sheet`).toBeGreaterThanOrEqual(bounds.y);
+      expect.soft(bounds.y + bounds.height, `${number}: ${view} sheet stays bottom-anchored`).toBeCloseTo(page.viewportSize()!.height, 0);
+      expect.soft(await sheet.evaluate(element => element.scrollTop), `${number}: only the list scrolls`).toBe(0);
+    }
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+  }
+});
+
+test("menu title is centered between equal noninteractive slots", async ({ page }) => {
+  await open(page, 1);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+  const sheet = page.locator("#player-menu");
+  await sheet.click({ trial: true });
+  const title = sheet.getByRole("heading", { name: "학습 메뉴", exact: true });
+  const heading = title.locator("..");
+  const titleBox = (await title.boundingBox())!;
+  const headingBox = (await heading.boundingBox())!;
+  expect(titleBox.x + titleBox.width / 2).toBeCloseTo(headingBox.x + headingBox.width / 2, 0);
+  await expect(title).toHaveCSS("text-align", "center");
+  await expect(heading.getByRole("button")).toHaveCount(0);
+});
+
+test("the sentence drawer has a white surface and menu back action without a Close button", async ({ page }) => {
+  await open(page, 1);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   const menu = page.getByRole("dialog", { name: "문장 목록", exact: true });
   const title = menu.getByRole("heading", { name: "문장 목록", exact: true });
-  const header = title.locator("..").locator("..");
-  await expect(header).toHaveCSS("background-color", "rgb(88, 204, 79)");
-  const home = header.getByRole("button", { name: "첫 화면으로", exact: true });
-  await expect(home).toBeVisible();
+  const header = menu.locator('[data-slot="drawer-header"]');
+  await expect(menu).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  const back = header.getByRole("button", { name: "메뉴로 돌아가기", exact: true });
+  await expect(back).toBeVisible();
   await expect(header.getByRole("button", { name: "문장 목록 닫기", exact: true })).toHaveCount(0);
-  await expect(menu.locator("#sentence-menu-help")).toHaveCSS("background-color", "rgb(88, 204, 79)");
-  await expect(title).toHaveCSS("color", "rgb(7, 16, 6)");
-  const close = menu.getByRole("button", { name: "문장 목록 닫기", exact: true });
-  expect((await close.boundingBox())!.y).toBeGreaterThan((await home.boundingBox())!.y);
-  await close.hover();
-  await expect(close).toHaveCSS("color", "rgb(7, 16, 6)");
-  await close.click();
+  await expect(menu.locator("#sentence-menu-help")).toBeVisible();
+  await expect(title).toHaveCSS("color", "rgb(4, 44, 96)");
+  await expect(menu.getByRole("button", { name: /닫기/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(page).toHaveURL(/\/player\?/);
-  await expect(page.getByRole("button", { name: "문장 목록", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "학습 메뉴", exact: true })).toBeFocused();
 });
 
 for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} selects any sentence and restores the selected position after refresh`, async ({ page }) => {
   await open(page, level);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   const menu = page.getByRole("dialog", { name: "문장 목록", exact: true });
-  await expect(menu.getByRole("heading", { name: "At home", exact: true })).toBeVisible();
-  await expect(menu.getByRole("heading", { name: "At work", exact: true })).toHaveCount(1);
+  await expect(menu.getByRole("button", { name: /At home/ })).toHaveAttribute("aria-expanded", "true");
+  await expect(menu.getByRole("button", { name: /At work/ })).toHaveAttribute("aria-expanded", "false");
+  await menu.getByRole("button", { name: /At work/ }).click();
   await expect(menu.getByRole("button", { name: /번 문장/ })).toHaveCount(10);
   await expect(menu.getByRole("button", { name: /^1번 문장/ })).toHaveAttribute("aria-current", "true");
   await expect(menu.getByRole("button", { name: /^1번 문장/ })).toHaveAccessibleName(/나는 창문을 연다\./);
@@ -52,7 +102,7 @@ for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} selects any s
   await expect(progress).toHaveAttribute("aria-valuenow", grouped ? "1" : "4");
   if (level < 6) await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await expect(page.getByRole("button", { name: /^CONTINUE/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "문장 목록", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "학습 메뉴", exact: true })).toBeFocused();
   await page.reload();
   await expect(progress).toHaveAttribute("aria-valuenow", grouped ? "1" : "4");
   await selectSentence(page, 1);
@@ -70,8 +120,9 @@ test("a stale tab starts a fresh run when another tab has already completed its 
   await otherTab.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await otherTab.goto(page.url());
   await selectSentence(otherTab, 3);
+  await otherTab.getByRole("button", { name: /^CONTINUE/ }).click();
   for (let cycle = 1; cycle <= 3; cycle++) {
-    await otherTab.getByRole("button", { name: /^CONTINUE/ }).click();
+    await confirmManualListen(otherTab);
     await expect(otherTab.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
   }
   await otherTab.getByRole("button", { name: /^NEXT/ }).click();
@@ -94,6 +145,7 @@ test("the menu pauses word timing, traps focus, ignores player shortcuts, and cl
   await page.clock.pauseAt(new Date(Date.now() + 1000));
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   await page.clock.runFor(150);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   const menu = page.getByRole("dialog", { name: "문장 목록", exact: true });
   await page.keyboard.press("ArrowRight");
@@ -114,6 +166,7 @@ test("the menu pauses word timing, traps focus, ignores player shortcuts, and cl
 test("jumping from an unfinished listen resets its cycles, hides hints, and preserves subtitle access", async ({ page }) => {
   await open(page, 3, "morning-routine");
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
+  await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   await page.getByRole("button", { name: "자막 보기", exact: true }).click();
   await selectSentence(page, 2);
@@ -130,8 +183,9 @@ for (const level of [1, 8]) test(`level ${level} sentence selection after comple
   if (level === 8) await page.clock.pauseAt(new Date(Date.now() + 1000));
   await selectSentence(page, 3);
   if (level === 1) {
+    await page.getByRole("button", { name: /^CONTINUE/ }).click();
     for (let cycle = 1; cycle <= 3; cycle++) {
-      await page.getByRole("button", { name: /^CONTINUE/ }).click();
+      await confirmManualListen(page);
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
     }
     await page.getByRole("button", { name: /^NEXT/ }).click();

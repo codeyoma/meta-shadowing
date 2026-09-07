@@ -1,15 +1,14 @@
 import { redirect } from "next/navigation";
 import { getPublishedLesson } from "@/lib/published-lessons";
 import { requireLearner } from "@/lib/server-auth";
-import { getSessionDefaults } from "@/lib/session-defaults-repository";
-import { SessionSetup } from "./session-setup";
+import { browseHref, stageHref } from "@/lib/browse-navigation";
 
-type SetupPageProps = { searchParams: Promise<{ lesson?: string }> };
+type SetupPageProps = { searchParams: Promise<{ lesson?: string; panel?: string }> };
 
 export default async function SetupPage({ searchParams }: SetupPageProps) {
   await requireLearner();
-  const { lesson: lessonId } = await searchParams;
-  const [lesson, defaults] = await Promise.all([getPublishedLesson(lessonId ?? null), getSessionDefaults()]);
-  if (!lesson) redirect("/home");
-  return <SessionSetup lesson={lesson} defaults={defaults} />;
+  const { lesson: lessonId, panel } = await searchParams;
+  const lesson = await getPublishedLesson(lessonId ?? null);
+  if (!lesson) redirect("/languages");
+  redirect(panel === "settings" ? browseHref("session", { language: lesson.language, lessonId: lesson.id }) : stageHref(lesson.id));
 }

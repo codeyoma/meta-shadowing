@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "@fontsource-variable/nunito";
+import "@fontsource-variable/quicksand";
+import "@fontsource-variable/noto-sans-kr";
+import "@fontsource-variable/noto-sans-jp";
 
 export const metadata: Metadata = {
   title: "Meta Shadowing",
@@ -10,8 +14,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0d1216",
-  colorScheme: "dark",
+  themeColor: "#ffffff",
+  colorScheme: "light",
   viewportFit: "cover"
 };
 

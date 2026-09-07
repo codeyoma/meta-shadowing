@@ -5,7 +5,7 @@
 - `main` is the default and release branch. It starts at planning-only commit `786de68`; the MVP enters it only through an approved release PR.
 - `dev` is the integration branch, initialized at tested MVP commit `b29a8fe`.
 - Start each change from the latest `origin/dev` on a new `codex/<topic>` branch. Explicitly target `dev` when opening its PR; GitHub's default target is `main`.
-- Preserve `codex/meta-shadowing-mvp` as the historical MVP branch. Never rewrite existing branch history to adopt this workflow.
+- Keep only `main` and `dev` as long-lived branches. Delete merged feature branches after confirming their commits are included in `dev`; historical MVP commits remain in its history. Never rewrite existing branch history to adopt this workflow.
 
 Feature flow: `dev -> codex/<topic> -> PR into dev`. Release flow: `dev -> PR into main -> human approval -> merge -> Vercel Production`.
 

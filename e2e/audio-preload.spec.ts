@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { testRecording } from "./fixtures/audio";
+import { confirmManualListen } from "./fixtures/manual-practice";
 
 test("only current and next recordings preload, and the buffered next recording plays without a second download", async ({ page }) => {
   await page.addInitScript(() => {
@@ -25,22 +26,24 @@ test("only current and next recordings preload, and the buffered next recording 
   const initialNextDownloads = requested.filter(number => number === 2).length;
   await expect(page.locator("audio")).toHaveJSProperty("paused", true);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
+  await page.keyboard.press("Space");
   for (const cycle of [1, 2, 3]) {
-    await page.keyboard.press("Space");
+    await confirmManualListen(page, "keyboard");
     await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
   }
   await page.keyboard.press("Space");
   await expect(page.getByText("I wash my face.", { exact: true })).toBeVisible();
   await page.keyboard.press("Space");
+  await confirmManualListen(page, "keyboard");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   expect(requested.filter(number => number === 2)).toHaveLength(initialNextDownloads);
   await expect.poll(() => new Set(requested)).toEqual(new Set([1, 2, 3]));
   expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
   expect(await page.evaluate(() => caches.keys())).toEqual([]);
   expect(await page.evaluate(() => (window as typeof window & { liveAudioBuffers: number }).liveAudioBuffers)).toBeLessThanOrEqual(2);
-  await page.getByRole("button", { name: "문장 목록", exact: true }).click();
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "첫 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(/\/home/);
+  await expect(page).toHaveURL(/\/languages/);
   await expect.poll(() => page.evaluate(() => (window as typeof window & { liveAudioBuffers: number }).liveAudioBuffers)).toBe(0);
 });
 
@@ -53,8 +56,9 @@ test("a corrupt prefetched recording stops safely and a fresh retry never counts
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto("/player?lesson=morning-routine&level=1");
   await page.waitForLoadState("networkidle");
+  await page.keyboard.press("Space");
   for (const cycle of [1, 2, 3]) {
-    await page.keyboard.press("Space");
+    await confirmManualListen(page, "keyboard");
     await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
   }
   await page.keyboard.press("Space");
@@ -64,5 +68,6 @@ test("a corrupt prefetched recording stops safely and a fresh retry never counts
   await expect(page.locator("audio")).toHaveJSProperty("paused", true);
   corrupt = false;
   await page.getByRole("alert", { name: "원음 재생 오류" }).getByRole("button", { name: "다시 시도", exact: true }).click();
+  await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });

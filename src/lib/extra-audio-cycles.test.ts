@@ -18,6 +18,7 @@ function finishCycle(session: AudioSession) {
 it.each([1, 2, 3, 4, 5] as const)("level %s adds both extra cycles once and preserves manual speaking and subtitle control", level => {
   let session = createAudioSession({ phraseCount: 3, level, groupSizes: [2, 1] });
   for (let cycle = 0; cycle < 3; cycle++) session = finishCycle(transitionAudioSession(session, { type: "space" }));
+  session = transitionAudioSession(session, { type: "space" });
   session = transitionAudioSession(session, { type: "reveal-subtitles" });
   session = transitionAudioSession(session, { type: "pause" });
   session = transitionAudioSession(session, { type: "retry" });
@@ -33,6 +34,7 @@ it.each([1, 2, 3, 4, 5] as const)("level %s adds both extra cycles once and pres
   expect(session).toMatchObject({ phraseIndex: 0, completedCycles: 4, phase: "loading", subtitlesRevealed: false });
   session = finishCycle(session);
   expect(session).toMatchObject({ cycleTarget: 5, completedCycles: 5, phase: "ready" });
+  session = transitionAudioSession(session, { type: "space" });
   for (const type of ["space", "retry"] as const) {
     expect(transitionAudioSession(session, { type })).toMatchObject({ cycleTarget: 3, completedCycles: 0, groupIndex: 1, phase: "ready" });
   }
@@ -71,6 +73,7 @@ it.each([
 it("recovers an extra-cycle error without losing the pair and clears the pair when selecting another sentence", () => {
   let session = createAudioSession({ phraseCount: 3 });
   for (let cycle = 0; cycle < 3; cycle++) session = finishCycle(transitionAudioSession(session, { type: "space" }));
+  session = transitionAudioSession(session, { type: "space" });
   session = transitionAudioSession(session, { type: "retry" });
   const failedAttempt = session.attempt;
   session = transitionAudioSession(session, { type: "audio-error", attempt: failedAttempt });
@@ -93,7 +96,7 @@ it("switching the added pair to manual mode stops timed progression and preserve
   session = finishCycle(transitionAudioSession(session, { type: "retry" }));
   session = transitionAudioSession(session, { type: "pause" });
   session = transitionAudioSession(session, { type: "settings", mode: "manual" });
-  expect(session).toMatchObject({ phase: "ready", mode: "manual", completedCycles: 4, cycleTarget: 5, remainingMs: 0 });
+  expect(session).toMatchObject({ phase: "paused", pausedPhase: "ready", mode: "manual", completedCycles: 4, cycleTarget: 5, remainingMs: 0 });
   session = finishCycle(transitionAudioSession(session, { type: "space" }));
   expect(session).toMatchObject({ phase: "ready", completedCycles: 5, phraseIndex: 0 });
 });

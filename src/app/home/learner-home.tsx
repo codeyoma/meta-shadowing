@@ -1,14 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { getLesson, type Language, type Lesson } from "@/lib/lessons";
 import { getPlayerHref, readLastSelection, saveLastSelection, SessionSelection } from "@/lib/resume";
+import { createRunId } from "@/lib/run-id";
+import { stageForLevel } from "@/lib/learning-stages";
 import { reconcileLearningJournal, type ProgressRecord, type CompletionRecord } from "@/lib/learning-records";
 import { VersionNotice } from "../version-notice";
 import { RecordDetails } from "../completion-summary";
-import { ArrowIcon, Brand, LessonIcon, Page, PlayIcon } from "../ui";
+import { ArrowIcon, LessonIcon, Page, PlayIcon } from "../ui";
+import { LearnerTopNavigation } from "../learner-top-navigation";
 import { OnlineInstallHelp } from "../online-install-help";
+import { BottomNavigation, type BrowseDestination } from "../bottom-navigation";
+import styles from "../learner.module.css";
 
 function ResumeRow({ selection, catalog, progress }: { selection: SessionSelection; catalog: Lesson[]; progress: ProgressRecord | null }) {
   const router = useRouter();
@@ -16,24 +25,35 @@ function ResumeRow({ selection, catalog, progress }: { selection: SessionSelecti
   if (!lesson) return null;
 
   return (
-    <button className="continuation-row" onClick={() => router.push(getPlayerHref(selection))}>
-      <span className="round-icon"><PlayIcon /></span>
-      <span className="continuation-copy">
+    <Button variant="choice" size="row" className="w-full" onClick={() => router.push(getPlayerHref(selection))}>
+      <PlayIcon />
+      <span className={styles.rowCopy}>
         <strong>마지막 학습 계속하기</strong>
-        <small>{selection.language === "english" ? "영어" : "일본어"} · {lesson.name} · 레벨 {selection.level} · 프레이즈 {progress && progress.lessonVersion === lesson.version ? progress.nextPhrase + 1 : 1} / {lesson.phraseCount}</small>
+        <small>{selection.language === "english" ? "영어" : "일본어"} · {lesson.name} · 레벨 {selection.level} · 스테이지 {stageForLevel(selection.level, selection.stage)} · 프레이즈 {progress && progress.lessonVersion === lesson.version ? progress.nextPhrase + 1 : 1} / {lesson.phraseCount}</small>
       </span>
       <ArrowIcon />
-    </button>
+    </Button>
   );
 }
 
-export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
+export function LearnerHome({ catalog, initialTab = "languages", initialLanguage = "english", lessonId }: {
+  catalog: Lesson[]; initialTab?: "languages" | "lessons"; initialLanguage?: Language; lessonId?: string;
+}) {
   const router = useRouter();
-  const [language, setLanguage] = useState<Language>("english");
+  const [language, setLanguage] = useState<Language>(initialLanguage);
+  const [activeTab, setActiveTab] = useState<BrowseDestination>(initialTab);
+  const languageHeading = useRef<HTMLHeadingElement>(null);
+  const lessonHeading = useRef<HTMLHeadingElement>(null);
   const [resume, setResume] = useState<SessionSelection | null>(null);
   const [progress, setProgress] = useState<ProgressRecord | null>(null);
   const [history, setHistory] = useState<CompletionRecord[]>([]);
   const [versionReset, setVersionReset] = useState<{ storageFailed: boolean } | null>(null);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+    setLanguage(initialLanguage);
+    if (initialTab === "lessons") lessonHeading.current?.scrollIntoView({ block: "start" });
+  }, [initialTab, initialLanguage]);
 
   useEffect(() => {
     const selection = readLastSelection();
@@ -41,7 +61,7 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
     if (journal.resetLessonId) {
       setVersionReset({ storageFailed: journal.storageFailed });
       if (selection?.lessonId === journal.resetLessonId) {
-        selection.runId = crypto.randomUUID();
+        selection.runId = createRunId();
         saveLastSelection(selection);
       }
     }
@@ -50,49 +70,71 @@ export function LearnerHome({ catalog }: { catalog: Lesson[] }) {
     setHistory(journal.history.toReversed());
   }, [catalog]);
   const visibleLessons = catalog.filter((lesson) => lesson.language === language);
+  const currentLesson = visibleLessons.find(lesson => lesson.id === (lessonId ?? resume?.lessonId)) ?? visibleLessons[0];
+
+  function navigate(destination: BrowseDestination) {
+    if (destination === "languages" || destination === "lessons") {
+      setActiveTab(destination);
+      const heading = destination === "languages" ? languageHeading.current : lessonHeading.current;
+      heading?.scrollIntoView({ block: "start" });
+      return;
+    }
+    if (!currentLesson) return;
+    const query = new URLSearchParams({ language, lesson: currentLesson.id });
+    if (destination === "settings") query.set("panel", "settings");
+    router.push(`/setup?${query}`);
+  }
 
   return (
-    <Page className="home-page">
-      <section className="learner-shell" aria-labelledby="home-title">
-        <Brand compact />
-        <h1 id="home-title">오늘도 한 프레이즈부터.</h1>
+    <Page className={styles.homePage}>
+      <section className={styles.homeShell} aria-labelledby="home-title">
+        <LearnerTopNavigation />
+        <ScrollArea className={styles.homeScroll} viewportProps={{ role: "region", "aria-label": "레슨과 학습 기록" }}>
+        <div className={styles.homeBody}>
+        <h1 id="home-title" className={styles.homeTitle}>오늘도 한 프레이즈부터.</h1>
         {versionReset ? <VersionNotice storageFailed={versionReset.storageFailed} /> : null}
         {resume ? <ResumeRow selection={resume} catalog={catalog} progress={progress} /> : null}
-        <section className="home-section" aria-labelledby="language-title">
-          <h2 id="language-title">언어 선택</h2>
-          <div className="open-list">
-            <button className={`choice-row ${language === "english" ? "selected" : ""}`} aria-pressed={language === "english"} onClick={() => setLanguage("english")}>
-              <span><strong>English</strong><em>영어</em></span><ArrowIcon />
-            </button>
-            <button className={`choice-row ${language === "japanese" ? "selected" : ""}`} aria-pressed={language === "japanese"} onClick={() => setLanguage("japanese")}>
-              <span><strong>日本語</strong><em>일본어</em></span><ArrowIcon />
-            </button>
-          </div>
+        <section className={styles.homeSection} aria-labelledby="language-title">
+          <h2 ref={languageHeading} id="language-title">언어 선택</h2>
+          <ToggleGroup type="single" variant="choice" value={language} onValueChange={value => {
+            if (value === "english" || value === "japanese") setLanguage(value);
+          }} aria-labelledby="language-title" className="grid w-full grid-cols-2" spacing={3}>
+            <ToggleGroupItem value="english" className="min-w-0 p-4">
+              <span className={styles.rowCopy}><strong>English</strong><em>영어</em></span><ArrowIcon />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="japanese" className="min-w-0 p-4">
+              <span className={styles.rowCopy}><strong>日本語</strong><em>일본어</em></span><ArrowIcon />
+            </ToggleGroupItem>
+          </ToggleGroup>
         </section>
-        <section className="home-section" aria-labelledby="lesson-title">
-          <h2 id="lesson-title">{language === "english" ? "영어 레슨" : "일본어 레슨"}</h2>
-          <div className="open-list">
+        <section className={styles.homeSection} aria-labelledby="lesson-title">
+          <h2 ref={lessonHeading} id="lesson-title">{language === "english" ? "영어 레슨" : "일본어 레슨"}</h2>
+          <div className={styles.rows}>
             {visibleLessons.map((lesson) => (
-              <button className="lesson-row" key={lesson.id} onClick={() => router.push(`/setup?language=${language}&lesson=${lesson.id}`)}>
-                <span className="round-icon"><LessonIcon /></span>
-                <span><strong>{lesson.name}</strong>{lesson.localizedName !== lesson.name ? <em>{lesson.localizedName}</em> : null}<small>{lesson.phraseCount}개 프레이즈</small></span>
+              <Button variant="choice" size="row" key={lesson.id} onClick={() => router.push(`/setup?language=${language}&lesson=${lesson.id}`)}>
+                <LessonIcon />
+                <span className={styles.rowCopy}><strong>{lesson.name}</strong>{lesson.localizedName !== lesson.name ? <em>{lesson.localizedName}</em> : null}<small>{lesson.phraseCount}개 프레이즈</small></span>
                 <ArrowIcon />
-              </button>
+              </Button>
             ))}
             {visibleLessons.length === 0 ? (
-              <p className="empty-lessons" role="status">아직 게시된 레슨이 없습니다.</p>
+              <Empty role="status"><EmptyHeader><EmptyDescription>아직 게시된 레슨이 없습니다.</EmptyDescription></EmptyHeader></Empty>
             ) : null}
           </div>
         </section>
-        {history.length ? <section className="home-section completion-history" aria-label="완료 기록">
+        {history.length ? <section className={styles.homeSection} aria-label="완료 기록">
           <h2>완료 기록</h2>
-          <ol>{history.map(record => <li key={record.runId}>
+          <ol className={styles.history}>{history.map(record => <li key={record.runId}>
             <h3>{record.lessonName} · 레벨 {record.level}</h3>
+            <p>스테이지 {stageForLevel(record.level, record.stage)}</p>
             <RecordDetails record={record} />
           </li>)}</ol>
         </section> : null}
         <OnlineInstallHelp />
+        </div>
+        </ScrollArea>
       </section>
+      <BottomNavigation active={activeTab} onSelect={navigate} lessonAvailable={!!currentLesson} />
     </Page>
   );
 }

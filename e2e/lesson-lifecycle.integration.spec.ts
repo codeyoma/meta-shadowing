@@ -64,8 +64,8 @@ test("a validated replacement keeps the lesson ID and atomically advances its ve
     await fixture.publish(original);
     const { data: before } = await fixture.service.from("lesson_drafts").select("published_at").eq("id", original).single();
     const replacement = await fixture.draft("Replacement lesson", original);
-    await page.goto("/home");
-    await expect(page.getByRole("button", { name: /Original lesson/ })).toBeVisible();
+    await page.goto("/lessons?language=english");
+    await expect(page.getByRole("link", { name: /Original lesson/ })).toBeVisible();
     await expect(page.getByText("Replacement lesson", { exact: true })).toHaveCount(0);
     expect((await page.request.post(`/api/admin/drafts/${replacement}/publish`)).status()).toBe(422);
     await fixture.upload(replacement);
@@ -77,7 +77,7 @@ test("a validated replacement keeps the lesson ID and atomically advances its ve
     expect(versions!.find(version => version.id === original)?.publication_status).toBe("archived");
     expect(versions!.find(version => version.id === replacement)?.published_at).not.toBe(before!.published_at);
     await page.reload();
-    await expect(page.getByRole("button", { name: /Replacement lesson/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Replacement lesson/ })).toBeVisible();
     await expect(page.getByText("Original lesson", { exact: true })).toHaveCount(0);
     expect((await page.request.get(`/api/lessons/${original}/audio/1?version=${encodeURIComponent(before!.published_at)}`, { maxRedirects: 0 })).status()).toBe(404);
     expect((await page.request.get(`/api/lessons/${original}/audio/1`, { maxRedirects: 0 })).status()).toBe(307);
@@ -108,18 +108,18 @@ for (const entry of ["home", "player"] as const) {
       const replacement = await fixture.draft("Updated practice", original);
       await fixture.upload(replacement);
       await fixture.publish(replacement);
-      await page.goto(entry === "home" ? "/home" : oldRun);
+      await page.goto(entry === "home" ? "/lessons?language=english" : oldRun);
       await expect(page.getByRole("alert", { name: "레슨 버전 변경" })).toContainText("레슨이 새 버전으로 변경되어 이전 진도를 초기화했습니다.");
       if (entry === "home") {
         await expect(page.getByRole("region", { name: "완료 기록" }).getByRole("listitem")).toHaveCount(1);
-        await expect(page.getByRole("button", { name: /마지막 학습 계속하기/ })).toContainText("프레이즈 1 / 2");
-        await page.getByRole("button", { name: /마지막 학습 계속하기/ }).click();
+        await page.getByRole("link", { name: /Updated practice/ }).click();
+        await page.getByRole("button", { name: /현재 스테이지 .* 시작/ }).click();
       }
       await expect(page.getByText("문장 1 / 2", { exact: true })).toBeVisible();
       expect(new URL(page.url()).searchParams.get("run")).not.toBe(new URL(oldRun).searchParams.get("run"));
       await page.reload();
       await expect(page.getByText("문장 1 / 2", { exact: true })).toBeVisible();
-      await page.goto("/home");
+      await page.goto("/lessons?language=english");
       await expect(page.getByRole("region", { name: "완료 기록" }).getByRole("listitem")).toHaveCount(1);
     } finally { await fixture.cleanup(); }
   });
@@ -162,8 +162,8 @@ test(`an administrator replaces from files, unpublishes without loss, and confir
     await page.screenshot({ path: join(tmpdir(), `meta-shadowing-issue10-${viewport.name}-management.png`) });
     await replaced.getByRole("button", { name: "게시 해제", exact: true }).click();
     await expect(replaced).toContainText("게시 해제됨");
-    await page.goto("/home");
-    await expect(page.getByRole("button", { name: /Managed replacement/ })).toHaveCount(0);
+    await page.goto("/lessons?language=english");
+    await expect(page.getByRole("link", { name: /Managed replacement/ })).toHaveCount(0);
     const { data: retained, error } = await fixture.service.from("lesson_drafts").select("id").eq("lesson_id", original);
     expect(error).toBeNull();
     expect(retained).toHaveLength(2);
@@ -222,8 +222,8 @@ test("partial Storage deletion remains hidden and can be retried after a reload"
     expect(root!.cleanup_error).toContain("삭제가 완료되지 않았습니다");
     expect((await fixture.service.storage.from("lesson-audio").list(`${fixture.owner}/${original}`)).data).toEqual([]);
     expect((await fixture.service.storage.from("lesson-audio").list(`${fixture.owner}/${replacement}`)).data).toHaveLength(2);
-    await page.goto("/home");
-    await expect(page.getByRole("button", { name: /Cleanup/ })).toHaveCount(0);
+    await page.goto("/lessons?language=english");
+    await expect(page.getByRole("link", { name: /Cleanup/ })).toHaveCount(0);
     expect((await page.request.get(`/api/lessons/${original}/audio/1`, { maxRedirects: 0 })).status()).toBe(404);
     await page.goto("/admin/lessons");
     await expect(page.getByText("삭제 정리 필요", { exact: false })).toBeVisible();

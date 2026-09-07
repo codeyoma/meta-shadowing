@@ -1,4 +1,5 @@
 import { isGroupSize, type GroupSize } from "./phrase-groups";
+import { isStageForLevel } from "./learning-stages";
 import { isRapidDelay, isWpmLevel, normalizeRapidSettings, type RapidSettings } from "./rapid-session";
 
 const LAST_SELECTION_KEY = "meta-shadowing:last-selection";
@@ -7,6 +8,7 @@ export type SessionSelection = {
   language: "english" | "japanese";
   lessonId: string;
   level: number;
+  stage?: number;
   mode: "manual" | "automatic";
   display: "current" | "cumulative";
   speed: number;
@@ -26,6 +28,7 @@ export function getPlayerHref(selection: SessionSelection): string {
     level: String(selection.level),
     mode: selection.mode
   });
+  if (isStageForLevel(selection.stage, selection.level)) params.set("stage", String(selection.stage));
   if (selection.level >= 6) {
     const settings = normalizeRapidSettings(selection);
     params.set("display", settings.display);
@@ -54,6 +57,7 @@ function isSessionSelection(value: unknown): value is SessionSelection {
     Number.isInteger(selection.level) &&
     selection.level >= 1 &&
     selection.level <= 8 &&
+    (selection.stage === undefined || isStageForLevel(selection.stage, selection.level)) &&
     (selection.mode === "manual" || selection.mode === "automatic") &&
     (selection.display === "current" || selection.display === "cumulative") &&
     typeof selection.speed === "number" &&

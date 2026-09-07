@@ -9,6 +9,8 @@ export type Lesson = {
   name: string;
   localizedName: string;
   phraseCount: number;
+  /** Titled script sections, stored as chapter_count (not blank separators). */
+  sectionCount: number;
 };
 
 export type LessonPhrase = Extract<LessonDraftEntry, { kind: "phrase" }>;
@@ -25,7 +27,8 @@ export const lessons: Lesson[] = [
     language: "english",
     name: "Morning Routine",
     localizedName: "아침 일과",
-    phraseCount: 24
+    phraseCount: 24,
+    sectionCount: 0
   },
   {
     id: "daily-conversation",
@@ -33,7 +36,8 @@ export const lessons: Lesson[] = [
     language: "english",
     name: "Daily Conversation",
     localizedName: "일상 회화",
-    phraseCount: 18
+    phraseCount: 18,
+    sectionCount: 2
   },
   {
     id: "tokyo-walk",
@@ -41,7 +45,8 @@ export const lessons: Lesson[] = [
     language: "japanese",
     name: "東京の散歩",
     localizedName: "도쿄 산책",
-    phraseCount: 20
+    phraseCount: 20,
+    sectionCount: 0
   }
 ];
 

@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { testRecording } from "./fixtures/audio";
+import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, level = 1) {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto(`/player?lesson=morning-routine&level=${level}&mode=manual`);
-  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 }
 
 test("the simplified entry page keeps password entry working", async ({ page }) => {
@@ -15,36 +16,38 @@ test("the simplified entry page keeps password entry working", async ({ page }) 
   await expect(page.getByText("개인 학습 자료를 위한 비공개 베타", { exact: true })).toHaveCount(0);
   await page.getByLabel("베타 비밀번호", { exact: true }).fill("test-beta-password");
   await page.getByRole("button", { name: "입장하기", exact: true }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/\/languages$/);
 });
 
-for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} settings open in a modal without removing the lesson`, async ({ page }) => {
+for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} settings open inside the drawer without removing the lesson`, async ({ page }) => {
   await openPlayer(page, level);
-  const gear = page.getByRole("button", { name: "학습 설정", exact: true });
+  const gear = page.getByRole("button", { name: "학습 메뉴", exact: true });
   const canvas = page.getByRole("region", { name: level <= 5 ? "학습 자막" : "속사포 학습", exact: true });
   const copy = await canvas.textContent();
   await gear.click();
+  await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "세션 설정", exact: true });
   await expect(dialog).toBeVisible();
   // Modal content is accessible; the retained background is deliberately inert.
   await expect(page.locator(level <= 5 ? "#practice-subtitles" : '[aria-label="속사포 학습"]')).toHaveText(copy!);
-  await expect(dialog).toHaveJSProperty("open", true);
-  await expect(dialog.getByRole("button", { name: "수동", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(dialog).toHaveAttribute("data-state", "open");
+  await expect(dialog.getByRole("radio", { name: "수동", exact: true })).toHaveAttribute("aria-checked", "true");
   const speed = dialog.getByRole("combobox", { name: level <= 5 ? "재생속도" : "단어 속도", exact: true });
   await speed.selectOption(level <= 5 ? "1.5" : "6");
-  const close = dialog.getByRole("button", { name: "설정 닫기", exact: true });
-  await close.focus();
-  await page.keyboard.press("Tab");
-  expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+  const back = dialog.getByRole("button", { name: "메뉴로 돌아가기", exact: true });
+  await back.focus();
   await page.keyboard.press("Shift+Tab");
-  await expect(close).toBeFocused();
+  expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Tab");
+  await expect(back).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(gear).toBeFocused();
   await expect(canvas).toHaveText(copy!);
   await gear.click();
+  await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect(speed).toHaveValue(level <= 5 ? "1.5" : "6");
-  await close.click();
+  await page.keyboard.press("Escape");
   await expect(gear).toBeFocused();
   if (level <= 5) {
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
@@ -52,13 +55,14 @@ for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} settings open
   }
 });
 
-test("settings restore focus to the gear even when pointer activation does not focus it", async ({ page }) => {
+test("settings restore focus to the menu button even when pointer activation does not focus it", async ({ page }) => {
   await openPlayer(page);
-  const gear = page.getByRole("button", { name: "학습 설정", exact: true });
+  const gear = page.getByRole("button", { name: "학습 메뉴", exact: true });
   await page.getByRole("region", { name: "학습 자막", exact: true }).focus();
   // Reproduce browsers that leave focus on the prior element when clicking a button.
   await gear.evaluate(button => button.addEventListener("mousedown", event => event.preventDefault()));
   await gear.click();
+  await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "세션 설정", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(gear).toBeFocused();
@@ -68,8 +72,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) test(`the extr
   await page.emulateMedia({ reducedMotion });
   await openPlayer(page);
   const cycles = page.getByLabel("완료한 듣기");
+  await page.getByRole("button", { name: /^CONTINUE/ }).click();
   for (let cycle = 1; cycle <= 3; cycle++) {
-    await page.getByRole("button", { name: /^CONTINUE/ }).click();
+    await confirmManualListen(page);
     await expect(cycles).toHaveText(`필수 ${cycle} / 3`);
   }
   await page.locator("audio").evaluate(audio => {
@@ -102,5 +107,6 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) test(`the extr
   expect(motion.late.map(dot => dot.opacity)).toEqual([1, 1, 1, 1, 1]);
   await expect(cycles).toHaveText("필수 3 / 3 · 추가 0 / 2");
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
+  await confirmManualListen(page);
   await expect(cycles).toHaveText("필수 3 / 3 · 추가 1 / 2");
 });

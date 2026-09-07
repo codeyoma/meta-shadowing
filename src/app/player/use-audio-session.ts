@@ -6,6 +6,7 @@ import type { PublishedLesson } from "@/lib/lessons";
 import type { PhraseGroup } from "@/lib/phrase-groups";
 import { useLearningRecord, type LearningStart } from "./use-learning-record";
 import { createAudioPreloader } from "@/lib/audio-preloader";
+import { createSuccessChime } from "@/lib/success-chime";
 
 function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
@@ -18,6 +19,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   const audioRef = useRef<HTMLAudioElement>(null);
   const preloader = useRef<ReturnType<typeof createAudioPreloader> | null>(null);
   const playRequest = useRef(0);
+  const successChime = useRef<ReturnType<typeof createSuccessChime> | null>(null);
 
   const prepareAudio = useCallback((index: number, refresh = false) => {
     if (!audioRef.current) return;
@@ -30,12 +32,21 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     const previous = currentSession.current;
     const next = transitionAudioSession(previous, event);
     if (next === previous) return;
+    if (["space", "next", "retry"].includes(event.type)) {
+      successChime.current ??= createSuccessChime();
+      successChime.current.unlock();
+    }
+    if (next.groupIndex === previous.groupIndex && previous.confirmedCycles < 3 && next.confirmedCycles === 3) successChime.current?.play();
     const finished = next.phase === "completed";
     const boundary = finished || event.type === "jump" || next.groupIndex > previous.groupIndex;
+    const studied = next.groupIndex === previous.groupIndex && next.confirmedCycles > previous.confirmedCycles;
+    if (boundary) successChime.current?.cancelPending();
     updateRecord({
       restartCompleted: event.type === "jump",
+      studied,
       active: shortcutsEnabled && !document.hidden && (["playing", "gap", "speaking", "countdown"].includes(next.phase) || (next.phase === "ready" && next.completedCycles > 0)),
-      ...(boundary ? { checkpoint: { unit: finished ? next.groupSizes.length : next.groupIndex, phrase: finished ? lesson.phrases.length : next.phraseIndex }, finished } : {}),
+      ...(boundary || studied ? { checkpoint: { unit: finished ? next.groupSizes.length : next.groupIndex,
+        phrase: finished ? lesson.phrases.length : studied && groups.length ? groups[next.groupIndex].phrases[0].phraseNumber - 1 : next.phraseIndex }, finished } : {}),
       ...(event.type === "settings" ? { settings: {
         ...(event.mode !== undefined ? { mode: next.mode } : {}), ...(event.playbackRate !== undefined ? { speed: next.playbackRate } : {}),
         ...(event.advanceDelayMs !== undefined ? { advanceDelayMs: next.advanceDelayMs } : {}), ...(event.groupGapMs !== undefined ? { groupGapMs: next.groupGapMs } : {})
@@ -89,7 +100,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       playRequest.current++;
       audio.pause();
     }
-  }, [lesson, shortcutsEnabled, updateRecord, prepareAudio]);
+  }, [lesson, groups, shortcutsEnabled, updateRecord, prepareAudio]);
 
   useEffect(() => {
     if (!["gap", "speaking", "countdown"].includes(session.phase)) return;
@@ -110,9 +121,11 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("input, select, textarea, [contenteditable=true], [role=dialog]")) return;
       if (target instanceof HTMLElement && target.closest("button, a") && !target.closest("[data-player-shortcuts]")) return;
+      // The speaker's native Space activation must use its replay/pause click action.
+      if (event.code === "Space" && target instanceof HTMLElement && target.closest("button[data-player-shortcuts]")) return;
       const type = event.code === "Space" ? "space" : event.key.toLowerCase() === "r" ? "retry"
         : event.key.toLowerCase() === "s" ? "reveal-subtitles"
-        : event.key === "ArrowLeft" ? "previous" : event.key === "ArrowRight" ? "next" : null;
+        : event.key === "ArrowRight" ? "next" : null;
       if (!type) return;
       event.preventDefault();
       if (event.code === "Space") handledSpace = true;
@@ -142,6 +155,8 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     prepareAudio(currentSession.current.phraseIndex);
     return () => {
       playRequest.current++;
+      successChime.current?.dispose();
+      successChime.current = null;
       if (!audio) return;
       detachAudioListeners(audio);
       preloader.current?.dispose();
