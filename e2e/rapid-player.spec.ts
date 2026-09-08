@@ -165,6 +165,9 @@ test("automatic playback respects ordinary and blank/chapter gaps and completes 
   for (let index = 0; index < 3; index++) {
     await page.keyboard.press("ArrowRight");
     await advanceCloudClock(page, 0);
+    // An empty request queue can precede the acknowledged player transition.
+    await expect(canvas).toHaveText(["We", "She", "They"][index]);
+    await expect(page.getByRole("button", { name: /PAUSE/ })).toBeEnabled();
   }
   await expect(canvas).toHaveText("They");
   await advanceCloudClock(page, 2100);
@@ -175,6 +178,8 @@ test("automatic playback respects ordinary and blank/chapter gaps and completes 
   await expect(canvas).toHaveText("He");
   await expect(page.getByRole("separator", { name: "구간 경계" })).toBeVisible();
   await page.keyboard.press("ArrowRight");
+  await expect(canvas).toHaveText("We");
+  await expect(page.getByRole("button", { name: /PAUSE/ })).toBeEnabled();
   await advanceCloudClock(page, 2100);
   await expect(page.getByRole("timer")).toHaveText("2.0초");
   await advanceCloudClock(page, 2000);
