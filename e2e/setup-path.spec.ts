@@ -18,7 +18,7 @@ test("setup places shared brand and streak navigation above the book summary", a
   expect(headingBox.y).toBeGreaterThan(navBox.y + navBox.height);
   expect(headingBox.y).toBeLessThan(160);
   expect(await heading.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(22);
-  await expect(page.getByText("0개 섹션 · 3개 프레이즈", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText("0개 섹션 · 3개 프레이즈", { exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "하단 탐색" }).getByRole("link", { name: "레슨", exact: true }).click();
   await expect(page).toHaveURL(/\/lessons\?/);
 });

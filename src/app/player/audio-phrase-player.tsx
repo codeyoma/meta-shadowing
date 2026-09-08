@@ -126,7 +126,10 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
       </PracticeFooter> : null}
       <PlayerDrawer open={menuOpen} lesson={lesson} currentPhraseNumbers={grouped ? group.phrases.map(line => line.phraseNumber) : [phrase.phraseNumber]}
         initialView={surface === "settings" ? "settings" : "menu"} onViewChange={setDrawerView}
-        settings={cloud ? <p>이번 학습은 시작 당시의 계정 설정을 사용합니다. 설정 변경은 다음 학습부터 적용됩니다. 현재 클라우드는 수동 프레이즈 학습만 지원합니다.</p> : <AudioSessionControls level={level} settings={session} onChange={value => send({ type: "settings", ...value })} />}
+        settings={<>
+          {cloud ? <p>이 설정은 현재 학습에만 적용됩니다. 계정 기본 설정은 새 학습부터 적용됩니다.</p> : null}
+          <AudioSessionControls disabled={cloud?.blocked} level={level} settings={session} onChange={value => send({ type: "settings", ...value })} />
+        </>}
         onSelect={phraseIndex => send({ type: "jump", phraseIndex })} onClose={() => setSurface(null)} onStages={() => navigate(stageHref(lesson.id, start.selection.stage))} />
       {dictionary.selection ? <DictionaryPopup selection={dictionary.selection} language={lesson.language} onClose={dictionary.close} /> : null}
       {analysis.selection ? <SentenceAnalysisPopup lesson={lesson} selection={analysis.selection} onClose={analysis.close} /> : null}

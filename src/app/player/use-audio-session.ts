@@ -37,7 +37,6 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   }, [lesson]);
 
   const send = useCallback(function send(event: AudioSessionEvent) {
-    if (cloudRef.current && event.type === "settings") return;
     if (event.type !== "pause" && (waiting.current || (cloudRef.current && !cloudRef.current.canAct()))) return;
     if (waiting.current && event.type === "pause") { audioRef.current?.pause(); updateRecord({ active: false }); return; }
     const previous = currentSession.current;
@@ -60,11 +59,11 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     }
     const finished = next.phase === "completed";
     const boundary = finished || event.type === "jump" || next.groupIndex !== previous.groupIndex;
-    const studied = next.groupIndex === previous.groupIndex && next.confirmedCycles > previous.confirmedCycles;
+    const studied = !boundary && next.confirmedCycles > previous.confirmedCycles;
     if (boundary) successChime.current?.cancelPending();
     const saved = updateRecord({
       kind: studied ? "studied" : event.type === "jump" || event.type === "previous" ? "jump" : "advance",
-      confirmedCycles: previous.confirmedCycles,
+      confirmedCycles: event.type === "tick" && previous.phase === "speaking" ? previous.completedCycles : previous.confirmedCycles,
       restartCompleted: event.type === "jump",
       studied,
       active: shortcutsEnabled && !document.hidden && (["playing", "gap", "speaking", "countdown"].includes(next.phase) || (next.phase === "ready" && next.completedCycles > 0)),
@@ -82,7 +81,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       ? transitionAudioSession(next, { type: "pause" }) : next;
     currentSession.current = accepted;
     setSession(accepted);
-    if (cloudRef.current) updateRecord({ active: shortcutsEnabled && !document.hidden && (accepted.phase === "playing" || (accepted.phase === "ready" && accepted.completedCycles > 0)) });
+    if (cloudRef.current) updateRecord({ active: shortcutsRef.current && !document.hidden && (["playing", "gap", "speaking", "countdown"].includes(accepted.phase) || (accepted.phase === "ready" && accepted.completedCycles > 0)) });
 
     const audio = audioRef.current;
     if (!audio) return;
@@ -140,7 +139,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   }, [cloud?.blocked, send]);
 
   useEffect(() => {
-    if (!["gap", "speaking", "countdown"].includes(session.phase)) return;
+    if (cloud?.blocked || !["gap", "speaking", "countdown"].includes(session.phase)) return;
     let lastTick = performance.now();
     const timer = window.setInterval(() => {
       const now = performance.now();
@@ -148,7 +147,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       lastTick = now;
     }, 100);
     return () => window.clearInterval(timer);
-  }, [session.phase, session.attempt, send]);
+  }, [cloud?.blocked, session.phase, session.attempt, send]);
 
   useEffect(() => {
     let handledSpace = false;

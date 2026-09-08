@@ -8,7 +8,6 @@ import { getSessionDefaults } from "@/lib/session-defaults-repository";
 import { LearningPlayer } from "./learning-player";
 import { stageForLevel } from "@/lib/learning-stages";
 import { cloudLearningEnabled } from "@/lib/cloud-learning";
-import { CloudLearningNotice } from "../cloud-learning-notice";
 import { CloudLearningPlayer } from "./cloud-learning-player";
 
 type PlayerPageProps = { searchParams: Promise<Record<string, string | undefined>> };
@@ -32,8 +31,8 @@ export default async function PlayerPage({ searchParams }: PlayerPageProps) {
     target: firstPracticeToken(phrase.target, lesson.language), korean: firstPracticeToken(phrase.korean, "korean")
   })) : [];
   if (cloudLearningEnabled()) {
-    if (level > 3 || params.mode === "automatic") return <main className="page"><CloudLearningNotice /></main>;
-    return <CloudLearningPlayer key={`${lesson.id}:${lesson.version}:${stage}`} accountId={identity.id} lesson={lesson} level={level as 1 | 2 | 3} stage={stage} hints={hints} requestedRun={params.run} />;
+    return <CloudLearningPlayer key={`${lesson.id}:${lesson.version}:${stage}`} accountId={identity.id} lesson={lesson} level={level as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8} stage={stage} hints={hints}
+      lines={level >= 6 ? prepareRapidLines(lesson.entries,lesson.language) : []} requestedRun={params.run} />;
   }
   return <LearningPlayer key={JSON.stringify([lesson.id, lesson.version, level, params])} lesson={lesson} level={level} stage={stage} hints={hints}
     lines={level >= 6 ? prepareRapidLines(lesson.entries, lesson.language) : []} defaults={defaults} overrides={overrides} requestedRun={params.run} />;

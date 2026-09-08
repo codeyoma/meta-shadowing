@@ -1,4 +1,4 @@
-# Server-confirmed manual practice (#19)
+# Server-confirmed practice (#19–20)
 
 This is a gated development slice of #17, not a public beta release. Keep
 `CLOUD_LEARNING_ENABLED` unset unless testing the cloud path. Deploying the SQL,
@@ -9,8 +9,8 @@ enabling hosted traffic, and physical Google/mobile acceptance require separate 
 - The verified Google account UUID owns one current checkpoint, per-run history,
   and study dates in its stored timezone. Browser learning records are neither
   read, migrated, updated, nor deleted in cloud mode.
-- Levels 1–3 in manual mode are enabled. Automatic, grouped, and rapid modes
-  stay gated until #20. The explicit takeover action belongs to #21.
+- All eight levels, manual/automatic audio, grouped audio, and rapid display use
+  the same server-confirmed path. The explicit takeover action belongs to #21.
 - Pressing **계정 학습 시작** atomically acquires a 30-second account lease.
   The instance UUID exists only in memory; a run URL never grants ownership.
   Foreground checks run every eight seconds, on focus, and immediately before
@@ -21,6 +21,11 @@ enabling hosted traffic, and physical Google/mobile acceptance require separate 
 - The existing three/five-repeat player rules remain intact. Confirmed practice
   records the current unit; advancing and jumping wait for server acknowledgment.
   The completion screen is not confirmed until the final transaction succeeds.
+- The database derives unit offsets from the published entries. Group tails merge
+  only within their section, matching the existing player. A partial recording or
+  incomplete repeat never advances to the next group. Rapid tokens remain segmented
+  on the server; a delayed timer consumes at most one complete line before saving.
+  Save waits discard timer overshoot instead of skipping unseen lines.
 - Checkpoints include an operation UUID and expected revision. Retrying the same
   payload returns its original result; changing its payload, using an old revision,
   or writing to a completed run is rejected. Operations are retained with account
@@ -28,8 +33,10 @@ enabling hosted traffic, and physical Google/mobile acceptance require separate 
 - Active time is a cumulative value. Pauses, settings, background time, and save
   waits are excluded. Only confirmed practice earns a study date, not visits,
   jumps, or a completion click by itself.
-- Completion preserves the published name/version and resolved run settings.
-  Preference changes affect new runs, not the run being resumed. Replaced versions
+- Completion preserves the published name/version and actual run settings.
+  Practice settings are revision-checked, idempotent changes to the current run.
+  Account preferences affect new runs, not the run being resumed. Group size stays
+  fixed for a run so saved group boundaries cannot change. Replaced versions
   cannot be resumed; old completion history remains available.
 - Failed saves retain their operation only in memory. Retry temporary errors;
   reauthenticate for auth changes, return to lessons for lost ownership or version
@@ -42,7 +49,8 @@ enabling hosted traffic, and physical Google/mobile acceptance require separate 
 `GET /api/learner/practice` reads the account journal. `POST` accepts start,
 checkpoint, renew, and release commands. The server verifies Google identity,
 beta access, same origin, body shape, and the stale-account guard. It never accepts
-a caller-supplied owner or settings snapshot. The database transaction locks the
+a caller-supplied owner, unit plan, or starting settings snapshot. Validated in-run
+settings patches cannot change group size. The database transaction locks the
 account row and the published lesson version before mutating learning state.
 
 All four learning tables use default-deny RLS, with direct `PUBLIC`, `anon`, and

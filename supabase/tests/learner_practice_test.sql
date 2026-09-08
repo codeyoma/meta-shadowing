@@ -5,7 +5,7 @@ insert into auth.users(id) values ('00000000-0000-4000-8000-000000000019');
 insert into public.lesson_drafts(id, created_by, title, language, target_filename, korean_filename,
  target_source, korean_source, parsed_entries, validation_status, phrase_count, chapter_count, section_count)
 values ('19000000-0000-4000-8000-000000000019','00000000-0000-4000-8000-000000000019',
- 'Practice test','english','en.txt','ko.txt','Hello','안녕','[]','validated',1,0,0);
+ 'Practice test','english','en.txt','ko.txt','Hello','안녕','[{"kind":"phrase"}]','validated',1,0,0);
 update public.lesson_drafts set publication_status='published',published_at='2026-09-08T00:00:00Z',
  audio_manifest='[{"phraseNumber":1,"path":"test/1.mp3"}]' where id='19000000-0000-4000-8000-000000000019';
 set local role service_role;

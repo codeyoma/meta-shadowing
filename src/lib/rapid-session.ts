@@ -56,7 +56,7 @@ export type RapidSession = {
 
 export type RapidEvent = { type: "space" | "pause" | "restart" | "previous" | "next" }
   | { type: "jump"; lineIndex: number }
-  | { type: "tick"; elapsedMs: number; runId: number }
+  | { type: "tick"; elapsedMs: number; runId: number; stopAtBoundary?: boolean }
   | { type: "settings"; settings: Partial<RapidSettings> };
 
 export function createRapidSession({ lines, level, settings = {}, initialLineIndex = 0 }: { lines: readonly RapidLine[]; level: RapidLevel; settings?: Partial<RapidSettings>; initialLineIndex?: number }): RapidSession {
@@ -137,6 +137,8 @@ export function transitionRapidSession(session: RapidSession, event: RapidEvent)
       if (!following) next = { ...next, phase: "completed", remainingMs: 0 };
       else if (next.settings.mode === "manual") next = { ...next, phase: "line-complete", remainingMs: 0 };
       else next = { ...next, phase: "gap", remainingMs: following.boundary ? next.settings.sectionGapMs : next.settings.lineGapMs };
+      // Cloud callers must acknowledge this line before consuming the next one.
+      if (event.stopAtBoundary) return next;
     }
   }
   return next;

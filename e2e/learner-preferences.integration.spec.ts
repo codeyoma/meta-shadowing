@@ -221,7 +221,7 @@ test("account settings synchronize across browsers without sharing another accou
       const value = await service.from("learner_preferences").select("selection").eq("user_id", a.id).single();
       expect(value.data?.selection).toEqual({ language: "english", lessonId: lessonIds[0] });
       await pageA.goto(`/player?lesson=${lessonIds[0]}`);
-      await expect(pageA.getByText("클라우드 학습 준비 중", { exact: true })).toBeVisible();
+      await expect(pageA.getByRole("button", { name: "계정 학습 시작", exact: true })).toBeVisible();
       await pageA.goto("/settings/session");
     });
 

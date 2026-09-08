@@ -1,0 +1,28 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(12);
+select is(public.practice_unit_starts('[{"kind":"phrase"},{"kind":"phrase"},{"kind":"phrase"},{"kind":"section"},{"kind":"phrase"},{"kind":"phrase"},{"kind":"phrase"},{"kind":"phrase"}]',4,2), '[0,3,5,7]'::jsonb, 'group tails merge without crossing a section');
+select is(public.practice_unit_starts('[{"kind":"phrase"},{"kind":"phrase"}]',8,4), '[0,1,2]'::jsonb, 'rapid units are complete published phrases, not client tokens');
+insert into auth.users(id) values ('00000000-0000-4000-8000-000000000020');
+insert into public.lesson_drafts(id,created_by,title,language,target_filename,korean_filename,target_source,korean_source,parsed_entries,validation_status,phrase_count,chapter_count,section_count)
+values ('20000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000020','Modes','english','en.txt','ko.txt','One\nTwo\nThree','하나\n둘\n셋','[{"kind":"phrase"},{"kind":"phrase"},{"kind":"phrase"}]','validated',3,0,0);
+update public.lesson_drafts set publication_status='published',published_at='2026-09-08T00:00:00Z',audio_manifest='[{"phraseNumber":1,"path":"test/1.mp3"},{"phraseNumber":2,"path":"test/2.mp3"},{"phraseNumber":3,"path":"test/3.mp3"}]' where id='20000000-0000-4000-8000-000000000020';
+set local role service_role;
+select public.get_learner_preferences('00000000-0000-4000-8000-000000000020','UTC');
+select set_config('test.start',public.learner_practice('00000000-0000-4000-8000-000000000020','{"action":"start","instance":"20000000-0000-4000-8000-000000000001","operation":"20000000-0000-4000-8000-000000000002","lessonId":"20000000-0000-4000-8000-000000000020","lessonVersion":"2026-09-08T00:00:00Z","level":4,"stage":7,"settings":{"mode":"automatic","groupSize":2,"speed":1}}')::text,true);
+select is(current_setting('test.start')::jsonb->'record'->'unitStarts','[0,3]'::jsonb,'run snapshots server grouped boundaries');
+select set_config('test.op',jsonb_build_object('action','checkpoint','instance','20000000-0000-4000-8000-000000000001','operation','20000000-0000-4000-8000-000000000003','runId',current_setting('test.start')::jsonb->'record'->>'runId','generation',1,'revision',0,'kind','advance','nextUnit',1,'activeMs',500,'confirmedCycles',2)::text,true);
+select throws_ok($$select public.learner_practice('00000000-0000-4000-8000-000000000020',current_setting('test.op')::jsonb)$$,'P0001','invalid-checkpoint','an incomplete group repeat cannot advance');
+select throws_ok($$select public.learner_practice('00000000-0000-4000-8000-000000000020',current_setting('test.op')::jsonb || '{"kind":"line"}')$$,'P0001','invalid-checkpoint','audio mode cannot use rapid completion');
+select is(public.learner_practice('00000000-0000-4000-8000-000000000020',current_setting('test.op')::jsonb || '{"kind":"settings","nextUnit":0,"settings":{"speed":2}}')->'record'->'settings'->>'speed','2','current run changes are acknowledged');
+select is((select settings from public.learner_preferences where user_id='00000000-0000-4000-8000-000000000020'),'{}'::jsonb,'current run changes do not write next-run defaults');
+select is(public.learner_practice('00000000-0000-4000-8000-000000000020',current_setting('test.op')::jsonb || '{"operation":"20000000-0000-4000-8000-000000000004","revision":1,"confirmedCycles":3}') ->'record'->>'nextPhrase','3','a whole grouped unit completes at the published phrase boundary');
+select is(public.read_learner_journal('00000000-0000-4000-8000-000000000020')->'history'->0->'settings'->>'speed','2','completion snapshots actual run settings');
+select is(public.read_learner_journal('00000000-0000-4000-8000-000000000020')->'studyDays','[]'::jsonb,'settings and a final advance alone do not earn a study day');
+select set_config('test.start',public.learner_practice('00000000-0000-4000-8000-000000000020','{"action":"start","instance":"20000000-0000-4000-8000-000000000001","operation":"20000000-0000-4000-8000-000000000005","lessonId":"20000000-0000-4000-8000-000000000020","lessonVersion":"2026-09-08T00:00:00Z","level":8,"stage":16,"settings":{"mode":"automatic","groupSize":2}}')::text,true);
+select set_config('test.op',jsonb_build_object('action','checkpoint','instance','20000000-0000-4000-8000-000000000001','operation','20000000-0000-4000-8000-000000000006','runId',current_setting('test.start')::jsonb->'record'->>'runId','generation',2,'revision',0,'kind','line','nextUnit',1,'activeMs',500)::text,true);
+select is(public.learner_practice('00000000-0000-4000-8000-000000000020',current_setting('test.op')::jsonb)->'record'->>'nextUnit','1','a rapid line uses the same fenced transaction');
+select is(jsonb_array_length(public.read_learner_journal('00000000-0000-4000-8000-000000000020')->'studyDays'),1,'a completed rapid line earns a study day');
+reset role;
+select * from finish();
+rollback;

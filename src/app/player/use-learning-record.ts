@@ -16,7 +16,7 @@ export type RecordUpdate = {
   settings?: Partial<SessionSettings>;
   restartCompleted?: boolean;
   studied?: boolean;
-  kind?: "studied" | "advance" | "jump";
+  kind?: "studied" | "advance" | "jump" | "line" | "settings";
   confirmedCycles?: number;
 };
 export type CloudRecording = {

@@ -1,4 +1,5 @@
 import type { ProgressRecord, CompletionRecord, Journal } from "./learning-records";
+import { validSettingOverrides, type SessionSettings } from "./session-settings";
 
 export type PracticeLease = { accountId: string; record: ProgressRecord & Partial<CompletionRecord>; generation: number; revision: number; leaseUntil: string };
 export type CloudJournal = Journal & { accountId: string };
@@ -6,7 +7,7 @@ type Ownership = { accountId: string; instance: string; runId: string; generatio
 export type PracticeCommand =
   | { action: "start"; accountId: string; instance: string; operation: string; lessonId: string; lessonVersion: string; level: number; stage: number }
   | (Ownership & { action: "renew" | "release" })
-  | (Ownership & { action: "checkpoint"; operation: string; revision: number; kind: "studied" | "advance" | "jump"; nextUnit: number; activeMs: number; confirmedCycles?: number });
+  | (Ownership & { action: "checkpoint"; operation: string; revision: number; kind: "studied" | "advance" | "jump" | "line" | "settings"; nextUnit: number; activeMs: number; confirmedCycles?: number; settings?: Partial<SessionSettings> });
 const uuid = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const integer = (value: unknown, min = 0) => typeof value === "number" && Number.isSafeInteger(value) && value >= min;
 export function parsePracticeCommand(value: unknown): PracticeCommand | null {
@@ -18,14 +19,20 @@ export function parsePracticeCommand(value: unknown): PracticeCommand | null {
   if (v.action === "start") {
     keys = [...common, "operation", "lessonId", "lessonVersion", "level", "stage"];
     if (!uuid(v.operation) || !uuid(v.lessonId) || typeof v.lessonVersion !== "string" || !Number.isFinite(Date.parse(v.lessonVersion))
-      || !integer(v.level, 1) || Number(v.level) > 3 || !integer(v.stage, 1) || Math.ceil(Number(v.stage) / 2) !== v.level) return null;
+      || !integer(v.level, 1) || Number(v.level) > 8 || !integer(v.stage, 1) || Math.ceil(Number(v.stage) / 2) !== v.level) return null;
   } else {
     keys = [...common, "runId", "generation"];
     if (!uuid(v.runId) || !integer(v.generation, 1)) return null;
     if (v.action === "checkpoint") {
       keys.push("operation", "revision", "kind", "nextUnit", "activeMs", "confirmedCycles");
+      if (v.kind === "settings") {
+        keys.push("settings");
+        const valid = validSettingOverrides(v.settings);
+        if (!v.settings || typeof v.settings !== "object" || Array.isArray(v.settings) || !Object.keys(valid).length
+          || Object.keys(valid).length !== Object.keys(v.settings).length || "groupSize" in v.settings) return null;
+      }
       if (!uuid(v.operation) || !integer(v.revision) || !integer(v.nextUnit) || !integer(v.activeMs)
-        || !["studied", "advance", "jump"].includes(String(v.kind))
+        || !["studied", "advance", "jump", "line", "settings"].includes(String(v.kind))
         || (v.kind === "advance" && ![3, 5].includes(Number(v.confirmedCycles)))) return null;
     } else if (v.action !== "renew" && v.action !== "release") return null;
   }

@@ -166,6 +166,16 @@ it("changing automatic to manual cancels a pending line gap without skipping the
   expect(transitionRapidSession(session, { type: "space" })).toMatchObject({ phase: "target", lineIndex: 1 });
 });
 
+it("stops a cloud tick at exactly one confirmed line boundary, discarding elapsed overshoot", () => {
+  const started = transitionRapidSession(createRapidSession({ lines, level: 6, settings: { mode: "automatic", lineGapMs: 0 } }), { type: "space" });
+  const boundary = transitionRapidSession(started, { type: "tick", elapsedMs: 99999, runId: started.runId, stopAtBoundary: true });
+  expect(boundary).toMatchObject({ lineIndex: 0, phase: "gap", boundaryCount: 1, checkpointIndex: 1 });
+  expect(boundary.activeElapsedMs).toBe(boundary.checkpointActiveMs);
+  const following = transitionRapidSession(boundary, { type: "tick", elapsedMs: 1, runId: boundary.runId, stopAtBoundary: true });
+  expect(following.lineIndex).toBe(1);
+  expect(following.boundaryCount).toBe(1);
+});
+
 it("rejects invalid durations and ticks, and safely handles an empty lesson", () => {
   let session = createRapidSession({ lines, level: 6, settings: { speakingExtraMs: -1, lineGapMs: NaN, sectionGapMs: Infinity } });
   expect(session.settings).toMatchObject({ speakingExtraMs: 500, lineGapMs: 1000, sectionGapMs: 2000 });

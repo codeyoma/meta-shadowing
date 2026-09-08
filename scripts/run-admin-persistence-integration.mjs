@@ -58,7 +58,7 @@ const result = spawnSync(
   [
     "playwright",
     "test",
-    ...(cloudPractice ? ["e2e/cloud-practice.integration.spec.ts"] : learnerPreferences ? ["e2e/learner-preferences.integration.spec.ts"] : ["e2e/admin-persistence.integration.spec.ts",
+    ...(cloudPractice ? ["e2e/cloud-practice.integration.spec.ts", "e2e/cloud-practice-modes.integration.spec.ts"] : learnerPreferences ? ["e2e/learner-preferences.integration.spec.ts"] : ["e2e/admin-persistence.integration.spec.ts",
     "e2e/lesson-publication.integration.spec.ts",
     "e2e/session-defaults.integration.spec.ts",
     "e2e/lesson-lifecycle.integration.spec.ts"]),

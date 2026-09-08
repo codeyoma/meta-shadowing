@@ -8,25 +8,26 @@ import type { CompletionRecord } from "@/lib/learning-records";
 import { AudioPhrasePlayer } from "./audio-phrase-player";
 import { PracticeFailure, useCloudRecording } from "./use-cloud-recording";
 import { CompletionSummary } from "../completion-summary";
-import { CloudLearningNotice } from "../cloud-learning-notice";
-import { resolveSessionSettings } from "@/lib/session-settings";
+import { groupLessonPhrases } from "@/lib/phrase-groups";
+import type { RapidLine } from "@/lib/rapid-session";
+import { RapidPlayer } from "./rapid-player";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
-type Props = { accountId: string; lesson: PublishedLesson; level: 1 | 2 | 3; stage: number; hints: SubtitleHint[]; requestedRun?: string };
-const noGroups: [] = [];
-function ActiveCloudPlayer({ lease, instance, lesson, level, stage, hints, invalidateAccount }: Props & { lease: PracticeLease; instance: string; invalidateAccount: () => void }) {
+type Props = { accountId: string; lesson: PublishedLesson; level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; stage: number; hints: SubtitleHint[]; lines: RapidLine[]; requestedRun?: string };
+function ActiveCloudPlayer({ lease, instance, lesson, level, stage, hints, lines, invalidateAccount }: Props & { lease: PracticeLease; instance: string; invalidateAccount: () => void }) {
   const { recording, notice } = useCloudRecording(lease,instance,invalidateAccount);
   const start = useMemo(() => ({ selection: { ...lease.record.settings, language: lesson.language, lessonId: lesson.id, level, stage, runId: lease.record.runId }, progress: lease.record, completion: null }), [lease,lesson,level,stage]);
-  return <AudioPhrasePlayer lesson={lesson} level={level} hints={hints} groups={noGroups} start={start} cloud={recording} notice={notice}
-    settings={{ mode: "manual", playbackRate: lease.record.settings.speed, advanceDelayMs: lease.record.settings.advanceDelayMs }} />;
+  const groups = useMemo(() => level === 4 || level === 5 ? groupLessonPhrases(lesson.entries,lease.record.settings.groupSize) : [],[lesson,level,lease]);
+  if (level === 6 || level === 7 || level === 8) return <RapidPlayer lesson={lesson} level={level} lines={lines} settings={lease.record.settings} start={start} cloud={recording} notice={notice} />;
+  return <AudioPhrasePlayer lesson={lesson} level={level} hints={hints} groups={groups} start={start} cloud={recording} notice={notice}
+    settings={{ mode: lease.record.settings.mode, playbackRate: lease.record.settings.speed, advanceDelayMs: lease.record.settings.advanceDelayMs, groupGapMs: lease.record.settings.groupGapMs }} />;
 }
 export function CloudLearningPlayer(props: Props) {
   const [lease,setLease] = useState<PracticeLease | null>(null);
   const [journal,setJournal] = useState<CloudJournal | null>(null);
   const [error,setError] = useState<string | null>(null);
   const [busy,setBusy] = useState(false);
-  const [unsupported,setUnsupported] = useState(false);
   const [loadAttempt,setLoadAttempt] = useState(0);
   const command = useRef<Extract<PracticeCommand,{action:"start"}> | null>(null);
   const fetching = useRef(false);
@@ -66,10 +67,9 @@ export function CloudLearningPlayer(props: Props) {
     ]).then(async ([response,preferences]) => {
       if (!response.ok || !preferences.ok) throw new PracticeError(response.status === 401 || preferences.status === 401 ? "unauthorized" : "temporary-error");
       const data: CloudJournal = await response.json();
-      const {profile,defaults} = await preferences.json();
+      const {profile} = await preferences.json();
       if (data.accountId !== props.accountId || profile.accountId !== props.accountId) throw new PracticeError("account-changed");
-      const resumable = data.progress?.lessonId === props.lesson.id && data.progress.stage === props.stage && Date.parse(data.progress.lessonVersion) === Date.parse(props.lesson.version);
-      if (alive && accountValid.current) { setJournal(data); setUnsupported(!resumable && resolveSessionSettings(profile.overrides,defaults).mode !== "manual"); }
+      if (alive && accountValid.current) setJournal(data);
     }).catch(error => { if (alive) setError(error instanceof PracticeError ? error.code : "temporary-error"); });
     return () => { alive = false; };
   },[props.accountId,props.lesson.id,props.lesson.version,props.stage,loadAttempt]);
@@ -90,8 +90,8 @@ export function CloudLearningPlayer(props: Props) {
   const completed = journal?.history.find(record => record.runId === props.requestedRun);
   return <main className="page">
     <h1>{props.lesson.name}</h1>
-    {completed ? <CompletionSummary record={completed as CompletionRecord} onHome={() => window.location.assign("/lessons")} /> : unsupported ? <CloudLearningNotice /> : <>
-      <p>마지막 서버 확인 지점에서 이어 학습합니다. 수동 프레이즈 학습만 지원합니다.</p>
+    {completed ? <CompletionSummary record={completed as CompletionRecord} onHome={() => window.location.assign("/lessons")} /> : <>
+      <p>마지막 서버 확인 지점에서 이어 학습합니다.</p>
       {journal?.progress?.lessonId === props.lesson.id && Date.parse(journal.progress.lessonVersion) !== Date.parse(props.lesson.version) ? <p>레슨 버전이 변경되어 이전 진도를 이어갈 수 없습니다. 새 버전의 처음부터 시작합니다. 과거 완료 기록은 유지됩니다.</p> : null}
       {error ? <PracticeFailure error={error} retry={() => journal ? void begin() : setLoadAttempt(value => value + 1)} /> : null}
       <Button disabled={busy || !journal} onClick={() => void begin()}>계정 학습 시작</Button>
