@@ -1,103 +1,35 @@
 "use client";
 
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
+import {
+  BookOpen, Check, ChevronLeft, ChevronRight, Menu, Pause, Play, RotateCcw,
+  Settings, Subtitles, Volume2, X, type LucideProps
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export function MarkIcon({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" className={className} viewBox="0 0 36 36" fill="none">
-      <path d="M5 28V10c0-3 4-5 6-2l7 8 7-8c2-3 6-1 6 2v18" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function ArrowIcon() {
-  return (
-    <svg aria-hidden="true" className="arrow-icon" viewBox="0 0 24 24" fill="none">
-      <path d="m9 4 8 8-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function BackIcon() {
-  return (
-    <svg aria-hidden="true" className="arrow-icon" viewBox="0 0 24 24" fill="none">
-      <path d="m15 4-8 8 8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function MenuIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="M4 6h16M4 12h16M4 18h16" />
+  return <svg aria-hidden="true" className={className} viewBox="0 0 36 36" fill="none">
+    <path d="M5 28V10c0-3 4-5 6-2l7 8 7-8c2-3 6-1 6 2v18" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>;
 }
 
-export function CloseIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <path d="m6 6 12 12M6 18 18 6" />
-  </svg>;
-}
-
-export function GearIcon() {
-  return (
-    <svg aria-hidden="true" className="gear-icon" viewBox="0 0 24 24" fill="none">
-      <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm7.2 4a7.1 7.1 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7.8 7.8 0 0 0-1.7-1L14.7 3h-4l-.4 3.1a7.8 7.8 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a7.1 7.1 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7.8 7.8 0 0 0 1.7 1l.4 3.1h4l.4-3.1a7.8 7.8 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function PauseIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-      <path d="M8 5v14M16 5v14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-export function PlayIcon() {
-  return (
-    <svg aria-hidden="true" className="play-icon" viewBox="0 0 24 24" fill="none">
-      <path d="m8 5 10 7-10 7V5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function SubtitleIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M7 11h3m4 0h3M7 15h10" />
-    </svg>
-  );
-}
-
-export function SpeakerIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m11 4-6 5H2v6h3l6 5V4Zm5 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" />
-  </svg>;
-}
-
-export function RepeatIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 10a9 9 0 1 1 2 8M3 4v6h6" />
-  </svg>;
-}
-
-export function LessonIcon() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 6C9 4 6 4 3 5v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1Zm0 0v14" />
-  </svg>;
-}
+export function ArrowIcon(props: LucideProps) { return <ChevronRight aria-hidden="true" data-icon="inline-end" {...props} />; }
+export function BackIcon(props: LucideProps) { return <ChevronLeft aria-hidden="true" data-icon="inline-start" {...props} />; }
+export function MenuIcon(props: LucideProps) { return <Menu aria-hidden="true" {...props} />; }
+export function CloseIcon(props: LucideProps) { return <X aria-hidden="true" {...props} />; }
+export function CheckIcon(props: LucideProps) { return <Check aria-hidden="true" {...props} />; }
+export function GearIcon(props: LucideProps) { return <Settings aria-hidden="true" data-icon="inline-start" {...props} />; }
+export function PauseIcon(props: LucideProps) { return <Pause aria-hidden="true" data-icon="inline-start" {...props} />; }
+export function PlayIcon(props: LucideProps) { return <Play aria-hidden="true" data-icon="inline-start" {...props} />; }
+export function SubtitleIcon(props: LucideProps) { return <Subtitles aria-hidden="true" data-icon="inline-start" {...props} />; }
+export function SpeakerIcon(props: LucideProps) { return <Volume2 aria-hidden="true" {...props} />; }
+export function RepeatIcon(props: LucideProps) { return <RotateCcw aria-hidden="true" data-icon="inline-start" {...props} />; }
+export function LessonIcon(props: LucideProps) { return <BookOpen aria-hidden="true" data-icon="inline-start" {...props} />; }
 
 export function Brand({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className={`brand ${compact ? "brand-compact" : ""}`}>
-      <MarkIcon />
-      <span>Meta Shadowing</span>
-    </div>
-  );
+  return <div className={cn("brand", compact && "brand-compact")}><MarkIcon /><span>Meta Shadowing</span></div>;
 }
 
-export function Page({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <main className={`page ${className}`}>{children}</main>;
+export function Page({ children, className }: { children: ReactNode; className?: string }) {
+  return <main className={cn("page", className)}>{children}</main>;
 }

@@ -5,11 +5,17 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { testRecording } from "./fixtures/audio";
+import {
+  assertLocalSupabaseUrl,
+  installLocalSupabaseSession,
+  promoteLocalSessionToGoogle
+} from "./fixtures/local-supabase-google";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1", "requires the project-local Supabase stack");
 
 async function lifecycleFixture(page: Page) {
   const url = process.env.SUPABASE_INTEGRATION_URL!;
+  assertLocalSupabaseUrl(url);
   const options = { auth: { persistSession: false, autoRefreshToken: false } };
   const service = createClient(url, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, options);
   const admin = createClient(url, process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!, options);
@@ -26,6 +32,8 @@ async function lifecycleFixture(page: Page) {
   }
   expect((await page.request.post("/api/admin/auth/verify", { data: { email, token: await otp() } })).status()).toBe(200);
   expect((await admin.auth.verifyOtp({ email, token: await otp(), type: "email" })).error).toBeNull();
+  const googleAdminSession = await promoteLocalSessionToGoogle(url, service, admin, owner, "admin");
+  await installLocalSupabaseSession(page, url, googleAdminSession);
   expect((await page.request.post("/api/auth", { data: { password: "integration-beta-password" } })).status()).toBe(200);
 
   async function draft(title: string, replacementFor?: string) {
@@ -56,6 +64,20 @@ async function lifecycleFixture(page: Page) {
   return { service, admin, owner, paths, draft, upload, publish, cleanup };
 }
 
+async function expectPreservedCompletion(page: Page, originalVersion: string) {
+  await page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "완료 기록", exact: true });
+  const table = dialog.getByRole("table", { name: "이 레슨의 완료 기록", exact: true });
+  const records = table.getByRole("row").filter({ has: page.getByRole("button", { name: "설정 보기", exact: true }) });
+  await expect(records).toHaveCount(1);
+  await expect(records.getByRole("rowheader")).toContainText("스테이지 11");
+  await expect(records.getByRole("rowheader")).toContainText("레벨 6");
+  await records.getByRole("button", { name: "설정 보기", exact: true }).click();
+  await expect(dialog.getByText(`버전 ${originalVersion}`, { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "완료 기록 닫기", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+}
+
 test("a validated replacement keeps the lesson ID and atomically advances its version", async ({ page }) => {
   const fixture = await lifecycleFixture(page);
   try {
@@ -64,8 +86,8 @@ test("a validated replacement keeps the lesson ID and atomically advances its ve
     await fixture.publish(original);
     const { data: before } = await fixture.service.from("lesson_drafts").select("published_at").eq("id", original).single();
     const replacement = await fixture.draft("Replacement lesson", original);
-    await page.goto("/home");
-    await expect(page.getByRole("button", { name: /Original lesson/ })).toBeVisible();
+    await page.goto("/lessons?language=english");
+    await expect(page.getByRole("link", { name: /Original lesson/ })).toBeVisible();
     await expect(page.getByText("Replacement lesson", { exact: true })).toHaveCount(0);
     expect((await page.request.post(`/api/admin/drafts/${replacement}/publish`)).status()).toBe(422);
     await fixture.upload(replacement);
@@ -77,7 +99,7 @@ test("a validated replacement keeps the lesson ID and atomically advances its ve
     expect(versions!.find(version => version.id === original)?.publication_status).toBe("archived");
     expect(versions!.find(version => version.id === replacement)?.published_at).not.toBe(before!.published_at);
     await page.reload();
-    await expect(page.getByRole("button", { name: /Replacement lesson/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Replacement lesson/ })).toBeVisible();
     await expect(page.getByText("Original lesson", { exact: true })).toHaveCount(0);
     expect((await page.request.get(`/api/lessons/${original}/audio/1?version=${encodeURIComponent(before!.published_at)}`, { maxRedirects: 0 })).status()).toBe(404);
     expect((await page.request.get(`/api/lessons/${original}/audio/1`, { maxRedirects: 0 })).status()).toBe(307);
@@ -91,6 +113,9 @@ for (const entry of ["home", "player"] as const) {
       const original = await fixture.draft("Versioned practice");
       await fixture.upload(original);
       await fixture.publish(original);
+      const { data: published, error } = await fixture.service.from("lesson_drafts").select("published_at").eq("id", original).single();
+      expect(error).toBeNull();
+      const originalVersion = published!.published_at as string;
       await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
       await page.goto(`/player?lesson=${original}&level=6&mode=automatic&lineGap=0`);
       await page.waitForLoadState("networkidle");
@@ -108,19 +133,22 @@ for (const entry of ["home", "player"] as const) {
       const replacement = await fixture.draft("Updated practice", original);
       await fixture.upload(replacement);
       await fixture.publish(replacement);
-      await page.goto(entry === "home" ? "/home" : oldRun);
+      await page.goto(entry === "home" ? "/lessons?language=english" : oldRun);
       await expect(page.getByRole("alert", { name: "레슨 버전 변경" })).toContainText("레슨이 새 버전으로 변경되어 이전 진도를 초기화했습니다.");
       if (entry === "home") {
-        await expect(page.getByRole("region", { name: "완료 기록" }).getByRole("listitem")).toHaveCount(1);
-        await expect(page.getByRole("button", { name: /마지막 학습 계속하기/ })).toContainText("프레이즈 1 / 2");
-        await page.getByRole("button", { name: /마지막 학습 계속하기/ }).click();
+        await page.getByRole("link", { name: /Updated practice/ }).click();
+        await expectPreservedCompletion(page, originalVersion);
+        await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
       }
-      await expect(page.getByText("문장 1 / 2", { exact: true })).toBeVisible();
+      const firstUnit = page.getByRole("navigation", { name: "학습 탐색", exact: true })
+        .getByText(entry === "home" ? "1 / 2" : "문장 1 / 2", { exact: true });
+      await expect(firstUnit).toBeVisible();
       expect(new URL(page.url()).searchParams.get("run")).not.toBe(new URL(oldRun).searchParams.get("run"));
       await page.reload();
-      await expect(page.getByText("문장 1 / 2", { exact: true })).toBeVisible();
-      await page.goto("/home");
-      await expect(page.getByRole("region", { name: "완료 기록" }).getByRole("listitem")).toHaveCount(1);
+      await expect(firstUnit).toBeVisible();
+      await page.goto("/lessons?language=english");
+      await page.getByRole("link", { name: /Updated practice/ }).click();
+      await expectPreservedCompletion(page, originalVersion);
     } finally { await fixture.cleanup(); }
   });
 }
@@ -162,8 +190,8 @@ test(`an administrator replaces from files, unpublishes without loss, and confir
     await page.screenshot({ path: join(tmpdir(), `meta-shadowing-issue10-${viewport.name}-management.png`) });
     await replaced.getByRole("button", { name: "게시 해제", exact: true }).click();
     await expect(replaced).toContainText("게시 해제됨");
-    await page.goto("/home");
-    await expect(page.getByRole("button", { name: /Managed replacement/ })).toHaveCount(0);
+    await page.goto("/lessons?language=english");
+    await expect(page.getByRole("link", { name: /Managed replacement/ })).toHaveCount(0);
     const { data: retained, error } = await fixture.service.from("lesson_drafts").select("id").eq("lesson_id", original);
     expect(error).toBeNull();
     expect(retained).toHaveLength(2);
@@ -222,8 +250,8 @@ test("partial Storage deletion remains hidden and can be retried after a reload"
     expect(root!.cleanup_error).toContain("삭제가 완료되지 않았습니다");
     expect((await fixture.service.storage.from("lesson-audio").list(`${fixture.owner}/${original}`)).data).toEqual([]);
     expect((await fixture.service.storage.from("lesson-audio").list(`${fixture.owner}/${replacement}`)).data).toHaveLength(2);
-    await page.goto("/home");
-    await expect(page.getByRole("button", { name: /Cleanup/ })).toHaveCount(0);
+    await page.goto("/lessons?language=english");
+    await expect(page.getByRole("link", { name: /Cleanup/ })).toHaveCount(0);
     expect((await page.request.get(`/api/lessons/${original}/audio/1`, { maxRedirects: 0 })).status()).toBe(404);
     await page.goto("/admin/lessons");
     await expect(page.getByText("삭제 정리 필요", { exact: false })).toBeVisible();

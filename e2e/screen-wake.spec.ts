@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { testRecording } from "./fixtures/audio";
+import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
 async function supportedWakeLock(page: Page) {
   await page.addInitScript(() => {
@@ -38,18 +39,23 @@ test("screen wake covers manual speaking and releases on pause, settings, backgr
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).waitFor();
   expect(await activeLocks(page)).toBe(0);
   await page.keyboard.press("Space");
-  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
+  await waitForManualListen(page);
+  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await expect.poll(() => activeLocks(page)).toBe(1);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(0);
-  await page.getByRole("button", { name: "문장 목록 닫기", exact: true }).click();
-  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await confirmManualListen(page);
   await expect.poll(() => activeLocks(page)).toBe(1);
+  await waitForManualListen(page);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(0);
-  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
-  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await confirmManualListen(page);
   await expect.poll(() => activeLocks(page)).toBe(1);
+  await waitForManualListen(page);
   await page.evaluate(() => {
     Object.defineProperty(document, "hidden", { configurable: true, value: true });
     document.dispatchEvent(new Event("visibilitychange"));
@@ -60,12 +66,14 @@ test("screen wake covers manual speaking and releases on pause, settings, backgr
     document.dispatchEvent(new Event("visibilitychange"));
   });
   expect(await activeLocks(page)).toBe(0);
-  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
+  await confirmManualListen(page);
   await expect.poll(() => activeLocks(page)).toBe(1);
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(0);
-  await page.getByRole("button", { name: "첫 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(/\/home/);
+  await page.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
+  await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
+  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
   await expect.poll(() => activeLocks(page)).toBe(0);
 });
 
@@ -94,9 +102,10 @@ for (const support of ["unsupported", "denied"] as const) {
     await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
     await page.goto("/player?lesson=morning-routine&level=1");
     await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
+    await confirmManualListen(page);
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
     await expect(page.getByLabel("화면 유지 안내")).toHaveCount(0);
-    await page.getByRole("button", { name: "CONTINUE · 다음 원음 듣기", exact: true }).click();
+    await confirmManualListen(page);
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 2 / 3");
   });
 }

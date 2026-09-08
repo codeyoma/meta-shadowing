@@ -48,13 +48,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run check:ui
       - run: npm run build
       - run: npm run typecheck
 
-  ci-browser:
-    name: ci-browser
+  ci-browser-shards:
+    name: ci-browser-shard-${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +70,19 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser -- --workers=2 --reporter=line --global-timeout=600000
+      - run: npm run test:browser -- --workers=2 --reporter=line --global-timeout=600000 --shard=${{ matrix.shard }}/4
+
+  ci-browser:
+    name: ci-browser
+    if: always()
+    needs: [ci-browser-shards]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every browser shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.ci-browser-shards.result }}
+        run: test "$SHARD_RESULT" = success
 
   ci-database:
     name: ci-database

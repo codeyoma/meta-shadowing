@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { confirmManualListen } from "./fixtures/manual-practice";
+import {
+  assertLocalSupabaseUrl,
+  installLocalSupabaseSession,
+  promoteLocalSessionToGoogle
+} from "./fixtures/local-supabase-google";
 
 const integrationEnabled = process.env.ADMIN_SUPABASE_INTEGRATION === "1";
 const TEST_WEBM_BASE64 =
@@ -25,7 +31,7 @@ async function signInWithEmailOtp(client: SupabaseClient, serviceClient: Supabas
 test("a saved 560-file draft recovers from a text timeout without reuploading any audio", async ({ page }) => {
   test.setTimeout(120000);
   const url = process.env.SUPABASE_INTEGRATION_URL!;
-  if (!["127.0.0.1", "localhost"].includes(new URL(url).hostname)) throw new Error("Local fixtures only");
+  assertLocalSupabaseUrl(url);
   const options = { auth: { persistSession: false, autoRefreshToken: false } };
   const service = createClient(url, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, options);
   const admin = createClient(url, process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!, options);
@@ -71,8 +77,9 @@ test("a saved 560-file draft recovers from a text timeout without reuploading an
     await page.route(`**/api/admin/drafts/${draftId}/publish`, route => route.fulfill({ status: 504, contentType: "text/plain", body: "An error occurred" }), { times: 1 });
     await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toBeVisible();
     await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
-    await expect(page.locator(".admin-form-error[role=alert]")).toContainText("시간");
-    await expect(page.locator(".admin-form-error[role=alert]")).not.toContainText("Unexpected");
+    const failureAlert = page.getByRole("main").getByRole("alert").filter({ hasText: "게시 검증 시간이 초과되었습니다." });
+    await expect(failureAlert).toContainText("업로드된 음성은 유지됩니다.");
+    await expect(failureAlert).not.toContainText("Unexpected");
     const published = page.waitForResponse(response => response.url().endsWith(`/api/admin/drafts/${draftId}/publish`));
     const started = Date.now();
     await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
@@ -131,6 +138,7 @@ test("only a complete private audio package can be published and played by a bet
   request
 }) => {
   const supabaseUrl = process.env.SUPABASE_INTEGRATION_URL!;
+  assertLocalSupabaseUrl(supabaseUrl);
   const publishableKey = process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!;
   const secretKey = process.env.SUPABASE_INTEGRATION_SECRET_KEY!;
   const adminEmail = `audio-admin-${randomUUID()}@example.com`;
@@ -179,6 +187,9 @@ test("only a complete private audio package can be published and played by a bet
 
     await signInWithEmailOtp(adminClient, serviceClient, adminEmail);
     await signInWithEmailOtp(learnerClient, serviceClient, learnerEmail);
+    const googleLearnerSession = await promoteLocalSessionToGoogle(
+      supabaseUrl, serviceClient, learnerClient, createdLearner.user.id, "learner"
+    );
 
     const rejectedUpload = await learnerClient.storage
       .from("lesson-audio")
@@ -281,8 +292,9 @@ test("only a complete private audio package can be published and played by a bet
       status: 504, contentType: "text/plain", body: "An error occurred: FUNCTION_INVOCATION_TIMEOUT"
     }), { times: 1 });
     await page.getByRole("button", { name: "음성 업로드 후 게시" }).click();
-    await expect(page.locator(".admin-form-error[role=alert]")).toContainText("시간");
-    await expect(page.locator(".admin-form-error[role=alert]")).not.toContainText("Unexpected token");
+    const failureAlert = page.getByRole("main").getByRole("alert").filter({ hasText: "게시 검증 시간이 초과되었습니다." });
+    await expect(failureAlert).toContainText("업로드된 음성은 유지됩니다.");
+    await expect(failureAlert).not.toContainText("Unexpected token");
     expect(uploadWrites).toBe(2);
     const publishedResponse = page.waitForResponse((response) =>
       response.url().endsWith(`/api/admin/drafts/${draftId}/publish`)
@@ -306,9 +318,11 @@ test("only a complete private audio package can be published and played by a bet
       data: { password: "integration-beta-password" }
     });
     expect(learnerEntry.status()).toBe(200);
+    await installLocalSupabaseSession(page, supabaseUrl, googleLearnerSession);
 
-    await page.goto("/home");
-    await expect(page.getByText(title)).toBeVisible();
+    await page.goto("/lessons?language=english");
+    await expect(page.getByRole("region", { name: "레슨 목록" })
+      .getByRole("link", { name: new RegExp(title) })).toBeVisible();
 
     await page.goto(`/setup?lesson=${draftId}`);
     await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
@@ -334,7 +348,11 @@ test("only a complete private audio package can be published and played by a bet
     expect(Buffer.from(await storedAudio.body())).toEqual(audioBytes);
 
     await page.goto(`/player?lesson=${draftId}&level=1`);
-    await expect(page.getByRole("main").getByText(title, { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+    const menu = page.getByRole("dialog", { name: "학습 메뉴", exact: true });
+    await expect(menu).toHaveAccessibleDescription(new RegExp(title));
+    await menu.getByRole("button", { name: "확인", exact: true }).click();
+    await expect(menu).toHaveCount(0);
     await expect(page.getByText(targetDialogue, { exact: true })).toBeVisible();
     await expect(page.getByText(targetDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
     await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기" }).click();
@@ -346,15 +364,17 @@ test("only a complete private audio package can be published and played by a bet
         })
       )
       .toBe(true);
+    await confirmManualListen(page);
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
     for (const cycle of [2, 3]) {
-      await page.keyboard.press("Space");
+      await confirmManualListen(page, "keyboard");
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
     }
     await page.keyboard.press("Space");
     await expect(page.getByText("I wash my face.", { exact: true })).toBeVisible();
+    await page.keyboard.press("Space");
     for (const cycle of [1, 2, 3]) {
-      await page.keyboard.press("Space");
+      await confirmManualListen(page, "keyboard");
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
     }
     await page.keyboard.press("Space");
@@ -373,6 +393,7 @@ test("only a complete private audio package can be published and played by a bet
       await expect(subtitles.getByText(targetDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
       await expect(subtitles.getByText(koreanDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
       await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
+      await confirmManualListen(page);
       await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
       if (level === 3 || level === 5) await expect(subtitles.getByText("Good", { exact: true })).toBeVisible();
       if (level >= 4) {
@@ -381,7 +402,7 @@ test("only a complete private audio package can be published and played by a bet
         await expect(subtitles.getByRole("listitem")).toHaveCount(1);
         await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuemax", "2");
         for (const cycle of [2, 3]) {
-          await page.keyboard.press("Space");
+          await confirmManualListen(page, "keyboard");
           await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
         }
         await page.keyboard.press("Space");

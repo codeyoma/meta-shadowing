@@ -12,25 +12,21 @@ function render(overrides: Partial<PracticeSubtitlesProps> = {}) {
   const root = document.createElement("div");
   root.innerHTML = renderToStaticMarkup(createElement(PracticeSubtitles, {
     lines: [dialogue], language: "english", grouped: false, currentIndex: 0, highlight: false,
-    canvasRef: { current: null }, currentLineRef: { current: null },
-    playback: createElement("button", null, "Play"), ...overrides
+    canvasRef: { current: null }, currentLineRef: { current: null }, ...overrides
   }));
   return root;
 }
 
-it("renders bilingual turns left, right, left, with one shared control before the subtitle region", () => {
+it("renders bilingual turns left, right, left without playback controls in the subtitles", () => {
   const root = render();
   const turns = [...root.querySelectorAll('[aria-label="대화"] > li')];
   expect(turns.map(turn => turn.getAttribute("data-side"))).toEqual(["left", "right", "left"]);
-  expect(turns.map(turn => [...turn.children].map(child => [child.getAttribute("lang"), child.textContent]))).toEqual([
+  expect(turns.map(turn => [...(turn.querySelector(':scope > [data-slot="bubble-content"]')?.children ?? [])].map(child => [child.getAttribute("lang"), child.textContent]))).toEqual([
     [["en", '"First."'], ["ko", '"첫째."']],
     [["en", '"Second."'], ["ko", '"둘째."']],
     [["en", '"Third."'], ["ko", '"셋째."']]
   ]);
-  expect(root.querySelectorAll("button")).toHaveLength(1);
-  expect(root.querySelector('[role="region"] button')).toBeNull();
-  expect(root.querySelector("button")!.compareDocumentPosition(root.querySelector('[role="region"]')!))
-    .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(root.querySelectorAll("button")).toHaveLength(0);
 });
 
 it("keeps ordinary sentences, unmatched dialogue, and first-token hints unsplit", () => {
@@ -41,9 +37,9 @@ it("keeps ordinary sentences, unmatched dialogue, and first-token hints unsplit"
   ]) {
     const root = render({ lines: [text] });
     expect(root.querySelector('[aria-label="대화"]')).toBeNull();
+    expect(root.querySelectorAll('[data-slot="bubble"][data-variant="outline"] > [data-slot="bubble-content"]')).toHaveLength(1);
     expect(root.querySelector('[lang="en"]')?.textContent).toBe(text.target);
     expect(root.querySelector('[lang="ko"]')?.textContent).toBe(text.korean);
-    expect(root.querySelectorAll("button")).toHaveLength(1);
   }
 });
 
@@ -54,5 +50,15 @@ it("preserves grouped phrase boundaries and current phrase while restarting alte
   expect([...phrases].map(line => line.getAttribute("aria-current"))).toEqual([null, null, "true"]);
   expect([...root.querySelectorAll('[aria-label="대화"]')].map(list => list.firstElementChild?.getAttribute("data-side"))).toEqual(["left", "left"]);
   expect(phrases[1].querySelector('[lang="en"]')?.textContent).toBe("Plain.");
-  expect(root.querySelectorAll("button")).toHaveLength(1);
+  expect(phrases[1].querySelector('[data-slot="bubble"] > [data-slot="bubble-content"] > [lang="ko"]')?.textContent).toBe("일반.");
+  expect([...phrases].map(phrase => [...phrase.querySelectorAll('[lang="en"]')].map(copy => copy.textContent))).toEqual([
+    ['"First."', '"Second."', '"Third."'], ["Plain."], ['"First."', '"Second."', '"Third."']
+  ]);
+});
+
+it.each([
+  ["japanese", "ja"], ["chinese", "zh"], ["german", "de"], ["french", "fr"]
+] as const)("marks %s subtitle text with its locale", (language, locale) => {
+  const root = render({ language, lines: [{ target: "Target.", korean: "번역." }] });
+  expect(root.querySelector(`[lang="${locale}"]`)?.textContent).toBe("Target.");
 });

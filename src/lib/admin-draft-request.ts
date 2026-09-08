@@ -2,6 +2,7 @@ import "server-only";
 
 import type { LessonDraftParseResult } from "./lesson-draft-parser";
 import { parseCombinedLessonDraft } from "./combined-script-parser";
+import { isLanguage, type Language } from "./languages";
 
 const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 5 * 1024 * 1024;
@@ -18,7 +19,7 @@ export class DraftRequestError extends Error {
 export type LessonDraftImport = {
   replacementFor?: string;
   title: string;
-  language: "english" | "japanese";
+  language: Language;
   targetFilename: string;
   koreanFilename: string;
   targetSource: string;
@@ -78,7 +79,7 @@ export async function readLessonDraftImport(request: Request): Promise<LessonDra
   }
 
   const language = readField(formData, "language");
-  if (language !== "english" && language !== "japanese") {
+  if (!isLanguage(language)) {
     throw new DraftRequestError("지원하는 언어를 선택해 주세요.", 400);
   }
 

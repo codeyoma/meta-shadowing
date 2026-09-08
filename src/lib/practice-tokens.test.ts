@@ -35,3 +35,10 @@ it("segments each Japanese dialogue line without mistaking line breaks for suppl
   expect(tokenizePracticeText("私は 七時に 起きます。\r\n東京に行きます。", "japanese")).toEqual(["私は", "七時に", "起きます。", "東京", "に", "行き", "ます。"]);
   expect(firstPracticeToken("東京に行きます。\n私は 七時に 起きます。", "japanese")).toBe("東京");
 });
+
+it("segments each unspaced Chinese dialogue line with the Chinese locale", () => {
+  expect(tokenizePracticeText("我喜欢学习中文。\n今天天气很好。", "chinese")).toEqual([
+    "我", "喜欢", "学习", "中文。", "今天", "天气", "很好。"
+  ]);
+  expect(firstPracticeToken("我喜欢学习中文。", "chinese")).toBe("我");
+});

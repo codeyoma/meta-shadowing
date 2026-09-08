@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openSelectedStageSettings, returnToStages, startSelectedStage } from "./fixtures/stage-preview";
 import { testRecording } from "./fixtures/audio";
+import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
 // Real PCM audio with known duration, so progress assertions exercise browser media.
 const wav = Buffer.alloc(44 + 8_000 * 2 * 2);
@@ -13,68 +15,86 @@ async function login(page: Page) {
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
 }
 
-for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} keeps title, instruction, and lesson progress in reading order`, async ({ page }) => {
+for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} keeps top-bar progress above the help trigger without a book title`, async ({ page }) => {
   await login(page);
   await page.goto(`/player?lesson=morning-routine&level=${level}`);
   const context = page.getByLabel("레슨 안내", { exact: true });
-  const book = context.getByText("Morning Routine", { exact: true });
-  const guidance = context.getByLabel("학습 방법", { exact: true });
-  const progress = context.getByRole("progressbar");
+  const guidance = context.getByRole("button", { name: `메타쉐도잉 레벨 ${level}`, exact: true });
+  const progress = page.locator("main > header").getByRole("progressbar");
   await expect(progress).toHaveCount(1);
   for (const width of [320, 583, 1066]) {
     await page.setViewportSize({ width, height: 788 });
-    const titleBox = (await book.boundingBox())!;
-    const instructionBox = (await guidance.boundingBox())!;
+    await expect(guidance).toBeVisible();
+    await expect(context).not.toContainText("Morning Routine");
+    const headingBox = (await guidance.boundingBox())!;
     const progressBox = (await progress.boundingBox())!;
-    expect(Math.abs(titleBox.x - instructionBox.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(titleBox.x - progressBox.x)).toBeLessThanOrEqual(1);
-    expect(progressBox.y).toBeGreaterThanOrEqual(instructionBox.y + instructionBox.height);
+    expect(progressBox.y + progressBox.height).toBeLessThanOrEqual(headingBox.y);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
 });
 
-test("the speaker outline follows real audio and freezes on pause before resetting for another listen", async ({ page }) => {
+test("the current cycle follows real audio progress through pause, completion, repeat and the next phrase", async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: wav }));
   await login(page);
   await page.goto("/player?lesson=morning-routine&level=1");
   const ring = page.getByRole("progressbar", { name: "원음 재생 진행", exact: true });
   await expect(ring).toBeVisible();
-  const speaker = page.getByRole("button", { name: "재생 또는 일시정지", exact: true });
-  await speaker.click();
+  await expect(ring).toHaveAttribute("aria-valuenow", "0");
+  const action = page.getByRole("group", { name: "학습 진행", exact: true }).getByRole("button");
+  await page.keyboard.press("Tab");
+  await action.focus();
+  expect(await action.evaluate(element => element.matches(":focus-visible"))).toBe(true);
+  await expect(action).not.toHaveCSS("box-shadow", "none");
+  await action.click();
   await expect.poll(async () => Number(await ring.getAttribute("aria-valuenow"))).toBeGreaterThan(10);
-  await speaker.click();
-  const paused = Number(await ring.getAttribute("aria-valuenow"));
+  const ringBox = (await ring.boundingBox())!;
+  const currentBox = (await page.getByLabel("완료한 듣기").locator('[data-current="true"] i').boundingBox())!;
+  expect(ringBox.width).toBe(28);
+  expect(ringBox.height).toBe(28);
+  expect(ringBox.x).toBeCloseTo(currentBox.x, 0);
+  expect(ringBox.y).toBeCloseTo(currentBox.y, 0);
+  await page.getByRole("button", { name: "PAUSE · 일시정지", exact: true }).click();
+  await expect(ring).toBeVisible();
+  const paused = await page.locator("audio").evaluate(audio => (audio as HTMLAudioElement).currentTime);
   expect(paused).toBeGreaterThan(0);
-  expect(paused).toBeLessThan(100);
-  // Let native media time pass; a visual clock must not advance while paused.
+  expect(paused).toBeLessThan(2);
+  const pausedProgress = await ring.getAttribute("aria-valuenow");
+  expect(Number(pausedProgress)).toBeCloseTo(paused / 2 * 100, 0);
+  // Both native media time and the visible ring remain at the paused position.
   await page.waitForTimeout(300);
-  expect(Number(await ring.getAttribute("aria-valuenow"))).toBeCloseTo(paused, 0);
-  await speaker.click();
-  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
+  const settledTime = await page.locator("audio").evaluate(audio => (audio as HTMLAudioElement).currentTime);
+  expect(settledTime).toBeCloseTo(paused, 2);
+  // The native pause/timeupdate event can settle a millisecond after click().
+  // Assert the frozen media timestamp, not a pre-event animation-frame sample.
+  await expect(ring).toHaveAttribute("aria-valuenow", String(Math.round(settledTime / 2 * 1000) / 10));
+  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
+  await waitForManualListen(page);
+  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await expect(ring).toHaveAttribute("aria-valuenow", "100");
-  await speaker.click();
+  await confirmManualListen(page);
+  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   await expect.poll(async () => Number(await ring.getAttribute("aria-valuenow"))).toBeLessThan(30);
+  await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 2 / 3");
-  await speaker.click();
+  await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 3 / 3");
-  await page.keyboard.press("r");
+  await expect(ring).toHaveCount(0);
+  await page.getByRole("button", { name: /^REPEAT/ }).click();
   await expect.poll(async () => Number(await ring.getAttribute("aria-valuenow"))).toBeLessThan(30);
+  await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 3 / 3 · 추가 1 / 2");
-  await page.getByRole("button", { name: /^CONTINUE/ }).click();
+  await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 3 / 3 · 추가 2 / 2");
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("region", { name: "학습 자막" })).toContainText("I wash my face.");
+  await expect(ring).toBeVisible();
   await expect(ring).toHaveAttribute("aria-valuenow", "0");
-  const ringBox = (await ring.boundingBox())!;
-  const buttonBox = (await speaker.boundingBox())!;
-  expect(Math.abs(ringBox.width - buttonBox.width)).toBeLessThanOrEqual(2);
-  expect(Math.abs(ringBox.height - buttonBox.height)).toBeLessThanOrEqual(2);
 });
 
 test("unknown-duration audio never invents a percentage and still reaches completion", async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await login(page);
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await page.goto("/player?lesson=morning-routine&level=1&speed=0.5");
   const ring = page.getByRole("progressbar", { name: "원음 재생 진행", exact: true });
   await expect(ring).toBeVisible();
   // Chrome can discover this WebM's duration during preload. Control only the
@@ -83,13 +103,18 @@ test("unknown-duration audio never invents a percentage and still reaches comple
     Object.defineProperty(audio, "duration", { configurable: true, get: () => Infinity });
     audio.dispatchEvent(new Event("durationchange"));
   });
-  await expect(ring).not.toHaveAttribute("aria-valuenow");
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
-  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
+  await expect(ring).toBeVisible();
+  await expect(ring).not.toHaveAttribute("aria-valuenow");
+  await expect(ring).toHaveAttribute("aria-valuetext", "재생 길이 확인 중");
+  await waitForManualListen(page);
+  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await expect(ring).toHaveAttribute("aria-valuenow", "100");
+  await confirmManualListen(page);
+  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });
 
-test("grouped listening resets the outline for each recording, not just for the whole cycle", async ({ page }) => {
+test("grouped listening keeps completed progress in each gap and resets it for the next recording", async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: wav }));
   await login(page);
   await page.goto("/player?lesson=morning-routine&level=4&group=3&groupGap=0.5");
@@ -99,74 +124,63 @@ test("grouped listening resets the outline for each recording, not just for the 
   for (const index of [0, 1, 2]) {
     await expect(phrases.nth(index)).toHaveAttribute("aria-current", "true");
     await expect.poll(async () => Number(await ring.getAttribute("aria-valuenow"))).toBeLessThan(35);
-    // The completed outline is visible only during the 500ms inter-recording gap.
-    await expect.poll(() => ring.getAttribute("aria-valuenow"), { intervals: [50] }).toBe("100");
+    await expect.poll(() => page.locator("audio").evaluate(audio => (audio as HTMLAudioElement).ended), { intervals: [50] }).toBe(true);
+    await expect(ring).toHaveAttribute("aria-valuenow", "100");
   }
+  await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });
 
-test("setup options protect focus and preserve preferences while leaving only Start below the path", async ({ page }) => {
+test("session preferences page preserves grouped and rapid options before starting through the stage preview", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await login(page);
   await page.goto("/setup?lesson=morning-routine");
-  const options = page.getByRole("button", { name: "세션 설정", exact: true });
-  await expect(options).toBeVisible();
+  await expect(page.getByRole("button", { name: "세션 설정", exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox")).toHaveCount(0);
   const title = (await page.getByRole("heading", { level: 1 }).boundingBox())!;
-  const metadata = (await page.getByText("3개 프레이즈", { exact: true }).boundingBox())!;
-  const back = (await page.getByRole("button", { name: "레슨", exact: true }).boundingBox())!;
-  expect(Math.abs(back.y + back.height / 2 - (title.y + metadata.y + metadata.height) / 2)).toBeLessThanOrEqual(2);
-  await page.getByRole("button", { name: /4 다문장 암기/ }).click();
-  await options.click();
-  const dialog = page.getByRole("dialog", { name: "세션 설정", exact: true });
-  await expect(dialog).toBeVisible();
+  const metadata = (await page.getByRole("main").getByText("0개 섹션 · 3개 프레이즈", { exact: true }).boundingBox())!;
+  const nav = (await page.getByRole("navigation", { name: "상단 탐색", exact: true }).boundingBox())!;
+  expect(title.y).toBeGreaterThan(nav.y + nav.height);
+  expect(metadata.y).toBeGreaterThanOrEqual(title.y + title.height);
+  await page.getByRole("radio", { name: /7 다문장 암기/ }).click();
+  await openSelectedStageSettings(page);
+  await expect(page.getByRole("heading", { name: "세션 설정", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByLabel("묶음 크기").selectOption("4");
   await page.getByRole("combobox", { name: "재생속도", exact: true }).selectOption("1.5");
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(options).toBeFocused();
-  await options.click();
+  await returnToStages(page);
+  await page.getByRole("radio", { name: /7 다문장 암기/, checked: false }).click();
+  await openSelectedStageSettings(page);
   await expect(page.getByLabel("묶음 크기")).toHaveValue("4");
-  await page.getByRole("button", { name: "설정 닫기", exact: true }).click();
-  await page.getByRole("button", { name: /7 속사포 한영/ }).click();
-  await options.click();
-  await page.getByRole("button", { name: "자동", exact: true }).click();
+  await returnToStages(page);
+  await page.getByRole("radio", { name: /13 속사포 한영/ }).click();
+  await openSelectedStageSettings(page);
+  await page.getByRole("radio", { name: "자동", exact: true }).click();
   await page.getByLabel("말하기 추가 시간 (초)").fill("1.5");
   await page.getByRole("combobox", { name: "단어 속도", exact: true }).selectOption("6");
-  expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-  await page.getByRole("button", { name: "설정 닫기", exact: true }).focus();
-  await page.keyboard.press("Tab");
-  expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
-  await page.keyboard.press("Shift+Tab");
-  await expect(page.getByRole("button", { name: "설정 닫기", exact: true })).toBeFocused();
-  await page.keyboard.press("Escape");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await returnToStages(page);
+  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
   await page.reload();
-  await page.getByRole("button", { name: /7 속사포 한영/ }).click();
-  await options.click();
+  await page.getByRole("radio", { name: /13 속사포 한영/ }).click();
+  await openSelectedStageSettings(page);
   await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("1.5");
   await expect(page.getByRole("combobox", { name: "단어 속도", exact: true })).toHaveValue("6");
-  await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "학습 시작", exact: true }).click();
+  await returnToStages(page);
+  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
+  await startSelectedStage(page);
   await expect(page).toHaveURL(/level=7/);
   await expect(page).toHaveURL(/wpm=6/);
 });
 
-test("the bottom Close matches the main primary button and the top Home still returns home", async ({ page }) => {
+test("drawer views have no Close actions and return to stage selection through the menu", async ({ page }) => {
   await login(page);
   await page.goto("/player?lesson=morning-routine&level=1");
-  const primary = await page.getByRole("button", { name: /^CONTINUE/ }).evaluate(element => {
-    const style = getComputedStyle(element);
-    return { background: style.backgroundColor, foreground: style.color, border: style.borderTopWidth, radius: style.borderRadius, weight: style.fontWeight, shadow: style.boxShadow };
-  });
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
-  const home = page.getByRole("button", { name: "첫 화면으로", exact: true });
-  const close = page.getByRole("button", { name: "문장 목록 닫기", exact: true });
-  const colors = await close.evaluate(element => {
-    const style = getComputedStyle(element);
-    return { background: style.backgroundColor, foreground: style.color, border: style.borderTopWidth, radius: style.borderRadius, weight: style.fontWeight, shadow: style.boxShadow };
-  });
-  expect(colors).toEqual(primary);
-  await expect(close.locator("svg")).toHaveCSS("color", primary.foreground);
+  const home = page.getByRole("button", { name: "스테이지 화면으로", exact: true });
+  await expect(page.getByRole("dialog").getByRole("button", { name: /닫기/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
   await home.click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
 });

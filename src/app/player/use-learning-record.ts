@@ -2,8 +2,9 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { Lesson } from "@/lib/lessons";
-import { readLearningJournal, saveLearningBoundary, type ProgressRecord, type CompletionRecord, type RunSelection } from "@/lib/learning-records";
+import { readLearningJournal, recordConfirmedPractice, saveLearningBoundary, type ProgressRecord, type CompletionRecord, type RunSelection } from "@/lib/learning-records";
 import { getPlayerHref, saveLastSelection } from "@/lib/resume";
+import { createRunId } from "@/lib/run-id";
 import { resolveSessionSettings, saveSessionPreferences, type SessionSettings } from "@/lib/session-settings";
 
 export type LearningStart = { selection: RunSelection; progress: ProgressRecord | null; completion: CompletionRecord | null };
@@ -14,6 +15,7 @@ type RecordUpdate = {
   finished?: boolean;
   settings?: Partial<SessionSettings>;
   restartCompleted?: boolean;
+  studied?: boolean;
 };
 
 export function useLearningRecord(lesson: Lesson, start: LearningStart) {
@@ -26,7 +28,7 @@ export function useLearningRecord(lesson: Lesson, start: LearningStart) {
     const state = current.current;
     // Another tab may have completed this run since this player was mounted.
     if (update.restartCompleted && (state.completed || readLearningJournal().history.some(record => record.runId === state.runId))) {
-      state.runId = crypto.randomUUID();
+      state.runId = createRunId();
       state.completed = false;
       state.active = false;
       state.activeMs = 0;
@@ -36,6 +38,8 @@ export function useLearningRecord(lesson: Lesson, start: LearningStart) {
       window.history.replaceState(null, "", getPlayerHref(selection));
     }
     if (state.completed && !update.settings) return;
+    const studySaved = !update.studied || recordConfirmedPractice();
+    if (!studySaved) setStorageFailed(true);
     const now = performance.now();
     if (state.active) state.activeMs += Math.max(0, now - state.anchor);
     state.activeMs += update.elapsedMs ?? 0;
@@ -51,7 +55,7 @@ export function useLearningRecord(lesson: Lesson, start: LearningStart) {
     if (!update.checkpoint) return;
     const record: ProgressRecord = {
       runId: state.runId, lessonId: lesson.id, lessonVersion: lesson.version, lessonName: lesson.name,
-      language: lesson.language, level: start.selection.level, nextUnit: update.checkpoint.unit,
+      language: lesson.language, level: start.selection.level, stage: start.selection.stage, nextUnit: update.checkpoint.unit,
       nextPhrase: update.checkpoint.phrase, activeMs: state.activeMs, settings: state.settings
     };
     if (update.finished) {
@@ -59,8 +63,8 @@ export function useLearningRecord(lesson: Lesson, start: LearningStart) {
       state.completed = true;
       state.active = false;
       setCompletion(completed);
-      setStorageFailed(!saveLearningBoundary(completed));
-    } else setStorageFailed(!saveLearningBoundary(record));
+      setStorageFailed(!saveLearningBoundary(completed) || !studySaved);
+    } else setStorageFailed(!saveLearningBoundary(record) || !studySaved);
   }, [lesson, start]);
 
   return { completion, storageFailed, updateRecord };

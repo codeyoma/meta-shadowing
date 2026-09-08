@@ -23,7 +23,7 @@ export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: Rapid
       type: "tick", elapsedMs: now - clockAnchor.current, runId: previous.runId
     }) : previous;
     if (next.boundaryCount !== previous.boundaryCount) {
-      updateRecord({ elapsedMs: next.checkpointActiveMs - previous.activeElapsedMs, checkpoint: { unit: next.checkpointIndex, phrase: next.checkpointIndex }, finished: next.phase === "completed" });
+      updateRecord({ studied: true, elapsedMs: next.checkpointActiveMs - previous.activeElapsedMs, checkpoint: { unit: next.checkpointIndex, phrase: next.checkpointIndex }, finished: next.phase === "completed" });
       updateRecord({ elapsedMs: next.activeElapsedMs - next.checkpointActiveMs });
     } else updateRecord({ elapsedMs: next.activeElapsedMs - previous.activeElapsedMs });
     const beforeEvent = next;
@@ -49,8 +49,8 @@ export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: Rapid
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("input, select, textarea, [contenteditable=true], [role=dialog]")) return;
       if (target instanceof HTMLElement && target.closest("button, a") && !target.closest("[data-player-shortcuts]")) return;
-      const type = event.code === "Space" ? "space" : event.key.toLowerCase() === "r" ? "restart"
-        : event.key === "ArrowLeft" ? "previous" : event.key === "ArrowRight" ? "next" : null;
+      const type = event.code === "Space" ? "space"
+        : event.key === "ArrowRight" ? "next" : null;
       if (!type) return;
       event.preventDefault();
       if (event.code === "Space") handledSpace = true;

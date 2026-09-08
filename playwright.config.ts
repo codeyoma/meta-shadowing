@@ -1,4 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
+import {
+  createLearnerAuthStorageState,
+  FAKE_SUPABASE_PUBLISHABLE_KEY
+} from "./e2e/fixtures/learner-auth";
 
 const chromeExecutable = process.env.PLAYWRIGHT_CHROME_EXECUTABLE;
 const runSupabaseIntegration = process.env.ADMIN_SUPABASE_INTEGRATION === "1";
@@ -8,6 +12,8 @@ if (productionBuild && !runSupabaseIntegration) {
 }
 const port = Number(process.env.PLAYWRIGHT_PORT ?? (runSupabaseIntegration ? 3010 : 3000));
 const baseURL = `${productionBuild ? "https" : "http"}://127.0.0.1:${port}`;
+const authPort = Number(process.env.PLAYWRIGHT_AUTH_PORT ?? port + 1);
+const fakeSupabaseUrl = `http://127.0.0.1:${authPort}`;
 const integrationUrl = process.env.SUPABASE_INTEGRATION_URL;
 const integrationPublishableKey = process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY;
 
@@ -35,6 +41,8 @@ const serverEnvironment = runSupabaseIntegration
       ...inheritedServerEnvironment,
       BETA_PASSWORD: "test-beta-password",
       LEARNER_COOKIE_SECRET: "test-cookie-secret",
+      NEXT_PUBLIC_SUPABASE_URL: fakeSupabaseUrl,
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: FAKE_SUPABASE_PUBLISHABLE_KEY,
       ADMIN_TEST_MODE: "1",
       ADMIN_TEST_EMAIL: "admin@example.com",
       ADMIN_TEST_OTP: "123456",
@@ -56,10 +64,22 @@ export default defineConfig({
     } : undefined
   },
   projects: [
-    { name: "mobile", use: { ...devices["Pixel 5"] } },
-    { name: "desktop", use: { ...devices["Desktop Chrome"] } }
+    {
+      name: "mobile",
+      use: {
+        ...devices["Pixel 5"],
+        ...(runSupabaseIntegration ? {} : { storageState: createLearnerAuthStorageState(baseURL, fakeSupabaseUrl) })
+      }
+    },
+    {
+      name: "desktop",
+      use: {
+        ...devices["Desktop Chrome"],
+        ...(runSupabaseIntegration ? {} : { storageState: createLearnerAuthStorageState(baseURL, fakeSupabaseUrl) })
+      }
+    }
   ],
-  webServer: {
+  webServer: runSupabaseIntegration ? {
     command: productionBuild
       ? `node scripts/start-production-test-server.mjs ${port}`
       : `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
@@ -67,5 +87,17 @@ export default defineConfig({
     url: baseURL,
     ignoreHTTPSErrors: productionBuild,
     reuseExistingServer: runSupabaseIntegration ? false : !process.env.CI
-  }
+  } : [
+    {
+      command: `node e2e/fixtures/learner-auth-server.ts ${authPort}`,
+      url: `${fakeSupabaseUrl}/auth/v1/health`,
+      reuseExistingServer: !process.env.CI
+    },
+    {
+      command: `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
+      env: serverEnvironment,
+      url: baseURL,
+      reuseExistingServer: !process.env.CI
+    }
+  ]
 });

@@ -20,6 +20,8 @@ export type AudioSession = {
   groupIndex: number;
   groupDurationMs: number;
   completedCycles: number;
+  // A recording can be finished while its practice confirmation is still pending.
+  confirmedCycles: number;
   cycleTarget: 3 | 5;
   attempt: number;
   phase: "ready" | ActivePhase | "paused" | "error" | "completed";
@@ -44,6 +46,11 @@ export function hasSessionTimer(session: AudioSession): boolean {
     || (session.phase === "paused" && ["speaking", "countdown"].includes(session.pausedPhase));
 }
 
+export function isAudioRepeatAvailable(session: AudioSession): boolean {
+  return session.cycleTarget === 3 && session.confirmedCycles === 3
+    && (session.phase === "ready" || (session.phase === "paused" && session.pausedPhase === "ready"));
+}
+
 export function createAudioSession({
   phraseCount, groupSizes, level = 1, mode = "manual", advanceDelayMs = 1000, playbackRate = 1, groupGapMs = 500, initialGroupIndex = 0
 }: { phraseCount: number; groupSizes?: number[]; level?: AudioPracticeLevel; initialGroupIndex?: number } & Partial<AudioSessionSettings>): AudioSession {
@@ -52,7 +59,7 @@ export function createAudioSession({
   const sizes = validGroups ? [...groupSizes!] : Array.from({ length: phraseCount }, () => 1);
   const groupIndex = Number.isInteger(initialGroupIndex) && initialGroupIndex >= 0 && initialGroupIndex < sizes.length ? initialGroupIndex : 0;
   return {
-    level, subtitlesRevealed: false, phraseCount, phraseIndex: sizes.slice(0, groupIndex).reduce((a, b) => a + b, 0), completedCycles: 0, cycleTarget: 3, attempt: 0, phase: "ready",
+    level, subtitlesRevealed: false, phraseCount, phraseIndex: sizes.slice(0, groupIndex).reduce((a, b) => a + b, 0), completedCycles: 0, confirmedCycles: 0, cycleTarget: 3, attempt: 0, phase: "ready",
     groupSizes: sizes,
     groupIndex, groupDurationMs: 0,
     pausedPhase: "loading", mode, remainingMs: 0,
@@ -70,6 +77,7 @@ function startListen(session: AudioSession): AudioSession {
   const startsNewCycle = session.phase === "ready" || (session.phase === "paused" && session.pausedPhase === "ready") || hasSessionTimer(session);
   return {
     ...session, phase: "loading", attempt: session.attempt + 1, remainingMs: 0,
+    completedCycles: session.confirmedCycles,
     phraseIndex: groupFirstPhrase(session), groupDurationMs: 0,
     subtitlesRevealed: startsNewCycle ? false : session.subtitlesRevealed
   };
@@ -80,7 +88,7 @@ function advanceGroup(session: AudioSession): AudioSession {
   const next: AudioSession = {
     ...session, phase: "ready", groupIndex: session.groupIndex + 1,
     phraseIndex: groupFirstPhrase(session) + session.groupSizes[session.groupIndex],
-    completedCycles: 0, cycleTarget: 3, attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
+    completedCycles: 0, confirmedCycles: 0, cycleTarget: 3, attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
   };
   return session.mode === "automatic" ? startListen(next) : next;
 }
@@ -93,6 +101,15 @@ function requestAdvance(session: AudioSession): AudioSession {
   return advanceGroup(session);
 }
 
+function speakingTime(session: AudioSession, durationMs = session.groupDurationMs): number {
+  const extended = session.level === 2 || session.level === 4;
+  return durationMs / session.playbackRate * (extended ? 2.25 : 1.25) + (extended ? 750 : 500);
+}
+
+function confirmListen(session: AudioSession): AudioSession {
+  return { ...session, confirmedCycles: session.completedCycles, phase: "ready", remainingMs: 0 };
+}
+
 export function transitionAudioSession(session: AudioSession, event: AudioSessionEvent): AudioSession {
   if (event.type === "jump") {
     if (!Number.isInteger(event.phraseIndex) || event.phraseIndex < 0 || event.phraseIndex >= session.phraseCount) return session;
@@ -102,7 +119,7 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       phraseIndex += size;
       return false;
     });
-    return { ...session, groupIndex, phraseIndex, phase: "ready", pausedPhase: "loading", completedCycles: 0, cycleTarget: 3,
+    return { ...session, groupIndex, phraseIndex, phase: "ready", pausedPhase: "loading", completedCycles: 0, confirmedCycles: 0, cycleTarget: 3,
       attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0 };
   }
   if (session.phase === "completed") return session;
@@ -118,10 +135,12 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       return {
         ...session, groupIndex: session.groupIndex - 1,
         phraseIndex: groupFirstPhrase(session) - session.groupSizes[session.groupIndex - 1],
-        completedCycles: 0, cycleTarget: 3, phase: "ready", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
+        completedCycles: 0, confirmedCycles: 0, cycleTarget: 3, phase: "ready", attempt: session.attempt + 1, remainingMs: 0, subtitlesRevealed: false, groupDurationMs: 0
       };
     case "next":
-      return session.completedCycles >= session.cycleTarget ? requestAdvance(session) : session;
+      if (session.mode === "manual" && session.completedCycles >= session.cycleTarget && session.confirmedCycles < session.cycleTarget
+        && (session.phase === "ready" || (session.phase === "paused" && session.pausedPhase === "ready"))) return confirmListen(session);
+      return session.confirmedCycles >= session.cycleTarget ? requestAdvance(session) : session;
     case "space":
       if (session.phase === "error") return startListen(session);
       if (["loading", "playing", "gap"].includes(session.phase)) {
@@ -131,11 +150,15 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
         if (session.pausedPhase === "ready") return transitionAudioSession({ ...session, phase: "ready" }, event);
         return { ...session, phase: session.pausedPhase === "playing" ? "loading" : session.pausedPhase };
       }
-      if (session.completedCycles >= session.cycleTarget) return requestAdvance(session);
+      if (session.mode === "manual" && session.completedCycles > session.confirmedCycles && session.phase === "ready") {
+        const confirmed = confirmListen(session);
+        return confirmed.confirmedCycles >= confirmed.cycleTarget ? confirmed : startListen(confirmed);
+      }
+      if (session.confirmedCycles >= session.cycleTarget) return requestAdvance(session);
       return startListen(session);
     case "retry":
-      if (session.completedCycles >= 5) return requestAdvance(session);
-      return startListen({ ...session, cycleTarget: session.completedCycles >= 3 ? 5 : session.cycleTarget });
+      if (session.confirmedCycles >= 5) return requestAdvance(session);
+      return startListen({ ...session, cycleTarget: session.confirmedCycles >= 3 ? 5 : session.cycleTarget });
     case "audio-playing":
       if (event.attempt !== session.attempt || session.phase !== "loading") return session;
       return { ...session, phase: "playing" };
@@ -145,16 +168,13 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       if (session.phraseIndex + 1 < groupFirstPhrase(session) + session.groupSizes[session.groupIndex]) {
         return { ...session, phase: "gap", groupDurationMs, remainingMs: session.groupGapMs };
       }
-      const speakingWindow = session.level === 2 || session.level === 4
-        ? { multiplier: 2.25, paddingMs: 750 }
-        : { multiplier: 1.25, paddingMs: 500 };
       return {
         ...session,
         groupDurationMs,
         phase: session.mode === "automatic" ? "speaking" : "ready",
         completedCycles: session.completedCycles + 1,
         remainingMs: session.mode === "automatic"
-          ? groupDurationMs / session.playbackRate * speakingWindow.multiplier + speakingWindow.paddingMs
+          ? speakingTime(session, groupDurationMs)
           : 0
       };
     }
@@ -167,9 +187,10 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
       if (remainingMs > 0) return { ...session, remainingMs };
       if (session.phase === "gap") return { ...session, phraseIndex: session.phraseIndex + 1, attempt: session.attempt + 1, phase: "loading", remainingMs: 0 };
       if (session.phase === "countdown") return advanceGroup(session);
-      if (session.completedCycles < session.cycleTarget) return startListen(session);
-      if (session.cycleTarget === 5) return requestAdvance(session);
-      return { ...session, phase: "ready", remainingMs: 0 };
+      const confirmed = confirmListen(session);
+      if (confirmed.confirmedCycles < confirmed.cycleTarget) return startListen(confirmed);
+      if (confirmed.cycleTarget === 5) return requestAdvance(confirmed);
+      return confirmed;
     }
     case "settings": {
       const next = {
@@ -182,7 +203,14 @@ export function transitionAudioSession(session: AudioSession, event: AudioSessio
           && event.advanceDelayMs >= 0 && event.advanceDelayMs <= 30000
           ? event.advanceDelayMs : session.advanceDelayMs
       };
-      return next.mode === "manual" && hasSessionTimer(session) ? { ...next, phase: "ready", remainingMs: 0 } : next;
+      if (next.mode === "manual" && hasSessionTimer(session)) return {
+        ...next, phase: session.phase === "paused" ? "paused" : "ready", pausedPhase: "ready", remainingMs: 0
+      };
+      if (next.mode === "automatic" && session.mode === "manual" && next.completedCycles > next.confirmedCycles
+        && (session.phase === "ready" || (session.phase === "paused" && session.pausedPhase === "ready"))) {
+        return { ...next, phase: session.phase === "paused" ? "paused" : "speaking", pausedPhase: "speaking", remainingMs: speakingTime(next) };
+      }
+      return next;
     }
   }
 }

@@ -58,6 +58,7 @@ it("keeps the entire level 5 group revealed across recordings and hides it at th
   session = finishPair(transitionAudioSession(session, { type: "space" }));
   session = transitionAudioSession(session, { type: "reveal-subtitles" });
   session = transitionAudioSession(session, { type: "space" });
+  session = transitionAudioSession(session, { type: "space" });
   expect(session).toMatchObject({ groupIndex: 1, phraseIndex: 2, subtitlesRevealed: false });
 });
 
@@ -69,17 +70,20 @@ it("repeats the entire group three plus two times and navigates between groups, 
     session = finishPair(session);
     expect(session.completedCycles).toBe(cycle);
   }
+  session = transitionAudioSession(session, { type: "space" });
   expect(transitionAudioSession(session, { type: "space" })).toMatchObject({
     groupIndex: 1, phraseIndex: 2, completedCycles: 0, phase: "ready"
   });
   for (const cycle of [4, 5]) {
-    session = finishPair(transitionAudioSession(session, { type: "retry" }));
+    session = finishPair(transitionAudioSession(session, { type: cycle === 4 ? "retry" : "space" }));
     expect(session.completedCycles).toBe(cycle);
   }
+  session = transitionAudioSession(session, { type: "space" });
   session = transitionAudioSession(session, { type: "retry" });
   expect(session).toMatchObject({ groupIndex: 1, phraseIndex: 2, completedCycles: 0, phase: "ready" });
   expect(transitionAudioSession(session, { type: "previous" })).toMatchObject({ groupIndex: 0, phraseIndex: 0, completedCycles: 0 });
   for (let cycle = 0; cycle < 3; cycle++) session = finishRecording(transitionAudioSession(session, { type: "space" }), 1000);
+  session = transitionAudioSession(session, { type: "space" });
   expect(transitionAudioSession(session, { type: "space" }).phase).toBe("completed");
 });
 

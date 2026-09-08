@@ -1,5 +1,30 @@
 import type { LessonDraftEntry } from "./lesson-draft-parser";
 
+type SentenceSection = {
+  id: string;
+  heading: Extract<LessonDraftEntry, { kind: "chapter" }> | null;
+  entries: Exclude<LessonDraftEntry, { kind: "chapter" }>[];
+};
+
+/** Blank separators stay inside a titled section; introductory text stays untitled. */
+export function lessonSentenceSections(entries: LessonDraftEntry[]): SentenceSection[] {
+  const sections: SentenceSection[] = [];
+  let current: SentenceSection | undefined;
+  entries.forEach((entry, index) => {
+    if (entry.kind === "chapter") {
+      current = { id: `section-${index}`, heading: entry, entries: [] };
+      sections.push(current);
+    } else {
+      if (!current) {
+        current = { id: "untitled", heading: null, entries: [] };
+        sections.push(current);
+      }
+      current.entries.push(entry);
+    }
+  });
+  return sections;
+}
+
 export type LessonSection = {
   chapter: { target: string; korean: string } | null;
   startsSection: boolean;

@@ -1,10 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import Link from "next/link";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Spinner } from "@/components/ui/spinner";
 import type { ManagedLesson } from "@/lib/lesson-management";
+import { languageInfo } from "@/lib/languages";
 import { requestLessonPublication } from "@/lib/request-lesson-publication";
 import { Brand, Page } from "../../ui";
+import { SyntaxAnalysisStatus } from "../syntax-analysis-status";
 
 const statusNames = { draft: "초안", published: "게시 중", unpublished: "게시 해제됨", deleting: "삭제 정리 필요" };
 
@@ -72,54 +84,75 @@ export function LessonManager({ initialLessons, initialError = "" }: { initialLe
     } finally { setBusy(false); }
   }
 
-  return <Page className="admin-page">
-    <header className="admin-header"><Brand compact /><Link href="/admin">새 레슨 가져오기</Link></header>
-    <section className="admin-workspace" aria-labelledby="management-title">
-      <div className="admin-page-title"><p>관리자</p><h1 id="management-title">레슨 관리</h1></div>
-      <button className="secondary-button" type="button" disabled={busy} onClick={refresh}>목록 새로고침</button>
-      {message ? <p className="management-message" role="status">{message}</p> : null}
-      {error ? <p className="admin-form-error" role="alert">{error}</p> : null}
-      <ul className="managed-lessons">
+  return <Page className="px-4 pb-4 sm:px-8">
+    <header className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4 py-6"><Brand compact /><Button asChild variant="outline"><Link href="/admin">새 레슨 가져오기</Link></Button></header>
+    <ScrollArea className="mx-auto w-full max-w-5xl flex-1" viewportProps={{ role: "region", "aria-label": "레슨 관리 목록" }}>
+    <section className="flex min-w-0 flex-col gap-8 px-2 pt-6 pb-4" aria-labelledby="management-title">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 id="management-title" className="font-heading text-3xl font-bold text-display">레슨 관리</h1>
+        <Button variant="outline" type="button" disabled={busy} onClick={refresh}>{busy ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}목록 새로고침</Button>
+      </div>
+      {message ? <Alert role="status"><AlertDescription>{message}</AlertDescription></Alert> : null}
+      {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
+      <ul className="flex min-w-0 flex-col gap-6">
         {lessons.map(lesson => <li key={lesson.id}>
-          <div className="managed-lesson-heading">
-            <h2>{lesson.title}</h2>
-            <p>{lesson.language === "english" ? "영어" : "일본어"} · {statusNames[lesson.status]} · {lesson.versionCount}개 버전</p>
-          </div>
-          {lesson.status === "deleting" ? <p className="admin-form-error">{lesson.cleanupError || "삭제가 중단되었습니다. 레슨은 숨김 상태입니다. 삭제 정리를 다시 시도해 주세요."}</p> : null}
-          {lesson.pendingDrafts.length > 1 ? <div className="import-metadata">
-            <label htmlFor={`pending-draft-${lesson.id}`}>게시할 초안</label>
-            <select id={`pending-draft-${lesson.id}`} disabled={busy} value={selectedDraft(lesson)?.id} onChange={event => setSelectedDraftIds({ ...selectedDraftIds, [lesson.id]: event.target.value })}>
-              {lesson.pendingDrafts.map((draft, index) => <option key={draft.id} value={draft.id}>{draft.title} — {index + 1}번 (최신순)</option>)}
-            </select>
-          </div> : null}
-          {selectedDraft(lesson) ? <p>
+          <Card>
+          <CardHeader>
+            <CardTitle role="heading" aria-level={2} className="min-w-0 break-words">{lesson.title}</CardTitle>
+            <CardDescription className="flex flex-wrap items-center gap-2">
+              <span>{languageInfo(lesson.language).koreanLabel}</span>
+              <Badge variant={lesson.status === "deleting" ? "destructive" : lesson.status === "published" ? "secondary" : "outline"}>{statusNames[lesson.status]}</Badge>
+              <span>{lesson.versionCount}개 버전</span>
+            </CardDescription>
+          </CardHeader>
+          {lesson.status === "deleting" || selectedDraft(lesson) ? <CardContent className="flex flex-col gap-4">
+          {lesson.status === "deleting" ? <Alert variant="destructive"><AlertDescription>{lesson.cleanupError || "삭제가 중단되었습니다. 레슨은 숨김 상태입니다. 삭제 정리를 다시 시도해 주세요."}</AlertDescription></Alert> : null}
+          {lesson.pendingDrafts.length > 1 ? <FieldGroup>
+            <Field data-disabled={busy}>
+            <FieldLabel htmlFor={`pending-draft-${lesson.id}`}>게시할 초안</FieldLabel>
+            <NativeSelect id={`pending-draft-${lesson.id}`} disabled={busy} value={selectedDraft(lesson)?.id} onChange={event => setSelectedDraftIds({ ...selectedDraftIds, [lesson.id]: event.target.value })}>
+              {lesson.pendingDrafts.map((draft, index) => <NativeSelectOption key={draft.id} value={draft.id}>{draft.title} — {index + 1}번 (최신순)</NativeSelectOption>)}
+            </NativeSelect>
+            </Field>
+          </FieldGroup> : null}
+          {selectedDraft(lesson) ? <p className="text-muted-foreground">
             {selectedDraft(lesson)!.id !== lesson.draftId ? `대기 중인 새 버전 “${selectedDraft(lesson)!.title}”: ` : ""}
             이미 올린 음성으로 검증과 게시만 진행합니다. 파일을 다시 선택하거나 업로드하지 않습니다.
           </p> : null}
-          <div className="management-actions">
-            {lesson.pendingDrafts.length ? <button className="primary-button" disabled={busy} onClick={() => publishUploadedDraft(lesson)}>{busy ? "처리 중…" : "업로드된 음성으로 게시"}</button> : null}
+          </CardContent> : null}
+          <CardFooter className="flex-col items-stretch gap-6">
+          {lesson.status !== "deleting" ? <SyntaxAnalysisStatus key={selectedDraft(lesson)?.id ?? lesson.draftId} draftId={selectedDraft(lesson)?.id ?? lesson.draftId} /> : null}
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            {lesson.pendingDrafts.length ? <Button disabled={busy} onClick={() => publishUploadedDraft(lesson)}>{busy ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}{busy ? "처리 중…" : "업로드된 음성으로 게시"}</Button> : null}
             {lesson.status !== "deleting" && lesson.versionCount > 0
-              ? <Link className="secondary-button" href={`/admin?replace=${lesson.id}`}>새 버전 가져오기</Link> : null}
-            {lesson.status === "published" ? <button className="secondary-button" disabled={busy} onClick={() => mutate(lesson, "unpublish")}>게시 해제</button> : null}
-            <button className="secondary-button danger-button" disabled={busy} onClick={() => { setConfirmation(lesson); setTitle(""); }}>
+              ? <Button asChild variant="outline"><Link href={`/admin?replace=${lesson.id}`}>새 버전 가져오기</Link></Button> : null}
+            {lesson.status === "published" ? <Button variant="outline" disabled={busy} onClick={() => mutate(lesson, "unpublish")}>게시 해제</Button> : null}
+            <Button variant="destructive" disabled={busy} onClick={() => { setConfirmation(lesson); setTitle(""); }}>
               {lesson.status === "deleting" ? "삭제 정리 다시 시도" : "영구 삭제"}
-            </button>
+            </Button>
           </div>
-          {confirmation?.id === lesson.id ? <form className="delete-confirmation" onSubmit={event => { event.preventDefault(); if (title === confirmation.title) void mutate(confirmation, "delete"); }}>
-            <fieldset disabled={busy} aria-label="영구 삭제 확인">
-              <legend>영구 삭제 확인</legend>
-              <p>“{confirmation.title}”의 모든 버전, 초안, 텍스트와 음성을 영구 삭제합니다. 복구할 수 없습니다.</p>
-              <label htmlFor="delete-lesson-title">삭제할 레슨 제목</label>
-              <input id="delete-lesson-title" value={title} onChange={event => setTitle(event.target.value)} autoComplete="off" autoFocus />
-              <div className="management-actions">
-                <button className="secondary-button" type="button" onClick={() => setConfirmation(null)}>취소</button>
-                <button className="secondary-button danger-button" type="submit" disabled={title !== confirmation.title}>{busy ? "삭제 중…" : "삭제 확인"}</button>
+          {confirmation?.id === lesson.id ? <form onSubmit={event => { event.preventDefault(); if (title === confirmation.title) void mutate(confirmation, "delete"); }}>
+            <FieldSet disabled={busy} aria-label="영구 삭제 확인">
+              <FieldLegend>영구 삭제 확인</FieldLegend>
+              <FieldDescription>“{confirmation.title}”의 모든 버전, 초안, 텍스트와 음성을 영구 삭제합니다. 복구할 수 없습니다.</FieldDescription>
+              <FieldGroup>
+              <Field data-disabled={busy}>
+                <FieldLabel htmlFor="delete-lesson-title">삭제할 레슨 제목</FieldLabel>
+                <Input id="delete-lesson-title" value={title} onChange={event => setTitle(event.target.value)} autoComplete="off" autoFocus />
+              </Field>
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <Button variant="outline" type="button" onClick={() => setConfirmation(null)}>취소</Button>
+                <Button variant="destructive" type="submit" disabled={title !== confirmation.title}>{busy ? <Spinner data-icon="inline-start" aria-hidden="true" /> : null}{busy ? "삭제 중…" : "삭제 확인"}</Button>
               </div>
-            </fieldset>
+              </FieldGroup>
+            </FieldSet>
           </form> : null}
+          </CardFooter>
+          </Card>
         </li>)}
       </ul>
-      {!lessons.length && !error ? <p>저장된 레슨이 없습니다.</p> : null}
+      {!lessons.length && !error ? <Empty><EmptyHeader><EmptyTitle>저장된 레슨이 없습니다.</EmptyTitle></EmptyHeader></Empty> : null}
     </section>
+    </ScrollArea>
   </Page>;
 }

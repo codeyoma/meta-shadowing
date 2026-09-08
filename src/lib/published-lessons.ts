@@ -3,6 +3,7 @@ import "server-only";
 import { decodeLessonDraftEntries } from "./lesson-entry-decoder";
 import { parseLessonDraft } from "./lesson-draft-parser";
 import { lessons, type Language, type Lesson, type LessonPhrase, type PublishedLesson } from "./lessons";
+import { isLanguage } from "./languages";
 import { LESSON_AUDIO_BUCKET } from "./lesson-audio";
 import type { PublishedAudioItem } from "./lesson-publication";
 import { createSecretSupabaseClient } from "./supabase/secret";
@@ -13,6 +14,7 @@ type PublishedLessonRow = {
   title: string;
   language: string;
   phrase_count: number;
+  chapter_count: number;
   parsed_entries: unknown;
   published_at: string;
 };
@@ -25,9 +27,9 @@ function fixtureLesson(lesson: Lesson): PublishedLesson {
   if (lesson.id === "daily-conversation") {
     const target = "## At home\nI open the window.\nYou make breakfast.\nWe sit at the table.\nShe pours the tea.\nThey enjoy the morning.\n\nHe takes the bus.\nWe reach the office.\n## At work\nI read my messages.\nYou plan the day.\nWe start the meeting.";
     const korean = "## 집에서\n나는 창문을 연다.\n너는 아침을 준비한다.\n우리는 식탁에 앉는다.\n그녀는 차를 따른다.\n그들은 아침을 즐긴다.\n\n그는 버스를 탄다.\n우리는 사무실에 도착한다.\n## 직장에서\n나는 메시지를 읽는다.\n너는 하루를 계획한다.\n우리는 회의를 시작한다.";
-    const { entries } = parseLessonDraft(target, korean);
+    const { entries, summary } = parseLessonDraft(target, korean);
     const phrases = entries.filter((entry): entry is LessonPhrase => entry.kind === "phrase");
-    return { ...lesson, phraseCount: phrases.length, entries, phrases };
+    return { ...lesson, phraseCount: phrases.length, sectionCount: summary.chapters, entries, phrases };
   }
   const targets = lesson.language === "english"
     ? ["I wake up at seven.", "I wash my face.", "I brush my teeth."]
@@ -39,13 +41,14 @@ function fixtureLesson(lesson: Lesson): PublishedLesson {
   return {
     ...lesson,
     phraseCount: targets.length,
+    sectionCount: 0,
     entries: phrases,
     phrases
   };
 }
 
 function readLanguage(value: string): Language | null {
-  return value === "english" || value === "japanese" ? value : null;
+  return isLanguage(value) ? value : null;
 }
 
 function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {
@@ -54,6 +57,7 @@ function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {
   if (!entries) return null;
   const phrases = entries.filter((entry): entry is LessonPhrase => entry.kind === "phrase");
   if (!language || phrases.length !== row.phrase_count || phrases.length === 0) return null;
+  if (entries.filter(entry => entry.kind === "chapter").length !== row.chapter_count) return null;
   const chapter = entries.find((entry) => entry.kind === "chapter");
 
   return {
@@ -63,6 +67,7 @@ function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {
     name: row.title,
     localizedName: chapter?.korean || row.title,
     phraseCount: row.phrase_count,
+    sectionCount: row.chapter_count,
     entries,
     phrases
   };
@@ -75,7 +80,7 @@ export async function listPublishedLessons(): Promise<Lesson[]> {
 
   const { data, error } = await supabase
     .from("lesson_drafts")
-    .select("id, lesson_id, title, language, phrase_count, parsed_entries, published_at")
+    .select("id, lesson_id, title, language, phrase_count, chapter_count, parsed_entries, published_at")
     .eq("publication_status", "published")
     .order("published_at", { ascending: false });
 
@@ -97,7 +102,7 @@ export async function getPublishedLesson(id: string | null): Promise<PublishedLe
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("lesson_drafts")
-    .select("id, lesson_id, title, language, phrase_count, parsed_entries, published_at")
+    .select("id, lesson_id, title, language, phrase_count, chapter_count, parsed_entries, published_at")
     .eq("lesson_id", id)
     .eq("publication_status", "published")
     .maybeSingle();
