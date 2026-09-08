@@ -9,9 +9,11 @@ export function readAuthEnvironment(): { password: string; secret: string } | nu
   return password && secret ? { password, secret } : null;
 }
 
-export async function requireLearner(): Promise<void> {
+export async function requireLearner(): Promise<{ id: string; email: string }> {
   if (!(await hasBetaAccess())) redirect("/");
-  if (!(await getGoogleLearnerIdentity())) redirect("/login");
+  const identity = await getGoogleLearnerIdentity();
+  if (!identity) redirect("/login");
+  return identity;
 }
 
 // The existing learner cookie is an invitation pass, not a user session.

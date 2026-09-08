@@ -10,6 +10,7 @@ import AppError from "./error";
 
 const catalog = vi.hoisted(() => ({ unavailable: true }));
 vi.mock("@/lib/server-auth", () => ({ requireLearner: async () => undefined }));
+vi.mock("@/lib/cloud-learning", () => ({ cloudLearningEnabled: () => false }));
 vi.mock("@/lib/published-lessons", () => ({
   listPublishedLessons: async () => {
     if (catalog.unavailable) throw new Error("Catalog database unavailable");

@@ -7,11 +7,14 @@ import { validSettingOverrides } from "@/lib/session-settings";
 import { getSessionDefaults } from "@/lib/session-defaults-repository";
 import { LearningPlayer } from "./learning-player";
 import { stageForLevel } from "@/lib/learning-stages";
+import { cloudLearningEnabled } from "@/lib/cloud-learning";
+import { CloudLearningNotice } from "../cloud-learning-notice";
 
 type PlayerPageProps = { searchParams: Promise<Record<string, string | undefined>> };
 
 export default async function PlayerPage({ searchParams }: PlayerPageProps) {
   await requireLearner();
+  if (cloudLearningEnabled()) return <main className="page"><CloudLearningNotice /></main>;
   const params = await searchParams;
   const [lesson, defaults] = await Promise.all([getPublishedLesson(params.lesson ?? null), getSessionDefaults()]);
   if (!lesson) redirect("/home");

@@ -63,6 +63,7 @@ test("admin defaults persist behind authorization and reach learners without ove
     const publication = await service.from("lesson_drafts").update({ publication_status: "published", published_at: "2026-09-06T00:00:00Z", audio_manifest: [{}] }).eq("id", draftId);
     expect(publication.error).toBeNull();
     await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+    expect((await page.request.get("/api/learner/preferences")).status()).toBe(404);
     await page.goto(`/setup?lesson=${draftId}`);
     await openSelectedStageSettings(page);
     await expect(page.getByLabel("재생속도")).toHaveValue("2");

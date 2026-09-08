@@ -223,7 +223,8 @@ test(`an administrator replaces from files, unpublishes without loss, and confir
 test("partial Storage deletion remains hidden and can be retried after a reload", async ({ page }) => {
   const fixture = await lifecycleFixture(page);
   const fault = `test_cleanup_${randomUUID().replaceAll("-", "")}`;
-  const query = (sql: string) => execFileSync("npx", ["--yes", "supabase@2.116.0", "db", "query", "--local", sql], { stdio: "pipe" });
+  const query = (sql: string) => execFileSync("npx", ["--yes", "supabase@2.116.0", "db", "query", "--local",
+    ...(process.env.SUPABASE_TEST_WORKDIR ? ["--workdir", process.env.SUPABASE_TEST_WORKDIR] : []), sql], { stdio: "pipe" });
   let faultInstalled = false;
   try {
     const original = await fixture.draft("Cleanup original");
