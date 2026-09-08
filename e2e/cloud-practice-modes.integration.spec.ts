@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
-import { testRecording } from "./fixtures/audio";
+import { testRecording, testAudioManifest } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
@@ -67,7 +67,7 @@ for (const level of [1,4,5,6,7,8]) test(`level ${level} uses acknowledged units,
   try {
     expect((await service.from("learner_preferences").update({settings:{mode:grouped?"manual":"automatic",speed:3,groupSize:2,groupGapMs:0,advanceDelayMs:0,wpmLevel:6,speakingExtraMs:0,lineGapMs:0,sectionGapMs:0}}).eq("user_id",id)).error).toBeNull();
     expect((await service.from("lesson_drafts").insert({id:lessonId,created_by:id,title:`Cloud level ${level}`,language:"english",target_filename:"en.txt",korean_filename:"ko.txt",target_source:"Hello",korean_source:"안녕",
-      parsed_entries:Array.from({length:count},(_,i)=>({kind:"phrase",sourceLine:i+1,phraseNumber:i+1,target:`Hello ${i+1}.`,korean:`안녕 ${i+1}.`})),validation_status:"validated",phrase_count:count,chapter_count:0,section_count:0,publication_status:"published",published_at:new Date().toISOString(),audio_manifest:Array.from({length:count},()=>({}))})).error).toBeNull();
+      parsed_entries:Array.from({length:count},(_,i)=>({kind:"phrase",sourceLine:i+1,phraseNumber:i+1,target:`Hello ${i+1}.`,korean:`안녕 ${i+1}.`})),validation_status:"validated",phrase_count:count,chapter_count:0,section_count:0,publication_status:"published",published_at:new Date().toISOString(),audio_manifest:testAudioManifest(count)})).error).toBeNull();
     let page = await a.newPage(); await open(page);
     const initial = (await journal()).progress;
     expect(initial.unitStarts).toEqual(grouped ? [0,2,5] : [0,1,2]);

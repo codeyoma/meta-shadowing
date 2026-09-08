@@ -1,5 +1,8 @@
-/** A two-recording, memory-only window. Playback never waits for a fetch promise. */
-export function createAudioPreloader(audio: HTMLAudioElement, sources: readonly string[]) {
+import { createCachedAudioPreloader } from "./cached-audio-preloader";
+
+/** Isolated component fixtures omit the account; routed learners always provide it. */
+export function createAudioPreloader(audio: HTMLAudioElement, sources: readonly string[], accountId?: string) {
+  if (accountId) return createCachedAudioPreloader(audio, sources, accountId);
   let currentIndex = -1;
   let currentBlob: string | undefined;
   let next: { index: number; controller: AbortController; url?: string } | undefined;
@@ -30,6 +33,8 @@ export function createAudioPreloader(audio: HTMLAudioElement, sources: readonly 
   }
 
   return {
+    play: () => audio.play(),
+    pause: () => audio.pause(),
     select(index: number, refresh = false) {
       if (disposed || !sources[index]) return;
       if (index === currentIndex && !refresh && !audio.error) {

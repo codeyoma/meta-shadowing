@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
-import { testRecording } from "./fixtures/audio";
+import { testRecording, testAudioManifest } from "./fixtures/audio";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
 test.use({actionTimeout:15000});
@@ -47,7 +47,7 @@ test("explicit takeover cancels safely and fences the previous browser", async (
   }
   try {
     expect((await service.from("lesson_drafts").insert({id:lessonId,created_by:id,title:"Takeover fixture",language:"english",target_filename:"en.txt",korean_filename:"ko.txt",target_source:"Hello",korean_source:"안녕",
-      parsed_entries:[1,2].map(phraseNumber=>({kind:"phrase",sourceLine:phraseNumber,phraseNumber,target:`Hello ${phraseNumber}.`,korean:`안녕 ${phraseNumber}.`})),validation_status:"validated",phrase_count:2,chapter_count:0,section_count:0,publication_status:"published",published_at:version,audio_manifest:[{},{}]})).error).toBeNull();
+      parsed_entries:[1,2].map(phraseNumber=>({kind:"phrase",sourceLine:phraseNumber,phraseNumber,target:`Hello ${phraseNumber}.`,korean:`안녕 ${phraseNumber}.`})),validation_status:"validated",phrase_count:2,chapter_count:0,section_count:0,publication_status:"published",published_at:version,audio_manifest:testAudioManifest(2)})).error).toBeNull();
     const first = await a.newPage(), second = await b.newPage();
     await open(first);
     const starting = first.waitForResponse(response=>response.request().method()==="POST" && response.url().endsWith("/api/learner/practice") && response.request().postDataJSON()?.action==="start");

@@ -3,7 +3,7 @@ import { expect, test, type BrowserContext } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
-import { testRecording } from "./fixtures/audio";
+import { testRecording, testAudioManifest } from "./fixtures/audio";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
 test("manual practice ownership and acknowledged progress survive independent browsers", async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
@@ -47,7 +47,7 @@ test("manual practice ownership and acknowledged progress survive independent br
       target_filename: "en.txt", korean_filename: "ko.txt", target_source: "Hello.", korean_source: "안녕.",
       parsed_entries: [1,2].map(phraseNumber => ({ kind: "phrase", sourceLine: phraseNumber, phraseNumber, target: `Hello ${phraseNumber}.`, korean: `안녕 ${phraseNumber}.` })),
       validation_status: "validated", phrase_count: 2, chapter_count: 0, section_count: 0,
-      publication_status: "published", published_at: version, audio_manifest: [{},{}],
+      publication_status: "published", published_at: version, audio_manifest: testAudioManifest(2),
     })).error).toBeNull();
     const start = { action: "start", accountId: a.id, instance: randomUUID(), operation: randomUUID(), lessonId, lessonVersion: version, level: 1, stage: 1 };
     const first = await a.context.request.post("/api/learner/practice", { data: start });

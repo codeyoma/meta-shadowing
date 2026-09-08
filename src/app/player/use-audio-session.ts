@@ -7,12 +7,14 @@ import type { PhraseGroup } from "@/lib/phrase-groups";
 import { useLearningRecord, type LearningStart, type CloudRecording } from "./use-learning-record";
 import { createAudioPreloader } from "@/lib/audio-preloader";
 import { createSuccessChime } from "@/lib/success-chime";
+import { useAudioCacheAccount } from "../audio-cache-scope";
 
 function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
 }
 
 export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart, cloud?: CloudRecording) {
+  const audioAccount = useAudioCacheAccount();
   const legacy = useLearningRecord(lesson, start, Boolean(cloud));
   const completion = cloud ? cloud.completion : legacy.completion;
   const storageFailed = cloud ? false : legacy.storageFailed;
@@ -32,9 +34,9 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   const prepareAudio = useCallback((index: number, refresh = false) => {
     if (!audioRef.current) return;
     preloader.current ??= createAudioPreloader(audioRef.current, lesson.phrases.map(phrase =>
-      `/api/lessons/${lesson.id}/audio/${phrase.phraseNumber}?version=${encodeURIComponent(lesson.version)}`));
+      `/api/lessons/${lesson.id}/audio/${phrase.phraseNumber}?version=${encodeURIComponent(lesson.version)}`), audioAccount);
     preloader.current.select(index, refresh);
-  }, [lesson]);
+  }, [lesson, audioAccount]);
 
   const send = useCallback(function send(event: AudioSessionEvent) {
     if (event.type !== "pause" && (waiting.current || (cloudRef.current && !cloudRef.current.canAct()))) return;
@@ -111,7 +113,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
         send({ type: "audio-ended", attempt, durationMs: duration * 1000 });
       };
       audio.onerror = () => {
-        if (audio.error) send({ type: "audio-error", attempt });
+        send({ type: "audio-error", attempt });
       };
       audio.onpause = () => {
         if (!audio.ended && audio.paused && currentSession.current.attempt === attempt) send({ type: "pause" });
@@ -120,13 +122,13 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     audio.playbackRate = next.playbackRate;
     if (accepted.phase === "loading" && (previous.phase !== "loading" || next.attempt !== previous.attempt)) {
       const request = ++playRequest.current;
-      // Keep play() in the keyboard/touch action to preserve mobile user activation.
-      void audio.play().catch(() => {
-        if (request === playRequest.current) send({ type: "audio-error", attempt: next.attempt });
+      void (preloader.current?.play() ?? audio.play()).catch(error => {
+        if (request !== playRequest.current || error?.name === "AbortError") return;
+        send(error?.name === "NotAllowedError" ? { type: "pause" } : { type: "audio-error", attempt: next.attempt });
       });
     } else if (["paused", "error", "completed"].includes(accepted.phase)) {
       playRequest.current++;
-      audio.pause();
+      if (preloader.current) preloader.current.pause(); else audio.pause();
     }
     };
     if (saved instanceof Promise) {

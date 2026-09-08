@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const learnerPreferences = process.argv.includes("--learner-preferences");
 const cloudPractice = process.argv.includes("--cloud-practice");
+const mp3Cache = process.argv.includes("--mp3-cache");
 
 const status = execFileSync(
   "npx",
@@ -58,14 +59,14 @@ const result = spawnSync(
   [
     "playwright",
     "test",
-    ...(cloudPractice ? ["e2e/cloud-practice.integration.spec.ts", "e2e/cloud-practice-modes.integration.spec.ts", "e2e/cloud-practice-takeover.integration.spec.ts"] : learnerPreferences ? ["e2e/learner-preferences.integration.spec.ts"] : ["e2e/admin-persistence.integration.spec.ts",
+    ...(mp3Cache ? ["e2e/mp3-cache.integration.spec.ts"] : cloudPractice ? ["e2e/cloud-practice.integration.spec.ts", "e2e/cloud-practice-modes.integration.spec.ts", "e2e/cloud-practice-takeover.integration.spec.ts"] : learnerPreferences ? ["e2e/learner-preferences.integration.spec.ts"] : ["e2e/admin-persistence.integration.spec.ts",
     "e2e/lesson-publication.integration.spec.ts",
     "e2e/session-defaults.integration.spec.ts",
     "e2e/lesson-lifecycle.integration.spec.ts"]),
     "--project=desktop",
     "--workers=1",
     `--output=${join(tmpdir(), `meta-shadowing-integration-${process.pid}`)}`,
-    ...process.argv.slice(2).filter(argument => !["--learner-preferences", "--cloud-practice"].includes(argument))
+    ...process.argv.slice(2).filter(argument => !["--learner-preferences", "--cloud-practice", "--mp3-cache"].includes(argument))
   ],
   {
     stdio: "inherit",
