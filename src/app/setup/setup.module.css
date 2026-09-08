@@ -86,7 +86,7 @@
   .stagePreview [data-slot="popover-arrow"] { visibility: hidden; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .stageRingArc { animation: none; }
+  .stageRingArc { animation: none; transition-property: none; }
   .levelNode { transition: none; }
   .stagePreview[data-state] { animation: none; }
 }

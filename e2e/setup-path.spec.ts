@@ -23,27 +23,22 @@ test("setup places shared brand and streak navigation above the book summary", a
   await expect(page).toHaveURL(/\/lessons\?/);
 });
 
-test("all sixteen stages launch the correct paired level and retain their stage", async ({ page }) => {
+const expectedLevels = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8];
+for (const [index, level] of expectedLevels.entries()) test(`stage ${index + 1} launches level ${level} and retains its stage`, async ({ page }) => {
   await openSetup(page);
   const path = page.getByRole("list", { name: "학습 단계", exact: true });
   const nodes = path.getByRole("radio");
   await expect(nodes).toHaveCount(16);
   await expect(path.getByRole("radio", { checked: true })).toHaveCount(0);
-  const expectedLevels = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8];
-  for (let index = 0; index < 16; index++) {
-    const level = expectedLevels[index];
-    await expect(nodes.nth(index)).toContainText(`Lv ${level}`);
-    await expect(nodes.nth(index)).toBeEnabled();
-    await nodes.nth(index).click();
-    await expect(nodes.nth(index)).toHaveAttribute("aria-checked", "true");
-    await expect(path.getByRole("radio", { checked: true })).toHaveCount(1);
-    await startSelectedStage(page);
-    await expect(page).toHaveURL(new RegExp(`level=${level}(?:&|$)`));
-    await expect(page).toHaveURL(new RegExp(`stage=${index + 1}(?:&|$)`));
-    await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
-    await page.goto("/setup?lesson=morning-routine");
-    await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio").first()).toBeEnabled();
-  }
+  await expect(nodes.nth(index)).toContainText(`Lv ${level}`);
+  await expect(nodes.nth(index)).toBeEnabled();
+  await nodes.nth(index).click();
+  await expect(nodes.nth(index)).toHaveAttribute("aria-checked", "true");
+  await expect(path.getByRole("radio", { checked: true })).toHaveCount(1);
+  await startSelectedStage(page);
+  await expect(page).toHaveURL(new RegExp(`level=${level}(?:&|$)`));
+  await expect(page).toHaveURL(new RegExp(`stage=${index + 1}(?:&|$)`));
+  await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 });
 
 test("path selection preserves grouped and rapid preferences without starting practice early", async ({ page }) => {

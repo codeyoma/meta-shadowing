@@ -171,7 +171,14 @@ test("only the recommended stage has a clockwise border arc, even when preview s
   expect(await arc.evaluate(el => getComputedStyle(el).strokeDasharray.split(/[ ,]+/).map(Number.parseFloat).every(n => n > 0))).toBe(true);
   await current.screenshot({ path: test.info().outputPath("current-stage-arc.png"), scale: "css" });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect.poll(() => ring.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+  await expect(arc).toHaveCSS("animation-name", "none");
+  await expect(arc).toHaveCSS("transition-property", "none");
+  await expect.poll(() => ring.evaluate(el => el.getAnimations({ subtree: true }).map(animation => ({
+    property: animation instanceof CSSTransition ? animation.transitionProperty : "animation",
+    playState: animation.playState,
+    timing: animation.effect?.getTiming(),
+    target: ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.tagName
+  })))).toEqual([]);
   await expect(arc).toBeVisible();
   expect(await arc.evaluate(el => parseFloat(getComputedStyle(el).strokeWidth))).toBeGreaterThan(0);
 });

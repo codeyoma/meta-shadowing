@@ -348,7 +348,11 @@ test("only a complete private audio package can be published and played by a bet
     expect(Buffer.from(await storedAudio.body())).toEqual(audioBytes);
 
     await page.goto(`/player?lesson=${draftId}&level=1`);
-    await expect(page.getByRole("main").getByText(title, { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+    const menu = page.getByRole("dialog", { name: "학습 메뉴", exact: true });
+    await expect(menu).toHaveAccessibleDescription(new RegExp(title));
+    await menu.getByRole("button", { name: "확인", exact: true }).click();
+    await expect(menu).toHaveCount(0);
     await expect(page.getByText(targetDialogue, { exact: true })).toBeVisible();
     await expect(page.getByText(targetDialogue, { exact: true })).toHaveCSS("white-space", "pre-wrap");
     await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기" }).click();

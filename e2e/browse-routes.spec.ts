@@ -92,14 +92,35 @@ test("pending cycles have no inner marks and only the current cycle shows media 
 
 test("choosing another lesson does not reset that language's lesson-list scroll", async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 350 });
-  await page.goto("/lessons?language=english");
+  await page.goto("/lessons/morning-routine/stages");
+  await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toBeEnabled();
+  const nav = page.getByRole("navigation", { name: "하단 탐색", exact: true });
+  await nav.getByRole("link", { name: "레슨", exact: true }).click();
+  await expect(page).toHaveURL(/\/lessons\?language=english&lesson=morning-routine$/);
   const list = page.getByRole("region", { name: "레슨 목록" });
-  await page.getByRole("link", { name: /Daily Conversation/ }).scrollIntoViewIfNeeded();
-  expect(await list.evaluate(el => el.scrollTop)).toBeGreaterThan(50);
-  await page.getByRole("link", { name: /Daily Conversation/ }).click();
-  await expect(page).toHaveURL(/\/daily-conversation\/stages/);
-  await page.getByRole("navigation", { name: "하단 탐색" }).getByRole("link", { name: "레슨", exact: true }).click();
+  async function waitForScrollableList() {
+    // Radix enables viewport scrolling after mount; useBrowseScroll also
+    // restores once on the next frame. Finish both before the user scrolls.
+    await expect(list).toHaveCSS("overflow-y", "scroll");
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+  }
+  await waitForScrollableList();
+  const nextLesson = list.getByRole("link", { name: /Daily Conversation/ });
+  await nextLesson.scrollIntoViewIfNeeded();
+  await expect(nextLesson).toBeInViewport();
   await expect.poll(() => list.evaluate(el => el.scrollTop)).toBeGreaterThan(50);
+  const scrollBefore = await list.evaluate(el => el.scrollTop);
+  await nextLesson.click();
+  await expect(page).toHaveURL(/\/daily-conversation\/stages/);
+  await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toBeEnabled();
+  await nav.getByRole("link", { name: "레슨", exact: true }).click();
+  await expect(page).toHaveURL(/\/lessons\?language=english&lesson=daily-conversation$/);
+  await waitForScrollableList();
+  await expect.poll(() => list.evaluate(el => el.scrollTop)).toBeCloseTo(scrollBefore, 0);
+  await expect(nextLesson).toBeInViewport();
+  await expect(nav.getByRole("link", { name: "스테이지", exact: true })).toHaveAttribute("href", "/lessons/daily-conversation/stages");
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
 
 test("lesson history distinguishes both stages belonging to the same level", async ({ page }) => {

@@ -25,6 +25,8 @@ test("the book summary keeps the actual next stage separate from previews and do
 test("the winding path exposes all stages through its own viewport", async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 932 });
   const nodes = page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio");
+  await expect(nodes.last()).toBeEnabled();
+  await page.evaluate(() => document.fonts.ready);
   const firstThree = await Promise.all([0, 1, 2].map(index => nodes.nth(index).boundingBox()));
   expect(firstThree[1]!.x).toBeGreaterThan(firstThree[0]!.x + 40);
   expect(firstThree[2]!.x).toBeGreaterThan(firstThree[1]!.x + 40);
