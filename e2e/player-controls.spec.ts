@@ -23,22 +23,21 @@ test("the settings segment is touch-sized within a borderless lesson heading", a
   await expect(shortcut).toHaveText("수동 · 2×");
 });
 
-for (const level of [1, 2, 3, 4, 5]) test(`level ${level} keeps one playback control beside the lower listening dots`, async ({ page }) => {
+for (const level of [1, 2, 3, 4, 5]) test(`level ${level} uses the main action below the listening progress`, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto(`/player?lesson=morning-routine&level=${level}`);
-  const speaker = page.getByRole("button", { name: "재생 또는 일시정지", exact: true });
-  await expect(speaker).toHaveCount(1);
-  await expect(page.locator("footer").getByRole("button", { name: "재생 또는 일시정지", exact: true })).toBeVisible();
-  const button = (await speaker.boundingBox())!;
+  await expect(page.getByRole("button", { name: "재생 또는 일시정지", exact: true })).toHaveCount(0);
+  const start = page.getByRole("button", { name: /^CONTINUE/ });
+  const button = (await start.boundingBox())!;
   const dots = (await page.getByRole("group", { name: "완료한 듣기", exact: true }).boundingBox())!;
   const actions = (await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox())!;
-  expect(button.x + button.width).toBeLessThan(dots.x);
-  expect(Math.abs(button.y + button.height / 2 - dots.y - dots.height / 2)).toBeLessThanOrEqual(1);
-  expect(button.y + button.height).toBeLessThan(actions.y);
+  expect(dots.y + dots.height).toBeLessThan(actions.y);
+  await expect(page.getByRole("group", { name: "학습 진행", exact: true }).getByRole("button")).toHaveCount(1);
+  await expect(page.getByRole("progressbar", { name: "원음 재생 진행", exact: true })).toBeVisible();
   expect(actions.y + actions.height).toBeLessThanOrEqual(568);
   expect(Math.min(button.width, button.height)).toBeGreaterThanOrEqual(44);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await speaker.click();
+  await start.click();
   await expect(page.getByRole("button", { name: "CONTINUE · 듣기 완료 확인", exact: true })).toBeVisible();
   await expect(page.getByLabel("완료한 듣기", { exact: true })).toHaveText("필수 0 / 3");
   await page.getByRole("button", { name: "CONTINUE · 듣기 완료 확인", exact: true }).click();

@@ -28,7 +28,13 @@ export function LearnerTopNavigation({ className }: { className?: string }) {
   return <header className={cn(styles.homeHeader, className)}>
     <nav className={styles.homeNav} aria-label="상단 탐색">
       <Brand compact />
-      <Badge variant="streak" aria-label={`${streak}일 연속 학습`} title="하루 한 번 이상 학습한 연속 일수"><Flame aria-hidden="true" />{streak}</Badge>
+      <Badge variant="streak" aria-label={`${streak}일 연속 학습`} title="하루 한 번 이상 학습한 연속 일수">
+        <span className={styles.streakFlame} aria-hidden="true">
+          <Flame className={styles.streakFlameOuter} fill="currentColor" />
+          <Flame className={styles.streakFlameInner} fill="currentColor" />
+        </span>
+        {streak}
+      </Badge>
     </nav>
     <Separator />
   </header>;

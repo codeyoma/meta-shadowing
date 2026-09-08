@@ -1,16 +1,18 @@
 import type { Language } from "./lessons";
+import { languageCode } from "./languages";
 
 export type SubtitleHint = { target: string; korean: string };
 
 export function tokenizePracticeText(text: string, language: Language | "korean"): string[] {
   const trimmed = text.trim();
-  if (language === "japanese" && /[\r\n]/u.test(trimmed)) {
+  const usesUnspacedWords = language === "japanese" || language === "chinese";
+  if (usesUnspacedWords && /[\r\n]/u.test(trimmed)) {
     return trimmed.split(/\r\n?|\n/u).flatMap(line => tokenizePracticeText(line, language));
   }
-  if (language === "japanese" && trimmed && !/\s/u.test(trimmed)) {
+  if (usesUnspacedWords && trimmed && !/\s/u.test(trimmed)) {
     const tokens: string[] = [];
     let prefix = "";
-    for (const word of new Intl.Segmenter("ja", { granularity: "word" }).segment(trimmed)) {
+    for (const word of new Intl.Segmenter(languageCode(language), { granularity: "word" }).segment(trimmed)) {
       if (word.isWordLike) {
         tokens.push(prefix + word.segment);
         prefix = "";

@@ -11,7 +11,7 @@ Configure these independently for Vercel Preview and Production:
 | Variable | Purpose | Exposure |
 | --- | --- | --- |
 | `BETA_PASSWORD` | Shared learner entrance password, at least 12 characters | Server only |
-| `LEARNER_COOKIE_SECRET` | At least 32 random characters for signing the 30-day learner cookie | Server only |
+| `LEARNER_COOKIE_SECRET` | At least 32 random characters for signing the 30-day beta invitation cookie (not the Google session) | Server only |
 | `NEXT_PUBLIC_SUPABASE_URL` | Approved project's HTTPS API origin | Public |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Modern `sb_publishable_` key | Public, RLS constrained |
 | `SUPABASE_SECRET_KEY` | Modern `sb_secret_` key for server catalog/signing/lifecycle operations | Server only |
@@ -33,6 +33,8 @@ Follow [administrator setup](admin-setup.md) on the existing Supabase project ex
 - For new free projects using default SMTP, email template customization may be unavailable. Use the default Magic Link flow, or configure supported SMTP before choosing a customized typed-OTP template. See [Supabase email-template limits](https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier).
 
 ## Repeatable local verification
+
+Learner entry also requires [Google OAuth setup](learner-google-login.md): the Google provider, exact `/auth/callback` URLs, and a signup policy compatible with first-time learners. Verify beta-only requests cannot access learner pages/APIs, then complete a real Google sign-in in the intended environment. Keep administrator OTP redirects and authorization unchanged.
 
 Run from the MVP worktree. Use the installed Chrome executable only if the normal Playwright browser is unavailable; on this Mac, set `PLAYWRIGHT_CHROME_EXECUTABLE` to `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. Do not install browsers or stop unrelated user browsers as part of a test retry.
 
@@ -60,7 +62,7 @@ Run only one `next dev` for this worktree at a time. Reuse the known server for 
 - Practice holds a Screen Wake Lock only while actively learning, including manual audio speaking windows. Pause, settings, hidden tab, completion and navigation release it. Returning to the tab does not silently restart practice. Test low-power/permission denial, OS release, unsupported browsers, and explicit resume. The fallback explains device auto-lock settings; the app remains usable. See [Screen Wake Lock behavior](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API).
 - Audio preloads only a bounded current/next window. Current media uses native preload; next media uses a temporary in-memory Blob. Preload is a browser hint, not a guarantee. Playback remains synchronous with the user's gesture. Failed prefetch cannot count a listen; failed/corrupt playback stops and retry obtains a fresh source. Buffers are aborted/revoked on replacement, completion or leaving the player.
 - No service worker, offline lesson/audio download, or Cache Storage persistence is implemented. Transiently buffered audio is not an offline lesson. Unpublishing prevents new signed URLs, but cannot recall bytes already delivered; leaving/reloading clears the player's buffers.
-- Verify keyboard Space/R/S/Right Arrow and sentence-menu navigation; Left Arrow must not navigate or reset practice. Verify visible focus, semantic selection states, ≥44px touch controls, long bilingual text, 64px first-word hints, and non-overlapping controls. Short phones use an in-flow dock, reachable by scrolling, to avoid covering practice actions.
+- Verify keyboard Space/S/Right Arrow and sentence-menu navigation; R, Shift+R, and Left Arrow must not navigate or reset practice. Verify visible focus, semantic selection states, ≥44px touch controls, long bilingual text, 64px first-word hints, and non-overlapping controls. Check the current listening ring against audio time: pause holds it, new recordings reset it, and unknown duration does not invent a percentage. The main action remains in the safe-area bottom dock without a separate speaker button.
 - Verify the player bottom sheet across audio/grouped/rapid modes: settings and sentence selection stay in one sheet, Back restores its menu item, and Escape/outside/Close restore the originating menu or mode/speed shortcut without resuming playback. Check bottom and landscape notch insets. Tap the level label to open its method popup; verify dismissal, paused playback, and focus restoration. Top-bar lesson progress and bottom listening circles must remain visible without overlapping the primary action; the bottom action region has no separator line.
 
 ## Hosted release gate — requires an approved target

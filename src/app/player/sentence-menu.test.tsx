@@ -29,7 +29,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function render(currentPhraseNumbers: number[], source = lesson, onSelect = vi.fn()) {
+async function render(currentPhraseNumbers: number[], source: PublishedLesson = lesson, onSelect = vi.fn()) {
   await act(async () => root.render(createElement(SentenceList, { lesson: source, currentPhraseNumbers, onSelect })));
   return onSelect;
 }
@@ -71,4 +71,12 @@ it("does not invent a section for material without headings", async () => {
   expect(visiblePhrases()).toHaveLength(5);
   await act(async () => visiblePhrases()[4].click());
   expect(selected).toHaveBeenCalledWith(4);
+});
+
+it.each([
+  ["japanese", "ja"], ["chinese", "zh"], ["german", "de"], ["french", "fr"]
+] as const)("marks %s sentence text with its locale", async (language, locale) => {
+  await render([1], { ...lesson, language });
+  expect(container.querySelector(`button[aria-expanded] [lang="${locale}"]`)?.textContent).toBe("First");
+  expect(container.querySelector(`[aria-label^="1번 문장"] [lang="${locale}"]`)?.textContent).toBe("Before.");
 });

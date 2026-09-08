@@ -49,7 +49,7 @@ export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: Rapid
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("input, select, textarea, [contenteditable=true], [role=dialog]")) return;
       if (target instanceof HTMLElement && target.closest("button, a") && !target.closest("[data-player-shortcuts]")) return;
-      const type = event.code === "Space" ? "space" : event.key.toLowerCase() === "r" ? "restart"
+      const type = event.code === "Space" ? "space"
         : event.key === "ArrowRight" ? "next" : null;
       if (!type) return;
       event.preventDefault();

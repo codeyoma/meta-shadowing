@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { TextSearch } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogViewportContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import type { PublishedLesson } from "@/lib/lessons";
 import { syntaxConnection, syntaxFeatures, syntaxPartLabel, syntaxRelationLabel, type PhraseSyntax, type SentenceAnalysis } from "@/lib/phrase-syntax";
@@ -24,10 +23,10 @@ export function useSentenceAnalysis() {
 export function SentenceAnalysisButton({ onClick, disabled = false }: {
   onClick: (trigger: HTMLButtonElement) => void; disabled?: boolean;
 }) {
-  return <Button type="button" variant="ghost" size="icon" className={styles.trigger} disabled={disabled}
+  return <Button type="button" variant="context" size="row" className={styles.trigger} disabled={disabled}
     title={disabled ? "자막을 표시하면 문장 분석을 볼 수 있어요." : "현재 프레이즈의 문장 분석 보기"}
     aria-label="문장 분석" aria-haspopup="dialog" onClick={event => onClick(event.currentTarget)}>
-    <TextSearch aria-hidden="true" />
+    문장 분석
   </Button>;
 }
 
@@ -98,7 +97,8 @@ export function SentenceAnalysisPopup({ lesson, selection, onClose }: {
   }, [lesson.id, lesson.version, selection.phraseNumber, attempt]);
 
   return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-    <DialogContent className={styles.popup} showCloseButton={false}
+    <DialogViewportContent panelClassName={styles.popup}
+      footer={<DialogClose asChild><Button type="button" variant="close" size="lg" className="w-full"><CloseIcon data-icon="inline-start" />닫기</Button></DialogClose>}
       onOpenAutoFocus={event => { event.preventDefault(); closeRef.current?.focus({ preventScroll: true }); }}
       onCloseAutoFocus={event => { event.preventDefault(); if (selection.trigger.isConnected) selection.trigger.focus({ preventScroll: true }); }}>
       <DialogHeader>
@@ -108,7 +108,7 @@ export function SentenceAnalysisPopup({ lesson, selection, onClose }: {
         </div>
         <DialogDescription>{lesson.name} · {selection.phraseNumber}번 프레이즈<br />단어를 누르면 원형과 문장 속 역할을 볼 수 있어요.</DialogDescription>
       </DialogHeader>
-      <div className={styles.body} aria-busy={lookup.status === "loading"}>
+      <div data-slot="dialog-scroll-body" className={styles.body} aria-busy={lookup.status === "loading"}>
         {lookup.status === "loading" ? <Empty role="status"><EmptyDescription>저장된 분석을 불러오고 있어요…</EmptyDescription></Empty>
           : lookup.status === "unauthorized" ? <Alert><AlertDescription>접속이 만료되었어요. 앱에 다시 입장해 주세요.</AlertDescription></Alert>
           : lookup.status === "error" ? <Alert variant="destructive"><AlertDescription>
@@ -119,6 +119,6 @@ export function SentenceAnalysisPopup({ lesson, selection, onClose }: {
           : lookup.result.sentences.map(sentence => <AnalyzedSentence key={`${selection.phraseNumber}-${sentence.sentenceNumber}`} sentence={sentence} />)}
       </div>
       <p className={styles.note}>Google 자동 분석 · 문맥에 따라 품사나 연결관계가 부정확할 수 있어요.</p>
-    </DialogContent>
+    </DialogViewportContent>
   </Dialog>;
 }

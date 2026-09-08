@@ -1,11 +1,12 @@
 import { isGroupSize, type GroupSize } from "./phrase-groups";
 import { isStageForLevel } from "./learning-stages";
 import { isRapidDelay, isWpmLevel, normalizeRapidSettings, type RapidSettings } from "./rapid-session";
+import { isLanguage, type Language } from "./languages";
 
 const LAST_SELECTION_KEY = "meta-shadowing:last-selection";
 
 export type SessionSelection = {
-  language: "english" | "japanese";
+  language: Language;
   lessonId: string;
   level: number;
   stage?: number;
@@ -51,7 +52,7 @@ function isSessionSelection(value: unknown): value is SessionSelection {
 
   const selection = value as Record<string, unknown>;
   return (
-    (selection.language === "english" || selection.language === "japanese") &&
+    isLanguage(selection.language) &&
     typeof selection.lessonId === "string" &&
     typeof selection.level === "number" &&
     Number.isInteger(selection.level) &&

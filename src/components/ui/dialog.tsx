@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import styles from "./dialog.module.css"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
@@ -95,6 +96,38 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+// Keep the detached screen-bottom action in the same focus/dismissal scope as
+// the card. The transparent space passes pointer events through to the overlay.
+function DialogViewportContent({
+  children,
+  footer,
+  panelClassName,
+  style,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  footer: React.ReactNode
+  panelClassName?: string
+}) {
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        data-slot="dialog-content"
+        {...props}
+        style={{ ...style, pointerEvents: "none" }}
+        className={cn("fixed inset-0 z-50 grid h-dvh grid-rows-[minmax(0,1fr)_auto] gap-4 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 duration-100", props.className)}
+      >
+        <div data-slot="dialog-panel" className={cn("pointer-events-auto grid min-h-0 max-h-full w-full max-w-sm place-self-center gap-4 overflow-hidden rounded-xl border-2 border-border bg-popover p-5 text-base text-popover-foreground", styles.viewportPanel, panelClassName)}>
+          {children}
+        </div>
+        <div data-slot="dialog-viewport-footer" className="pointer-events-auto mx-auto w-full max-w-[648px] px-1">
+          {footer}
+        </div>
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  )
+}
+
 function DialogFooter({
   className,
   showCloseButton = false,
@@ -158,6 +191,7 @@ export {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogViewportContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,

@@ -31,15 +31,17 @@ export function BottomNavigation({ active, onSelect, lessonAvailable = true, set
         disabled={!hrefs && !lessonAvailable && id === "stages"}
         title={!lessonAvailable && id === "stages" ? "선택한 언어에 게시된 레슨이 없습니다" : undefined}
         onClick={event => {
-          const icon = event.currentTarget.querySelector<HTMLElement>("[data-nav-icon]");
-          if (icon && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            for (const animation of icon.getAnimations()) animation.cancel();
-            icon.animate([
-              { transform: "translateY(0)", offset: 0 },
-              { transform: "translateY(-5px)", offset: .4 },
-              { transform: "translateY(1px)", offset: .75 },
-              { transform: "translateY(0)", offset: 1 },
+          const button = event.currentTarget;
+          if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            for (const animation of button.getAnimations()) {
+              if (animation.id === "navigation-press") animation.cancel();
+            }
+            const animation = button.animate([
+              { transform: "translateY(0px)", offset: 0 },
+              { transform: "translateY(4px)", offset: .4 },
+              { transform: "translateY(0px)", offset: 1 },
             ], { duration: 220, iterations: 1, easing: "cubic-bezier(.16, 1, .3, 1)" });
+            animation.id = "navigation-press";
           }
           onSelect?.(id, event.currentTarget);
         }}>

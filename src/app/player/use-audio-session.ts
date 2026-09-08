@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createAudioSession, transitionAudioSession, type AudioPracticeLevel, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
+import { createAudioSession, isAudioRepeatAvailable, transitionAudioSession, type AudioPracticeLevel, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { PhraseGroup } from "@/lib/phrase-groups";
 import { useLearningRecord, type LearningStart } from "./use-learning-record";
@@ -120,10 +120,12 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       if (event.code === "Space") handledSpace = false;
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("input, select, textarea, [contenteditable=true], [role=dialog]")) return;
-      if (target instanceof HTMLElement && target.closest("button, a") && !target.closest("[data-player-shortcuts]")) return;
-      // The speaker's native Space activation must use its replay/pause click action.
-      if (event.code === "Space" && target instanceof HTMLElement && target.closest("button[data-player-shortcuts]")) return;
-      const type = event.code === "Space" ? "space" : event.key.toLowerCase() === "r" ? "retry"
+      const repeatKey = event.key.toLowerCase() === "r";
+      // R has no native button action, including when a dialog restores focus
+      // to its trigger. Keep Space/arrow handling local to the footer controls.
+      if (!repeatKey && target instanceof HTMLElement && target.closest("button, a") && !target.closest("[data-player-shortcuts]")) return;
+      const type = event.code === "Space" ? "space"
+        : repeatKey && isAudioRepeatAvailable(currentSession.current) ? "retry"
         : event.key.toLowerCase() === "s" ? "reveal-subtitles"
         : event.key === "ArrowRight" ? "next" : null;
       if (!type) return;

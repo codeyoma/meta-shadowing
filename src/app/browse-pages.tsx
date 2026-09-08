@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { BookOpen, ChevronRight, CirclePlay, Flag } from "lucide-react";
+import { BookOpen, ChevronRight, CirclePlay } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
@@ -10,10 +10,10 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { completedStagesForLesson, reconcileLearningJournal, type Journal } from "@/lib/learning-records";
 import { browseHref, stageHref } from "@/lib/browse-navigation";
 import { nextPracticeForLesson } from "@/lib/next-practice";
-import { stageForLevel } from "@/lib/learning-stages";
+import { LANGUAGE_CATALOG, languageInfo } from "@/lib/languages";
+import { learningStages } from "@/lib/learning-stages";
 import { useBrowse, useBrowseScroll } from "./browse-shell";
 import { VersionNotice } from "./version-notice";
-import { RecordDetails } from "./completion-summary";
 import styles from "./browse.module.css";
 
 export function BrowsePageContent({ title, region, children, before }: { title: string; region: string; children: ReactNode; before?: ReactNode }) {
@@ -30,11 +30,11 @@ export function BrowsePageContent({ title, region, children, before }: { title: 
 export function LanguagePage() {
   return <BrowsePageContent title="언어 선택" region="언어 목록">
     <ul className={styles.rows}>
-      {[{ language: "english", name: "영어", native: "English" }, { language: "japanese", name: "일본어", native: "日本語" }].map(item =>
-        <li key={item.language}><Button asChild variant="choice" size="row" className={styles.row}>
-          <Link href={`/lessons?language=${item.language}`} scroll={false}>
-            <span className={styles.flag} aria-hidden="true"><Flag /></span>
-            <span className={styles.copy}><strong>{item.name}</strong><small>{item.native}</small></span>
+      {LANGUAGE_CATALOG.map(item =>
+        <li key={item.id}><Button asChild variant="choice" size="row" className={styles.row}>
+          <Link href={`/lessons?language=${item.id}`} scroll={false}>
+            <span className={styles.flag} aria-hidden="true">{item.flag}</span>
+            <span className={styles.copy}><strong>{item.koreanLabel}</strong><small lang={item.code}>{item.nativeLabel}</small></span>
             <ChevronRight aria-hidden="true" data-icon="inline-end" />
           </Link>
         </Button></li>)}
@@ -51,28 +51,32 @@ export function LessonPage() {
     setJournal(value);
     if (value.resetLessonId) setReset({ storageFailed: value.storageFailed });
   }, [catalog]);
-  const lessons = catalog.filter(lesson => lesson.language === selection.language);
-  const completed = lessons.reduce((sum, lesson) => sum + completedStagesForLesson(journal.history, lesson).length, 0);
-  const history = journal.history.filter(record => record.language === selection.language).toReversed();
-  return <BrowsePageContent title={`${selection.language === "english" ? "영어" : "일본어"} 레슨`} region="레슨 목록">
+  const lessons = catalog.filter(lesson => lesson.language === selection.language)
+    .map(lesson => ({ lesson, count: completedStagesForLesson(journal.history, lesson).length }));
+  const stageCount = learningStages.length;
+  const completed = lessons.filter(({ count }) => count === stageCount).length;
+  return <BrowsePageContent title={`${languageInfo(selection.language).koreanLabel} 레슨`} region="레슨 목록">
     {reset ? <VersionNotice storageFailed={reset.storageFailed} /> : null}
     {lessons.length ? <div className={styles.summary}>
-      <div className={styles.summaryLine}><span>완료한 스테이지</span><span>{completed} / {lessons.length * 16}</span></div>
-      <Progress value={completed} max={lessons.length * 16} aria-label="레슨 학습 진척도" />
+      <div className={styles.summaryLine}><span>완료한 레슨</span><span>{completed} / {lessons.length}</span></div>
+      <Progress value={completed} max={lessons.length} aria-label="레슨 학습 진척도" />
     </div> : null}
     <ul className={styles.rows}>
-      {lessons.map((lesson, index) => {
-        const count = completedStagesForLesson(journal.history, lesson).length;
+      {lessons.map(({ lesson, count }, index) => {
         const current = nextPracticeForLesson(journal, lesson);
         return <li key={lesson.id}><Button asChild variant="choice" size="row" className={styles.row}>
           <Link href={stageHref(lesson.id)} scroll={false}>
             <span className={styles.book} data-tone={index % 3} aria-hidden="true"><span>BOOK {String(index + 1).padStart(2, "0")}</span><BookOpen /></span>
-            <span className={styles.copy}>
+            <div className={styles.copy}>
               <strong>{lesson.name}</strong>
               {lesson.localizedName !== lesson.name ? <small>{lesson.localizedName}</small> : null}
               <small>{lesson.sectionCount}개 섹션 · {lesson.phraseCount}개 프레이즈</small>
-              <span className={styles.progressText}><CirclePlay aria-hidden="true" />{count ? `${count} / 16 스테이지 완료` : current.progress ? `스테이지 ${current.stage} 이어서 학습` : "시작하기"}</span>
-            </span>
+              <span className={styles.progressText}><CirclePlay aria-hidden="true" />{count === stageCount ? "레슨 완료" : count || current.progress ? `스테이지 ${current.stage} 이어서 학습` : "시작하기"}</span>
+              <div className={styles.lessonProgress}>
+                <Progress value={count} max={stageCount} className="h-2" aria-label={`${lesson.name} 스테이지 진척도`} />
+                <small>{count} / {stageCount}</small>
+              </div>
+            </div>
             <ChevronRight aria-hidden="true" data-icon="inline-end" />
           </Link>
         </Button></li>;
@@ -81,13 +85,6 @@ export function LessonPage() {
     {!lessons.length ? <Empty role="status"><EmptyHeader><EmptyDescription>아직 게시된 레슨이 없습니다.</EmptyDescription></EmptyHeader>
       <Button asChild variant="outline"><Link href="/languages" scroll={false}>다른 언어 선택</Link></Button>
     </Empty> : null}
-    {history.length ? <section className={styles.section} aria-label="완료 기록"><h2 className={styles.subheading}>완료 기록</h2>
-      <ol className={styles.history}>{history.map(record => <li key={record.runId}>
-        <h3>{record.lessonName} · 레벨 {record.level}</h3>
-        <p>스테이지 {stageForLevel(record.level, record.stage)}</p>
-        <RecordDetails record={record} />
-      </li>)}</ol>
-    </section> : null}
   </BrowsePageContent>;
 }
 

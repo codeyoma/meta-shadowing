@@ -24,6 +24,7 @@ import {
   getLessonAudioPath
 } from "@/lib/lesson-audio";
 import type { LessonDraftParseResult } from "@/lib/lesson-draft-parser";
+import { LANGUAGE_CATALOG } from "@/lib/languages";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { Brand, Page } from "../ui";
 import styles from "./admin.module.css";
@@ -419,8 +420,7 @@ function AdminImport({ admin, replacement }: { admin: AdminIdentity; replacement
             <FieldLabel htmlFor="lesson-language">언어</FieldLabel>
             {replacement ? <Input type="hidden" name="language" value={replacement.language} /> : null}
             <NativeSelect id="lesson-language" name="language" defaultValue={replacement?.language ?? "english"} disabled={!!replacement || busyAction === "publish"} onChange={clearSavedDraft}>
-              <NativeSelectOption value="english">English 영어</NativeSelectOption>
-              <NativeSelectOption value="japanese">日本語 일본어</NativeSelectOption>
+              {LANGUAGE_CATALOG.map(item => <NativeSelectOption key={item.id} value={item.id}>{item.nativeLabel} {item.koreanLabel}</NativeSelectOption>)}
             </NativeSelect>
             </Field>
           </FieldGroup>

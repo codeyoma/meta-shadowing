@@ -11,21 +11,19 @@ async function openPlayer(page: Page, level: number) {
 
 async function expectGuidancePopup(page: Page, level: number, instruction?: string, clockPaused = false) {
   const heading = page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true });
-  // The modal Popover correctly hides its background from assistive tech.
-  // Use the stable trigger ID for geometry while that background is inert.
+  // The modal dialog hides its background from assistive tech.
   const trigger = page.locator("#practice-help-trigger");
   const guidance = page.getByRole("dialog", { name: "학습 방법", exact: true });
   await expect(heading).toHaveCount(1);
   await expect(guidance).toHaveCount(0);
   await trigger.click();
   await expect(guidance).toBeVisible();
-  if (instruction) await expect(guidance.locator("p")).toHaveText(instruction);
-  const headingBox = (await trigger.boundingBox())!;
+  if (instruction) await expect(guidance.getByRole("tabpanel")).toContainText(instruction);
+  await expect(guidance.getByRole("tab", { name: `Lv ${level}`, exact: true })).toHaveAttribute("aria-selected", "true");
   const guidanceBox = (await guidance.boundingBox())!;
-  expect(guidanceBox.y).toBeGreaterThanOrEqual(headingBox.y + headingBox.height);
   expect(guidanceBox.x).toBeGreaterThanOrEqual(0);
   expect(guidanceBox.x + guidanceBox.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-  await page.getByRole("button", { name: "학습 방법 닫기", exact: true }).click();
+  await guidance.getByRole("button", { name: "닫기", exact: true }).click();
   await expect(guidance).toHaveCount(0);
   // Radix FocusScope restores focus from a zero-delay unmount timer.
   if (clockPaused) await page.clock.runFor(1);
@@ -35,9 +33,14 @@ async function expectGuidancePopup(page: Page, level: number, instruction?: stri
 for (let level = 1; level <= 8; level++) test(`level ${level} reveals its method from the stage heading`, async ({ page }) => {
   await page.setViewportSize({ width: 583, height: 701 });
   await openPlayer(page, level);
-  const book = (await page.getByText("Morning Routine", { exact: true }).boundingBox())!;
-  const heading = (await page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true }).boundingBox())!;
-  expect(heading.x).toBeGreaterThan(book.x + book.width);
+  const context = page.getByLabel("레슨 안내", { exact: true });
+  await expect(context.getByRole("button")).toHaveCount(3);
+  const analysis = context.getByRole("button", { name: "문장 분석", exact: true });
+  await expect(analysis).toBeVisible();
+  await expect(analysis).toHaveText("문장 분석");
+  await expect(analysis.locator("svg")).toHaveCount(0);
+  await expect(page.locator("#player-book-label")).toHaveCount(0);
+  await expect(context).not.toContainText("Morning Routine");
   const instructions = [
     "자막을 보며 듣고, 따라 말한 뒤 원음과 비교하세요.",
     "자막을 보며 따라 말하고, 눈을 감고 한 번 더 말하세요.",
@@ -51,15 +54,13 @@ for (let level = 1; level <= 8; level++) test(`level ${level} reveals its method
   await expectGuidancePopup(page, level, instructions[level - 1]);
 });
 
-test("the narrow header wraps long titles without covering guidance or the bottom action", async ({ page }) => {
+test("the narrow header keeps all three actions visible without covering guidance or the bottom action", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await openPlayer(page, 5);
-  // Exercise a long localized upload title without changing published fixture data.
-  await page.getByText("Morning Routine", { exact: true }).evaluate(element => {
-    element.textContent = "A long bilingual lesson title — 日本語の会話と日常生活の練習";
-  });
   await expectGuidancePopup(page, 5);
   const context = page.getByLabel("레슨 안내", { exact: true });
+  await expect(context.getByRole("button")).toHaveCount(3);
+  for (const button of await context.getByRole("button").all()) await expect(button).toBeInViewport();
   expect(await context.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole("group", { name: "학습 진행", exact: true })).toBeInViewport();
@@ -114,7 +115,7 @@ test("rapid learning help pauses word progress and remains available after setti
 
 for (let level = 1; level <= 8; level++) test(`level ${level} follows the script chapter above the speech bubble`, async ({ page }) => {
   await openPlayer(page, level);
-  await expect(page.getByLabel("현재 챕터", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("현재 챕터", { exact: true }).getByRole("heading")).toHaveCount(0);
   await page.goto(`/player?lesson=daily-conversation&level=${level}&group=2`);
   const chapter = page.getByLabel("현재 챕터", { exact: true });
   await expect(chapter.getByRole("heading", { name: "At home", exact: true })).toBeVisible();
@@ -122,7 +123,10 @@ for (let level = 1; level <= 8; level++) test(`level ${level} follows the script
   for (const [number, title] of [[8, "At work"], [1, "At home"]] as const) {
     await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
     await page.getByRole("button", { name: "문장 목록", exact: true }).click();
-    await page.getByRole("dialog").getByRole("button", { name: new RegExp(`^${number}번 문장`) }).click();
+    const drawer = page.getByRole("dialog", { name: "문장 목록", exact: true });
+    const section = drawer.getByRole("button", { name: new RegExp(`^${title} `) });
+    if (await section.getAttribute("aria-expanded") === "false") await section.click();
+    await drawer.getByRole("button", { name: new RegExp(`^${number}번 문장`) }).click();
     await expect(chapter.getByRole("heading", { name: title, exact: true })).toBeVisible();
     const headingBox = (await chapter.boundingBox())!;
     const canvasBox = (await page.getByRole("region", { name: level <= 5 ? "학습 자막" : "속사포 학습" }).boundingBox())!;
@@ -150,12 +154,13 @@ test("section headings wrap long script titles without clipping or displacing th
   }
 });
 
-test("an audio error keeps the method available and offers recovery separately", async ({ page }) => {
+test("an audio error keeps the method available with recovery only in the bottom action", async ({ page }) => {
   await openPlayer(page, 1);
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ status: 503, body: "Unavailable" }));
   await page.reload();
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
-  await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RETRY · 다시 시도", exact: true })).toBeInViewport();
+  await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);
   await expectGuidancePopup(page, 1, "자막을 보며 듣고, 따라 말한 뒤 원음과 비교하세요.");
-  await expect(page.getByRole("alert").getByRole("button", { name: "다시 시도", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RETRY · 다시 시도", exact: true })).toBeInViewport();
 });

@@ -30,7 +30,7 @@ export function EntryForm() {
       });
 
       if (response.ok) {
-        window.location.assign("/home");
+        window.location.assign("/login");
         return;
       }
 

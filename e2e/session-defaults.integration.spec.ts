@@ -2,11 +2,20 @@ import { openSelectedStageSettings } from "./fixtures/stage-preview";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import {
+  assertLocalSupabaseUrl,
+  installLocalSupabaseSession,
+  promoteLocalSessionToGoogle
+} from "./fixtures/local-supabase-google";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1", "requires the project-local Supabase stack");
 
 test("admin defaults persist behind authorization and reach learners without overwriting browser overrides", async ({ page }) => {
-  const service = createClient(process.env.SUPABASE_INTEGRATION_URL!, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+  const url = process.env.SUPABASE_INTEGRATION_URL!;
+  assertLocalSupabaseUrl(url);
+  const options = { auth: { persistSession: false, autoRefreshToken: false } };
+  const service = createClient(url, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, options);
+  const authenticatedAdmin = createClient(url, process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!, options);
   const original = await service.from("session_defaults").select("settings").eq("id", true).single();
   const email = `settings-${randomUUID()}@example.com`;
   const created = await service.auth.admin.createUser({ email, email_confirm: true, app_metadata: { role: "admin" } });
@@ -16,6 +25,15 @@ test("admin defaults persist behind authorization and reach learners without ove
     const link = await service.auth.admin.generateLink({ type: "magiclink", email });
     expect(link.error).toBeNull();
     expect((await page.request.post("/api/admin/auth/verify", { data: { email, token: link.data.properties?.email_otp } })).status()).toBe(200);
+    const clientLink = await service.auth.admin.generateLink({ type: "magiclink", email });
+    expect(clientLink.error).toBeNull();
+    const clientOtp = clientLink.data.properties?.email_otp;
+    if (!clientOtp || !created.data.user) throw new Error("Local Supabase did not create the admin OTP fixture.");
+    expect((await authenticatedAdmin.auth.verifyOtp({ email, token: clientOtp, type: "email" })).error).toBeNull();
+    const googleAdminSession = await promoteLocalSessionToGoogle(
+      url, service, authenticatedAdmin, created.data.user.id, "admin"
+    );
+    await installLocalSupabaseSession(page, url, googleAdminSession);
     await page.goto("/admin");
     await page.getByRole("link", { name: "전역 학습 기본값" }).click();
     await page.getByRole("group", { name: "원음 기본값", exact: true }).getByLabel("재생속도").selectOption("2");
@@ -49,21 +67,15 @@ test("admin defaults persist behind authorization and reach learners without ove
     await openSelectedStageSettings(page);
     await expect(page.getByLabel("재생속도")).toHaveValue("2");
     await page.getByLabel("재생속도").selectOption("3");
-    await page.keyboard.press("Escape");
-    await page.getByRole("radio", { name: /7 다문장 암기/ }).click();
-    await openSelectedStageSettings(page);
+    await page.getByLabel("학습 레벨").selectOption("4");
     await expect(page.getByLabel("묶음 크기")).toHaveValue("3");
-    await page.keyboard.press("Escape");
-    await page.getByRole("radio", { name: /11 속사포 영한/ }).click();
-    await openSelectedStageSettings(page);
+    await page.getByLabel("학습 레벨").selectOption("6");
     await expect(page.getByLabel("단어 속도")).toHaveValue("5");
     expect((await page.request.put("/api/admin/settings", { data: { ...saved.data?.settings, speed: 1.5, wpmLevel: 6 } })).status()).toBe(200);
     await page.goto(`/setup?lesson=${draftId}`);
     await openSelectedStageSettings(page);
     await expect(page.getByLabel("재생속도")).toHaveValue("3");
-    await page.keyboard.press("Escape");
-    await page.getByRole("radio", { name: /11 속사포 영한/ }).click();
-    await openSelectedStageSettings(page);
+    await page.getByLabel("학습 레벨").selectOption("6");
     await expect(page.getByLabel("단어 속도")).toHaveValue("6");
   } finally {
     if (original.data) await service.from("session_defaults").update({ settings: original.data.settings }).eq("id", true);

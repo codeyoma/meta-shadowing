@@ -1,7 +1,7 @@
-.page { padding: env(safe-area-inset-top) max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left)); }
-.header { flex: none; width: min(100%, 1000px); margin-inline: auto; }
+.page { width: min(100%, 430px); margin-inline: auto; padding: env(safe-area-inset-top) max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left)); }
+.header { flex: none; width: 100%; }
 .content { display: flex; flex: 1; min-width: 0; min-height: 0; width: 100%; }
-.scroll { flex: 1; width: min(100%, 560px); max-width: 560px; margin-inline: auto; }
+.scroll { flex: 1; width: 100%; max-width: 100%; }
 .body { display: flex; flex-direction: column; gap: 20px; padding: 24px 8px 24px 0; }
 .heading { color: var(--display); font-size: 24px; font-weight: 800; line-height: 1.3; letter-spacing: -.02em; }
 .subheading { color: var(--display); font-size: 18px; font-weight: 700; line-height: 1.4; }
@@ -11,8 +11,7 @@
 .copy { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
 .copy strong { color: var(--display); font-size: 18px; line-height: 1.4; font-weight: 800; }
 .copy small { color: var(--muted-foreground); font-size: 13px; line-height: 1.5; font-weight: 500; }
-.flag { display: grid; place-items: center; width: 48px; height: 56px; flex: none; color: var(--display); }
-.flag svg { width: 28px; height: 28px; }
+.flag { display: grid; place-items: center; width: 48px; height: 56px; flex: none; font-size: 32px; line-height: 1; }
 .book { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 68px; min-height: 84px; flex: none; border-radius: var(--radius); color: var(--display); background: var(--accent-bee); }
 .book[data-tone="1"] { background: var(--nav-lesson-surface); }
 .book[data-tone="2"] { background: var(--path-beetle); }
@@ -20,6 +19,9 @@
 .book svg { width: 28px; height: 28px; }
 .progressText { display: flex; align-items: center; gap: 4px; color: var(--nav-language-ink); font-size: 12px; font-weight: 700; }
 .progressText svg { width: 14px; height: 14px; }
+.lessonProgress { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 4px; }
+.lessonProgress [data-slot="progress"] { flex: 1; min-width: 0; }
+.lessonProgress small { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .summary { display: grid; gap: 8px; }
 .summaryLine { display: flex; justify-content: space-between; gap: 12px; color: var(--display); font-size: 14px; font-weight: 700; }
 .section { display: grid; gap: 16px; }

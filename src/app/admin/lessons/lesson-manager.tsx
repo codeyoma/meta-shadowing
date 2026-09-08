@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import type { ManagedLesson } from "@/lib/lesson-management";
+import { languageInfo } from "@/lib/languages";
 import { requestLessonPublication } from "@/lib/request-lesson-publication";
 import { Brand, Page } from "../../ui";
 import { SyntaxAnalysisStatus } from "../syntax-analysis-status";
@@ -99,7 +100,7 @@ export function LessonManager({ initialLessons, initialError = "" }: { initialLe
           <CardHeader>
             <CardTitle role="heading" aria-level={2} className="min-w-0 break-words">{lesson.title}</CardTitle>
             <CardDescription className="flex flex-wrap items-center gap-2">
-              <span>{lesson.language === "english" ? "영어" : "일본어"}</span>
+              <span>{languageInfo(lesson.language).koreanLabel}</span>
               <Badge variant={lesson.status === "deleting" ? "destructive" : lesson.status === "published" ? "secondary" : "outline"}>{statusNames[lesson.status]}</Badge>
               <span>{lesson.versionCount}개 버전</span>
             </CardDescription>

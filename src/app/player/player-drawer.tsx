@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Map } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import type { PublishedLesson } from "@/lib/lessons";
-import { ArrowIcon, BackIcon, GearIcon, LessonIcon } from "../ui";
+import { ArrowIcon, BackIcon, CheckIcon, GearIcon, LessonIcon } from "../ui";
 import { centerCurrentSentence, SentenceList } from "./sentence-menu";
 import styles from "./practice.module.css";
 
 export type DrawerView = "menu" | "settings" | "sentences";
 
-export function PlayerDrawer({ open, lesson, initialView, settings, currentPhraseNumbers, grouped, onSelect, onClose, onHome, onViewChange }: {
+export function PlayerDrawer({ open, lesson, initialView, settings, currentPhraseNumbers, onSelect, onClose, onStages, onViewChange }: {
   open: boolean; lesson: PublishedLesson; initialView: "menu" | "settings"; settings: ReactNode;
-  currentPhraseNumbers: readonly number[]; grouped?: boolean;
-  onSelect: (phraseIndex: number) => void; onClose: () => void; onHome: () => void;
+  currentPhraseNumbers: readonly number[];
+  onSelect: (phraseIndex: number) => void; onClose: () => void; onStages: () => void;
   onViewChange: (view: DrawerView) => void;
 }) {
   const [view, setView] = useState<DrawerView>(initialView);
@@ -69,7 +70,7 @@ export function PlayerDrawer({ open, lesson, initialView, settings, currentPhras
 
   return <Drawer open={open} onOpenChange={nextOpen => { if (!nextOpen) close(); }} direction="bottom" autoFocus handleOnly>
     <DrawerContent ref={dialogRef} id="player-menu" className={styles.drawer} data-view={view} aria-labelledby="player-menu-title"
-      aria-describedby={view === "sentences" ? "sentence-menu-help player-menu-description" : "player-menu-description"}
+      aria-describedby="player-menu-description"
       onOpenAutoFocus={event => {
         event.preventDefault();
         dialogRef.current?.querySelector<HTMLButtonElement>(initialView === "settings" ? "[data-drawer-back]" : '[data-drawer-view="settings"]')?.focus({ preventScroll: true });
@@ -80,7 +81,7 @@ export function PlayerDrawer({ open, lesson, initialView, settings, currentPhras
       }}>
     <DrawerHeader className={styles.drawerHeader}>
       <div className={styles.drawerHeading}>
-        {view !== "menu" ? <Button type="button" variant="ghost" size="icon" data-drawer-back aria-label="메뉴로 돌아가기" onClick={() => show("menu")}><BackIcon /></Button> : <Button asChild variant="ghost" size="icon" className="invisible" aria-hidden="true"><span /></Button>}
+        {view !== "menu" ? <Button type="button" variant="context" size="icon" data-drawer-back aria-label="메뉴로 돌아가기" onClick={() => show("menu")}><BackIcon /></Button> : <Button asChild variant="ghost" size="icon" className="invisible" aria-hidden="true"><span /></Button>}
         <DrawerTitle id="player-menu-title">{title}</DrawerTitle>
         <span className={styles.drawerHeadingSpacer} aria-hidden="true" />
       </div>
@@ -89,10 +90,11 @@ export function PlayerDrawer({ open, lesson, initialView, settings, currentPhras
     {view === "menu" ? <nav className={styles.drawerNav} aria-label="학습 메뉴 항목">
       <Button type="button" variant="ghost" size="row" data-drawer-view="settings" onClick={() => show("settings")}><GearIcon data-icon="inline-start" /><span>학습 설정</span><ArrowIcon data-icon="inline-end" /></Button>
       <Button type="button" variant="ghost" size="row" data-drawer-view="sentences" onClick={() => show("sentences")}><LessonIcon data-icon="inline-start" /><span>문장 목록</span><ArrowIcon data-icon="inline-end" /></Button>
-      <Button type="button" variant="ghost" size="row" onClick={() => { close(); onHome(); }}><BackIcon data-icon="inline-start" /><span>첫 화면으로</span><ArrowIcon data-icon="inline-end" /></Button>
-    </nav> : view === "settings" ? <div className={styles.settingsBody}>{settings}</div> : <>
-      <p id="sentence-menu-help" className={styles.drawerHelp}>{grouped ? "문장을 선택하면 해당 묶음의 처음부터 연습합니다." : "연습할 문장을 선택하세요."} 재생은 일시정지됩니다.</p>
-      <SentenceList lesson={lesson} currentPhraseNumbers={currentPhraseNumbers} onSelect={index => { close(); onSelect(index); }} />
-    </>}
+    </nav> : view === "settings" ? <div className={styles.settingsBody}>{settings}</div> :
+      <SentenceList lesson={lesson} currentPhraseNumbers={currentPhraseNumbers} onSelect={index => { close(); onSelect(index); }} />}
+    <DrawerFooter className={styles.drawerFooter}>
+      <Button type="button" variant="practice" size="lg" onClick={close}><CheckIcon data-icon="inline-start" />확인</Button>
+      <Button type="button" variant="stage-exit" size="sm" onClick={() => { close(); onStages(); }}><Map aria-hidden="true" data-icon="inline-start" />스테이지 화면으로</Button>
+    </DrawerFooter>
   </DrawerContent></Drawer>;
 }

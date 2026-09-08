@@ -1,6 +1,7 @@
 import type { LessonDraftEntry } from "./lesson-draft-parser";
+import type { Language } from "./languages";
 
-export type Language = "english" | "japanese";
+export type { Language } from "./languages";
 
 export type Lesson = {
   id: string;

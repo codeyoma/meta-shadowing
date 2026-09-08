@@ -33,7 +33,7 @@ it("exposes the menu and phrase progress as one player navigation landmark", () 
 });
 
 it("marks only the confirmed-count boundary as the current listening cycle", () => {
-  act(() => root.render(createElement(CycleProgress, { completed: 1, target: 3 })));
+  act(() => root.render(createElement(CycleProgress, { completed: 1, target: 3, audioRef: { current: null } })));
 
   const steps = Array.from(container.querySelectorAll<HTMLElement>("[data-visible]"));
   expect(steps.map(step => ({
@@ -49,8 +49,8 @@ it("marks only the confirmed-count boundary as the current listening cycle", () 
   ]);
 });
 
-it("has no bouncing cycle after the confirmed count reaches its target", () => {
-  act(() => root.render(createElement(CycleProgress, { completed: 3, target: 3 })));
+it("has no current playback ring after the confirmed count reaches its target", () => {
+  act(() => root.render(createElement(CycleProgress, { completed: 3, target: 3, audioRef: { current: null } })));
 
   expect(container.querySelectorAll('[data-current="true"]')).toHaveLength(0);
   expect(container.querySelector('[aria-label="완료한 듣기"]')?.textContent).toBe("필수 3 / 3");

@@ -28,7 +28,7 @@ test("one Repeat adds two circle slots and manual Continue completes them before
   for (let cycle = 1; cycle <= 3; cycle++) {
     await confirmManualListen(page);
     await expect(cycles).toHaveText(`필수 ${cycle} / 3`);
-    await expect(cycles.locator("svg")).toHaveCount(cycle);
+    await expect(cycles.locator('[data-complete="true"] svg')).toHaveCount(cycle);
   }
   await expect(actions.getByRole("button")).toHaveCount(2);
   await expect(actions.getByRole("button", { name: /^NEXT/ })).toBeVisible();
@@ -70,7 +70,8 @@ test("help stays collapsed and playback uses one control without a timeline", as
   await expect(page.getByText(/^\d\d:\d\d\.\d$/)).toHaveCount(0);
   const outline = page.getByRole("progressbar", { name: "원음 재생 진행" });
   await expect(outline).toBeVisible();
-  expect((await outline.boundingBox())!.width).toBe(44);
+  expect((await outline.boundingBox())!.width).toBe(28);
+  await expect(page.getByLabel("완료한 듣기").locator('[data-current="true"]').getByRole("progressbar")).toHaveCount(1);
   await page.keyboard.press("Space");
   await confirmManualListen(page, "keyboard");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
@@ -78,31 +79,30 @@ test("help stays collapsed and playback uses one control without a timeline", as
   await expect(page.getByRole("group", { name: "학습 진행", exact: true }).getByRole("button")).toHaveCount(1);
 });
 
-test("the focused audio icon replays with Space and R while confirmation and arrows preserve progress", async ({ page }) => {
+test("the focused main action confirms with Space while r and R are ignored and arrows preserve progress", async ({ page }) => {
   await openPlayer(page);
-  const speaker = page.getByRole("button", { name: "재생 또는 일시정지", exact: true });
+  const continueButton = page.getByRole("button", { name: /^CONTINUE/ });
   const subtitles = page.getByRole("region", { name: "학습 자막", exact: true });
   const cycles = page.getByLabel("완료한 듣기");
-  await speaker.click();
+  await continueButton.click();
   await waitForManualListen(page);
   await expect(cycles).toHaveText("필수 0 / 3");
-  await speaker.focus();
+  await continueButton.focus();
   await page.keyboard.press("r");
+  await page.keyboard.press("R");
   await waitForManualListen(page);
   await expect(cycles).toHaveText("필수 0 / 3");
+  await expect(page.locator("audio")).toHaveJSProperty("ended", true);
   await page.keyboard.press("Space");
-  await waitForManualListen(page);
-  await expect(cycles).toHaveText("필수 0 / 3");
-  await subtitles.focus();
-  await confirmManualListen(page, "keyboard");
   await expect(cycles).toHaveText("필수 1 / 3");
+  await subtitles.focus();
   await confirmManualListen(page, "keyboard");
   await expect(cycles).toHaveText("필수 2 / 3");
   await confirmManualListen(page, "keyboard");
   await expect(cycles).toHaveText("필수 3 / 3");
   await page.keyboard.press("Space");
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
-  await speaker.focus();
+  await continueButton.focus();
   await page.keyboard.press("ArrowLeft");
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
   await page.keyboard.press("ArrowRight");
@@ -113,12 +113,12 @@ test("the focused audio icon replays with Space and R while confirmation and arr
     await confirmManualListen(page, "keyboard");
     await expect(cycles).toHaveText(`필수 ${cycle} / 3`);
   }
-  await speaker.focus();
+  await page.getByRole("button", { name: /^NEXT/ }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "2");
 });
 
-test("the audio icon repeats a paused checkpoint and stays disabled after the fifth listen", async ({ page }) => {
+test("Repeat resumes a paused checkpoint and only Next remains after the fifth listen", async ({ page }) => {
   await openPlayer(page);
   await page.keyboard.press("Space");
   for (let cycle = 1; cycle <= 3; cycle++) {
@@ -128,11 +128,7 @@ test("the audio icon repeats a paused checkpoint and stays disabled after the fi
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await page.keyboard.press("Escape");
-  const speaker = page.getByRole("button", { name: "재생 또는 일시정지", exact: true });
-  await speaker.click();
-  await waitForManualListen(page);
-  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 3 / 3 · 추가 0 / 2");
-  await speaker.click();
+  await page.getByRole("button", { name: /^REPEAT/ }).click();
   await waitForManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 3 / 3 · 추가 0 / 2");
   await confirmManualListen(page);
@@ -142,7 +138,9 @@ test("the audio icon repeats a paused checkpoint and stays disabled after the fi
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await page.keyboard.press("Escape");
-  await expect(speaker).toBeDisabled();
+  const actions = page.getByRole("group", { name: "학습 진행", exact: true });
+  await expect(actions.getByRole("button")).toHaveCount(1);
+  await expect(actions.getByRole("button", { name: /^NEXT/ })).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "0");
 });
 

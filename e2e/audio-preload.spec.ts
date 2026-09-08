@@ -42,8 +42,8 @@ test("only current and next recordings preload, and the buffered next recording 
   expect(await page.evaluate(() => caches.keys())).toEqual([]);
   expect(await page.evaluate(() => (window as typeof window & { liveAudioBuffers: number }).liveAudioBuffers)).toBeLessThanOrEqual(2);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-  await page.getByRole("button", { name: "첫 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(/\/languages/);
+  await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
+  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
   await expect.poll(() => page.evaluate(() => (window as typeof window & { liveAudioBuffers: number }).liveAudioBuffers)).toBe(0);
 });
 
@@ -63,11 +63,12 @@ test("a corrupt prefetched recording stops safely and a fresh retry never counts
   }
   await page.keyboard.press("Space");
   await page.keyboard.press("Space");
-  await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RETRY · 다시 시도", exact: true })).toBeVisible();
+  await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await expect(page.locator("audio")).toHaveJSProperty("paused", true);
   corrupt = false;
-  await page.getByRole("alert", { name: "원음 재생 오류" }).getByRole("button", { name: "다시 시도", exact: true }).click();
+  await page.getByRole("button", { name: "RETRY · 다시 시도", exact: true }).click();
   await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });

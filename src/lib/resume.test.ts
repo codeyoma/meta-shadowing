@@ -29,6 +29,12 @@ describe("last learner selection", () => {
     expect(readLastSelection()).toEqual(selection);
   });
 
+  it.each(["chinese", "german", "french"] as const)("returns a saved %s session selection", language => {
+    const saved = { ...selection, language };
+    saveLastSelection(saved);
+    expect(readLastSelection()).toEqual(saved);
+  });
+
   it("retains WPM settings in a rapid session link without audio speed or grouping", () => {
     const rapid = { ...selection, level: 7, mode: "automatic" as const, display: "cumulative" as const, wpmLevel: 5 as const, speakingExtraMs: 1500, lineGapMs: 500, sectionGapMs: 3000 };
     saveLastSelection(rapid);

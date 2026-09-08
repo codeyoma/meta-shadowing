@@ -21,4 +21,10 @@ describe("browsing context", () => {
     expect(resolveBrowseSelection("/settings", new URLSearchParams(), lessons, { language: "japanese", lessonId: "tokyo-walk" }))
       .toEqual({ language: "japanese", lessonId: "tokyo-walk" });
   });
+  it.each(["chinese", "german", "french"] as const)("keeps an explicit %s selection when that language has no published lessons", language => {
+    const selection = resolveBrowseSelection("/lessons", new URLSearchParams({ language }), lessons,
+      { language: "english", lessonId: "morning-routine" });
+    expect(selection).toEqual({ language, lessonId: null });
+    expect(browseHref("settings", selection)).toBe(`/settings?language=${language}`);
+  });
 });

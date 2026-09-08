@@ -31,7 +31,7 @@ async function openPlayer(page: Page, level = 1, lesson = "daily-conversation") 
   await expect(page.getByRole("button", { name: "문장 분석", exact: true })).toBeVisible();
 }
 
-test("section action reads multiple sentences, pauses audio, explains words, and restores focus", async ({ page }) => {
+test("header action reads multiple sentences, pauses audio, explains words, and restores focus", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   let resolve!: () => void;
@@ -41,7 +41,9 @@ test("section action reads multiple sentences, pauses audio, explains words, and
   const trigger = page.getByRole("button", { name: "문장 분석", exact: true });
   const heading = page.getByRole("heading", { name: "At home", exact: true });
   const [buttonBox, headingBox] = await Promise.all([trigger.boundingBox(), heading.boundingBox()]);
-  expect(buttonBox!.x).toBeGreaterThan(headingBox!.x + headingBox!.width);
+  expect(buttonBox!.y + buttonBox!.height).toBeLessThan(headingBox!.y);
+  await expect(page.getByLabel("레슨 안내", { exact: true }).getByRole("button", { name: "문장 분석", exact: true })).toBeVisible();
+  await expect(trigger).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   await expect.poll(() => page.locator("audio").evaluate(el => !(el as HTMLAudioElement).paused)).toBe(true);
   await trigger.click();

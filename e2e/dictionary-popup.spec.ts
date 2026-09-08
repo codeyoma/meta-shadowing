@@ -55,6 +55,9 @@ test("a word pauses media, displays the source fixture, blocks shortcuts, and re
   respond();
   await expect(popup).toContainText("잠에서 깨다.");
   await expect(popup.getByRole("link", { name: "위키낱말사전 원문", exact: true })).toHaveAttribute("href", sourceFixture.entries[0].sourceUrl);
+  await expect(popup.getByRole("link", { name: "wake 원문 보기 (새 탭)", exact: true })).toHaveAttribute("href", "https://ko.wiktionary.org/wiki/wake");
+  await expect(popup.locator('[data-slot="badge"]')).toHaveText(["verb"]);
+  await popup.getByRole("button", { name: "출처 및 라이선스", exact: true }).click();
   await expect(popup.getByRole("link", { name: "Kaikki", exact: true })).toBeVisible();
   await expect(popup.getByRole("link", { name: "CC BY-SA 4.0", exact: true })).toBeVisible();
   const pausedTime = await page.locator("audio").evaluate(element => (element as HTMLAudioElement).currentTime);
@@ -71,6 +74,84 @@ test("a word pauses media, displays the source fixture, blocks shortcuts, and re
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 3, y: 3 } });
   await expect(popup).toHaveCount(0);
   await expect(word).toBeFocused();
+});
+
+test("sentence analysis has no background while keeping the dialog action", async ({ page }) => {
+  await openPlayer(page);
+  const trigger = page.getByRole("button", { name: "문장 분석", exact: true });
+  await expect(trigger).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await trigger.click();
+  await expect(page.getByRole("dialog", { name: "문장 분석", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+});
+
+test("headword icons open each entry's own source in a new tab without leaving practice", async ({ page, context }, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => { if (["error", "warning"].includes(message.type())) errors.push(message.text()); });
+  const entries = [sourceFixture.entries[0],
+    { ...sourceFixture.entries[0], headword: "waken", matchType: "lemma", sourceUrl: "https://ko.wiktionary.org/w/index.php?title=waken&oldid=12345" },
+    { ...sourceFixture.entries[0], pos: "noun", senses: [{ glosses: ["배가 지나간 자국."] }] },
+  ];
+  await page.route("**/api/dictionary?**", route => route.fulfill({ json: { word: "wake", entries } }));
+  // Verify native new-tab navigation without depending on the external site's uptime.
+  await context.route("https://ko.wiktionary.org/**", route => route.fulfill({
+    contentType: "text/html", body: "<!doctype html><title>Dictionary source fixture</title><p>Source destination test</p>"
+  }));
+  await openPlayer(page);
+  await expect(page).toHaveTitle("Meta Shadowing");
+  const playerUrl = page.url();
+  const word = page.getByRole("button", { name: "wake 뜻 보기", exact: true });
+  await word.click();
+  const dialog = page.getByRole("dialog", { name: "wake 뜻", exact: true });
+  const headings = dialog.locator("article h3");
+  const links = headings.getByRole("link");
+  await expect(links).toHaveCount(3);
+  await expect(links.nth(0)).toHaveAccessibleName("wake 원문 보기 (새 탭)");
+  await expect(links.nth(1)).toHaveAccessibleName("waken 원문 보기 (새 탭)");
+  for (const width of [320, 430, 1280]) {
+    await page.setViewportSize({ width, height: 932 });
+    for (let index = 0; index < 3; index++) {
+      // A resize can recenter the dialog between separate browser calls.
+      // Compare the word and icon from the same layout frame.
+      const { headword, icon } = await headings.nth(index).evaluate(heading => ({
+        headword: heading.querySelector('[lang="en"]')!.getBoundingClientRect().toJSON(),
+        icon: heading.querySelector("a")!.getBoundingClientRect().toJSON(),
+      }));
+      expect(icon.x).toBeGreaterThanOrEqual(headword.x + headword.width);
+      expect(Math.abs(icon.y + icon.height / 2 - headword.y - headword.height / 2)).toBeLessThan(2);
+      expect(icon.width).toBeGreaterThanOrEqual(44);
+      expect(icon.height).toBeGreaterThanOrEqual(44);
+      await expect(links.nth(index)).toBeInViewport();
+    }
+    expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`headword-links-${width}.png`), animations: "disabled", scale: "css" });
+  }
+  const destinations = ["https://ko.wiktionary.org/wiki/wake", "https://ko.wiktionary.org/w/index.php?title=waken&oldid=12345", "https://ko.wiktionary.org/wiki/wake"];
+  for (let index = 0; index < destinations.length; index++) {
+    await expect(links.nth(index)).toHaveAttribute("rel", "noopener noreferrer");
+    const opened = page.waitForEvent("popup");
+    if (index === 0) {
+      await page.keyboard.press("Tab");
+      await links.nth(index).focus();
+      expect(await links.nth(index).evaluate(element => element.matches(":focus-visible"))).toBe(true);
+      await links.nth(index).press("Enter");
+    } else await links.nth(index).click();
+    const source = await opened;
+    await expect(source).toHaveURL(destinations[index]);
+    expect(await source.evaluate(() => window.opener === null)).toBe(true);
+    await source.close();
+    await page.bringToFront();
+    await expect(page).toHaveURL(playerUrl);
+    await expect(dialog).toBeVisible();
+    await expect(page.locator("audio")).toHaveJSProperty("paused", true);
+  }
+  await expect(dialog.getByRole("link", { name: "위키낱말사전 원문", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(word).toBeFocused();
+  expect(errors).toEqual([]);
 });
 
 test("hint-only subtitles stay hidden while the dictionary reports missing entries", async ({ page }) => {

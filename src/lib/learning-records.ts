@@ -3,6 +3,7 @@ import { isStageForLevel, stageForLevel } from "./learning-stages";
 import { isSessionSettings, type SessionSettings } from "./session-settings";
 import type { SessionSelection } from "./resume";
 import { localStudyDay, validStudyDay } from "./study-streak";
+import { isLanguage } from "./languages";
 
 export type RunSelection = SessionSelection & SessionSettings & { runId: string };
 export type ProgressRecord = {
@@ -39,7 +40,7 @@ function isProgress(value: unknown): value is ProgressRecord {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return ["runId", "lessonId", "lessonVersion", "lessonName"].every(key => typeof record[key] === "string" && record[key].length > 0)
-    && (record.language === "english" || record.language === "japanese")
+    && isLanguage(record.language)
     && typeof record.level === "number" && Number.isInteger(record.level) && record.level >= 1 && record.level <= 8
     && (record.stage === undefined || isStageForLevel(record.stage, record.level))
     && [record.nextUnit, record.nextPhrase].every(value => typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 999)
@@ -72,6 +73,12 @@ export function completedStagesForLesson(history: CompletionRecord[], lesson: Le
   return [...new Set(history
     .filter(record => record.lessonId === lesson.id && record.lessonVersion === lesson.version)
     .map(record => stageForLevel(record.level, record.stage)))].sort((a, b) => a - b);
+}
+
+// History describes past work, so unlike stage progress it includes all versions.
+export function completionHistoryForLesson(history: readonly CompletionRecord[], lessonId: string): CompletionRecord[] {
+  return history.filter(record => record.lessonId === lessonId)
+    .toSorted((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt));
 }
 
 export function reconcileLearningJournal(catalog: Lesson[]) {

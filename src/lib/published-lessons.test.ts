@@ -42,6 +42,11 @@ it("does not expose stored counts that disagree with the published script", asyn
   expect(await getPublishedLesson("lesson")).toBeNull();
 });
 
+it.each(["chinese", "german", "french"] as const)("decodes a published %s lesson", async language => {
+  query.maybeSingle.mockResolvedValue({ data: { ...row, language }, error: null });
+  expect(await getPublishedLesson("lesson")).toMatchObject({ language, id: "lesson" });
+});
+
 it("derives accurate counts for the test catalog too", async () => {
   vi.stubEnv("ADMIN_TEST_MODE", "1");
   expect(await listPublishedLessons()).toMatchObject([

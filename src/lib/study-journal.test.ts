@@ -34,3 +34,17 @@ it("validates explicit study dates without substituting completion timestamps", 
   localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify({ progress: null, history: [], studyDays: ["bad", null, "2026-02-30", "2026-09-06"] }));
   expect(readLearningJournal().studyDays).toEqual(["2026-09-06"]);
 });
+
+it.each(["chinese", "german", "french"] as const)("retains valid %s learning progress", language => {
+  const progress = { runId: `run-${language}`, lessonId: `lesson-${language}`, lessonVersion: "v1", lessonName: "Lesson", language,
+    level: 1, stage: 1, nextUnit: 0, nextPhrase: 0, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS };
+  localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify({ progress, history: [], studyDays: [] }));
+  expect(readLearningJournal().progress).toEqual(progress);
+});
+
+it("still rejects an unsupported learning language", () => {
+  const progress = { runId: "run-spanish", lessonId: "lesson-spanish", lessonVersion: "v1", lessonName: "Lesson", language: "spanish",
+    level: 1, stage: 1, nextUnit: 0, nextPhrase: 0, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS };
+  localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify({ progress, history: [], studyDays: [] }));
+  expect(readLearningJournal().progress).toBeNull();
+});

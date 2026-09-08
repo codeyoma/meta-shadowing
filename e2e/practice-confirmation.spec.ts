@@ -77,26 +77,27 @@ test("automatic checks wait for the full timer and the third check chimes withou
   expect(await tones(page)).toHaveLength(3);
 });
 
-test("header segments highlight help or settings only while open, then return to the book", async ({ page }) => {
+test("header segments highlight help or settings only while their popup is open", async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 932 });
   await openPlayer(page);
-  const book = page.locator("#player-book-label");
   const help = page.locator("#practice-help-trigger");
   const settings = page.locator("#player-settings-trigger");
-  await expect(book).toHaveAttribute("data-selected", "true");
+  const analysis = page.getByRole("button", { name: "문장 분석", exact: true });
+  await expect(help).toHaveAttribute("data-selected", "false");
+  await expect(settings).toHaveAttribute("data-selected", "false");
   await help.click();
   await expect(help).toHaveAttribute("data-selected", "true");
-  await expect(book).toHaveAttribute("data-selected", "false");
+  await expect(settings).toHaveAttribute("data-selected", "false");
   await page.keyboard.press("Escape");
-  await expect(book).toHaveAttribute("data-selected", "true");
+  await expect(help).toHaveAttribute("data-selected", "false");
   await expect(help).toBeFocused();
   await settings.click();
   await expect(settings).toHaveAttribute("data-selected", "true");
-  await expect(book).toHaveAttribute("data-selected", "false");
+  await expect(help).toHaveAttribute("data-selected", "false");
   await page.mouse.click(2, 2);
-  await expect(book).toHaveAttribute("data-selected", "true");
+  await expect(settings).toHaveAttribute("data-selected", "false");
   await expect(settings).toBeFocused();
-  for (const item of [book, help, settings]) {
+  for (const item of [help, settings, analysis]) {
     const box = (await item.boundingBox())!;
     expect(box.height).toBeGreaterThanOrEqual(44);
     expect(box.x + box.width).toBeLessThanOrEqual(430);
@@ -107,31 +108,28 @@ test("settings selection follows sheet navigation without changing the original 
   await openPlayer(page);
   const menu = page.locator("#player-menu-trigger");
   const settings = page.locator("#player-settings-trigger");
-  const book = page.locator("#player-book-label");
   await menu.click();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
   await expect(settings).toHaveAttribute("data-selected", "true");
-  await expect(book).toHaveAttribute("data-selected", "false");
   await page.keyboard.press("Escape");
+  await expect(settings).toHaveAttribute("data-selected", "false");
   await expect(menu).toBeFocused();
   await settings.click();
   await page.getByRole("button", { name: "메뉴로 돌아가기" }).click();
   await expect(settings).toHaveAttribute("data-selected", "false");
-  await expect(book).toHaveAttribute("data-selected", "true");
   await page.keyboard.press("Escape");
   await expect(settings).toBeFocused();
 });
 
-test("Space on the speaker replays a pending listen instead of confirming it", async ({ page }) => {
+test("Space on Continue confirms a pending listen exactly once", async ({ page }) => {
   await openPlayer(page);
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   await expect(page.getByRole("button", { name: "CONTINUE · 듣기 완료 확인", exact: true })).toBeVisible();
-  const speaker = page.getByRole("button", { name: "재생 또는 일시정지", exact: true });
-  await speaker.focus();
+  const confirmation = page.getByRole("button", { name: "CONTINUE · 듣기 완료 확인", exact: true });
+  await confirmation.focus();
   await page.keyboard.press("Space");
-  await expect(page.getByLabel("완료한 듣기", { exact: true })).toHaveText("필수 0 / 3");
-  await expect(page.getByRole("button", { name: "CONTINUE · 듣기 완료 확인", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "CONTINUE · 듣기 완료 확인", exact: true }).click();
+  await expect(page.getByLabel("완료한 듣기", { exact: true })).toHaveText("필수 1 / 3");
+  await expect(confirmation).toBeVisible();
   await expect(page.getByLabel("완료한 듣기", { exact: true })).toHaveText("필수 1 / 3");
 });
 

@@ -1,4 +1,5 @@
 import type { Language, Lesson } from "./lessons";
+import { isLanguage } from "./languages";
 
 export type BrowseDestination = "languages" | "lessons" | "stages" | "settings";
 export type BrowseSelection = { language: Language; lessonId: string | null };
@@ -9,8 +10,8 @@ export function resolveBrowseSelection(pathname: string, query: URLSearchParams,
   const routeLesson = catalog.find(item => encodeURIComponent(item.id) === routeId);
   const requested = catalog.find(item => item.id === query.get("lesson"));
   const queryLanguage = query.get("language");
-  const language: Language = routeLesson?.language ?? (queryLanguage === "english" || queryLanguage === "japanese"
-    ? queryLanguage : requested?.language ?? (saved?.language === "japanese" ? "japanese" : "english"));
+  const language: Language = routeLesson?.language ?? (isLanguage(queryLanguage)
+    ? queryLanguage : requested?.language ?? (isLanguage(saved?.language) ? saved.language : "english"));
   const candidates = catalog.filter(item => item.language === language);
   const lesson = routeLesson ?? candidates.find(item => item.id === requested?.id)
     ?? candidates.find(item => item.id === saved?.lessonId) ?? candidates[0];

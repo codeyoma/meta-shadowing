@@ -46,6 +46,11 @@ export function hasSessionTimer(session: AudioSession): boolean {
     || (session.phase === "paused" && ["speaking", "countdown"].includes(session.pausedPhase));
 }
 
+export function isAudioRepeatAvailable(session: AudioSession): boolean {
+  return session.cycleTarget === 3 && session.confirmedCycles === 3
+    && (session.phase === "ready" || (session.phase === "paused" && session.pausedPhase === "ready"));
+}
+
 export function createAudioSession({
   phraseCount, groupSizes, level = 1, mode = "manual", advanceDelayMs = 1000, playbackRate = 1, groupGapMs = 500, initialGroupIndex = 0
 }: { phraseCount: number; groupSizes?: number[]; level?: AudioPracticeLevel; initialGroupIndex?: number } & Partial<AudioSessionSettings>): AudioSession {

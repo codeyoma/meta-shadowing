@@ -16,15 +16,22 @@ import { completedStagesForLesson, readLearningJournal } from "@/lib/learning-re
 import { nextPracticeForLesson } from "@/lib/next-practice";
 import { getPlayerHref, saveLastSelection } from "@/lib/resume";
 import { createRunId } from "@/lib/run-id";
+import { playStageSound } from "@/lib/stage-sound";
 import { DEFAULT_SESSION_SETTINGS, readSessionPreferences, type SessionSettings } from "@/lib/session-settings";
-import { browseHref } from "@/lib/browse-navigation";
-import { CloseIcon, GearIcon, PlayIcon } from "../ui";
+import { CloseIcon, PlayIcon } from "../ui";
 import { useBrowseScroll } from "../browse-shell";
+import { LessonHistoryDialog } from "./lesson-history-dialog";
 import styles from "./setup.module.css";
 
 const pathOffsets = [0, 1, 2, 1];
-const pathBands = ["bee", "fox", "cardinal", "beetle"];
 const methodIcons = [Headphones, Brain, TextCursorInput, Layers, WholeWord, Languages, Languages, Mic];
+
+const stageRing = <span className={styles.stageRing} data-stage-ring="" aria-hidden="true">
+  <svg viewBox="0 0 100 86" preserveAspectRatio="none" focusable="false">
+    <ellipse className={styles.stageRingTrack} cx="50" cy="43" rx="48" ry="41" vectorEffect="non-scaling-stroke" />
+    <ellipse className={styles.stageRingArc} data-stage-arc="" cx="50" cy="43" rx="48" ry="41" pathLength="100" vectorEffect="non-scaling-stroke" />
+  </svg>
+</span>;
 
 export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, initialStage }: { lesson: Lesson; defaults?: SessionSettings; initialStage?: number }) {
   const router = useRouter();
@@ -34,17 +41,10 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   const [settings, setSettings] = useState(defaults);
   const [ready, setReady] = useState(false);
   const [previewStage, setPreviewStage] = useState<number | null>(null);
-  const [compactLandscape, setCompactLandscape] = useState(false);
   const stageScrollRef = useBrowseScroll(`stages:${lesson.id}`);
+  const shellScrollRef = useBrowseScroll(`stage-shell:${lesson.id}`);
   const [completedStages, setCompletedStages] = useState<number[]>([]);
   const [currentPractice, setCurrentPractice] = useState<ReturnType<typeof nextPracticeForLesson>>({ stage: 1, progress: null, review: false });
-  useEffect(() => {
-    const media = window.matchMedia("(min-width: 560px) and (max-height: 500px)");
-    const update = () => setCompactLandscape(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
   useEffect(() => {
     setSettings(readSessionPreferences(defaults));
     const journal = readLearningJournal();
@@ -56,12 +56,14 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   }, [defaults, lesson, initialStage]);
 
   function start(): void {
+    playStageSound("start");
     const selection = { ...settings, language, lessonId: lesson.id, level, stage, runId: createRunId() };
     saveLastSelection(selection);
     router.push(getPlayerHref(selection));
   }
 
   function startCurrent(): void {
+    playStageSound("start");
     const current = nextPracticeForLesson(readLearningJournal(), lesson);
     const saved = current.progress;
     const selection = { ...(saved?.settings ?? settings), language, lessonId: lesson.id,
@@ -71,7 +73,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   }
 
   return (
-      <div className={styles.shell}>
+      <div className={styles.shell} ref={shellScrollRef}>
         <Card variant="lesson" className={styles.bookSummary} aria-labelledby="setup-title">
           <CardHeader className={styles.bookHeading}>
             <Badge variant="book" aria-hidden="true"><BookOpen /></Badge>
@@ -89,17 +91,23 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
               <span>{Math.round(completedStages.length / learningStages.length * 100)}%</span>
             </div>
             <Progress value={completedStages.length} max={learningStages.length} aria-label="완료한 스테이지" />
+            <div className={styles.bookActions}>
+            <LessonHistoryDialog lesson={lesson} disabled={!ready} />
             <Button className={styles.selectedStage} size="lg" disabled={!ready} aria-label={`현재 스테이지 ${currentPractice.stage} 시작`} onClick={startCurrent}>
-              <span className={styles.selectedStageCopy}><span>{currentPractice.review ? "복습" : currentPractice.progress ? "이어서 학습" : "스테이지"} {currentPractice.stage} · Lv {learningStages[currentPractice.stage - 1].level}</span><strong>{learningStages[currentPractice.stage - 1].name}</strong></span>
-              <PlayIcon data-icon="inline-end" />
+              <PlayIcon data-icon="inline-start" />
+              <span className={styles.selectedStageCopy}>
+                <span className={styles.selectedStageMeta}>{currentPractice.review ? "복습" : currentPractice.progress ? "이어서 학습" : "스테이지"} {currentPractice.stage} · Lv {learningStages[currentPractice.stage - 1].level}</span>
+                <strong className={styles.selectedStageName}>{learningStages[currentPractice.stage - 1].name}</strong>
+              </span>
             </Button>
+            </div>
           </CardContent>
         </Card>
         <section className={styles.stageSection} aria-labelledby="level-title">
-          <h2 id="level-title" className={styles.sectionTitle}>학습 단계</h2>
+          <h2 id="level-title" className="sr-only">학습 단계</h2>
           <ScrollArea className={styles.stageScroll} viewportProps={{ ref: stageScrollRef, role: "region", "aria-label": "학습 단계 목록", tabIndex: -1 }}>
           <div className={styles.pathInset}>
-          <ToggleGroup type="single" orientation="vertical" variant="path" value={String(stage)} aria-labelledby="level-title" className="w-full" onValueChange={value => {
+          <ToggleGroup type="single" orientation="vertical" variant="path" value={previewStage === null ? "" : String(previewStage)} aria-labelledby="level-title" className="w-full" onValueChange={value => {
             const selected = Number(value);
             if (Number.isInteger(selected) && selected >= 1 && selected <= learningStages.length) setStage(selected);
           }}>
@@ -107,25 +115,30 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
             {learningStages.map(({ stage: number, level: methodLevel, name }, index) => {
               const offset = pathOffsets[index % pathOffsets.length];
               const nextOffset = pathOffsets[(index + 1) % pathOffsets.length];
+              const direction = nextOffset - offset;
               const completed = completedStages.includes(number);
+              const current = ready && !currentPractice.review && number === currentPractice.stage;
               const MethodIcon = completed ? Check : methodIcons[methodLevel - 1];
               return (
-                <li className={styles.levelItem} key={number} data-band={pathBands[Math.floor(index / 4)]} style={{ "--path-offset": offset } as CSSProperties}>
+                <li className={styles.levelItem} key={number} style={{ "--path-offset": offset } as CSSProperties}>
                   {index < learningStages.length - 1 ? <svg className={styles.connector} aria-hidden="true" viewBox="0 0 2 100" preserveAspectRatio="none">
-                    <line x1={offset} y1="0" x2={nextOffset} y2="100" vectorEffect="non-scaling-stroke" />
+                    <path d={`M ${offset} 0 C ${offset + direction * 1.3} 8, ${nextOffset + direction * .15} 40, ${nextOffset} 100`} vectorEffect="non-scaling-stroke" />
                   </svg> : null}
                   <Popover open={previewStage === number} onOpenChange={open => {
                     setPreviewStage(open ? number : null);
-                    if (open) setStage(number);
+                    if (open) {
+                      playStageSound("select");
+                      setStage(number);
+                    }
                   }}>
                   <PopoverTrigger asChild>
                   <ToggleGroupItem value={String(number)} className={styles.levelButton} disabled={!ready}
-                    aria-label={`${number} ${name} Lv ${methodLevel}${completed ? " · 완료" : ""}`} data-completed={completed}>
-                    <span className={styles.levelNode}><MethodIcon aria-hidden="true" /><Badge variant="stage" className={styles.stageNumber}>{number}</Badge></span>
+                    aria-label={`${number} ${name} Lv ${methodLevel}${completed ? " · 완료" : ""}`} data-completed={completed} aria-current={current ? "step" : undefined}>
+                    <span className={styles.levelNode}>{current ? stageRing : null}<MethodIcon aria-hidden="true" /><Badge variant="stage" className={styles.stageNumber}>{number}</Badge></span>
                     <span className={styles.levelLabel}><Badge variant="secondary">Lv {methodLevel}</Badge><strong className={styles.levelName}>{name}</strong></span>
                   </ToggleGroupItem>
                   </PopoverTrigger>
-                  <PopoverContent variant="primary" className={styles.stagePreview} side={compactLandscape ? "left" : "bottom"} sideOffset={14} collisionPadding={20} hideWhenDetached
+                  <PopoverContent variant="primary" className={styles.stagePreview} side="bottom" sideOffset={14} collisionPadding={20} hideWhenDetached
                     aria-labelledby={`stage-${number}-title`} aria-describedby={`stage-${number}-description`}>
                     <PopoverArrow />
                     <ScrollArea className={styles.previewScroll} viewportProps={{ role: "region", "aria-label": "스테이지 안내", tabIndex: 0 }}>
@@ -135,15 +148,11 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
                         <PopoverTitle id={`stage-${number}-title`} role="heading" aria-level={3}>{name}</PopoverTitle>
                         <Button type="button" variant="ghost-inverse" size="icon" aria-label="스테이지 안내 닫기" onClick={() => setPreviewStage(null)}><CloseIcon /></Button>
                       </div>
-                      <PopoverDescription tone="metadata">스테이지 {number} · Lv {methodLevel}</PopoverDescription>
                     </PopoverHeader>
-                    <PopoverDescription id={`stage-${number}-description`}>{learningInstructions[methodLevel - 1]}</PopoverDescription>
+                    <PopoverDescription tone="display" size="sm" id={`stage-${number}-description`}>{learningInstructions[methodLevel - 1]}</PopoverDescription>
                     </div>
                     </ScrollArea>
                     <div className={styles.previewActions}>
-                      <Button type="button" variant="inverse" size="icon-lg" aria-label="세션 설정" disabled={!ready} onClick={() => {
-                        router.push(`${browseHref("session", { language, lessonId: lesson.id })}&stage=${number}&level=${methodLevel}`, { scroll: false });
-                      }}><GearIcon /></Button>
                       <Button variant="inverse" size="lg" className="min-w-0 flex-1" disabled={!ready} onClick={start}><PlayIcon />학습 시작</Button>
                     </div>
                   </PopoverContent>

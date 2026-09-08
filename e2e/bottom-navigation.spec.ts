@@ -44,30 +44,43 @@ test("settings opens a list and detail page without starting practice", async ({
   expect(await page.evaluate(() => localStorage.getItem("meta-shadowing:last-selection"))).toBeNull();
 });
 
-test("each tap bounces the icon once and repeated taps restart that feedback", async ({ page }) => {
+test("each tap dips the whole button then returns, with no independent icon bounce", async ({ page }) => {
   const tab = page.getByRole("navigation", { name: "하단 탐색" }).getByRole("link", { name: "레슨", exact: true });
   const icon = tab.locator("[data-nav-icon]");
   // Capture the real animation's timing at creation. A 220 ms animation can finish
   // between browser round trips under parallel load, so don't inspect it later.
-  await icon.evaluate(element => {
+  await tab.evaluate(element => {
     const el = element as HTMLElement;
     const animate = el.animate.bind(el);
     el.animate = (frames, options) => {
       const animation = animate(frames, options);
       el.dataset.animationCalls = String(Number(el.dataset.animationCalls ?? 0) + 1);
       el.dataset.animationTiming = JSON.stringify(animation.effect!.getTiming());
+      el.dataset.animationFrames = JSON.stringify((animation.effect as KeyframeEffect).getKeyframes());
       return animation;
     };
   });
   await tab.click();
-  await expect(icon).toHaveAttribute("data-animation-calls", "1");
-  const timing = JSON.parse((await icon.getAttribute("data-animation-timing"))!);
+  await expect(tab).toHaveAttribute("data-animation-calls", "1");
+  const timing = JSON.parse((await tab.getAttribute("data-animation-timing"))!);
   expect(timing.duration).toBe(220);
   expect(timing.iterations).toBe(1);
-  await expect.poll(() => icon.evaluate(el => el.getAnimations().length)).toBe(0);
+  const frames = JSON.parse((await tab.getAttribute("data-animation-frames"))!) as { transform: string }[];
+  expect(frames.map(frame => frame.transform)).toEqual(["translateY(0px)", "translateY(4px)", "translateY(0px)"]);
+  expect(await icon.evaluate(el => el.getAnimations().length)).toBe(0);
+  await expect.poll(() => tab.evaluate(el => el.getAnimations().length)).toBe(0);
   await tab.click();
-  await expect(icon).toHaveAttribute("data-animation-calls", "2");
-  await expect.poll(() => icon.evaluate(el => el.getAnimations().length)).toBe(0);
+  await expect(tab).toHaveAttribute("data-animation-calls", "2");
+  await expect.poll(() => tab.evaluate(el => el.getAnimations().length)).toBe(0);
+  const rapid = await tab.evaluate(element => {
+    const button = element as HTMLElement;
+    button.click();
+    const previous = button.getAnimations().find(animation => animation.id === "navigation-press")!;
+    previous.pause();
+    button.click();
+    return { previous: previous.playState, active: button.getAnimations().filter(animation => animation.id === "navigation-press").length };
+  });
+  expect(rapid).toEqual({ previous: "idle", active: 1 });
 });
 
 test("reduced motion preserves selection without the spatial bounce", async ({ page }) => {
@@ -79,7 +92,7 @@ test("reduced motion preserves selection without the spatial bounce", async ({ p
   await expect(tab).toHaveAttribute("aria-current", "location");
   // Chromium may briefly report an inherited scrollbar-color transition even
   // with reduced motion. The contract is no spatial icon animation.
-  expect(await tab.locator("[data-nav-icon]").evaluate(el => el.getAnimations().filter(animation =>
+  expect(await tab.evaluate(el => el.getAnimations({ subtree: true }).filter(animation =>
     (animation.effect as KeyframeEffect).getKeyframes().some(frame => "transform" in frame)
   ).length)).toBe(0);
 });

@@ -3,7 +3,11 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  density = "default",
+  ...props
+}: React.ComponentProps<"table"> & { density?: "default" | "compact" }) {
   return (
     <div
       data-slot="table-container"
@@ -11,7 +15,14 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        data-density={density}
+        className={cn(
+          "w-full caption-bottom",
+          density === "compact"
+            ? "text-xs [&_td]:px-1 [&_th]:px-1"
+            : "text-sm",
+          className
+        )}
         {...props}
       />
     </div>

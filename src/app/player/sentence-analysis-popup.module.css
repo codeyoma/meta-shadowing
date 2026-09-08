@@ -1,6 +1,5 @@
-.trigger { margin-left: auto; flex-shrink: 0; color: var(--display); background: var(--accent); }
-.trigger svg { width: 20px; height: 20px; }
-.popup { width: min(42rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); max-height: calc(100dvh - 2rem); grid-template-rows: auto minmax(0, 1fr) auto; }
+.trigger { min-width: 0; padding: 8px; }
+.popup { width: min(42rem, 100%); max-width: 100%; grid-template-rows: auto minmax(0, 1fr) auto; }
 .heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; padding-right: .25rem; }
 .sentence + .sentence { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }

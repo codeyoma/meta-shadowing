@@ -81,12 +81,18 @@ function PopoverTitle({ className, ...props }: React.ComponentProps<"h2">) {
 function PopoverDescription({
   className,
   tone = "default",
+  size = "default",
   ...props
-}: React.ComponentProps<"p"> & { tone?: "default" | "metadata" }) {
+}: React.ComponentProps<"p"> & { tone?: "default" | "metadata" | "soft" | "display"; size?: "default" | "sm" }) {
   return (
     <p
       data-slot="popover-description"
-      className={cn(tone === "metadata" ? "text-display/80" : "text-muted-foreground group-data-[variant=soft]/popover:text-inherit group-data-[variant=soft-inverse]/popover:text-inherit group-data-[variant=primary]/popover:text-inherit", className)}
+      className={cn({
+        default: "text-muted-foreground group-data-[variant=soft]/popover:text-inherit group-data-[variant=soft-inverse]/popover:text-inherit group-data-[variant=primary]/popover:text-inherit",
+        metadata: "text-display/80",
+        soft: "text-body-soft",
+        display: "text-display",
+      }[tone], size === "sm" && "text-sm", className)}
       {...props}
     />
   )

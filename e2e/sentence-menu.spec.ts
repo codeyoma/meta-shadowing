@@ -75,7 +75,9 @@ test("the sentence drawer has a white surface and menu back action without a Clo
   const back = header.getByRole("button", { name: "메뉴로 돌아가기", exact: true });
   await expect(back).toBeVisible();
   await expect(header.getByRole("button", { name: "문장 목록 닫기", exact: true })).toHaveCount(0);
-  await expect(menu.locator("#sentence-menu-help")).toBeVisible();
+  await expect(menu.locator("#sentence-menu-help")).toHaveCount(0);
+  await expect(menu).toHaveAttribute("aria-describedby", "player-menu-description");
+  await page.screenshot({ path: test.info().outputPath("sentence-menu-without-helper.png"), animations: "disabled", scale: "css" });
   await expect(title).toHaveCSS("color", "rgb(4, 44, 96)");
   await expect(menu.getByRole("button", { name: /닫기/ })).toHaveCount(0);
   await page.keyboard.press("Escape");

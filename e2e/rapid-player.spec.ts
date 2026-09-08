@@ -87,10 +87,14 @@ for (const level of [7, 8]) test(`level ${level} times speaking from the target 
   await page.clock.runFor(10000);
   await expect(canvas).toHaveText("한 문장 완료");
   await page.keyboard.press("r");
+  await page.keyboard.press("R");
+  await expect(canvas).toHaveText("한 문장 완료");
+  await page.getByRole("button", { name: "CONTINUE · 다음 문장", exact: true }).click();
   await expect(canvas).toHaveText("나는");
+  await expect(page.getByRole("progressbar", { name: "문장 진행", exact: true })).toHaveAttribute("aria-valuenow", "1");
 });
 
-test("pause, restart and Right Arrow work while Left Arrow preserves word progress", async ({ page, isMobile }) => {
+test("pause and Right Arrow work while r, R and Left Arrow preserve word progress", async ({ page, isMobile }) => {
   await openPlayer(page, 6, "morning-routine", "&display=cumulative");
   const canvas = page.getByRole("region", { name: "속사포 학습" });
   const start = page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true });
@@ -105,7 +109,8 @@ test("pause, restart and Right Arrow work while Left Arrow preserves word progre
   await page.clock.runFor(100);
   await expect(canvas).toHaveText("I wake");
   await page.keyboard.press("r");
-  await expect(canvas).toHaveText("I");
+  await page.keyboard.press("R");
+  await expect(canvas).toHaveText("I wake");
   await page.keyboard.press("ArrowRight");
   await page.clock.runFor(300);
   await expect(canvas).toHaveText("I wash");
@@ -232,7 +237,9 @@ test("mobile rapid controls remain above the dock and have touch-sized targets",
   const actions = await page.getByRole("region", { name: "속사포 학습" }).boundingBox();
   const dock = await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox();
   expect(actions!.y + actions!.height).toBeLessThanOrEqual(dock!.y);
-  for (const button of await page.locator("main button").all()) {
+  // Inline definitions use token typography; standalone player controls keep
+  // the full touch-target requirement.
+  for (const button of await page.locator("main button:not([data-dictionary-word])").all()) {
     const box = await button.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
     expect(box!.width).toBeGreaterThanOrEqual(44);

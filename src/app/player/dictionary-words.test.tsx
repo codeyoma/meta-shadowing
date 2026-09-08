@@ -49,6 +49,13 @@ it("segments unspaced Japanese without making punctuation clickable", () => {
   expect(words.every(word => !/[。！「」\s]/u.test(word ?? ""))).toBe(true);
 });
 
+it("segments unspaced Chinese without making punctuation clickable", () => {
+  const text = "我喜欢学习中文。";
+  const container = renderWords(text, "chinese");
+  expect(container.textContent).toBe(text);
+  expect([...container.querySelectorAll("button")].map(button => button.textContent)).toEqual(["我", "喜欢", "学习", "中文"]);
+});
+
 it("selects hyphenated English compounds as one word while keeping sentence dashes separate", () => {
   const text = "My ex-girlfriend passed. A state-of-the-art COVID-19 test — well done. non‑smoker; word--word";
   const selected = vi.fn();

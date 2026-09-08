@@ -11,7 +11,7 @@ const badgeVariants = cva(
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
         stage: "size-7 min-h-7 p-0 bg-display text-primary-foreground text-sm tabular-nums",
         book: "size-14 p-0 rounded-lg bg-reward text-reward-foreground [&>svg]:size-7!",
-        streak: "min-h-9 gap-1.5 bg-reward/20 text-foreground text-sm tabular-nums [&>svg]:size-4! [&>svg]:text-accent-fox",
+        streak: "min-h-9 gap-1.5 bg-transparent text-foreground text-sm tabular-nums",
         secondary:
           "bg-accent text-accent-foreground [a]:hover:bg-secondary/80",
         destructive:

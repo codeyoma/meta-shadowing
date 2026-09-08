@@ -55,3 +55,10 @@ it("preserves grouped phrase boundaries and current phrase while restarting alte
     ['"First."', '"Second."', '"Third."'], ["Plain."], ['"First."', '"Second."', '"Third."']
   ]);
 });
+
+it.each([
+  ["japanese", "ja"], ["chinese", "zh"], ["german", "de"], ["french", "fr"]
+] as const)("marks %s subtitle text with its locale", (language, locale) => {
+  const root = render({ language, lines: [{ target: "Target.", korean: "번역." }] });
+  expect(root.querySelector(`[lang="${locale}"]`)?.textContent).toBe("Target.");
+});

@@ -72,8 +72,8 @@ test("screen wake covers manual speaking and releases on pause, settings, backgr
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(0);
   await page.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
-  await page.getByRole("button", { name: "첫 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(/\/languages/);
+  await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
+  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
   await expect.poll(() => activeLocks(page)).toBe(0);
 });
 

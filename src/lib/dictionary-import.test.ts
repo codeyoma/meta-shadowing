@@ -30,6 +30,35 @@ describe("Kaikki mapping", () => {
     expect(mapped.source_dump).toBe("ko-2026-09-01");
   });
 
+  it("preserves pass transitivity only where the raw Kaikki source explicitly supplies it", () => {
+    // Korean raw dump: pass has two verb records, tagged at the entry level.
+    const intransitive = mapKaikkiRecord({ word: "pass", lang_code: "en", pos: "verb", pos_title: "자동사",
+      tags: ["intransitive"], senses: [{ glosses: ["지나가다, 통과하다."] }] });
+    const transitive = mapKaikkiRecord({ word: "pass", lang_code: "en", pos: "verb", pos_title: "타동사",
+      tags: ["transitive"], senses: [{ glosses: ["건네주다."] }, { glosses: ["(법안을) 가결하다, 승인하다, 통과시키다."] }] }, "dump", 1);
+    expect(intransitive.entry.tags).toEqual(["intransitive"]);
+    expect(transitive.entry.tags).toEqual(["transitive"]);
+    expect(intransitive.entry.senses[0]).not.toHaveProperty("tags");
+    expect(mapKaikkiRecord(source).entry).not.toHaveProperty("tags");
+  });
+
+  it("keeps source sense-level transitivity separate and allows only exact known raw metadata", () => {
+    // The raw Korean edition's bear record mixes intransitive/transitive sense tags.
+    const mapped = mapKaikkiRecord({ word: "bear", lang_code: "en", pos: "verb",
+      tags: ["rare", "transitive-ish"], senses: [
+        { glosses: ["버티다, 참다, 인내하다."], tags: ["intransitive"] },
+        { glosses: ["지다."], tags: ["transitive", "transitive", "rare"] },
+        { glosses: ["테스트 뜻"], raw_tags: ["타동사", "격식"] },
+        { glosses: ["다른 뜻"], raw_tags: ["자동사"] },
+        { glosses: ["자동사, 타동사라는 단어를 포함한 설명"], examples: [{ text: "She passes me." }] }
+      ] });
+    expect(mapped.entry).not.toHaveProperty("tags");
+    expect(mapped.entry.senses.map((sense: { tags?: string[] }) => sense.tags)).toEqual([
+      ["intransitive"], ["transitive"], ["transitive"], ["intransitive"], undefined
+    ]);
+    expect(mapKaikkiRecord({ ...source, raw_tags: ["타동사", "자동사"] }).entry.tags).toEqual(["transitive", "intransitive"]);
+  });
+
   it.each(["en", "ja", "zh", "es", "de", "fr"])("accepts Korean-edition definitions for %s", (language) => {
     expect(mapKaikkiRecord({ ...source, lang_code: language }).language).toBe(language);
   });

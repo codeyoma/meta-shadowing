@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openSelectedStageSettings, startSelectedStage } from "./fixtures/stage-preview";
+import { openSelectedStageSettings, returnToStages, startSelectedStage } from "./fixtures/stage-preview";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, manualConfirmation, waitForManualListen } from "./fixtures/manual-practice";
 
@@ -17,7 +17,7 @@ test("learner overrides become the next browser session defaults across lessons 
   await page.getByRole("radio", { name: "자동", exact: true }).click();
   await page.getByLabel("재생속도").selectOption("2");
   await page.getByLabel("다음 이동 대기 (초)").fill("2");
-  await page.getByRole("link", { name: "스테이지로 돌아가기" }).click();
+  await returnToStages(page);
   await page.getByRole("radio", { name: /13 속사포 한영/ }).click();
   await openSelectedStageSettings(page);
   await page.getByLabel("단어 속도").selectOption("6");
@@ -31,11 +31,11 @@ test("learner overrides become the next browser session defaults across lessons 
   await expect(page.getByLabel("재생속도")).toHaveValue("2");
   await expect(page.getByRole("radio", { name: "자동", exact: true })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByLabel("다음 이동 대기 (초)")).toHaveValue("2");
-  await page.getByRole("link", { name: "스테이지로 돌아가기" }).click();
+  await returnToStages(page);
   await page.getByRole("radio", { name: /9 다문장 첫 단어/ }).click();
   await openSelectedStageSettings(page);
   await expect(page.getByLabel("묶음 크기")).toHaveValue("4");
-  await page.getByRole("link", { name: "스테이지로 돌아가기" }).click();
+  await returnToStages(page);
   await page.getByRole("radio", { name: /15 속사포 한글/ }).click();
   await openSelectedStageSettings(page);
   await expect(page.getByLabel("단어 속도")).toHaveValue("6");
@@ -161,8 +161,9 @@ test("malformed browser records fall back to usable defaults without inventing p
   await page.goto("/setup?lesson=morning-routine");
   await openSelectedStageSettings(page);
   await expect(page.getByLabel("재생속도")).toHaveValue("1");
-  await page.getByRole("link", { name: "스테이지로 돌아가기" }).click();
-  await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio", { checked: true })).toBeEnabled();
+  await returnToStages(page);
+  await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio").first()).toBeEnabled();
+  await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio", { checked: true })).toHaveCount(0);
 });
 
 test("changing an unrelated group-size preference does not restart a completed rapid run", async ({ page }) => {
@@ -175,6 +176,8 @@ test("changing an unrelated group-size preference does not restart a completed r
   await page.clock.runFor(6900);
   await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
   const completedUrl = page.url();
+  // Let Next's client navigation timers run while outside timed practice.
+  await page.clock.resume();
   await page.goto("/setup?lesson=daily-conversation");
   await page.waitForLoadState("networkidle");
   await page.getByRole("radio", { name: /7 다문장 암기/ }).click();
@@ -227,7 +230,11 @@ test("rapid resume commits complete lines, excludes pauses and background time, 
   await page.waitForLoadState("networkidle");
   await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
   await page.getByRole("button", { name: "레슨 목록으로", exact: true }).click();
-  await expect(page.getByRole("region", { name: "완료 기록" }).getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "완료 기록" })).toHaveCount(0);
+  await page.goto("/lessons/morning-routine/stages");
+  await page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "완료 기록", exact: true }).getByRole("button", { name: "설정 보기", exact: true })).toHaveCount(1);
+  await page.clock.resume();
   await page.goto("/setup?lesson=morning-routine");
   await page.waitForLoadState("networkidle");
   await page.getByRole("radio", { name: /11 속사포 영한/ }).click();
@@ -237,14 +244,19 @@ test("rapid resume commits complete lines, excludes pauses and background time, 
   await page.keyboard.press("Escape");
   await startSelectedStage(page);
   await page.waitForLoadState("networkidle");
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect(page.getByRole("region", { name: "속사포 학습" })).toHaveText("I");
   await page.clock.runFor(6900);
   await expect(page.getByLabel("활성 학습시간")).toHaveText("6.9초");
   await page.getByRole("button", { name: "레슨 목록으로", exact: true }).click();
-  const history = page.getByRole("region", { name: "완료 기록" });
-  await expect(history.getByRole("listitem")).toHaveCount(2);
-  await history.getByText("설정 보기").first().click();
-  await expect(history.getByRole("listitem").first()).toContainText("200 WPM");
-  await expect(history.getByRole("listitem").first()).toContainText("버전 fixture-v1");
+  await page.goto("/lessons/morning-routine/stages");
+  await page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true }).click();
+  const history = page.getByRole("dialog", { name: "완료 기록", exact: true });
+  await expect(history.getByRole("button", { name: "설정 보기", exact: true })).toHaveCount(2);
+  const settings = history.getByRole("button", { name: "설정 보기", exact: true }).first();
+  await settings.click();
+  const details = page.locator(`[id="${await settings.getAttribute("aria-controls")}"]`);
+  await expect(details).toContainText("200 WPM");
+  await expect(details).toContainText("버전 fixture-v1");
 });

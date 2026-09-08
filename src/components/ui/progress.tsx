@@ -3,14 +3,16 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Progress as ProgressPrimitive } from "radix-ui"
+import styles from "./progress.module.css"
 
 function Progress({
   className,
   value,
   max = 100,
   variant = "default",
+  shimmer = false,
   ...props
-}: React.ComponentProps<typeof ProgressPrimitive.Root> & { variant?: "default" | "lesson" }) {
+}: React.ComponentProps<typeof ProgressPrimitive.Root> & { variant?: "default" | "lesson"; shimmer?: boolean }) {
   const total = max > 0 ? max : 100;
   const percent = Math.min(100, Math.max(0, ((value ?? 0) / total) * 100));
   return (
@@ -27,7 +29,7 @@ function Progress({
     >
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
-        className={cn("size-full flex-1 rounded-full transition-transform duration-300 ease-out", variant === "lesson" ? "bg-reward" : "bg-primary")}
+        className={cn("size-full flex-1 rounded-full transition-transform duration-300 ease-out", variant === "lesson" ? "bg-reward" : "bg-primary", shimmer && percent > 0 && styles.shimmer)}
         style={{ transform: `translateX(-${100 - percent}%)` }}
       />
     </ProgressPrimitive.Root>

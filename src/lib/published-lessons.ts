@@ -3,6 +3,7 @@ import "server-only";
 import { decodeLessonDraftEntries } from "./lesson-entry-decoder";
 import { parseLessonDraft } from "./lesson-draft-parser";
 import { lessons, type Language, type Lesson, type LessonPhrase, type PublishedLesson } from "./lessons";
+import { isLanguage } from "./languages";
 import { LESSON_AUDIO_BUCKET } from "./lesson-audio";
 import type { PublishedAudioItem } from "./lesson-publication";
 import { createSecretSupabaseClient } from "./supabase/secret";
@@ -47,7 +48,7 @@ function fixtureLesson(lesson: Lesson): PublishedLesson {
 }
 
 function readLanguage(value: string): Language | null {
-  return value === "english" || value === "japanese" ? value : null;
+  return isLanguage(value) ? value : null;
 }
 
 function toPublishedLesson(row: PublishedLessonRow): PublishedLesson | null {

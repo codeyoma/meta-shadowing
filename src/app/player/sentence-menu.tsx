@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import type { LessonDraftEntry } from "@/lib/lesson-draft-parser";
 import { lessonSentenceSections } from "@/lib/lesson-section";
 import type { PublishedLesson } from "@/lib/lessons";
+import { languageCode } from "@/lib/languages";
 import styles from "./practice.module.css";
 
 export function centerCurrentSentence(list: HTMLOListElement) {
@@ -41,7 +42,7 @@ export function SentenceList({ lesson, currentPhraseNumbers, onSelect }: {
         <li className={styles.sentenceSection}>
           <AccordionTrigger className={styles.sectionTrigger}>
             <span className={styles.sectionHeading}>
-              <span lang={lesson.language === "english" ? "en" : "ja"}>{section.heading.target}</span>
+              <span lang={languageCode(lesson.language)}>{section.heading.target}</span>
               {section.heading.korean ? <span lang="ko">{section.heading.korean}</span> : null}
             </span>
           </AccordionTrigger>
@@ -68,7 +69,7 @@ function SentenceRows({ entries, language, currentPhraseNumbers, onSelect }: {
           <Button type="button" variant="sentence" size="row" className={styles.sentenceChoice} data-selected={currentPhraseNumbers.includes(entry.phraseNumber)} aria-current={currentPhraseNumbers.includes(entry.phraseNumber) ? "true" : undefined}
             aria-label={`${entry.phraseNumber}번 문장 · ${entry.target} · ${entry.korean}`} onClick={() => onSelect(entry.phraseNumber - 1)}>
             <span className={styles.sentenceNumber} aria-hidden="true">{entry.phraseNumber}</span>
-            <span className={styles.sentenceCopy}><span lang={language === "english" ? "en" : "ja"}>{entry.target}</span><small lang="ko">{entry.korean}</small></span>
+            <span className={styles.sentenceCopy}><span lang={languageCode(language)}>{entry.target}</span><small lang="ko">{entry.korean}</small></span>
           </Button>
           <Separator />
         </li>)}

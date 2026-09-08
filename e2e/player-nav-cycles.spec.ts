@@ -18,7 +18,7 @@ test("the player drawer has no close buttons and Escape returns focus", async ({
   await expect(page.getByRole("button", { name: "학습 메뉴", exact: true })).toBeFocused();
 });
 
-test("the confirmed count advances the circular activity indicator and fills its incoming line Macaw", async ({ page }) => {
+test("the confirmed count moves media progress to the next cycle and fills its incoming line Macaw", async ({ page }) => {
   await openPlayer(page);
   const cycles = page.getByRole("group", { name: "완료한 듣기", exact: true });
   await expect(cycles.locator('[data-current="true"]')).toHaveCount(1);
@@ -27,38 +27,27 @@ test("the confirmed count advances the circular activity indicator and fills its
 
   const current = cycles.locator('[data-current="true"]');
   await expect(current).toHaveCount(1);
-  expect(await current.evaluate(element => getComputedStyle(element.querySelector("i")!, "::after").animationName)).toContain("current-cycle-ring");
-  const orbit = await current.locator("i").evaluate(element => {
-    const animation = element.getAnimations({ subtree: true }).find(a => a instanceof CSSAnimation && a.animationName.includes("current-cycle-ring"))!;
-    animation.pause();
-    const duration = Number(animation.effect!.getTiming().duration);
-    const frames = [0, duration / 4, duration / 2].map(time => {
-      animation.currentTime = time;
-      const matrix = new DOMMatrix(getComputedStyle(element, "::after").transform);
-      const box = element.getBoundingClientRect();
-      return { x: matrix.m11, y: matrix.m12, circleX: box.x, circleY: box.y };
-    });
-    animation.play();
-    return frames;
-  });
-  for (const frame of orbit) {
-    expect(Math.hypot(frame.x, frame.y)).toBeCloseTo(1, 1);
-    expect(frame.circleX).toBe(orbit[0].circleX);
-    expect(frame.circleY).toBe(orbit[0].circleY);
-  }
-  expect(orbit[1].x).toBeCloseTo(0, 1);
-  expect(orbit[1].y).toBeCloseTo(1, 1);
+  await expect(cycles.locator('[data-complete="true"] svg')).toHaveCount(1);
+  const ring = current.getByRole("progressbar", { name: "원음 재생 진행", exact: true });
+  await expect(ring).toBeVisible();
+  await expect(ring).toHaveCSS("width", "28px");
+  await expect(ring).toHaveCSS("height", "28px");
+  await expect(ring).toHaveCSS("animation-name", "none");
+  await expect(ring).toHaveAttribute("aria-valuenow", "100");
   await expect.poll(() => current.evaluate(element => getComputedStyle(element, "::after").backgroundColor)).toBe("rgb(28, 176, 246)");
   await expect.poll(() => current.evaluate(element => getComputedStyle(element, "::after").transform)).toBe("matrix(1, 0, 0, 1, 0, 0)");
 });
 
-test("reduced motion leaves the current listening arc still", async ({ page }) => {
+test("reduced motion preserves the static current listening progress ring", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openPlayer(page);
 
   const currentDot = page.getByRole("group", { name: "완료한 듣기", exact: true }).locator('[data-current="true"] i');
   await expect(currentDot).toHaveCount(1);
   expect(await currentDot.evaluate(element => getComputedStyle(element, "::after").animationName)).toBe("none");
+  const ring = currentDot.getByRole("progressbar", { name: "원음 재생 진행", exact: true });
+  await expect(ring).toBeVisible();
+  await expect(ring).toHaveCSS("animation-name", "none");
 });
 
 test("only player content scrolls while the safe-area navigation and footer stay anchored", async ({ page }) => {

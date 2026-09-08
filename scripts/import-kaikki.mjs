@@ -7,7 +7,7 @@ import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { createGunzip } from "node:zlib";
 import {
-  DICTIONARY_LANGUAGES, DICTIONARY_LICENSE, normalizeDictionaryLookup, parseDictionaryWord
+  DICTIONARY_LANGUAGES, DICTIONARY_LICENSE, dictionaryTransitivityTags, normalizeDictionaryLookup, parseDictionaryWord
 } from "../src/lib/dictionary.ts";
 
 export const KAIKKI_DOWNLOAD_URL = "https://kaikki.org/dictionary/downloads/ko/ko-extract.jsonl.gz";
@@ -17,6 +17,12 @@ const clean = (value) => typeof value === "string" ? value.trim() : "";
 const array = (value) => Array.isArray(value) ? value : [];
 
 class ImportError extends Error {}
+
+function sourceTransitivity(raw) {
+  const rawTags = array(raw.raw_tags).flatMap(tag => tag === "타동사" ? ["transitive"]
+    : tag === "자동사" ? ["intransitive"] : []);
+  return dictionaryTransitivityTags([...array(raw.tags), ...array(raw.raw_tags), ...rawTags]);
+}
 
 /** Occurrence distinguishes multiple same-headword/POS entries without hashing mutable gloss text. */
 export function mapKaikkiRecord(raw, sourceDump = KAIKKI_DOWNLOAD_URL, occurrence = 0) {
@@ -33,14 +39,17 @@ export function mapKaikkiRecord(raw, sourceDump = KAIKKI_DOWNLOAD_URL, occurrenc
       const translation = clean(example.translation);
       return text ? [{ text, ...(translation ? { translation } : {}) }] : [];
     });
-    return [{ glosses, ...(examples.length ? { examples } : {}) }];
+    const tags = sourceTransitivity(sense);
+    return [{ glosses, ...(examples.length ? { examples } : {}), ...(tags.length ? { tags } : {}) }];
   });
   if (!senses.length) return null;
   const pos = clean(raw.pos) || "unknown";
+  const tags = sourceTransitivity(raw);
   const sourceUrl = `https://ko.wiktionary.org/wiki/${encodeURIComponent(headword.replace(/ /g, "_"))}`;
   const pronunciations = [...new Set(array(raw.sounds).map((sound) => record(sound) ? clean(sound.ipa) : "").filter(Boolean))]
     .map((ipa) => ({ ipa }));
   const entry = { headword, language: raw.lang_code, pos, senses, sourceUrl, license: DICTIONARY_LICENSE,
+    ...(tags.length ? { tags } : {}),
     ...(pronunciations.length ? { pronunciations } : {}) };
   const forms = array(raw.forms).flatMap((form) => {
     if (!record(form) || array(form.tags).some((tag) => /romaniz|translit|table-tags/i.test(tag))) return [];

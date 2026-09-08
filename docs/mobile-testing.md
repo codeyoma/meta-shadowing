@@ -10,11 +10,11 @@ Use the same trusted Wi-Fi network on the Mac and phone. Do not expose the devel
    DEV_ALLOWED_ORIGINS=<MAC_WIFI_IP> npm run dev:lan
    ```
 
-4. Open `http://<MAC_WIFI_IP>:3000` in Safari or Chrome on the phone and enter the existing learner password. Keep the Mac awake and the server running.
+4. Open `http://<MAC_WIFI_IP>:3000` in Safari or Chrome on the phone, enter the beta password, then sign in with Google. The exact callback for this origin must be configured as described in [learner sign-in](learner-google-login.md). Keep the Mac awake and the server running.
 
 `DEV_ALLOWED_ORIGINS` is an explicit, comma-separated hostname allowlist for Next.js development assets and live reload. Do not use a wildcard or put a protocol or port in it. The IP remains local configuration, not a tracked infrastructure value. If DHCP changes the Mac's address, restart with the new value.
 
-The listener also retains localhost access. The local session-ID fallback uses Web Crypto random bytes, without changing learner authentication, production cookies, or hosted database policies. No production configuration is required for this workflow.
+The listener also retains localhost access. The local session-ID fallback uses Web Crypto random bytes, without weakening learner authentication, production cookies, or hosted database policies. Google OAuth still needs an approved callback URL for the origin being used; prefer the approved HTTPS Preview for real-account sign-in.
 
 ## What this verifies
 

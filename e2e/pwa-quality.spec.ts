@@ -1,11 +1,11 @@
 import { openSelectedStageSettings } from "./fixtures/stage-preview";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 test("empty form fields have a clearly distinguishable boundary on the white canvas", async ({ page }) => {
-  async function expectFieldBoundary(selector: string) {
-    const contrast = await page.locator(selector).evaluate(element => {
+  async function expectFieldBoundary(field: Locator) {
+    const contrast = await field.evaluate(element => {
       const style = getComputedStyle(element);
       const luminance = (color: string) => color.match(/[\d.]+/g)!.slice(0, 3)
         .map(Number).map(value => value / 255)
@@ -18,13 +18,13 @@ test("empty form fields have a clearly distinguishable boundary on the white can
     expect(contrast).toBeGreaterThanOrEqual(3);
   }
   await page.goto("/");
-  await expectFieldBoundary("#beta-password");
+  await expectFieldBoundary(page.locator("#beta-password"));
   await page.goto("/admin");
-  await expectFieldBoundary("#admin-email");
+  await expectFieldBoundary(page.locator("#admin-email"));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto("/setup?lesson=morning-routine");
   await openSelectedStageSettings(page);
-  await expectFieldBoundary('#session-options [data-slot="native-select"]');
+  await expectFieldBoundary(page.getByRole("combobox", { name: "재생속도", exact: true }));
 });
 
 test("the online-only install manifest and all home-screen icons work without learner access", async ({ page, request }) => {
@@ -63,7 +63,7 @@ test("setup exposes large touch targets, visible keyboard focus and a legible se
   }
   await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).focus();
   await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toHaveCSS("box-shadow", /rgb\(4, 44, 96\)/);
-  await expect(page.getByRole("radio", { name: /1 자막 쉐도잉/ })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("radio", { name: /1 자막 쉐도잉/ })).toHaveAttribute("aria-checked", "false");
   await page.getByRole("radio", { name: /5 첫 단어 힌트/ }).click();
   await expect(page.getByRole("radio", { name: /1 자막 쉐도잉/ })).toHaveAttribute("aria-checked", "false");
   await expect(page.getByRole("radio", { name: /5 첫 단어 힌트/ })).toHaveAttribute("aria-checked", "true");
@@ -84,10 +84,13 @@ test("setup exposes large touch targets, visible keyboard focus and a legible se
   expect(contrast).toBeGreaterThanOrEqual(4.5);
   await page.keyboard.press("Escape");
   await page.getByRole("navigation", { name: "하단 탐색" }).getByRole("link", { name: "레슨", exact: true }).click();
-  await expect(page.getByRole("radio", { name: /English 영어/ })).toHaveAttribute("aria-checked", "true");
-  await page.getByRole("radio", { name: /日本語 일본어/ }).click();
-  await expect(page.getByRole("radio", { name: /日本語 일본어/ })).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByRole("radio", { name: /English 영어/ })).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByRole("heading", { name: "영어 레슨", exact: true })).toBeVisible();
+  await page.getByRole("navigation", { name: "하단 탐색" }).getByRole("link", { name: "언어", exact: true }).click();
+  await page.getByRole("link", { name: /일본어 日本語/ }).click();
+  await expect(page).toHaveURL(/\/lessons\?language=japanese/);
+  await expect(page.getByRole("heading", { name: "일본어 레슨", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /東京の散歩/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Morning Routine/ })).toHaveCount(0);
 });
 
 for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }]) test(`a ${viewport.width} by ${viewport.height} phone never covers practice actions with its playback dock`, async ({ page }) => {
@@ -138,6 +141,8 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: /^재생 모드 및 속도/ })).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "문장 분석", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(canvas).toBeFocused();
   await expect(canvas).toHaveCSS("outline-style", "solid");
   expect(await canvas.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
@@ -152,7 +157,7 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "재생 또는 일시정지", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeFocused();
 
   await page.goto("/player?lesson=morning-routine&level=8&display=cumulative");
   const rapid = page.getByRole("region", { name: "속사포 학습" });
@@ -162,6 +167,8 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 8", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: /^재생 모드 및 속도/ })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "문장 분석", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(rapid).toBeFocused();
   await expect(rapid).toHaveCSS("outline-style", "solid");

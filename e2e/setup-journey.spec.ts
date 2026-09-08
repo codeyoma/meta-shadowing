@@ -12,7 +12,7 @@ test("the book summary keeps the actual next stage separate from previews and do
   await expect(page.getByRole("progressbar", { name: "완료한 스테이지" })).toHaveAttribute("aria-valuemax", "16");
   await page.getByRole("radio", { name: /^8 다문장 암기/ }).click();
   const popup = page.getByRole("dialog", { name: "다문장 암기", exact: true });
-  await expect(popup).toContainText("스테이지 8 · Lv 4");
+  await expect(popup).not.toContainText("스테이지 8 · Lv 4");
   await expect(popup).toHaveCSS("background-color", "rgb(88, 204, 2)");
   await expect(popup.getByText("다문장 암기", { exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(popup.getByRole("button", { name: "학습 시작", exact: true })).toHaveCSS("background-color", "rgb(255, 255, 255)");

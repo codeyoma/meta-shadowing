@@ -7,6 +7,7 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getLesson, type Language, type Lesson } from "@/lib/lessons";
+import { isLanguage, LANGUAGE_CATALOG, languageInfo } from "@/lib/languages";
 import { getPlayerHref, readLastSelection, saveLastSelection, SessionSelection } from "@/lib/resume";
 import { createRunId } from "@/lib/run-id";
 import { stageForLevel } from "@/lib/learning-stages";
@@ -29,7 +30,7 @@ function ResumeRow({ selection, catalog, progress }: { selection: SessionSelecti
       <PlayIcon />
       <span className={styles.rowCopy}>
         <strong>마지막 학습 계속하기</strong>
-        <small>{selection.language === "english" ? "영어" : "일본어"} · {lesson.name} · 레벨 {selection.level} · 스테이지 {stageForLevel(selection.level, selection.stage)} · 프레이즈 {progress && progress.lessonVersion === lesson.version ? progress.nextPhrase + 1 : 1} / {lesson.phraseCount}</small>
+        <small>{languageInfo(selection.language).koreanLabel} · {lesson.name} · 레벨 {selection.level} · 스테이지 {stageForLevel(selection.level, selection.stage)} · 프레이즈 {progress && progress.lessonVersion === lesson.version ? progress.nextPhrase + 1 : 1} / {lesson.phraseCount}</small>
       </span>
       <ArrowIcon />
     </Button>
@@ -97,18 +98,15 @@ export function LearnerHome({ catalog, initialTab = "languages", initialLanguage
         <section className={styles.homeSection} aria-labelledby="language-title">
           <h2 ref={languageHeading} id="language-title">언어 선택</h2>
           <ToggleGroup type="single" variant="choice" value={language} onValueChange={value => {
-            if (value === "english" || value === "japanese") setLanguage(value);
+            if (isLanguage(value)) setLanguage(value);
           }} aria-labelledby="language-title" className="grid w-full grid-cols-2" spacing={3}>
-            <ToggleGroupItem value="english" className="min-w-0 p-4">
-              <span className={styles.rowCopy}><strong>English</strong><em>영어</em></span><ArrowIcon />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="japanese" className="min-w-0 p-4">
-              <span className={styles.rowCopy}><strong>日本語</strong><em>일본어</em></span><ArrowIcon />
-            </ToggleGroupItem>
+            {LANGUAGE_CATALOG.map(item => <ToggleGroupItem key={item.id} value={item.id} className="min-w-0 p-4">
+              <span className={styles.rowCopy}><strong><span aria-hidden="true">{item.flag}</span> {item.nativeLabel}</strong><em>{item.koreanLabel}</em></span><ArrowIcon />
+            </ToggleGroupItem>)}
           </ToggleGroup>
         </section>
         <section className={styles.homeSection} aria-labelledby="lesson-title">
-          <h2 ref={lessonHeading} id="lesson-title">{language === "english" ? "영어 레슨" : "일본어 레슨"}</h2>
+          <h2 ref={lessonHeading} id="lesson-title">{languageInfo(language).koreanLabel} 레슨</h2>
           <div className={styles.rows}>
             {visibleLessons.map((lesson) => (
               <Button variant="choice" size="row" key={lesson.id} onClick={() => router.push(`/setup?language=${language}&lesson=${lesson.id}`)}>

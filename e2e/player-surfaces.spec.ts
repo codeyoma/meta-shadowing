@@ -11,10 +11,10 @@ for (const level of [1, 3, 4, 6, 8]) test(`level ${level} exposes help and direc
   await stage.click();
   const help = page.getByRole("dialog", { name: "학습 방법", exact: true });
   await expect(help).toBeVisible();
-  await expect(help.locator("p")).not.toBeEmpty();
-  const stageBox = (await stage.boundingBox())!;
+  await expect(help.getByRole("tabpanel").locator("p")).not.toBeEmpty();
+  await expect(help.getByRole("tab", { name: `Lv ${level}`, exact: true })).toHaveAttribute("aria-selected", "true");
   const helpBox = (await help.boundingBox())!;
-  expect(helpBox.y).toBeGreaterThanOrEqual(stageBox.y + stageBox.height);
+  await expect(help.getByRole("button", { name: "닫기", exact: true })).toBeInViewport();
   expect(helpBox.x).toBeGreaterThanOrEqual(0);
   expect(helpBox.x + helpBox.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   await page.keyboard.press("Escape");
@@ -73,7 +73,7 @@ test("menu is bottom anchored and enters vertically with reduced-motion support"
     const box = (await sheet.boundingBox())!;
     expect(box.y).toBeGreaterThan(24);
     expect(Math.abs(box.x - (viewport.width - box.width) / 2)).toBeLessThan(1);
-    await expect(sheet.getByRole("button", { name: "첫 화면으로", exact: true })).toBeInViewport();
+    await expect(sheet.getByRole("button", { name: "스테이지 화면으로", exact: true })).toBeInViewport();
     await expect(sheet.getByRole("button", { name: /닫기/ })).toHaveCount(0);
     await page.keyboard.press("Escape");
   }

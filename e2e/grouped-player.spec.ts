@@ -143,7 +143,8 @@ test("a long level 5 group keeps the first hint and touch actions accessible in 
   const firstHint = canvas.getByRole("listitem").first().locator('[lang="en"]');
   expect(await firstHint.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(22);
   expect(await firstHint.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(28);
-  for (const button of await page.locator("main button").all()) {
+  // Inline dictionary links retain text sizing; standalone controls are touch targets.
+  for (const button of await page.locator("main button:not([data-dictionary-word])").all()) {
     const box = await button.boundingBox();
     expect(Math.min(box!.width, box!.height)).toBeGreaterThanOrEqual(44);
   }
@@ -161,11 +162,12 @@ test("a failed second recording retries the whole group without counting a parti
   await page.waitForLoadState("networkidle");
   await page.keyboard.press("Space");
   await page.keyboard.press("s");
-  await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RETRY · 다시 시도", exact: true })).toBeInViewport();
+  await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toHaveAttribute("aria-expanded", "true");
   failSecond = false;
-  await page.getByRole("button", { name: "다시 시도", exact: true }).first().click();
+  await page.getByRole("button", { name: "RETRY · 다시 시도", exact: true }).click();
   await expect(page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem").first()).toHaveAttribute("aria-current", "true");
   await waitForManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");

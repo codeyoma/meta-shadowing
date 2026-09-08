@@ -5,11 +5,17 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { testRecording } from "./fixtures/audio";
+import {
+  assertLocalSupabaseUrl,
+  installLocalSupabaseSession,
+  promoteLocalSessionToGoogle
+} from "./fixtures/local-supabase-google";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1", "requires the project-local Supabase stack");
 
 async function lifecycleFixture(page: Page) {
   const url = process.env.SUPABASE_INTEGRATION_URL!;
+  assertLocalSupabaseUrl(url);
   const options = { auth: { persistSession: false, autoRefreshToken: false } };
   const service = createClient(url, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, options);
   const admin = createClient(url, process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!, options);
@@ -26,6 +32,8 @@ async function lifecycleFixture(page: Page) {
   }
   expect((await page.request.post("/api/admin/auth/verify", { data: { email, token: await otp() } })).status()).toBe(200);
   expect((await admin.auth.verifyOtp({ email, token: await otp(), type: "email" })).error).toBeNull();
+  const googleAdminSession = await promoteLocalSessionToGoogle(url, service, admin, owner, "admin");
+  await installLocalSupabaseSession(page, url, googleAdminSession);
   expect((await page.request.post("/api/auth", { data: { password: "integration-beta-password" } })).status()).toBe(200);
 
   async function draft(title: string, replacementFor?: string) {

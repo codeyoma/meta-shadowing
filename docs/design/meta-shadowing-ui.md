@@ -1,5 +1,33 @@
 # Meta Shadowing UI contract
 
+## Mobile-first browse layout (2026-09-08)
+
+- Languages, lessons, stages, settings, and session settings share a centered shell capped at 430px total width, including on desktop. The stage summary stays above its path at every width. Player and administrator layouts are unchanged.
+- Keep the top and bottom navigation stationary. On short screens, the stage content can scroll internally so both the summary actions and the complete stage path remain reachable without document scrolling.
+- At viewport heights of 500px or less, the stage preview is centered horizontally with 20px viewport margins instead of remaining anchored to a node. Its content scrolls above the full-width Start row, and the anchor arrow is hidden. Scrolling upward from the stage path can reach the summary in the outer content region.
+- Stage-preview descriptions use 14px display-ink text. The preview has only its X close action and full-width Start button; session preferences remain available through Settings → 세션 설정, not a popup gear button.
+- The real study streak has no badge background. Two overlapping, filled Lucide Flame icons use a larger Fox-orange flame and a smaller Bee-yellow flame, with one accessible streak label.
+- The equal-width history action displays its chart icon and `완료 기록`. The current-stage method name and leading play icon form a horizontally centered group, with both vertically centered in the button; its 10px stage/level metadata aligns with the method text above it, not above the icon, and does not participate in that centering.
+
+## Current stage and lesson history (2026-09-08)
+
+- Only the recommended next/resumable stage has a 4px blue arc traveling clockwise around a faint, fixed-size border track. The arc follows the node's elliptical outline without scaling or rotating the node and does not represent completion percentage. Opening a different stage preview does not move this indicator. Reduced motion leaves a static arc; a fully completed lesson in review mode has no indicator. This replaces the earlier electric and pulsing rings.
+- Recommendation alone does not select a node or make its background green. Selection follows the open preview: clicking its node again or dismissing the preview clears selection and restores the white idle background. Completed stages stay green independently of selection. The current-stage arc remains visible when its preview is closed.
+- The lesson-list screen no longer displays completion history. Records are not deleted, and lesson progress continues to count unique stages of the current version.
+- A chart-icon button immediately left of the current-stage Start action opens a large, scrollable completion-history dialog. Both buttons have equal width (1:1) and height. The dialog reads this lesson's saved records on each opening, includes older versions, and orders completion timestamps newest first.
+- History uses the shared shadcn Table's compact 12px density with stage/level, completion date/time, active study time, and settings columns. Settings expand in a full-width row using a 44px disclosure button. Empty history has an explicit empty state; keyboard dismissal restores focus to the chart button. The bottom Close action remains reachable on short screens.
+
+## Learner controls and language expansion (2026-09-08)
+
+These approved refinements supersede conflicting older behavior below:
+
+- Language selection offers English (UK flag), Japanese, Chinese, German, and French with Korean/native labels. New languages without published content show the empty lesson state; do not invent lesson data. The shared language catalog drives routing, persisted selection validation, locale tags, and admin choices. Apply the additive `expand_lesson_languages` migration before importing those languages in a deployed database.
+- The stage path retains its curved dotted connectors, but its Bee → Fox → Cardinal → Beetle palette blends continuously over the full scrolling list instead of changing at row boundaries.
+- The player has no book-title row or level chevron. Its three text controls share height, type, padding, and subtle lower shadows without visible borders. The menu button uses the same shadow treatment.
+- Level help opens a large dialog with eight level-preview tabs, initially the current practice level. Existing short instructions remain; detailed guidance is explicitly pending. Previewing a tab never changes the practice level. Opening pauses practice; dismissal restores focus without resuming. The Cardinal Close action sits at the viewport bottom, outside the card.
+- The player drawer's `스테이지 화면으로` action returns to the current lesson and selected stage.
+- R activates REPEAT only after all three required confirmations, while that action is available and no dialog/drawer is open. It remains inert during playback, mid-listen pause, errors, extra listens, and rapid practice. Modifier combinations, held-key repeats, and text inputs are excluded. Focus restored to a non-editable player button does not suppress an otherwise available R action.
+
 ## Current visual authority: DESIGN.md and shadcn (2026-09-07)
 
 Root `DESIGN.md` is now the sole visual reference, as explicitly requested by the user. Its white canvas, owl-green primary action, navy display ink, rounded 16px controls, and pressed button lip supersede **all older visual/color/font specifications below and the concepts images**. The behavior and content requirements below remain in force. Do not add demonstration content, copied mascot assets, or new product claims.
@@ -12,11 +40,19 @@ The historical sections below document earlier refinements and remain useful onl
 
 Accessibility adjustments stay within DESIGN.md's palette: empty fields use its `#777777` gray for a 4.48:1 boundary against white; decorative dividers retain `#e5e5e5`. Bottom sheet content respects the device's safe-area inset.
 
+### Compact player controls and recording progress (2026-09-08)
+
+- This section supersedes the historical book-title segments, speaker control, rotating cycle arc, and R shortcut requirements below.
+- Omit the book title from the player header. Its three controls are level/help, live mode/speed, and the text button `문장 분석` with no icon or filled background.
+- Remove the small speaker/play button. The main bottom Continue/Pause/Retry/Repeat/Next actions remain, as do Space, S, and Right Arrow. R and Shift+R do nothing; no R hints are shown.
+- The current 28px listening circle fills clockwise using the current recording's media time divided by duration. Pause/buffering holds its progress; a new recording resets it; ended reaches 100% without prematurely confirming a listen. Unknown duration has an empty, non-spinning track and no invented percentage.
+- The three/five-circle track spans the main action width. Retain completed checkmarks, incoming connectors, extra-cycle expansion, reduced-motion handling, and accessible confirmation counts.
+
 ### Separate browse routes and settings pages (2026-09-08)
 
 - This section supersedes earlier Home section-jumping, browse-settings drawers, and orbiting-dot requirements below.
 - A shared learner layout keeps brand/streak and four bottom destinations mounted. `/languages` contains only supported language links; `/lessons?language=...` contains that language's actual published lesson cards and version-aware progress; `/lessons/[lessonId]/stages` contains the existing sixteen-stage path.
-- `/settings` lists only `세션 설정`. It links to `/settings/session`, where existing level-specific preferences can be changed. Browse settings never open a drawer. A stage-preview gear links to this detail page with its lesson, level and stage; the back link restores the selected stage. Player live-session settings remain in-place with the player to preserve the active session.
+- `/settings` lists only `세션 설정`. It links to `/settings/session`, where existing level-specific preferences can be changed. Browse settings never open a drawer. Use the Settings tab to access preferences, then the Stages tab to choose a stage and start. Legacy session-settings deep links with a stage retain their stage back link. Player live-session settings remain in-place with the player to preserve the active session.
 - Bottom destinations are real links, derive selection from the route, retain their four accent colors and one short icon bounce, and remain available in empty catalogs. Without a current lesson, Stage leads to lesson selection. Only bounded content regions scroll; their positions are retained during tab navigation.
 - Preserve legacy `/home` and `/setup` entry links through redirects. Never infer a Japanese lesson from an English selection or show an unrelated lesson on an unknown stage route.
 - Language rows use a flag icon and Korean/native names. Lesson cards use colored book tiles, actual names/counts and recorded completion; no copied book names, fabricated weekly goals, CEFR badges or lock rules.

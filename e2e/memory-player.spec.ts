@@ -34,8 +34,10 @@ test("level 3 reveals both subtitles with S or touch and resets them on the next
   await expect(cycles).toHaveText("필수 1 / 3");
   await waitForManualListen(page);
   await page.keyboard.press("r");
+  await page.keyboard.press("R");
   await waitForManualListen(page);
   await expect(cycles).toHaveText("필수 1 / 3");
+  await expect(page.locator("audio")).toHaveJSProperty("ended", true);
   await confirmManualListen(page, "keyboard");
   await expect(cycles).toHaveText("필수 2 / 3");
   await confirmManualListen(page, "keyboard");
@@ -58,8 +60,8 @@ test("level 2 keeps full bilingual subtitles and allows two speaking turns witho
   await expect(subtitles.getByText("나는 일곱 시에 일어난다.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "메타쉐도잉 레벨 2", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "학습 방법", exact: true }).locator("p")).toHaveText("자막을 보며 따라 말하고, 눈을 감고 한 번 더 말하세요.");
-  await page.getByRole("button", { name: "학습 방법 닫기", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "학습 방법", exact: true }).getByRole("tabpanel")).toContainText("자막을 보며 따라 말하고, 눈을 감고 한 번 더 말하세요.");
+  await page.getByRole("dialog").getByRole("button", { name: "닫기", exact: true }).click();
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   // The 0.357-second recording at 0.5x allows about 2.36s for Level 2, versus 1.39s for Level 1.
   await expect(page.getByRole("timer")).toHaveText("2.4초");
@@ -102,7 +104,9 @@ test("short mobile screens expose subtitle and practice actions above the dock w
   const actions = await page.getByRole("button", { name: "자막 보기", exact: true }).boundingBox();
   const dock = await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox();
   expect(actions!.y + actions!.height).toBeLessThanOrEqual(dock!.y);
-  for (const button of await page.locator("main button").all()) {
+  // Inline dictionary words inherit subtitle typography; the full touch-target
+  // contract applies to the standalone player controls around the subtitle.
+  for (const button of await page.locator("main button:not([data-dictionary-word])").all()) {
     const box = await button.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
     expect(box!.width).toBeGreaterThanOrEqual(44);

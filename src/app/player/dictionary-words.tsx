@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/lessons";
+import { languageCode } from "@/lib/languages";
 import styles from "./dictionary-popup.module.css";
 
 export type DictionaryWordSelect = (word: string, trigger: HTMLButtonElement) => void;
@@ -9,7 +10,7 @@ const clientSnapshot = () => true;
 const serverSnapshot = () => false;
 
 function visibleWordSegments(text: string, language: Language) {
-  const segments = [...new Intl.Segmenter(language === "english" ? "en" : "ja", { granularity: "word" }).segment(text)];
+  const segments = [...new Intl.Segmenter(languageCode(language), { granularity: "word" }).segment(text)];
   if (language !== "english") return segments;
   const joined: typeof segments = [];
   for (let index = 0; index < segments.length; index++) {

@@ -2,17 +2,19 @@ import { expect, test } from "@playwright/test";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
-for (const level of [1, 4]) test(`level ${level} confirms extra listens from the speaker without double-counting a pause or replay`, async ({ page }) => {
+for (const level of [1, 4]) test(`level ${level} confirms extra listens from the main action without double-counting a pause or resume`, async ({ page }) => {
   test.setTimeout(60_000);
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto(`/player?lesson=morning-routine&level=${level}&mode=manual&speed=0.5&group=2`);
-  const speaker = page.getByRole("button", { name: "재생 또는 일시정지", exact: true });
+  const action = page.getByRole("group", { name: "학습 진행", exact: true }).getByRole("button");
   const cycles = page.getByLabel("완료한 듣기");
   const progress = page.getByRole("progressbar", { name: level === 4 ? "묶음 진행" : "프레이즈 진행", exact: true });
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
-  await waitForManualListen(page);
-  await speaker.click();
+  await page.getByRole("button", { name: "PAUSE · 일시정지", exact: true }).click();
+  await expect(page.locator("audio")).toHaveJSProperty("paused", true);
+  await expect(cycles).toHaveText("필수 0 / 3");
+  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
   await waitForManualListen(page);
   await expect(cycles).toHaveText("필수 0 / 3");
   for (const cycle of [1, 2, 3]) {
@@ -23,21 +25,21 @@ for (const level of [1, 4]) test(`level ${level} confirms extra listens from the
   await waitForManualListen(page);
   await expect(cycles).toHaveText("필수 3 / 3 · 추가 0 / 2");
   // The first click confirms the fourth listen; the second pauses the fifth.
-  await speaker.dblclick();
+  await action.dblclick();
   await expect(cycles).toHaveText("필수 3 / 3 · 추가 1 / 2");
   await expect.poll(() => page.locator("audio").evaluate(audio => (audio as HTMLAudioElement).paused)).toBe(true);
   await expect(progress).toHaveAttribute("aria-valuenow", "0");
-  await speaker.click();
+  await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
   await waitForManualListen(page);
   await expect(cycles).toHaveText("필수 3 / 3 · 추가 1 / 2");
-  // Opening a menu pauses a ready confirmation; native Space on the speaker
+  // Opening a menu pauses a ready confirmation; Space on the main action
   // must still confirm that final extra once after returning to the player.
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.keyboard.press("Escape");
-  await speaker.focus();
+  await action.focus();
   await page.keyboard.press("Space");
   await expect(cycles).toHaveText("필수 3 / 3 · 추가 2 / 2");
-  await expect(speaker).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^NEXT/ })).toBeVisible();
   await expect(progress).toHaveAttribute("aria-valuenow", "0");
   await expect(page.getByRole("button", { name: /^REPEAT/ })).toHaveCount(0);
   await page.getByRole("button", { name: /^NEXT/ }).click();
@@ -96,7 +98,7 @@ for (const level of [3, 5]) test(`level ${level} preserves manual bilingual reve
     await confirmManualListen(page, "keyboard");
     await expect(cycles).toHaveText(`필수 ${cycle} / 3`);
   }
-  await page.keyboard.press("r");
+  await page.getByRole("button", { name: /^REPEAT/ }).click();
   await expect(cycles.locator("[data-complete]")).toHaveCount(5);
   await waitForManualListen(page);
   await expect(cycles).toHaveText("필수 3 / 3 · 추가 0 / 2");

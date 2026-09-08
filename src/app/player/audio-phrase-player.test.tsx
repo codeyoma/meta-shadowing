@@ -77,66 +77,62 @@ function startExtraPair(mode: "manual" | "automatic" = "manual") {
   send({ type: "retry" });
 }
 
-function clickSpeaker() {
-  act(() => container.querySelector<HTMLButtonElement>('[aria-label="재생 또는 일시정지"]')!.click());
+function clickPrimary() {
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="학습 진행"] button:last-child')!.click());
   render();
 }
 
-it("keeps a normal finished listen unchecked when the speaker replays it", () => {
+it("offers only the primary playback action and confirms a finished listen once", () => {
   send({ type: "space" });
   finishRecording();
   render();
-  clickSpeaker();
-  expect(session).toMatchObject({ phase: "loading", cycleTarget: 3, completedCycles: 0, confirmedCycles: 0 });
+  expect(container.querySelector('[aria-label="재생 또는 일시정지"]')).toBeNull();
+  clickPrimary();
+  expect(session).toMatchObject({ phase: "loading", cycleTarget: 3, completedCycles: 1, confirmedCycles: 1 });
   finishRecording();
   render();
-  expect(container.querySelector('[aria-label="완료한 듣기"]')?.textContent).toBe("필수 0 / 3");
+  expect(container.querySelector('[aria-label="완료한 듣기"]')?.textContent).toBe("필수 1 / 3");
 });
 
-it.each([false, true])("confirms both extra listens from the speaker and offers Next (paused ready: %s)", paused => {
+it.each([false, true])("confirms both extra listens from Continue and offers Next (paused ready: %s)", paused => {
   startExtraPair();
   for (const extra of [1, 2]) {
     finishRecording();
     if (paused) send({ type: "pause" });
     render();
-    clickSpeaker();
+    clickPrimary();
     expect(container.querySelector('[aria-label="완료한 듣기"]')?.textContent).toBe(`필수 3 / 3 · 추가 ${extra} / 2`);
     expect(session).toMatchObject({ confirmedCycles: extra + 3, completedCycles: extra + 3, phase: extra === 1 ? "loading" : "ready", groupIndex: 0 });
   }
-  const speaker = container.querySelector<HTMLButtonElement>('[aria-label="재생 또는 일시정지"]')!;
-  expect(speaker.disabled).toBe(true);
-  clickSpeaker();
+  expect(container.querySelector('[aria-label="재생 또는 일시정지"]')).toBeNull();
   expect(session).toMatchObject({ confirmedCycles: 5, groupIndex: 0 });
   act(() => container.querySelector<HTMLButtonElement>('[aria-label^="NEXT"]')!.click());
   render();
   expect(session).toMatchObject({ groupIndex: 1, confirmedCycles: 0, cycleTarget: 3 });
 });
 
-it("a second speaker click pauses the next extra listen without granting another check", () => {
+it("a second primary click pauses the next extra listen without granting another check", () => {
   startExtraPair();
   finishRecording();
   render();
-  clickSpeaker();
+  clickPrimary();
   const nextAttempt = session.attempt;
-  clickSpeaker();
+  clickPrimary();
   expect(session).toMatchObject({ phase: "paused", pausedPhase: "loading", completedCycles: 4, confirmedCycles: 4, attempt: nextAttempt });
   send({ type: "audio-ended", attempt: nextAttempt - 1, durationMs: 2000 });
-  clickSpeaker();
+  clickPrimary();
   expect(session).toMatchObject({ phase: "loading", confirmedCycles: 4, attempt: nextAttempt });
   finishRecording();
   render();
-  clickSpeaker();
+  clickPrimary();
   expect(session).toMatchObject({ phase: "ready", confirmedCycles: 5 });
 });
 
-it("replaying an automatic extra listen never confirms it before the speaking timer finishes", () => {
+it("an automatic extra listen stays unchecked until its speaking timer finishes", () => {
   startExtraPair("automatic");
   finishRecording();
   render();
   expect(session).toMatchObject({ phase: "speaking", completedCycles: 4, confirmedCycles: 3 });
-  clickSpeaker();
-  expect(session).toMatchObject({ phase: "loading", completedCycles: 3, confirmedCycles: 3 });
-  finishRecording();
   send({ type: "tick", attempt: session.attempt, elapsedMs: 2999 });
   expect(session).toMatchObject({ phase: "speaking", confirmedCycles: 3 });
   send({ type: "tick", attempt: session.attempt, elapsedMs: 1 });
