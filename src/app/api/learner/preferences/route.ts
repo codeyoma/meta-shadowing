@@ -1,5 +1,4 @@
-import { cloudLearningEnabled } from "@/lib/cloud-learning";
-import { getGoogleLearnerIdentity, hasBetaAccess } from "@/lib/server-auth";
+import { authorizeCloudLearner } from "@/lib/cloud-learner-request";
 import { parsePreferencePatch, studyTimeZone } from "@/lib/learner-preferences";
 import { patchLearnerPreferences, readLearnerPreferences } from "@/lib/learner-preferences-repository";
 import { getSessionDefaults } from "@/lib/session-defaults-repository";
@@ -7,25 +6,9 @@ import { getPublishedLesson } from "@/lib/published-lessons";
 
 const headers = { "Cache-Control": "private, no-store" };
 function failure(error: string, status: number) { return Response.json({ error }, { status, headers }); }
-async function authorize(request: Request) {
-  if (!cloudLearningEnabled()) return failure("not-found", 404);
-  // GET initializes the profile/timezone, so it needs the same origin guard as PATCH.
-  const origin = request.headers.get("origin");
-  try {
-    const site = request.headers.get("sec-fetch-site");
-    if (site && site !== "same-origin" && site !== "none") return failure("invalid-origin", 403);
-    if (origin) {
-      const source = new URL(origin);
-      const protocol = request.headers.get("x-forwarded-proto") ?? new URL(request.url).protocol.slice(0, -1);
-      if (!["http:", "https:"].includes(source.protocol) || source.protocol !== `${protocol}:` || source.host !== request.headers.get("host")) return failure("invalid-origin", 403);
-    }
-  } catch { return failure("invalid-origin", 403); }
-  if (!await hasBetaAccess()) return failure("unauthorized", 401);
-  return await getGoogleLearnerIdentity() ?? failure("unauthorized", 401);
-}
 
 export async function GET(request: Request) {
-  const identity = await authorize(request);
+  const identity = await authorizeCloudLearner(request);
   if (identity instanceof Response) return identity;
   try {
     const defaults = await getSessionDefaults();
@@ -35,7 +18,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const identity = await authorize(request);
+  const identity = await authorizeCloudLearner(request);
   if (identity instanceof Response) return identity;
   if (!request.headers.get("content-type")?.startsWith("application/json")) return failure("invalid-content-type", 415);
   const text = await request.text();

@@ -31,6 +31,9 @@ export function useBrowseScroll(key: string) {
     const save = () => scrollPositions.set(key, viewport.scrollTop);
     viewport.addEventListener("scroll", save, { passive: true });
     return () => {
+      // Activity hides the DOM after layout cleanup. Capture the position now,
+      // even when a focus refresh beats the browser's asynchronous scroll event.
+      save();
       cancelAnimationFrame(frame);
       viewport.removeEventListener("scroll", save);
     };

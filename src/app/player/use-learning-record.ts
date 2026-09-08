@@ -8,7 +8,7 @@ import { createRunId } from "@/lib/run-id";
 import { resolveSessionSettings, saveSessionPreferences, type SessionSettings } from "@/lib/session-settings";
 
 export type LearningStart = { selection: RunSelection; progress: ProgressRecord | null; completion: CompletionRecord | null };
-type RecordUpdate = {
+export type RecordUpdate = {
   active?: boolean;
   elapsedMs?: number;
   checkpoint?: { unit: number; phrase: number };
@@ -16,15 +16,26 @@ type RecordUpdate = {
   settings?: Partial<SessionSettings>;
   restartCompleted?: boolean;
   studied?: boolean;
+  kind?: "studied" | "advance" | "jump";
+  confirmedCycles?: number;
+};
+export type CloudRecording = {
+  completion: CompletionRecord | null;
+  blocked: boolean;
+  canAct: () => boolean;
+  verifyResume: () => Promise<boolean>;
+  updateRecord: (update: RecordUpdate) => void | Promise<void>;
+  exit: (href: string) => void;
 };
 
-export function useLearningRecord(lesson: Lesson, start: LearningStart) {
+export function useLearningRecord(lesson: Lesson, start: LearningStart, disabled = false) {
   const [completion, setCompletion] = useState(start.completion);
   const [storageFailed, setStorageFailed] = useState(false);
   const current = useRef({ active: false, anchor: 0, activeMs: start.progress?.activeMs ?? 0,
     settings: resolveSessionSettings(start.selection), completed: !!start.completion, runId: start.selection.runId });
 
   const updateRecord = useCallback((update: RecordUpdate) => {
+    if (disabled) return;
     const state = current.current;
     // Another tab may have completed this run since this player was mounted.
     if (update.restartCompleted && (state.completed || readLearningJournal().history.some(record => record.runId === state.runId))) {
@@ -65,7 +76,7 @@ export function useLearningRecord(lesson: Lesson, start: LearningStart) {
       setCompletion(completed);
       setStorageFailed(!saveLearningBoundary(completed) || !studySaved);
     } else setStorageFailed(!saveLearningBoundary(record) || !studySaved);
-  }, [lesson, start]);
+  }, [lesson, start, disabled]);
 
   return { completion, storageFailed, updateRecord };
 }

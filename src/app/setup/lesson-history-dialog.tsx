@@ -11,6 +11,7 @@ import { stageForLevel } from "@/lib/learning-stages";
 import type { Lesson } from "@/lib/lessons";
 import { RecordSettings } from "../completion-summary";
 import styles from "./lesson-history-dialog.module.css";
+import { useCloudPreferences } from "../cloud-preferences-provider";
 
 function HistoryRow({ record }: { record: CompletionRecord }) {
   const [expanded, setExpanded] = useState(false);
@@ -46,11 +47,16 @@ function HistoryRow({ record }: { record: CompletionRecord }) {
 }
 
 export function LessonHistoryDialog({ lesson, disabled }: { lesson: Lesson; disabled?: boolean }) {
+  const cloud = useCloudPreferences();
   const [open, setOpen] = useState(false);
-  const [history, setHistory] = useState<CompletionRecord[]>([]);
+  const [localHistory, setHistory] = useState<CompletionRecord[]>([]);
+  const history = cloud ? completionHistoryForLesson(cloud.journal.history, lesson.id) : localHistory;
 
   function changeOpen(next: boolean) {
-    if (next) setHistory(completionHistoryForLesson(readLearningJournal().history, lesson.id));
+    if (next) {
+      if (cloud) void cloud.refresh();
+      else setHistory(completionHistoryForLesson(readLearningJournal().history, lesson.id));
+    }
     setOpen(next);
   }
 

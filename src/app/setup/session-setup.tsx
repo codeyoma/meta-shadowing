@@ -17,7 +17,8 @@ import { nextPracticeForLesson } from "@/lib/next-practice";
 import { getPlayerHref, saveLastSelection } from "@/lib/resume";
 import { createRunId } from "@/lib/run-id";
 import { playStageSound } from "@/lib/stage-sound";
-import { DEFAULT_SESSION_SETTINGS, readSessionPreferences, type SessionSettings } from "@/lib/session-settings";
+import { DEFAULT_SESSION_SETTINGS, readSessionPreferences, resolveSessionSettings, type SessionSettings } from "@/lib/session-settings";
+import { useCloudPreferences } from "../cloud-preferences-provider";
 import { CloseIcon, PlayIcon } from "../ui";
 import { useBrowseScroll } from "../browse-shell";
 import { LessonHistoryDialog } from "./lesson-history-dialog";
@@ -35,6 +36,8 @@ const stageRing = <span className={styles.stageRing} data-stage-ring="" aria-hid
 
 export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, initialStage }: { lesson: Lesson; defaults?: SessionSettings; initialStage?: number }) {
   const router = useRouter();
+  const cloud = useCloudPreferences();
+  const cloudJournal = cloud?.journal, overrides = cloud?.profile.overrides;
   const language = lesson.language;
   const [stage, setStage] = useState(1);
   const level = learningStages[stage - 1].level;
@@ -46,29 +49,29 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   const [completedStages, setCompletedStages] = useState<number[]>([]);
   const [currentPractice, setCurrentPractice] = useState<ReturnType<typeof nextPracticeForLesson>>({ stage: 1, progress: null, review: false });
   useEffect(() => {
-    setSettings(readSessionPreferences(defaults));
-    const journal = readLearningJournal();
+    setSettings(cloudJournal ? resolveSessionSettings(overrides,defaults) : readSessionPreferences(defaults));
+    const journal = cloudJournal ?? readLearningJournal();
     const current = nextPracticeForLesson(journal, lesson);
     setCompletedStages(completedStagesForLesson(journal.history, lesson));
     setCurrentPractice(current);
     setStage(initialStage ?? current.stage);
     setReady(true);
-  }, [defaults, lesson, initialStage]);
+  }, [defaults, lesson, initialStage, cloudJournal, overrides]);
 
   function start(): void {
     playStageSound("start");
     const selection = { ...settings, language, lessonId: lesson.id, level, stage, runId: createRunId() };
-    saveLastSelection(selection);
+    if (!cloud) saveLastSelection(selection);
     router.push(getPlayerHref(selection));
   }
 
   function startCurrent(): void {
     playStageSound("start");
-    const current = nextPracticeForLesson(readLearningJournal(), lesson);
+    const current = nextPracticeForLesson(cloudJournal ?? readLearningJournal(), lesson);
     const saved = current.progress;
     const selection = { ...(saved?.settings ?? settings), language, lessonId: lesson.id,
       level: learningStages[current.stage - 1].level, stage: current.stage, runId: saved?.runId ?? createRunId() };
-    saveLastSelection(selection);
+    if (!cloud) saveLastSelection(selection);
     router.push(getPlayerHref(selection));
   }
 

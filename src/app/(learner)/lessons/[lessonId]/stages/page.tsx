@@ -3,15 +3,12 @@ import { getPublishedLesson } from "@/lib/published-lessons";
 import { requireLearner } from "@/lib/server-auth";
 import { getSessionDefaults } from "@/lib/session-defaults-repository";
 import { SessionSetup } from "../../../../setup/session-setup";
-import { cloudLearningEnabled } from "@/lib/cloud-learning";
-import { CloudLearningNotice } from "../../../../cloud-learning-notice";
 
 export default async function StagesPage({ params, searchParams }: {
   params: Promise<{ lessonId: string }>;
   searchParams: Promise<{ stage?: string }>;
 }) {
   await requireLearner();
-  if (cloudLearningEnabled()) return <CloudLearningNotice />;
   const [{ lessonId }, query] = await Promise.all([params, searchParams]);
   const [lesson, defaults] = await Promise.all([getPublishedLesson(lessonId), getSessionDefaults()]);
   if (!lesson) notFound();

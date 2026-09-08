@@ -13,7 +13,7 @@ import { browseHref, stageHref } from "@/lib/browse-navigation";
 import { AudioSessionControls } from "../audio-session-controls";
 import { Page, PauseIcon, PlayIcon, RepeatIcon, SubtitleIcon } from "../ui";
 import { useAudioSession } from "./use-audio-session";
-import type { LearningStart } from "./use-learning-record";
+import type { LearningStart, CloudRecording } from "./use-learning-record";
 import { CompletionSummary } from "../completion-summary";
 import { ScreenWake } from "./screen-wake";
 import { CycleProgress, PracticeContext, PracticeFooter, PracticeHeader, PracticeProgress, PracticeSection } from "./practice-layout";
@@ -24,14 +24,15 @@ import { SentenceAnalysisButton, SentenceAnalysisPopup, useSentenceAnalysis } fr
 import { PlayerDrawer, type DrawerView } from "./player-drawer";
 import styles from "./practice.module.css";
 
-export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, start, notice }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[]; start: LearningStart; notice?: ReactNode }) {
+export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, start, notice, cloud }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[]; start: LearningStart; notice?: ReactNode; cloud?: CloudRecording }) {
   const router = useRouter();
   const [surface, setSurface] = useState<"menu" | "settings" | "help" | null>(null);
   const [drawerView, setDrawerView] = useState<DrawerView>("menu");
   const menuOpen = surface === "menu" || surface === "settings";
   const dictionary = useDictionaryPopup();
   const analysis = useSentenceAnalysis();
-  const { session, send, audioRef, completion, storageFailed } = useAudioSession(lesson, level, settings, groups, surface === null && !dictionary.open && !analysis.open, start);
+  const { session, send, audioRef, completion, storageFailed } = useAudioSession(lesson, level, settings, groups, surface === null && !dictionary.open && !analysis.open, start, cloud);
+  const navigate = (href: string) => cloud ? cloud.exit(href) : router.push(href);
   const openDictionary: DictionaryWordSelect = (word, trigger) => {
     send({ type: "pause" });
     dictionary.openWord(word, trigger);
@@ -97,7 +98,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
         }} />} />
       <section className={styles.practice} aria-labelledby="player-title">
         <audio ref={audioRef} preload="auto" />
-        {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => router.push(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : (
+        {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => navigate(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : (
           <>
             <PracticeSection {...section} />
             <PracticeSubtitles
@@ -119,14 +120,14 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
         actionsHidden={dictionary.open || analysis.open || surface === "help"}
         cycles={<CycleProgress completed={session.confirmedCycles} target={session.cycleTarget} audioRef={audioRef} attempt={session.attempt} />} utilities={hintLevel ? <Button type="button" variant="ghost" size="sm" aria-label="자막 보기" aria-expanded={session.subtitlesRevealed} aria-controls="practice-subtitles" onClick={() => send({ type: "reveal-subtitles" })}><SubtitleIcon data-icon="inline-start" />자막 보기<Kbd>S</Kbd></Button> : undefined}>
         {choosing ? <>
-          {isAudioRepeatAvailable(session) ? <Button type="button" variant="outline" size="lg" className={styles.action} aria-label="REPEAT · 다시 듣기" title="2회 더 연습" onClick={() => send({ type: "retry" })}><RepeatIcon data-icon="inline-start" />REPEAT<Kbd>R</Kbd></Button> : null}
-          <Button type="button" variant="practice" size="lg" className={styles.action} aria-label={`NEXT · ${nextLabel}`} onClick={() => send({ type: "next" })}><PlayIcon data-icon="inline-start" />NEXT<Kbd>Space</Kbd></Button>
-        </> : <Button type="button" variant="practice" size="lg" className={styles.action} aria-label={`${actionText} · ${actionLabel}`} onClick={() => send({ type: "space" })}>{playing ? <PauseIcon data-icon="inline-start" /> : <PlayIcon data-icon="inline-start" />}{actionText}<Kbd>Space</Kbd></Button>}
+          {isAudioRepeatAvailable(session) ? <Button disabled={cloud?.blocked} type="button" variant="outline" size="lg" className={styles.action} aria-label="REPEAT · 다시 듣기" title="2회 더 연습" onClick={() => send({ type: "retry" })}><RepeatIcon data-icon="inline-start" />REPEAT<Kbd>R</Kbd></Button> : null}
+          <Button disabled={cloud?.blocked} type="button" variant="practice" size="lg" className={styles.action} aria-label={`NEXT · ${nextLabel}`} onClick={() => send({ type: "next" })}><PlayIcon data-icon="inline-start" />NEXT<Kbd>Space</Kbd></Button>
+        </> : <Button disabled={cloud?.blocked} type="button" variant="practice" size="lg" className={styles.action} aria-label={`${actionText} · ${actionLabel}`} onClick={() => send({ type: "space" })}>{playing ? <PauseIcon data-icon="inline-start" /> : <PlayIcon data-icon="inline-start" />}{actionText}<Kbd>Space</Kbd></Button>}
       </PracticeFooter> : null}
       <PlayerDrawer open={menuOpen} lesson={lesson} currentPhraseNumbers={grouped ? group.phrases.map(line => line.phraseNumber) : [phrase.phraseNumber]}
         initialView={surface === "settings" ? "settings" : "menu"} onViewChange={setDrawerView}
-        settings={<AudioSessionControls level={level} settings={session} onChange={value => send({ type: "settings", ...value })} />}
-        onSelect={phraseIndex => send({ type: "jump", phraseIndex })} onClose={() => setSurface(null)} onStages={() => router.push(stageHref(lesson.id, start.selection.stage))} />
+        settings={cloud ? <p>이번 학습은 시작 당시의 계정 설정을 사용합니다. 설정 변경은 다음 학습부터 적용됩니다. 현재 클라우드는 수동 프레이즈 학습만 지원합니다.</p> : <AudioSessionControls level={level} settings={session} onChange={value => send({ type: "settings", ...value })} />}
+        onSelect={phraseIndex => send({ type: "jump", phraseIndex })} onClose={() => setSurface(null)} onStages={() => navigate(stageHref(lesson.id, start.selection.stage))} />
       {dictionary.selection ? <DictionaryPopup selection={dictionary.selection} language={lesson.language} onClose={dictionary.close} /> : null}
       {analysis.selection ? <SentenceAnalysisPopup lesson={lesson} selection={analysis.selection} onClose={analysis.close} /> : null}
     </Page>

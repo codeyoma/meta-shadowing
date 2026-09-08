@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import type { PreferenceChanges, PreferencePatch, PreferenceSnapshot } from "@/lib/learner-preferences";
+import type { CloudJournal } from "@/lib/cloud-practice";
 
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type CloudPreferences = PreferenceSnapshot & {
+  journal: CloudJournal;
+  refresh: () => Promise<void>;
   save: (changes: PreferenceChanges, revision?: number) => void;
   saving: boolean;
   loading: boolean;
@@ -25,6 +28,7 @@ export function CloudPreferencesProvider({ accountId, children }: { accountId: s
   const route = `${pathname}?${params.toString()}`;
   const [readyRoute, setReadyRoute] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<PreferenceSnapshot | null>(null);
+  const [journal, setJournal] = useState<CloudJournal | null>(null);
   const current = useRef<PreferenceSnapshot | null>(null);
   const [load, setLoad] = useState<"loading" | "ready" | "error" | "account-changed">("loading");
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -45,6 +49,7 @@ export function CloudPreferencesProvider({ accountId, children }: { accountId: s
     pending.current = null;
     saving.current = false;
     setSnapshot(null);
+    setJournal(null);
     setSaveState("idle");
     setLoad("account-changed");
   }, []);
@@ -56,13 +61,18 @@ export function CloudPreferencesProvider({ accountId, children }: { accountId: s
     setLoad("loading");
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const response = await fetch(`/api/learner/preferences?timezone=${encodeURIComponent(timezone)}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+      const [response, journalResponse] = await Promise.all([
+        fetch(`/api/learner/preferences?timezone=${encodeURIComponent(timezone)}`, { cache: "no-store", signal: AbortSignal.timeout(15000) }),
+        fetch("/api/learner/practice", { cache: "no-store", signal: AbortSignal.timeout(15000) }),
+      ]);
       if (token !== generation.current) return;
-      if (response.status === 401) { clearAccount(); return; }
-      if (!response.ok) throw new Error("load-failed");
+      if (response.status === 401 || journalResponse.status === 401) { clearAccount(); return; }
+      if (!response.ok || !journalResponse.ok) throw new Error("load-failed");
       const value: PreferenceSnapshot = await response.json();
+      const accountJournal: CloudJournal = await journalResponse.json();
       if (token !== generation.current) return;
-      if (value.profile.accountId !== accountId) { clearAccount(); return; }
+      if (value.profile.accountId !== accountId || accountJournal.accountId !== accountId) { clearAccount(); return; }
+      setJournal(accountJournal);
       accept(value);
       saving.current = false;
       setSaveState(pending.current ? "error" : "idle");
@@ -129,8 +139,8 @@ export function CloudPreferencesProvider({ accountId, children }: { accountId: s
       </Button>
     </Alert>}
   </div>;
-  if (!snapshot) return <main className="page">{gate}</main>;
-  return <Context.Provider value={{ ...snapshot, save, visitRoute, loading, gate, saving: loading || saveState === "saving" || saveState === "error" }}>
+  if (!snapshot || !journal) return <main className="page">{gate}</main>;
+  return <Context.Provider value={{ ...snapshot, journal, refresh, save, visitRoute, loading, gate, saving: loading || saveState === "saving" || saveState === "error" }}>
     {children}
     {!loading ? <div className="fixed bottom-24 left-1/2 w-[min(90vw,390px)] -translate-x-1/2">
       <p role="status">{saveState === "saving" ? "저장 중…" : saveState === "saved" ? "계정에 저장했습니다. 다음 학습부터 적용됩니다." : ""}</p>

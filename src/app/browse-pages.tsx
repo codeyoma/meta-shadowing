@@ -15,6 +15,7 @@ import { learningStages } from "@/lib/learning-stages";
 import { useBrowse, useBrowseScroll } from "./browse-shell";
 import { VersionNotice } from "./version-notice";
 import styles from "./browse.module.css";
+import { useCloudPreferences } from "./cloud-preferences-provider";
 
 export function BrowsePageContent({ title, region, children, before }: { title: string; region: string; children: ReactNode; before?: ReactNode }) {
   const { selection } = useBrowse();
@@ -44,7 +45,9 @@ export function LanguagePage() {
 
 export function LessonPage() {
   const { catalog, selection, cloud } = useBrowse();
-  const [journal, setJournal] = useState<Journal>({ progress: null, history: [], studyDays: [] });
+  const account = useCloudPreferences();
+  const [localJournal, setJournal] = useState<Journal>({ progress: null, history: [], studyDays: [] });
+  const journal = account?.journal ?? localJournal;
   const [reset, setReset] = useState<{ storageFailed: boolean } | null>(null);
   useEffect(() => {
     if (cloud) return;
@@ -58,7 +61,7 @@ export function LessonPage() {
   const completed = lessons.filter(({ count }) => count === stageCount).length;
   return <BrowsePageContent title={`${languageInfo(selection.language).koreanLabel} 레슨`} region="레슨 목록">
     {reset ? <VersionNotice storageFailed={reset.storageFailed} /> : null}
-    {!cloud && lessons.length ? <div className={styles.summary}>
+    {lessons.length ? <div className={styles.summary}>
       <div className={styles.summaryLine}><span>완료한 레슨</span><span>{completed} / {lessons.length}</span></div>
       <Progress value={completed} max={lessons.length} aria-label="레슨 학습 진척도" />
     </div> : null}
@@ -72,11 +75,11 @@ export function LessonPage() {
               <strong>{lesson.name}</strong>
               {lesson.localizedName !== lesson.name ? <small>{lesson.localizedName}</small> : null}
               <small>{lesson.sectionCount}개 섹션 · {lesson.phraseCount}개 프레이즈</small>
-              <span className={styles.progressText}><CirclePlay aria-hidden="true" />{cloud ? "레슨 보기" : count === stageCount ? "레슨 완료" : count || current.progress ? `스테이지 ${current.stage} 이어서 학습` : "시작하기"}</span>
-              {!cloud ? <div className={styles.lessonProgress}>
+              <span className={styles.progressText}><CirclePlay aria-hidden="true" />{count === stageCount ? "레슨 완료" : count || current.progress ? `스테이지 ${current.stage} 이어서 학습` : "시작하기"}</span>
+              <div className={styles.lessonProgress}>
                 <Progress value={count} max={stageCount} className="h-2" aria-label={`${lesson.name} 스테이지 진척도`} />
                 <small>{count} / {stageCount}</small>
-              </div> : null}
+              </div>
             </div>
             <ChevronRight aria-hidden="true" data-icon="inline-end" />
           </Link>
