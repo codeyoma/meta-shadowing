@@ -40,24 +40,3 @@ export function isSessionSettings(value: unknown): value is SessionSettings {
 export function resolveSessionSettings(value: unknown, defaults = DEFAULT_SESSION_SETTINGS): SessionSettings {
   return { ...defaults, ...validSettingOverrides(value) };
 }
-
-const PREFERENCES_KEY = "meta-shadowing:preferences:v1";
-
-export function readSessionPreferences(defaults = DEFAULT_SESSION_SETTINGS): SessionSettings {
-  try {
-    return resolveSessionSettings(JSON.parse(window.localStorage.getItem(PREFERENCES_KEY) ?? "null"), defaults);
-  } catch {
-    return defaults;
-  }
-}
-
-// Persist only fields the learner actually changed, so untouched fields still inherit admin defaults.
-export function saveSessionPreferences(changes: Partial<SessionSettings>): void {
-  try {
-    let previous: unknown;
-    try { previous = JSON.parse(window.localStorage.getItem(PREFERENCES_KEY) ?? "null"); } catch { previous = null; }
-    window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ ...validSettingOverrides(previous), ...validSettingOverrides(changes) }));
-  } catch {
-    // Browser storage can be disabled or full; practice remains available.
-  }
-}

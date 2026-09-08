@@ -49,7 +49,7 @@ export function parsePracticeCommand(value: unknown): PracticeCommand | null {
   return Object.keys(v).every(key => keys.includes(key)) ? value as PracticeCommand : null;
 }
 
-const errorCodes = ["temporary-error", "unauthorized", "account-changed", "session-busy", "ownership-lost", "lesson-version-changed", "operation-conflict", "revision-conflict", "run-completed", "mode-unavailable", "invalid-command", "not-found"] as const;
+const errorCodes = ["learning-disabled", "temporary-error", "unauthorized", "account-changed", "session-busy", "ownership-lost", "lesson-version-changed", "operation-conflict", "revision-conflict", "run-completed", "mode-unavailable", "invalid-command", "not-found"] as const;
 export type PracticeErrorCode = typeof errorCodes[number];
 export class PracticeError extends Error {
   public code: PracticeErrorCode;

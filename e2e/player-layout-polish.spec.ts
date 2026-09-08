@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
 test("player header and screen-bottom modal actions stay usable without layout or runtime errors", async ({ page }, testInfo) => {
@@ -8,7 +9,7 @@ test("player header and screen-bottom modal actions stay usable without layout o
     if (message.type() === "error" || message.type() === "warning") errors.push(message.text());
   });
   await page.setViewportSize(testInfo.project.name === "mobile" ? { width: 430, height: 932 } : { width: 1280, height: 800 });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.route("**/api/dictionary?**", route => route.fulfill({ json: { word: "wake", entries: [{
     headword: "wake", language: "en", pos: "verb", tags: ["intransitive"],
@@ -22,8 +23,8 @@ test("player header and screen-bottom modal actions stay usable without layout o
       { text: { content: "up", beginOffset: 7 }, lemma: "up", partOfSpeech: { tag: "PRT" }, dependencyEdge: { headTokenIndex: 1, label: "PRT" } }
     ]
   })) } }));
-  await page.goto("/player?lesson=morning-routine&level=1");
-  await expect(page).toHaveURL(url => url.pathname === "/player" && url.searchParams.get("lesson") === "morning-routine" && url.searchParams.get("level") === "1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
+  await expect(page).toHaveURL(url => url.pathname === "/player" && url.searchParams.get("lesson") === "10000000-0000-4000-8000-000000000001" && url.searchParams.get("level") === "1");
   await expect(page).toHaveTitle("Meta Shadowing");
   await expect(page.getByRole("region", { name: "학습 자막", exact: true })).toContainText("I wake up at seven.");
   const context = page.getByLabel("레슨 안내", { exact: true });

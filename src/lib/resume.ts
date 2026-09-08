@@ -1,9 +1,8 @@
-import { isGroupSize, type GroupSize } from "./phrase-groups";
+import { type GroupSize } from "./phrase-groups";
 import { isStageForLevel } from "./learning-stages";
-import { isRapidDelay, isWpmLevel, normalizeRapidSettings, type RapidSettings } from "./rapid-session";
-import { isLanguage, type Language } from "./languages";
+import { normalizeRapidSettings, type RapidSettings } from "./rapid-session";
+import { type Language } from "./languages";
 
-const LAST_SELECTION_KEY = "meta-shadowing:last-selection";
 
 export type SessionSelection = {
   language: Language;
@@ -45,46 +44,4 @@ export function getPlayerHref(selection: SessionSelection): string {
   if (selection.groupGapMs !== undefined && selection.level <= 5) params.set("groupGap", String(selection.groupGapMs / 1000));
   if (selection.runId) params.set("run", selection.runId);
   return `/player?${params}`;
-}
-
-function isSessionSelection(value: unknown): value is SessionSelection {
-  if (!value || typeof value !== "object") return false;
-
-  const selection = value as Record<string, unknown>;
-  return (
-    isLanguage(selection.language) &&
-    typeof selection.lessonId === "string" &&
-    typeof selection.level === "number" &&
-    Number.isInteger(selection.level) &&
-    selection.level >= 1 &&
-    selection.level <= 8 &&
-    (selection.stage === undefined || isStageForLevel(selection.stage, selection.level)) &&
-    (selection.mode === "manual" || selection.mode === "automatic") &&
-    (selection.display === "current" || selection.display === "cumulative") &&
-    typeof selection.speed === "number" &&
-    (selection.groupSize === undefined || isGroupSize(selection.groupSize)) &&
-    (selection.wpmLevel === undefined || isWpmLevel(selection.wpmLevel)) &&
-    (selection.runId === undefined || typeof selection.runId === "string") &&
-    ["speakingExtraMs", "lineGapMs", "sectionGapMs", "groupGapMs", "advanceDelayMs"].every(key => selection[key] === undefined || isRapidDelay(selection[key]))
-  );
-}
-
-export function saveLastSelection(selection: SessionSelection): void {
-  try {
-    window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify(selection));
-  } catch {
-    // Resume persistence is best-effort; storage may be blocked by the browser.
-  }
-}
-
-export function readLastSelection(): SessionSelection | null {
-  try {
-    const stored = window.localStorage.getItem(LAST_SELECTION_KEY);
-    if (!stored) return null;
-
-    const selection = JSON.parse(stored) as unknown;
-    return isSessionSelection(selection) ? selection : null;
-  } catch {
-    return null;
-  }
 }

@@ -1,11 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page) {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=1&mode=manual");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&mode=manual");
 }
 
 test("the player drawer has no close buttons and Escape returns focus", async ({ page }) => {

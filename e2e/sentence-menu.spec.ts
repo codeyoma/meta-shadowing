@@ -1,11 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { pauseCloudClock, advanceCloudClock, readServerJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
-async function open(page: Page, level: number, lesson = "daily-conversation") {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+async function open(page: Page, level: number, lesson = "10000000-0000-4000-8000-000000000002") {
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.goto(`/player?lesson=${lesson}&level=${level}&group=2&groupGap=0`);
+  await openLearnerPage(page, `/player?lesson=${lesson}&level=${level}&group=2&groupGap=0`);
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 }
 
@@ -105,18 +106,18 @@ for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} selects any s
   if (level < 6) await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await expect(page.getByRole("button", { name: /^CONTINUE/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "학습 메뉴", exact: true })).toBeFocused();
-  await page.reload();
+  await reloadLearnerPage(page);
   await expect(progress).toHaveAttribute("aria-valuenow", grouped ? "1" : "4");
   await selectSentence(page, 1);
-  await page.reload();
+  await reloadLearnerPage(page);
   await expect(progress).toHaveAttribute("aria-valuenow", "0");
-  const journal = await page.evaluate(() => JSON.parse(localStorage.getItem("meta-shadowing:learning:v1")!));
+  const journal = await readServerJournal(page);
   expect(journal.history).toHaveLength(0);
   expect(journal.progress.nextPhrase).toBe(0);
 });
 
 test("a stale tab starts a fresh run when another tab has already completed its run", async ({ page, context }) => {
-  await open(page, 1, "morning-routine");
+  await open(page, 1, "10000000-0000-4000-8000-000000000001");
   const oldRun = new URL(page.url()).searchParams.get("run");
   const otherTab = await context.newPage();
   await otherTab.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
@@ -132,9 +133,9 @@ test("a stale tab starts a fresh run when another tab has already completed its 
   await page.bringToFront();
   await selectSentence(page, 2);
   expect(new URL(page.url()).searchParams.get("run")).not.toBe(oldRun);
-  await page.reload();
+  await reloadLearnerPage(page);
   await expect(page.getByRole("region", { name: "학습 자막" })).toContainText("I wash my face.");
-  const journal = await page.evaluate(() => JSON.parse(localStorage.getItem("meta-shadowing:learning:v1")!));
+  const journal = await readServerJournal(page);
   expect(journal.history).toHaveLength(1);
   expect(journal.history[0].runId).toBe(oldRun);
   expect(journal.progress.nextPhrase).toBe(1);
@@ -143,16 +144,16 @@ test("a stale tab starts a fresh run when another tab has already completed its 
 
 test("the menu pauses word timing, traps focus, ignores player shortcuts, and closes without auto-resuming", async ({ page }) => {
   await page.clock.install();
-  await open(page, 6, "morning-routine");
-  await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await open(page, 6, "10000000-0000-4000-8000-000000000001");
+  await pauseCloudClock(page, new Date(Date.now() + 1000));
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
-  await page.clock.runFor(150);
+  await advanceCloudClock(page, 150);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   const menu = page.getByRole("dialog", { name: "문장 목록", exact: true });
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("r");
-  await page.clock.runFor(10000);
+  await advanceCloudClock(page, 10000);
   await page.keyboard.press("Tab");
   expect(await menu.evaluate(element => element.contains(document.activeElement))).toBe(true);
   await page.keyboard.press("Escape");
@@ -161,12 +162,12 @@ test("the menu pauses word timing, traps focus, ignores player shortcuts, and cl
   const canvas = page.getByRole("region", { name: "속사포 학습" });
   await expect(canvas).toHaveText("I");
   await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
-  await page.clock.runFor(150);
+  await advanceCloudClock(page, 150);
   await expect(canvas).toHaveText("wake");
 });
 
 test("jumping from an unfinished listen resets its cycles, hides hints, and preserves subtitle access", async ({ page }) => {
-  await open(page, 3, "morning-routine");
+  await open(page, 3, "10000000-0000-4000-8000-000000000001");
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
@@ -181,8 +182,8 @@ test("jumping from an unfinished listen resets its cycles, hides hints, and pres
 
 for (const level of [1, 8]) test(`level ${level} sentence selection after completion starts a fresh run without changing completion history`, async ({ page }) => {
   if (level === 8) await page.clock.install();
-  await open(page, level, "morning-routine");
-  if (level === 8) await page.clock.pauseAt(new Date(Date.now() + 1000));
+  await open(page, level, "10000000-0000-4000-8000-000000000001");
+  if (level === 8) await pauseCloudClock(page, new Date(Date.now() + 1000));
   await selectSentence(page, 3);
   if (level === 1) {
     await page.getByRole("button", { name: /^CONTINUE/ }).click();
@@ -193,17 +194,17 @@ for (const level of [1, 8]) test(`level ${level} sentence selection after comple
     await page.getByRole("button", { name: /^NEXT/ }).click();
   } else {
     await page.getByRole("button", { name: /^CONTINUE/ }).click();
-    await page.clock.runFor(10000);
+    await advanceCloudClock(page, 10000);
   }
   await expect(page.getByRole("heading", { name: `레벨 ${level} 학습 완료`, exact: true })).toBeVisible();
   const oldRun = new URL(page.url()).searchParams.get("run");
   await selectSentence(page, 2);
   expect(new URL(page.url()).searchParams.get("run")).not.toBe(oldRun);
   if (level === 1) await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
-  await page.reload();
+  await reloadLearnerPage(page);
   if (level === 1) await expect(page.getByRole("region", { name: "학습 자막" })).toContainText("I wash my face.");
   else await expect(page.getByRole("progressbar", { name: "문장 진행", exact: true })).toHaveAttribute("aria-valuenow", "1");
-  const journal = await page.evaluate(() => JSON.parse(localStorage.getItem("meta-shadowing:learning:v1")!));
+  const journal = await readServerJournal(page);
   expect(journal.history).toHaveLength(1);
   expect(journal.history[0].runId).toBe(oldRun);
   expect(journal.progress.nextPhrase).toBe(1);

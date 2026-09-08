@@ -1,11 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { pauseCloudClock, advanceCloudClock, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, level: number) {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=morning-routine&level=${level}`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 }
 
@@ -26,7 +27,7 @@ async function expectGuidancePopup(page: Page, level: number, instruction?: stri
   await guidance.getByRole("button", { name: "닫기", exact: true }).click();
   await expect(guidance).toHaveCount(0);
   // Radix FocusScope restores focus from a zero-delay unmount timer.
-  if (clockPaused) await page.clock.runFor(1);
+  if (clockPaused) await advanceCloudClock(page, 1);
   await expect(trigger).toBeFocused();
 }
 
@@ -94,15 +95,15 @@ test("rapid learning help pauses word progress and remains available after setti
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await openPlayer(page, 6);
   await page.waitForLoadState("networkidle");
-  await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const context = page.getByLabel("레슨 안내", { exact: true });
   const instruction = "목표어를 따라 말하고, 이어지는 한국어 뜻을 확인하세요.";
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
-  await page.clock.runFor(1500);
+  await advanceCloudClock(page, 1500);
   await expectGuidancePopup(page, 6, instruction, true);
   const display = page.getByRole("region", { name: "속사포 학습", exact: true });
   const pausedText = await display.innerText();
-  await page.clock.runFor(5000);
+  await advanceCloudClock(page, 5000);
   await expect(display).toHaveText(pausedText);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
@@ -116,7 +117,7 @@ test("rapid learning help pauses word progress and remains available after setti
 for (let level = 1; level <= 8; level++) test(`level ${level} follows the script chapter above the speech bubble`, async ({ page }) => {
   await openPlayer(page, level);
   await expect(page.getByLabel("현재 챕터", { exact: true }).getByRole("heading")).toHaveCount(0);
-  await page.goto(`/player?lesson=daily-conversation&level=${level}&group=2`);
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000002&level=${level}&group=2`);
   const chapter = page.getByLabel("현재 챕터", { exact: true });
   await expect(chapter.getByRole("heading", { name: "At home", exact: true })).toBeVisible();
   await expect(page.getByLabel("레슨 안내", { exact: true }).getByLabel("현재 챕터")).toHaveCount(0);
@@ -137,7 +138,7 @@ for (let level = 1; level <= 8; level++) test(`level ${level} follows the script
 
 test("section headings wrap long script titles without clipping or displacing the bottom action", async ({ page }) => {
   await openPlayer(page, 1);
-  await page.goto("/player?lesson=daily-conversation&level=1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1");
   const chapter = page.getByLabel("현재 챕터", { exact: true });
   await expect(chapter.getByRole("heading")).toBeVisible();
   await chapter.getByRole("heading").evaluate(element => {
@@ -157,7 +158,7 @@ test("section headings wrap long script titles without clipping or displacing th
 test("an audio error keeps the method available with recovery only in the bottom action", async ({ page }) => {
   await openPlayer(page, 1);
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ status: 503, body: "Unavailable" }));
-  await page.reload();
+  await reloadLearnerPage(page);
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   await expect(page.getByRole("button", { name: "RETRY · 다시 시도", exact: true })).toBeInViewport();
   await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);

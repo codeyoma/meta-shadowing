@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createAudioSession, isAudioRepeatAvailable, transitionAudioSession, type AudioPracticeLevel, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { PhraseGroup } from "@/lib/phrase-groups";
-import { useLearningRecord, type LearningStart, type CloudRecording } from "./use-learning-record";
+import type { LearningStart, CloudRecording } from "./recording-types";
 import { createAudioPreloader } from "@/lib/audio-preloader";
 import { createSuccessChime } from "@/lib/success-chime";
 import { useAudioCacheAccount } from "../audio-cache-scope";
@@ -13,16 +13,14 @@ function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
 }
 
-export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart, cloud?: CloudRecording) {
+export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart, cloud: CloudRecording) {
   const audioAccount = useAudioCacheAccount();
-  const legacy = useLearningRecord(lesson, start, Boolean(cloud));
-  const completion = cloud ? cloud.completion : legacy.completion;
-  const storageFailed = cloud ? false : legacy.storageFailed;
-  const updateRecord: CloudRecording["updateRecord"] = cloud?.updateRecord ?? legacy.updateRecord;
+  const { completion, updateRecord } = cloud;
   const cloudRef = useRef(cloud); cloudRef.current = cloud;
   const shortcutsRef = useRef(shortcutsEnabled); shortcutsRef.current = shortcutsEnabled;
   const waiting = useRef(false);
   const resumeVerified = useRef(false);
+  const preparedGesture = useRef<{ attempt: number; until: number } | null>(null);
   const alive = useRef(true);
   const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, groupSizes: groups.map(group => group.phrases.length), level, ...settings, initialGroupIndex: start.progress?.nextUnit }));
   const currentSession = useRef(session);
@@ -39,11 +37,16 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   }, [lesson, audioAccount]);
 
   const send = useCallback(function send(event: AudioSessionEvent) {
+    if (!["space", "retry"].includes(event.type)) preparedGesture.current = null;
     if (event.type !== "pause" && (waiting.current || (cloudRef.current && !cloudRef.current.canAct()))) return;
     if (waiting.current && event.type === "pause") { audioRef.current?.pause(); updateRecord({ active: false }); return; }
     const previous = currentSession.current;
     const startsPlayback = previous.phase === "paused" || (previous.phase === "ready" && previous.completedCycles === 0);
-    if (cloudRef.current && startsPlayback && (event.type === "space" || event.type === "retry") && !resumeVerified.current) {
+    // A browser gesture rejection already followed a successful ownership and
+    // media-access check. Permit only its immediate, same-attempt second tap;
+    // canAct above still fences stale/offline/hidden ownership before playback.
+    const freshGesture = preparedGesture.current?.attempt === previous.attempt && performance.now() < preparedGesture.current.until;
+    if (cloudRef.current && startsPlayback && (event.type === "space" || event.type === "retry") && !resumeVerified.current && !freshGesture) {
       waiting.current = true;
       void cloudRef.current.verifyResume().then(allowed => {
         waiting.current = false;
@@ -54,6 +57,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       });
       return;
     }
+    preparedGesture.current = null;
     const next = transitionAudioSession(previous, event);
     if (next === previous) return;
     if (["space", "next", "retry"].includes(event.type)) {
@@ -67,7 +71,6 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     const saved = updateRecord({
       kind: studied ? "studied" : event.type === "jump" || event.type === "previous" ? "jump" : "advance",
       confirmedCycles: event.type === "tick" && previous.phase === "speaking" ? previous.completedCycles : previous.confirmedCycles,
-      restartCompleted: event.type === "jump",
       studied,
       active: shortcutsEnabled && !document.hidden && (["playing", "gap", "speaking", "countdown"].includes(next.phase) || (next.phase === "ready" && next.completedCycles > 0)),
       ...(boundary || studied ? { checkpoint: { unit: finished ? next.groupSizes.length : next.groupIndex,
@@ -124,7 +127,12 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       const request = ++playRequest.current;
       void (preloader.current?.play() ?? audio.play()).catch(error => {
         if (request !== playRequest.current || error?.name === "AbortError") return;
-        send(error?.name === "NotAllowedError" ? { type: "pause" } : { type: "audio-error", attempt: next.attempt });
+        if (error?.name === "NotAllowedError") {
+          send({ type: "pause" });
+          if (alive.current && shortcutsRef.current && cloudRef.current.canAct()) {
+            preparedGesture.current = { attempt: next.attempt, until: performance.now() + 3000 };
+          }
+        } else send({ type: "audio-error", attempt: next.attempt });
       });
     } else if (["paused", "error", "completed"].includes(accepted.phase)) {
       playRequest.current++;
@@ -179,15 +187,20 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       handledSpace = false;
     }
     function onVisibilityChange() {
+      preparedGesture.current = null;
       if (document.hidden) send({ type: "pause" });
     }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onVisibilityChange);
+    window.addEventListener("offline", onVisibilityChange);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onVisibilityChange);
+      window.removeEventListener("offline", onVisibilityChange);
     };
   }, [send, shortcutsEnabled]);
 
@@ -207,5 +220,5 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     };
   }, [prepareAudio]);
 
-  return { session, send, audioRef, completion, storageFailed };
+  return { session, send, audioRef, completion };
 }

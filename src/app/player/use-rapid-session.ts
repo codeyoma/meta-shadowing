@@ -3,15 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRapidSession, isRapidRunning, transitionRapidSession, type RapidEvent, type RapidLevel, type RapidLine, type RapidSettings } from "@/lib/rapid-session";
 import type { Lesson } from "@/lib/lessons";
-import { useLearningRecord, type LearningStart, type CloudRecording } from "./use-learning-record";
+import type { LearningStart, CloudRecording } from "./recording-types";
 
 type ControlEvent = Exclude<RapidEvent, { type: "tick" }>;
 
-export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: RapidLevel, settings: RapidSettings, shortcutsEnabled: boolean, start: LearningStart, cloud?: CloudRecording) {
-  const legacy = useLearningRecord(lesson, start, Boolean(cloud));
-  const completion = cloud ? cloud.completion : legacy.completion;
-  const storageFailed = cloud ? false : legacy.storageFailed;
-  const updateRecord: CloudRecording["updateRecord"] = cloud?.updateRecord ?? legacy.updateRecord;
+export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: RapidLevel, settings: RapidSettings, shortcutsEnabled: boolean, start: LearningStart, cloud: CloudRecording) {
+  const { completion, updateRecord } = cloud;
   const cloudRef = useRef(cloud); cloudRef.current = cloud;
   const shortcutsRef = useRef(shortcutsEnabled); shortcutsRef.current = shortcutsEnabled;
   const waiting = useRef(false);
@@ -78,23 +75,6 @@ export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: Rapid
       } else apply(next);
       return;
     }
-    if (next.boundaryCount !== previous.boundaryCount) {
-      updateRecord({ studied: true, elapsedMs: next.checkpointActiveMs - previous.activeElapsedMs, checkpoint: { unit: next.checkpointIndex, phrase: next.checkpointIndex }, finished: next.phase === "completed" });
-      updateRecord({ elapsedMs: next.activeElapsedMs - next.checkpointActiveMs });
-    } else updateRecord({ elapsedMs: next.activeElapsedMs - previous.activeElapsedMs });
-    const beforeEvent = next;
-    if (event) next = transitionRapidSession(next, event);
-    if (event?.type === "jump" && next !== beforeEvent) {
-      updateRecord({ restartCompleted: true, checkpoint: { unit: next.lineIndex, phrase: next.lineIndex } });
-    }
-    if (event?.type === "settings") updateRecord({ settings: event.settings });
-    clockAnchor.current = now;
-    current.current = next;
-    if (next !== previous) setSession(next);
-    if (isRapidRunning(next)) {
-      // Re-arm from the engine's remaining duration, not the React render or a rounded WPM interval.
-      timer.current = setTimeout(() => send(), Math.max(1, Math.min(100, next.remainingMs)));
-    }
   }, [updateRecord]);
 
   useEffect(() => { if (cloud?.blocked && !waiting.current) send({ type:"pause" }); },[cloud?.blocked,send]);
@@ -134,5 +114,5 @@ export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: Rapid
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; clearTimeout(timer.current); }; }, []);
 
-  return { session, send, completion, storageFailed };
+  return { session, send, completion };
 }

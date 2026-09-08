@@ -1,12 +1,13 @@
-import { expect, test, type Page } from "@playwright/test";
+import { pauseCloudClock, advanceCloudClock, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { openSelectedStageSettings, startSelectedStage } from "./fixtures/stage-preview";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
 async function openGroupedPlayer(page: Page, level: 4 | 5, size = 2) {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=daily-conversation&level=${level}&group=${size}`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000002&level=${level}&group=${size}`);
   await page.waitForLoadState("networkidle");
 }
 
@@ -15,8 +16,8 @@ test("setup selects a group size and level 4 plays each highlighted phrase befor
   await page.route("**/api/lessons/*/audio/*", route => {
     return route.fulfill({ contentType: "audio/webm", body: testRecording });
   });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/setup?lesson=morning-routine");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
   await page.waitForLoadState("networkidle");
   await page.getByRole("radio", { name: /7 다문장 암기/ }).click();
   await openSelectedStageSettings(page);
@@ -28,7 +29,7 @@ test("setup selects a group size and level 4 plays each highlighted phrase befor
   await startSelectedStage(page);
   await expect(page).toHaveURL(/group=3/);
   await page.waitForLoadState("networkidle");
-  await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");
   await expect(phrases).toHaveCount(3);
   await expect(phrases.nth(0)).toContainText("I wake up at seven.");
@@ -39,7 +40,7 @@ test("setup selects a group size and level 4 plays each highlighted phrase befor
     await expect(phrases.nth(index)).toHaveCSS("border-left-width", "2px");
     await expect.poll(() => page.locator("audio").evaluate(element => (element as HTMLAudioElement).ended)).toBe(true);
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
-    await page.clock.runFor(500);
+    await advanceCloudClock(page, 500);
   }
   await expect(phrases.nth(2)).toHaveAttribute("aria-current", "true");
   await waitForManualListen(page);
@@ -90,7 +91,7 @@ test("level 5 reveals every bilingual phrase with S or touch and resets for the 
 test("group navigation follows the chapter and marks an unnamed section without grouping across it", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await openGroupedPlayer(page, 4, 4);
-  await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const chapter = page.getByLabel("현재 챕터");
   const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");
   await expect(chapter).toContainText("At home");
@@ -102,7 +103,7 @@ test("group navigation follows the chapter and marks an unnamed section without 
       for (let index = 1; index < phraseCount; index++) {
         await expect(phrases.nth(index - 1)).toHaveAttribute("aria-current", "true");
         await expect.poll(() => page.locator("audio").evaluate(element => (element as HTMLAudioElement).ended)).toBe(true);
-        await page.clock.runFor(500);
+        await advanceCloudClock(page, 500);
       }
       await confirmManualListen(page, "keyboard");
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
@@ -158,9 +159,10 @@ test("a failed second recording retries the whole group without counting a parti
     if (number === 2 && failSecond) return route.fulfill({ status: 503, body: "Audio unavailable" });
     return route.fulfill({ contentType: "audio/webm", body: testRecording });
   });
-  await page.reload();
+  await reloadLearnerPage(page);
   await page.waitForLoadState("networkidle");
   await page.keyboard.press("Space");
+  await expect(page.getByRole("button", { name: "PAUSE · 일시정지", exact: true })).toBeEnabled();
   await page.keyboard.press("s");
   await expect(page.getByRole("button", { name: "RETRY · 다시 시도", exact: true })).toBeInViewport();
   await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);
@@ -178,8 +180,8 @@ test("a failed second recording retries the whole group without counting a parti
 
 test("Japanese grouped hints honor supplied spaces and automatic word boundaries for every phrase", async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=tokyo-walk&level=5&group=2");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000003&level=5&group=2");
   await page.waitForLoadState("networkidle");
   const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");
   await expect(phrases).toHaveCount(3);

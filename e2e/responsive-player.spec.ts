@@ -1,12 +1,14 @@
-import { expect, test, type Page } from "@playwright/test";
+import { enterAccountPractice, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedServerJournal } from "./fixtures/cloud-journal";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 
 async function openPlayer(page: Page, query = "") {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=morning-routine&level=1${query}`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=1${query}`);
   await page.waitForLoadState("networkidle");
 }
 
@@ -146,15 +148,14 @@ test("Repeat resumes a paused checkpoint and only Next remains after the fifth l
 
 for (const level of [1, 8]) test(`a level ${level} version-reset notice keeps the action inside the viewport`, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.addInitScript(({ settings, level }) => {
-    localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify({ history: [], progress: {
-      runId: "previous-version-run", lessonId: "morning-routine", lessonVersion: "outdated-fixture",
-      lessonName: "Morning Routine", language: "english", level, nextUnit: 1, nextPhrase: 1, activeMs: 1000, settings
-    } }));
-  }, { settings: DEFAULT_SESSION_SETTINGS, level });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=morning-routine&level=${level}`);
-  await expect(page.getByRole("alert", { name: "레슨 버전 변경" })).toBeVisible();
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await seedServerJournal(page, { progress: {
+      runId: "previous-version-run", lessonId: "10000000-0000-4000-8000-000000000001", lessonVersion: "outdated-fixture",
+      lessonName: "Morning Routine", language: "english", level, nextUnit: 1, nextPhrase: 1, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS
+    } });
+  await page.goto(`/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
+  await expect(page.getByText(/레슨 버전이 변경되어/)).toBeVisible();
+  await enterAccountPractice(page);
   const box = (await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox())!;
   expect(box.y + box.height).toBeLessThanOrEqual(844);
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);

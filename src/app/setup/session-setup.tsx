@@ -12,12 +12,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverArrow, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import type { Lesson } from "@/lib/lessons";
 import { learningInstructions, learningStages } from "@/lib/learning-stages";
-import { completedStagesForLesson, readLearningJournal } from "@/lib/learning-records";
+import { completedStagesForLesson } from "@/lib/learning-records";
 import { nextPracticeForLesson } from "@/lib/next-practice";
-import { getPlayerHref, saveLastSelection } from "@/lib/resume";
+import { getPlayerHref } from "@/lib/resume";
 import { createRunId } from "@/lib/run-id";
 import { playStageSound } from "@/lib/stage-sound";
-import { DEFAULT_SESSION_SETTINGS, readSessionPreferences, resolveSessionSettings, type SessionSettings } from "@/lib/session-settings";
+import { DEFAULT_SESSION_SETTINGS, resolveSessionSettings, type SessionSettings } from "@/lib/session-settings";
 import { useCloudPreferences } from "../cloud-preferences-provider";
 import { CloseIcon, PlayIcon } from "../ui";
 import { useBrowseScroll } from "../browse-shell";
@@ -36,8 +36,8 @@ const stageRing = <span className={styles.stageRing} data-stage-ring="" aria-hid
 
 export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, initialStage }: { lesson: Lesson; defaults?: SessionSettings; initialStage?: number }) {
   const router = useRouter();
-  const cloud = useCloudPreferences();
-  const cloudJournal = cloud?.journal, overrides = cloud?.profile.overrides;
+  const cloud = useCloudPreferences()!;
+  const cloudJournal = cloud.journal, overrides = cloud.profile.overrides;
   const language = lesson.language;
   const [stage, setStage] = useState(1);
   const level = learningStages[stage - 1].level;
@@ -49,8 +49,8 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   const [completedStages, setCompletedStages] = useState<number[]>([]);
   const [currentPractice, setCurrentPractice] = useState<ReturnType<typeof nextPracticeForLesson>>({ stage: 1, progress: null, review: false });
   useEffect(() => {
-    setSettings(cloudJournal ? resolveSessionSettings(overrides,defaults) : readSessionPreferences(defaults));
-    const journal = cloudJournal ?? readLearningJournal();
+    setSettings(resolveSessionSettings(overrides,defaults));
+    const journal = cloudJournal;
     const current = nextPracticeForLesson(journal, lesson);
     setCompletedStages(completedStagesForLesson(journal.history, lesson));
     setCurrentPractice(current);
@@ -61,17 +61,15 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   function start(): void {
     playStageSound("start");
     const selection = { ...settings, language, lessonId: lesson.id, level, stage, runId: createRunId() };
-    if (!cloud) saveLastSelection(selection);
     router.push(getPlayerHref(selection));
   }
 
   function startCurrent(): void {
     playStageSound("start");
-    const current = nextPracticeForLesson(cloudJournal ?? readLearningJournal(), lesson);
+    const current = nextPracticeForLesson(cloudJournal, lesson);
     const saved = current.progress;
     const selection = { ...(saved?.settings ?? settings), language, lessonId: lesson.id,
       level: learningStages[current.stage - 1].level, stage: current.stage, runId: saved?.runId ?? createRunId() };
-    if (!cloud) saveLastSelection(selection);
     router.push(getPlayerHref(selection));
   }
 

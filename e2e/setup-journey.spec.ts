@@ -1,10 +1,12 @@
-import { expect, test } from "@playwright/test";
-import { lessons } from "../src/lib/lessons";
+import { readServerJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedServerJournal } from "./fixtures/cloud-journal";
+import { expect, test } from "./fixtures/cloud-ui";
+import { lessons } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/setup?lesson=morning-routine");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
 });
 
 test("the book summary keeps the actual next stage separate from previews and does not invent progress", async ({ page }) => {
@@ -19,7 +21,7 @@ test("the book summary keeps the actual next stage separate from previews and do
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/lessons\/[^/]+\/stages/);
-  expect(await page.evaluate(() => localStorage.getItem("meta-shadowing:last-selection"))).toBeNull();
+  expect((await readServerJournal(page)).progress).toBeNull();
 });
 
 test("the winding path exposes all stages through its own viewport", async ({ page }) => {
@@ -37,13 +39,12 @@ test("the winding path exposes all stages through its own viewport", async ({ pa
 });
 
 test("the summary and checkmarks reflect unique completed stages from the real journal", async ({ page }) => {
-  const lesson = lessons.find(item => item.id === "morning-routine")!;
+  const lesson = lessons.find(item => item.id === "10000000-0000-4000-8000-000000000001")!;
   const record = { runId: "stage-complete", lessonId: lesson.id, lessonVersion: lesson.version,
     lessonName: lesson.name, language: lesson.language, level: 4, stage: 8, nextUnit: 3, nextPhrase: 3,
     activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS, completedAt: "2026-09-07T00:00:00Z" };
-  await page.evaluate(history => localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify({ progress: null, history })),
-    [record, { ...record, runId: "replay" }, { ...record, stage: 7, lessonVersion: "old" }]);
-  await page.reload();
+  await seedServerJournal(page, { history: [record, { ...record, runId: "replay" }, { ...record, stage: 7, lessonVersion: "old" }] });
+  await reloadLearnerPage(page);
   await expect(page.getByRole("progressbar", { name: "완료한 스테이지" })).toHaveAttribute("aria-valuenow", "1");
   await expect(page.getByRole("radio", { name: "8 다문장 암기 Lv 4 · 완료", exact: true })).toBeEnabled();
   await expect(page.getByRole("radio", { name: "7 다문장 암기 Lv 4", exact: true })).toBeEnabled();

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { pauseCloudClock, advanceCloudClock, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import type { DictionaryResponse } from "../src/lib/dictionary";
 
 // Explicit mocked API response. Browser tests verify rendering/interaction,
@@ -20,10 +21,10 @@ function recording() {
   return wav;
 }
 
-async function openPlayer(page: Page, level = 1, lesson = "morning-routine") {
+async function openPlayer(page: Page, level = 1, lesson = "10000000-0000-4000-8000-000000000001") {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: recording() }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=${lesson}&level=${level}`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=${lesson}&level=${level}`);
   await page.waitForLoadState("networkidle");
 }
 
@@ -184,7 +185,7 @@ test("a failed Japanese lookup can retry, with only segmented foreign words inte
     requests++;
     return route.fulfill(unavailable ? { status: 503, json: { error: "dictionary-unavailable" } } : { json: { word: "私", entries: [] } });
   });
-  await openPlayer(page, 1, "tokyo-walk");
+  await openPlayer(page, 1, "10000000-0000-4000-8000-000000000003");
   const target = page.locator('#practice-subtitles [lang="ja"]');
   const visibleText = await target.textContent();
   await expect(page.locator('#practice-subtitles [lang="ko"] button')).toHaveCount(0);
@@ -228,24 +229,24 @@ test("rapid foreign words open the dictionary and freeze token timing; Korean st
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await page.route("**/api/dictionary?**", route => route.fulfill({ json: sourceFixture }));
   await openPlayer(page, 6);
-  await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const canvas = page.getByRole("region", { name: "속사포 학습", exact: true });
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
-  await page.clock.runFor(300);
+  await advanceCloudClock(page, 300);
   await expect(canvas).toHaveText("wake");
   await canvas.getByRole("button", { name: "wake 뜻 보기", exact: true }).click();
   const popup = page.getByRole("dialog", { name: "wake 뜻", exact: true });
   await expect(popup).toContainText("잠에서 깨다.");
   await popup.focus();
   for (const key of ["r", "ArrowRight", "Space"]) await page.keyboard.press(key);
-  await page.clock.runFor(5000);
+  await advanceCloudClock(page, 5000);
   await expect(page.locator('[aria-label="속사포 학습"]')).toHaveText("wake");
   await page.keyboard.press("Escape");
   // Radix restores focus in its deferred focus-scope cleanup.
-  await page.clock.runFor(1);
+  await advanceCloudClock(page, 1);
   await expect(canvas.getByRole("button", { name: "wake 뜻 보기", exact: true })).toBeFocused();
   await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
-  await page.clock.runFor(1200);
+  await advanceCloudClock(page, 1200);
   await expect(canvas).toHaveText("나는");
   await expect(canvas.getByRole("button")).toHaveCount(0);
 });

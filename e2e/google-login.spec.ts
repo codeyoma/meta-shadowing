@@ -30,7 +30,7 @@ test("Google PKCE login completes and existing sessions skip the login screen", 
   await page.goto("/login");
   await page.getByRole("button", { name: "Google로 로그인하기", exact: true }).click();
   await expect(page).toHaveURL(/\/languages$/);
-  await expect(page.getByRole("heading", { name: "언어 선택" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "계정 학습이 잠시 중지되었습니다." })).toBeVisible();
   await page.goto("/login");
   await expect(page).toHaveURL(/\/languages$/);
   await page.goto("/");

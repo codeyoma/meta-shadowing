@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -9,33 +9,23 @@ import { Field, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { levelNames } from "@/lib/lessons";
 import { isGroupSize } from "@/lib/phrase-groups";
-import { readSessionPreferences, resolveSessionSettings, saveSessionPreferences, type SessionSettings } from "@/lib/session-settings";
+import { resolveSessionSettings, type SessionSettings } from "@/lib/session-settings";
 import { browseHref, stageHref } from "@/lib/browse-navigation";
 import { useBrowse } from "./browse-shell";
 import { BrowsePageContent } from "./browse-pages";
 import { AudioSessionControls } from "./audio-session-controls";
 import { RapidSessionControls } from "./rapid-session-controls";
-import styles from "./browse.module.css";
 import { useCloudPreferences } from "./cloud-preferences-provider";
 
 export function SessionPreferencesPage({ defaults }: { defaults: SessionSettings }) {
   const { selection } = useBrowse();
-  const cloud = useCloudPreferences();
+  const cloud = useCloudPreferences()!;
   const query = useSearchParams();
   const requestedLevel = Number(query.get("level"));
   const [level, setLevel] = useState(Number.isInteger(requestedLevel) && requestedLevel >= 1 && requestedLevel <= 8 ? requestedLevel : 1);
-  const [localSettings, setSettings] = useState(defaults);
-  const [localReady, setReady] = useState(false);
-  const settings = cloud ? resolveSessionSettings(cloud.profile.overrides, cloud.defaults) : localSettings;
-  const ready = cloud ? !cloud.saving : localReady;
-  const [changed, setChanged] = useState(false);
-  useEffect(() => { if (!cloud) { setSettings(readSessionPreferences(defaults)); setReady(true); } }, [defaults, cloud]);
-  function change(changes: Partial<SessionSettings>) {
-    if (cloud) { cloud.save(changes); return; }
-    setSettings(previous => resolveSessionSettings(changes, previous));
-    saveSessionPreferences(changes);
-    setChanged(true);
-  }
+  const settings = resolveSessionSettings(cloud.profile.overrides, cloud.defaults);
+  const ready = !cloud.saving;
+  function change(changes: Partial<SessionSettings>) { cloud.save(changes); }
   const stage = Number(query.get("stage"));
   const fromStage = selection.lessonId && Number.isInteger(stage) && stage >= 1 && stage <= 16;
   const back = fromStage ? stageHref(selection.lessonId!, stage) : browseHref("settings", selection);
@@ -63,6 +53,5 @@ export function SessionPreferencesPage({ defaults }: { defaults: SessionSettings
         }} />}
     </FieldGroup>
     </FieldSet>
-    {!cloud ? <p className={styles.saved} role="status">{changed ? "변경한 설정은 다음 학습부터 적용됩니다." : "선택한 레벨에 해당하는 설정을 표시합니다."}</p> : null}
   </BrowsePageContent>;
 }

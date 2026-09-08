@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,7 @@ import { isRapidRunning, rapidDisplay, RAPID_WPM, type RapidLevel, type RapidLin
 import { Page, PauseIcon, PlayIcon } from "../ui";
 import { RapidSessionControls } from "../rapid-session-controls";
 import { useRapidSession } from "./use-rapid-session";
-import type { LearningStart, CloudRecording } from "./use-learning-record";
+import type { LearningStart, CloudRecording } from "./recording-types";
 import { CompletionSummary } from "../completion-summary";
 import { ScreenWake } from "./screen-wake";
 import { PracticeContext, PracticeFooter, PracticeHeader, PracticeProgress, PracticeSection } from "./practice-layout";
@@ -23,15 +22,14 @@ import { DictionaryWords, type DictionaryWordSelect } from "./dictionary-words";
 import { SentenceAnalysisButton, SentenceAnalysisPopup, useSentenceAnalysis } from "./sentence-analysis-popup";
 import styles from "./practice.module.css";
 
-export function RapidPlayer({ lesson, lines, level, settings, start, notice, cloud }: { lesson: PublishedLesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings; start: LearningStart; notice?: ReactNode; cloud?: CloudRecording }) {
-  const router = useRouter();
+export function RapidPlayer({ lesson, lines, level, settings, start, notice, cloud }: { lesson: PublishedLesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings; start: LearningStart; notice?: ReactNode; cloud: CloudRecording }) {
   const [surface, setSurface] = useState<"menu" | "settings" | "help" | null>(null);
   const [drawerView, setDrawerView] = useState<DrawerView>("menu");
   const menuOpen = surface === "menu" || surface === "settings";
   const dictionary = useDictionaryPopup();
   const analysis = useSentenceAnalysis();
-  const { session, send, completion, storageFailed } = useRapidSession(lesson, lines, level, settings, surface === null && !dictionary.open && !analysis.open, start, cloud);
-  const navigate = (href: string) => cloud ? cloud.exit(href) : router.push(href);
+  const { session, send, completion } = useRapidSession(lesson, lines, level, settings, surface === null && !dictionary.open && !analysis.open, start, cloud);
+  const navigate = (href: string) => cloud.exit(href);
   const openDictionary: DictionaryWordSelect = (word, trigger) => {
     send({ type: "pause" });
     dictionary.openWord(word, trigger);
@@ -65,7 +63,7 @@ export function RapidPlayer({ lesson, lines, level, settings, start, notice, clo
         analysis.show(lesson.phrases[session.lineIndex].phraseNumber, trigger);
       }} />} />
     <section className={styles.practice} aria-labelledby="player-title">
-      {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => navigate(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : <>
+      {completion ? <CompletionSummary record={completion} onHome={() => navigate(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : <>
         <PracticeSection chapter={line?.chapter ?? null} startsSection={line?.boundary === "section"} />
         <Bubble variant="outline" className={cn(styles.bubble, styles.textOnly)}>
         <BubbleContent size="lg" className={styles.bubbleFrame}>

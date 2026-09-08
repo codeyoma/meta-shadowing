@@ -1,20 +1,21 @@
-import { expect, test, type Page } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, level = 1) {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=morning-routine&level=${level}&mode=manual`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}&mode=manual`);
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 }
 
 test("the simplified entry page keeps password entry working", async ({ page }) => {
-  await page.goto("/");
+  await openLearnerPage(page, "/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("엄선된 문장으로,여덟 번 다르게.");
   await expect(page.getByText("헤드폰을 끼고 오늘의 레슨을 시작하세요.", { exact: true })).toHaveCount(0);
   await expect(page.getByText("개인 학습 자료를 위한 비공개 베타", { exact: true })).toHaveCount(0);
-  await page.getByLabel("베타 비밀번호", { exact: true }).fill("test-beta-password");
+  await page.getByLabel("베타 비밀번호", { exact: true }).fill("integration-beta-password");
   await page.getByRole("button", { name: "입장하기", exact: true }).click();
   await expect(page).toHaveURL(/\/languages$/);
 });

@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { enterAccountPractice } from "./cloud-navigation";
 
 // Test intent survives the Settings-tab round trip; the app deliberately opens
 // the stage map with no preview selected. Re-select the intended stage on Start.
@@ -51,4 +52,5 @@ export async function startSelectedStage(page: Page) {
   }
   await expect(start).toBeEnabled();
   await start.click();
+  if (process.env.CLOUD_LEARNING_ENABLED === "1") await enterAccountPractice(page);
 }

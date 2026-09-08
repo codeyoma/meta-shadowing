@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { pauseCloudClock, advanceCloudClock, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import type { PhraseSyntax, SyntaxToken } from "../src/lib/phrase-syntax";
 
 // Explicit stored-response fixture; live Google parsing is not run by this test.
@@ -24,10 +25,10 @@ function recording() {
   wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(bytes, 40);
   return wav;
 }
-async function openPlayer(page: Page, level = 1, lesson = "daily-conversation") {
+async function openPlayer(page: Page, level = 1, lesson = "10000000-0000-4000-8000-000000000002") {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: recording() }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=${lesson}&level=${level}&mode=manual`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=${lesson}&level=${level}&mode=manual`);
   await expect(page.getByRole("button", { name: "문장 분석", exact: true })).toBeVisible();
 }
 
@@ -89,7 +90,7 @@ test("missing analysis and failed reads are distinguishable, and retry reloads t
 test("hint levels require revealing subtitles before showing full analysis", async ({ page }) => {
   let calls = 0;
   await page.route("**/syntax/*?**", route => { calls++; return route.fulfill({ json: analysis }); });
-  await openPlayer(page, 3, "morning-routine");
+  await openPlayer(page, 3, "10000000-0000-4000-8000-000000000001");
   const trigger = page.getByRole("button", { name: "문장 분석", exact: true });
   await expect(trigger).toBeDisabled();
   await expect(page.locator('#practice-subtitles [lang="en"]')).toHaveText("I");
@@ -107,7 +108,7 @@ test("changing the practice phrase requests its own analysis, including when the
     phrases.push(phraseNumber);
     return route.fulfill({ json: { phraseNumber, sentences: [] } });
   });
-  await openPlayer(page, 1, "morning-routine");
+  await openPlayer(page, 1, "10000000-0000-4000-8000-000000000001");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await page.getByRole("button", { name: /^2번 문장 ·/ }).click();
@@ -122,16 +123,16 @@ test("changing the practice phrase requests its own analysis, including when the
 test("rapid playback freezes while analysis is open", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await page.route("**/syntax/*?**", route => route.fulfill({ json: analysis }));
-  await openPlayer(page, 6, "morning-routine");
-  await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+  await openPlayer(page, 6, "10000000-0000-4000-8000-000000000001");
+  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const canvas = page.getByRole("region", { name: "속사포 학습", exact: true });
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
-  await page.clock.runFor(300); await expect(canvas).toHaveText("wake");
+  await advanceCloudClock(page, 300); await expect(canvas).toHaveText("wake");
   await page.getByRole("button", { name: "문장 분석", exact: true }).click();
   const popup = page.getByRole("dialog", { name: "문장 분석", exact: true });
   await expect(popup.getByRole("article")).toHaveCount(2);
-  await popup.focus(); await page.keyboard.press("Space"); await page.clock.runFor(5000);
+  await popup.focus(); await page.keyboard.press("Space"); await advanceCloudClock(page, 5000);
   await expect(page.locator('[aria-label="속사포 학습"]')).toHaveText("wake");
-  await page.keyboard.press("Escape"); await page.clock.runFor(1);
+  await page.keyboard.press("Escape"); await advanceCloudClock(page, 1);
   await expect(page.getByRole("button", { name: "문장 분석", exact: true })).toBeFocused();
 });

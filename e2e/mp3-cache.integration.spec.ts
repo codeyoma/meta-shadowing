@@ -1,3 +1,4 @@
+import { enterAccountPractice } from "./fixtures/cloud-navigation";
 import { randomUUID } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -103,7 +104,7 @@ for (const scenario of ["restart and retention", "expiry during access check", "
       });
     }
     await page.clock.setFixedTime(new Date(initialTime));
-    await page.goto(playerUrl);
+    await page.goto(playerUrl); await enterAccountPractice(page);
     expect((await context.request.get(`/api/lessons/${lessonId}/audio/1/access?version=${encodeURIComponent(version)}`)).status()).toBe(200);
     if (scenario === "non-MP3 streaming") {
       try {
@@ -168,7 +169,8 @@ for (const scenario of ["restart and retention", "expiry during access check", "
       }));
       let downloads = 0;
       page.on("request", request => { if (request.url().includes("/storage/v1/object/sign/lesson-audio/")) downloads++; });
-      await page.reload(); await listen(page);
+      await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page); await listen(page);
       expect(downloads).toBe(1); // discard only the damaged entry, not its neighbor
       for (const fault of ["partial", "auth-document", "corrupt", "incomplete"] as const) {
         await page.evaluate(() => new Promise<void>((resolve, reject) => {
@@ -181,13 +183,15 @@ for (const scenario of ["restart and retention", "expiry during access check", "
           body: fault === "auth-document" ? Buffer.from("<html>Login required</html>") : fault === "corrupt" ? Buffer.from("ID3broken") : testMp3,
         }));
         await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page);
         await page.getByRole("button", { name: /첫 원음 듣기/ }).click();
         await expect(page.getByRole("button", { name: /RETRY/ })).toBeVisible();
         await expect(page.getByLabel("완료한 듣기")).toContainText("필수 0 / 3");
         expect(await cacheMetadata(page)).toEqual([]);
         await page.unroute(route);
       }
-      await page.reload(); await listen(page);
+      await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page); await listen(page);
       await expect.poll(async () => (await cacheMetadata(page)).length).toBe(2);
       expect(errors).toEqual([]);
       return;
@@ -212,6 +216,7 @@ for (const scenario of ["restart and retention", "expiry during access check", "
         };
       }), { template: prefetched[0], now: initialTime });
       await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page);
       await expect.poll(async () => (await cacheMetadata(page)).reduce((total, entry) => total + entry.size, 0)).toBeLessThanOrEqual(104857600);
       const remaining = (await cacheMetadata(page)).map(entry => JSON.parse(entry.key)[3]);
       expect(remaining).not.toContain("expired.mp3"); expect(remaining).not.toContain("oldest-played.mp3");
@@ -261,17 +266,18 @@ for (const scenario of ["restart and retention", "expiry during access check", "
       await page.getByRole("button", { name: /듣기 완료 확인/ }).click();
       await expect(page.locator("audio")).toHaveJSProperty("paused", false);
       expect((await service.from("lesson_drafts").update({ publication_status: "unpublished" }).eq("id", lessonId)).error).toBeNull();
-      await expect(page.getByRole("button", { name: /RETRY/ })).toBeVisible({ timeout: 12000 });
+      await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toBeVisible({ timeout: 12000 });
       await expect(page.locator("audio")).toHaveJSProperty("paused", true);
       expect((await context.request.get(accessUrl)).status()).toBe(404);
       const replaced = await service.from("lesson_drafts").update({ publication_status: "published", published_at: new Date(initialTime + 20000).toISOString() }).eq("id", lessonId).select("published_at").single();
       expect(replaced.error).toBeNull();
       expect((await context.request.get(accessUrl)).status()).toBe(404);
-      await page.getByRole("button", { name: /RETRY/ }).click();
-      await expect(page.getByRole("button", { name: /RETRY/ })).toBeVisible();
+      // Republishing cannot revive the old version's cloud run or audio grant.
+      await expect(page.getByRole("group", { name: "학습 진행", exact: true }).getByRole("button").first()).toBeDisabled();
       await expect(page.locator("audio")).toHaveJSProperty("paused", true);
       version = replaced.data!.published_at;
-      await page.reload(); await listen(page);
+      await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page); await listen(page);
       await page.evaluate(async () => {
         localStorage.setItem("meta-shadowing:legacy-sentinel", "preserve");
         await (await caches.open("unrelated-app")).put("/unrelated-fixture", new Response("preserve"));
@@ -284,7 +290,8 @@ for (const scenario of ["restart and retention", "expiry during access check", "
         };
         (window as typeof window & { failCacheCleanup?: boolean }).failCacheCleanup = /sb-.*auth-token/.test(document.cookie);
       });
-      await page.reload(); await listen(page);
+      await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page); await listen(page);
       const secondEmail = `mp3-second-${randomUUID()}@example.com`, secondPassword = randomUUID();
       const secondUser = await service.auth.admin.createUser({ email: secondEmail, password: secondPassword, email_confirm: true });
       expect(secondUser.error).toBeNull(); const secondId = secondUser.data.user!.id; users.push(secondId);
@@ -293,17 +300,19 @@ for (const scenario of ["restart and retention", "expiry during access check", "
       const secondSession = await promoteLocalSessionToGoogle(url, service, secondClient, secondId, "learner");
       await cookies.auth.setSession(secondSession);
       await page.getByRole("button", { name: /듣기 완료 확인/ }).click();
-      await expect(page.getByRole("button", { name: /RETRY/ })).toBeVisible();
-      await expect(page.locator("audio")).not.toHaveAttribute("src", /^blob:/);
+      await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toContainText("다시 로그인");
+      await expect(page.locator("audio")).toHaveCount(0);
       expect((await cacheMetadata(page)).some(entry => JSON.parse(entry.key)[0] === id)).toBe(true);
       let downloads = 0;
       page.on("request", request => { if (request.url().includes("/storage/v1/object/sign/lesson-audio/")) downloads++; });
-      await page.reload(); await listen(page);
+      await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page); await listen(page);
       expect(downloads).toBeGreaterThanOrEqual(2);
       expect((await cacheMetadata(page)).some(entry => JSON.parse(entry.key)[0] === secondId)).toBe(true);
       expect(await page.evaluate(() => localStorage.getItem("meta-shadowing:legacy-sentinel"))).toBe("preserve");
       await context.clearCookies();
       await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page);
       await expect(page).toHaveURL(/\/(login)?$/);
       await expect.poll(async () => (await cacheMetadata(page)).length).toBe(0);
       expect(await page.evaluate(() => localStorage.getItem("meta-shadowing:legacy-sentinel"))).toBe("preserve");
@@ -320,17 +329,19 @@ for (const scenario of ["restart and retention", "expiry during access check", "
       if (request.url().includes("/storage/v1/object/sign/lesson-audio/")) downloads++;
       if (request.url().includes("/audio/1/access?")) checks++;
     });
-    await page.goto(playerUrl);
+    await page.goto(playerUrl); await enterAccountPractice(page);
     await listen(page);
     expect(downloads).toBe(0);
     expect(checks).toBeGreaterThan(0);
     await expect.poll(async () => (await cacheMetadata(page)).filter(entry => entry.lastPlayedAt === initialTime + 60000).length).toBe(1);
     await page.clock.setFixedTime(new Date(initialTime + 1728000000));
     await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page);
     await expect.poll(() => downloads).toBe(1); // only the never-played prefetch expired
     await expect.poll(async () => (await cacheMetadata(page)).filter(entry => entry.createdAt === initialTime + 1728000000).length).toBe(1);
     await page.clock.setFixedTime(new Date(initialTime + 1728060000));
     await page.reload();
+      if (new URL(page.url()).pathname === "/player") await enterAccountPractice(page);
     await expect.poll(() => downloads).toBe(2); // the played file expires at its own exact boundary
     await listen(page);
     expect(errors).toEqual([]);

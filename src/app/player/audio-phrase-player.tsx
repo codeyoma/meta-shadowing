@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -13,7 +12,7 @@ import { browseHref, stageHref } from "@/lib/browse-navigation";
 import { AudioSessionControls } from "../audio-session-controls";
 import { Page, PauseIcon, PlayIcon, RepeatIcon, SubtitleIcon } from "../ui";
 import { useAudioSession } from "./use-audio-session";
-import type { LearningStart, CloudRecording } from "./use-learning-record";
+import type { LearningStart, CloudRecording } from "./recording-types";
 import { CompletionSummary } from "../completion-summary";
 import { ScreenWake } from "./screen-wake";
 import { CycleProgress, PracticeContext, PracticeFooter, PracticeHeader, PracticeProgress, PracticeSection } from "./practice-layout";
@@ -24,15 +23,14 @@ import { SentenceAnalysisButton, SentenceAnalysisPopup, useSentenceAnalysis } fr
 import { PlayerDrawer, type DrawerView } from "./player-drawer";
 import styles from "./practice.module.css";
 
-export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, start, notice, cloud }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[]; start: LearningStart; notice?: ReactNode; cloud?: CloudRecording }) {
-  const router = useRouter();
+export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, start, notice, cloud }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[]; start: LearningStart; notice?: ReactNode; cloud: CloudRecording }) {
   const [surface, setSurface] = useState<"menu" | "settings" | "help" | null>(null);
   const [drawerView, setDrawerView] = useState<DrawerView>("menu");
   const menuOpen = surface === "menu" || surface === "settings";
   const dictionary = useDictionaryPopup();
   const analysis = useSentenceAnalysis();
-  const { session, send, audioRef, completion, storageFailed } = useAudioSession(lesson, level, settings, groups, surface === null && !dictionary.open && !analysis.open, start, cloud);
-  const navigate = (href: string) => cloud ? cloud.exit(href) : router.push(href);
+  const { session, send, audioRef, completion } = useAudioSession(lesson, level, settings, groups, surface === null && !dictionary.open && !analysis.open, start, cloud);
+  const navigate = (href: string) => cloud.exit(href);
   const openDictionary: DictionaryWordSelect = (word, trigger) => {
     send({ type: "pause" });
     dictionary.openWord(word, trigger);
@@ -98,7 +96,7 @@ export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, star
         }} />} />
       <section className={styles.practice} aria-labelledby="player-title">
         <audio ref={audioRef} preload="auto" />
-        {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => navigate(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : (
+        {completion ? <CompletionSummary record={completion} onHome={() => navigate(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : (
           <>
             <PracticeSection {...section} />
             <PracticeSubtitles

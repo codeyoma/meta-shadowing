@@ -5,16 +5,23 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { isPracticeVerificationCurrent, PRACTICE_CHECK_INTERVAL_MS, PRACTICE_MAX_VERIFICATION_AGE_MS, PracticeError, sendPractice, type PracticeCommand, type PracticeLease, type PracticeErrorCode } from "@/lib/cloud-practice";
 import type { CompletionRecord } from "@/lib/learning-records";
-import type { CloudRecording, RecordUpdate } from "./use-learning-record";
+import type { CloudRecording, RecordUpdate } from "./recording-types";
 
 export function PracticeFailure({ error, retry, navigate = href => window.location.assign(href) }: { error: string; retry?: () => void; navigate?: (href: string) => void }) {
   const temporary = error === "temporary-error";
+  const readFailed = error === "read-failed";
   const auth = ["unauthorized", "account-changed"].includes(error);
   const ownership = ["ownership-lost", "session-busy"].includes(error);
+  const lessonChanged = ["lesson-version-changed", "not-found"].includes(error);
+  if (error === "learning-disabled") return <Alert aria-label="학습 저장 알림">
+    <AlertTitle>계정 학습이 잠시 중지되었습니다.</AlertTitle>
+    <AlertDescription>학습을 중지했습니다. 마지막 서버 확인 지점과 완료 기록은 보존되며 브라우저 기록으로 대신 저장하지 않습니다.</AlertDescription>
+    <Button variant="outline" onClick={() => navigate("/lessons")}>레슨으로 돌아가기</Button>
+  </Alert>;
   return <Alert aria-label="학습 저장 알림">
-    <AlertTitle>{temporary ? "저장을 확인하지 못했습니다." : auth ? "다시 로그인해 주세요." : ownership ? "다른 기기에서 학습 중이거나 학습 권한이 만료되었습니다." : "학습 상태가 변경되었습니다."}</AlertTitle>
-    <AlertDescription>{temporary ? "다음 단계로 이동하지 않았습니다. 같은 저장을 다시 시도할 수 있습니다." : ownership ? "다른 기기로 인계되었거나 연결이 만료되어 이 기기의 학습을 중지했습니다. 마지막 서버 확인 지점과 완료 기록은 보존됩니다." : "마지막 서버 확인 지점과 완료 기록은 보존됩니다."}</AlertDescription>
-    {temporary && retry ? <Button variant="outline" onClick={retry}>저장 재시도</Button> : null}
+    <AlertTitle>{readFailed ? "학습 기록을 불러오지 못했습니다." : temporary ? "저장을 확인하지 못했습니다." : auth ? "다시 로그인해 주세요." : ownership ? "다른 기기에서 학습 중이거나 학습 권한이 만료되었습니다." : lessonChanged ? "레슨을 다시 불러와 주세요." : "학습 상태가 변경되었습니다."}</AlertTitle>
+    <AlertDescription>{readFailed ? "빈 기록이나 브라우저 기록으로 대체하지 않습니다. 연결을 확인한 뒤 다시 불러와 주세요." : temporary ? "다음 단계로 이동하지 않았습니다. 같은 저장을 다시 시도할 수 있습니다." : ownership ? "다른 기기로 인계되었거나 연결이 만료되어 이 기기의 학습을 중지했습니다. 마지막 서버 확인 지점과 완료 기록은 보존됩니다." : lessonChanged ? "레슨 버전이나 공개 상태가 변경되어 학습을 중지했습니다. 레슨 목록에서 현재 버전을 확인해 주세요. 완료 기록은 보존됩니다." : "마지막 서버 확인 지점과 완료 기록은 보존됩니다."}</AlertDescription>
+    {(temporary || readFailed) && retry ? <Button variant="outline" onClick={retry}>{readFailed ? "다시 불러오기" : "저장 재시도"}</Button> : null}
     <Button variant="outline" onClick={() => navigate(auth ? "/login" : "/lessons")}>{auth ? "로그인" : "레슨으로 돌아가기"}</Button>
   </Alert>;
 }

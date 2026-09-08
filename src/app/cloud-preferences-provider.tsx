@@ -146,7 +146,7 @@ export function CloudPreferencesProvider({ accountId, children }: { accountId: s
       <p role="status">{saveState === "saving" ? "저장 중…" : saveState === "saved" ? "계정에 저장했습니다. 다음 학습부터 적용됩니다." : ""}</p>
       {saveState === "error" || saveState === "conflict" ? <Alert aria-label="계정 설정 알림">
         <AlertTitle>{saveState === "error" ? "저장을 확인하지 못했습니다." : "다른 기기에서 설정이 변경되었습니다."}</AlertTitle>
-        <AlertDescription>{saveState === "error" ? "연결을 확인한 뒤 다시 시도해 주세요." : "최신 설정을 표시했습니다. 원하는 값을 다시 선택해 주세요."}</AlertDescription>
+        <AlertDescription>{saveState === "error" ? "변경은 이 화면에만 남아 있습니다. 연결을 확인하고 재시도해 주세요. 화면을 닫으면 마지막 서버 확인 설정으로 돌아갑니다." : "최신 설정을 표시했습니다. 원하는 값을 다시 선택해 주세요."}</AlertDescription>
         {saveState === "error" ? <>
           <Button variant="outline" onClick={() => pending.current && void submit(pending.current)}>저장 재시도</Button>
           <Button variant="ghost" onClick={() => { pending.current = null; void refresh(); }}>변경 취소</Button>

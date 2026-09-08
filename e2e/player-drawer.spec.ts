@@ -1,10 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
 for (const level of [1, 3, 4, 6, 8]) test(`level ${level} uses one drawer for settings, sentences and home`, async ({ page }, info) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=morning-routine&level=${level}&mode=manual&group=2`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}&mode=manual&group=2`);
   const trigger = page.getByRole("button", { name: "학습 메뉴", exact: true });
   await expect(trigger).toBeVisible();
   await expect(page.locator("main > header").getByRole("button")).toHaveCount(1);
@@ -49,12 +50,12 @@ for (const level of [1, 3, 4, 6, 8]) test(`level ${level} uses one drawer for se
   }
   await trigger.click();
   await drawer.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(`/lessons/morning-routine/stages?stage=${level * 2 - 1}`);
+  await expect(page).toHaveURL(`/lessons/10000000-0000-4000-8000-000000000001/stages?stage=${level * 2 - 1}`);
 });
 
 test("progress stays in the top bar and the listening controls sit directly above the borderless actions", async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=3");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=3");
   for (const viewport of [{ width: 320, height: 568 }, { width: 583, height: 1488 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
     const header = page.locator("main > header");

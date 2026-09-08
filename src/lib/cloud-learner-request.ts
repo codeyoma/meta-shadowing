@@ -7,7 +7,7 @@ export async function authorizeCloudLearner(request: Request) {
   const failure = (error: string, status: number) => Response.json({ error }, {
     status, headers: { "Cache-Control": "private, no-store" },
   });
-  if (!cloudLearningEnabled()) return failure("not-found", 404);
+  if (!cloudLearningEnabled()) return failure("learning-disabled", 503);
   try {
     const site = request.headers.get("sec-fetch-site");
     if (site && site !== "same-origin" && site !== "none") return failure("invalid-origin", 403);

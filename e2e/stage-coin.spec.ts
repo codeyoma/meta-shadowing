@@ -1,8 +1,9 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { enterAccountPractice, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Locator } from "./fixtures/cloud-ui";
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/lessons/morning-routine/stages");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages");
 });
 
 test("stage coins are flattened without distorting their icons and labels fit beside level badges", async ({ page }) => {
@@ -83,5 +84,6 @@ test("reduced motion opens the stage preview without scaling and keeps Start usa
   expect(motion.start).toBe(1);
   expect(motion.end).toBe(1);
   await popup.getByRole("button", { name: "학습 시작", exact: true }).click();
+  await enterAccountPractice(page);
   await expect(page).toHaveURL(/\/player\?.*stage=1(?:&|$)/);
 });

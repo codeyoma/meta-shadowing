@@ -10,7 +10,7 @@ import {
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1", "requires the project-local Supabase stack");
 
-test("admin defaults persist behind authorization and reach learners without overwriting browser overrides", async ({ page }) => {
+test("admin defaults persist behind authorization and reach learners without overwriting account overrides", async ({ page }) => {
   const url = process.env.SUPABASE_INTEGRATION_URL!;
   assertLocalSupabaseUrl(url);
   const options = { auth: { persistSession: false, autoRefreshToken: false } };
@@ -63,7 +63,7 @@ test("admin defaults persist behind authorization and reach learners without ove
     const publication = await service.from("lesson_drafts").update({ publication_status: "published", published_at: "2026-09-06T00:00:00Z", audio_manifest: [{}] }).eq("id", draftId);
     expect(publication.error).toBeNull();
     await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
-    expect((await page.request.get("/api/learner/preferences")).status()).toBe(404);
+    expect((await page.request.get("/api/learner/preferences")).status()).toBe(200);
     await page.goto(`/setup?lesson=${draftId}`);
     await openSelectedStageSettings(page);
     await expect(page.getByLabel("재생속도")).toHaveValue("2");

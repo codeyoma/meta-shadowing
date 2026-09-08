@@ -1,10 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
 for (const level of [1, 3, 4, 6, 8]) test(`level ${level} exposes help and direct settings without duplicate status`, async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=morning-routine&level=${level}&mode=manual`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}&mode=manual`);
   const stage = page.locator("#practice-help-trigger");
   await expect(page.getByLabel("학습 방법", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
@@ -49,8 +50,8 @@ for (const level of [1, 3, 4, 6, 8]) test(`level ${level} exposes help and direc
 });
 
 test("menu is bottom anchored and enters vertically with reduced-motion support", async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   const menu = page.getByRole("button", { name: "학습 메뉴", exact: true });
   await expect(menu).toBeVisible();
   await page.evaluate(() => document.fonts.ready);

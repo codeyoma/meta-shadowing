@@ -5,10 +5,11 @@ import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
 import { testRecording, testAudioManifest } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
+import { auditLearningStorage } from "./fixtures/storage-audit";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
 
-for (const level of [1,4,5,6,7,8]) test(`level ${level} uses acknowledged units, run settings and cross-device resume`, async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
+for (const level of [1,2,3,4,5,6,7,8]) test(`level ${level} uses acknowledged units, run settings and cross-device resume`, async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
   test.setTimeout(120000);
   const url = process.env.SUPABASE_INTEGRATION_URL!; assertLocalSupabaseUrl(url);
   const key = process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!;
@@ -28,6 +29,7 @@ for (const level of [1,4,5,6,7,8]) test(`level ${level} uses acknowledged units,
   await a.request.post("/api/auth",{data:{password:"integration-beta-password"}});
   await a.request.get("/api/learner/preferences?timezone=Asia%2FSeoul");
   const b = await browser.newContext({baseURL,ignoreHTTPSErrors:true,viewport,isMobile,hasTouch,deviceScaleFactor,userAgent,storageState:{cookies:await a.cookies(),origins:[]}});
+  const persistentAccess = [await auditLearningStorage(a), await auditLearningStorage(b)];
   const grouped = level===4 || level===5, rapid = level>=6;
   const lessonId = randomUUID(), count = grouped ? 5 : 2;
   const errors: string[] = [], storage: string[] = [];
@@ -168,7 +170,7 @@ for (const level of [1,4,5,6,7,8]) test(`level ${level} uses acknowledged units,
     expect(completed.history[0]).toMatchObject({nextUnit:2,nextPhrase:count,settings:rapid?{wpmLevel:5}:{speed:2}});
     expect(completed.history[0].activeMs).toBeGreaterThan(0);
     expect(completed.history[0].activeMs).toBe(beforeRetry.history[0].activeMs);
-    expect(storage).toEqual([]); expect(errors).toEqual([]);
+    expect(storage).toEqual([]); expect(persistentAccess.flat()).toEqual([]); expect(errors).toEqual([]);
     await page.screenshot({path:testInfo.outputPath(`cloud-level-${level}.png`),animations:"disabled"});
   } finally {
     await a.close(); await b.close();

@@ -1,12 +1,13 @@
-import { expect, test, type Page } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 });
 
 
 test("player drawer interpolates menu height and stays mounted during its exit", async ({ page }) => {
-  await page.goto("/player?lesson=morning-routine&level=1&mode=manual");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&mode=manual");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   const dialog = page.locator("#player-menu");
   await expect(dialog.getByRole("button", { name: "학습 설정", exact: true })).toBeVisible();
@@ -68,7 +69,7 @@ async function swipeDrawerDown(page: Page) {
 }
 
 for (const screen of ["player"] as const) test(`${screen} dismisses by outside tap and handle swipe, then restores its opener`, async ({ page }) => {
-  await page.goto("/player?lesson=morning-routine&level=1&mode=manual");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&mode=manual");
   const opener = page.getByRole("button", { name: "학습 메뉴", exact: true });
   await opener.click();
   const dialog = page.getByRole("dialog");
@@ -85,7 +86,7 @@ for (const screen of ["player"] as const) test(`${screen} dismisses by outside t
 
 test("reduced motion skips drawer resizing and long exit motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/player?lesson=morning-routine&level=1&mode=manual");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&mode=manual");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "학습 설정", exact: true }).click();

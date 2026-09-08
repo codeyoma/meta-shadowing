@@ -14,6 +14,7 @@ import type { RapidLine } from "@/lib/rapid-session";
 import { RapidPlayer } from "./rapid-player";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { browseHref } from "@/lib/browse-navigation";
 
 type Props = { accountId: string; lesson: PublishedLesson; level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; stage: number; hints: SubtitleHint[]; lines: RapidLine[]; requestedRun?: string };
 function ActiveCloudPlayer({ lease, instance, lesson, level, stage, hints, lines, invalidateAccount }: Props & { lease: PracticeLease; instance: string; invalidateAccount: () => void }) {
@@ -67,18 +68,27 @@ export function CloudLearningPlayer(props: Props) {
   },[props.accountId,lease,invalidateAccount]);
   useEffect(() => {
     let alive = true;
+    setJournal(null);
     setError(null);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     void Promise.all([
       fetch("/api/learner/practice", { cache: "no-store",signal:AbortSignal.timeout(15000) }),
       fetch(`/api/learner/preferences?timezone=${encodeURIComponent(timezone)}`, { cache: "no-store",signal:AbortSignal.timeout(15000) }),
     ]).then(async ([response,preferences]) => {
-      if (!response.ok || !preferences.ok) throw new PracticeError(response.status === 401 || preferences.status === 401 ? "unauthorized" : "temporary-error");
+      if (!response.ok || !preferences.ok) {
+        if (response.status === 401 || preferences.status === 401) throw new PracticeError("unauthorized");
+        const failed = !response.ok ? response : preferences;
+        throw new PracticeError((await failed.json()).error);
+      }
       const data: CloudJournal = await response.json();
       const {profile} = await preferences.json();
       if (data.accountId !== props.accountId || profile.accountId !== props.accountId) throw new PracticeError("account-changed");
       if (alive && accountValid.current) setJournal(data);
-    }).catch(error => { if (alive) setError(error instanceof PracticeError ? error.code : "temporary-error"); });
+    }).catch(error => {
+      if (!alive) return;
+      const code = error instanceof PracticeError ? error.code : "temporary-error";
+      setError(code === "temporary-error" ? "read-failed" : code);
+    });
     return () => { alive = false; };
   },[props.accountId,props.lesson.id,props.lesson.version,props.stage,loadAttempt]);
   async function acquire() {
@@ -127,11 +137,13 @@ export function CloudLearningPlayer(props: Props) {
   const completed = journal?.history.find(record => record.runId === props.requestedRun);
   return <main className="page mx-auto flex w-full max-w-sm flex-col gap-4 p-5">
     <h1>{props.lesson.name}</h1>
-    {completed ? <CompletionSummary record={completed as CompletionRecord} onHome={() => window.location.assign("/lessons")} /> : <>
+    {completed ? <CompletionSummary record={completed as CompletionRecord} onHome={() => window.location.assign(browseHref("lessons", { language: props.lesson.language, lessonId: props.lesson.id }))} /> : <>
       <p>마지막 서버 확인 지점에서 이어 학습합니다.</p>
+      <p>학습 기록과 설정은 계정에 저장합니다. 기존 브라우저 기록은 가져오거나 삭제하지 않으며, 계정 기록이 없으면 새로 시작합니다.</p>
+      <p>저장 확인 전의 변경은 이 화면에만 남습니다. 화면을 닫거나 다시 시작하면 마지막 서버 확인 지점으로 돌아갑니다.</p>
       {journal?.progress?.lessonId === props.lesson.id && Date.parse(journal.progress.lessonVersion) !== Date.parse(props.lesson.version) ? <p>레슨 버전이 변경되어 이전 진도를 이어갈 수 없습니다. 새 버전의 처음부터 시작합니다. 과거 완료 기록은 유지됩니다.</p> : null}
       {error ? <PracticeFailure error={error} retry={() => journal ? begin() : setLoadAttempt(value => value + 1)} /> : null}
-      {journal?.activeLease && journal.progress ? journal.progress.lessonId === props.lesson.id && journal.progress.stage === props.stage ? <Dialog open={Boolean(takeoverTarget)} onOpenChange={open => setTakeoverTarget(open ? journal.activeLease : null)}>
+      {journal?.activeLease && journal.progress && Date.parse(journal.progress.lessonVersion) === Date.parse(props.lesson.version) ? journal.progress.lessonId === props.lesson.id && journal.progress.stage === props.stage ? <Dialog open={Boolean(takeoverTarget)} onOpenChange={open => setTakeoverTarget(open ? journal.activeLease : null)}>
         <DialogTrigger asChild><Button disabled={busy}>이 기기에서 이어 학습</Button></DialogTrigger>
         <DialogContent showCloseButton={false}>
           <DialogHeader>

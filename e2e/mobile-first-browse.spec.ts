@@ -1,34 +1,35 @@
-import { expect, test, type Page } from "@playwright/test";
+import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedServerJournal } from "./fixtures/cloud-journal";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 
-const stages = "/lessons/morning-routine/stages";
-const journalKey = "meta-shadowing:learning:v1";
+const stages = "/lessons/10000000-0000-4000-8000-000000000001/stages";
 
 async function openStages(page: Page) {
   await page.clock.setFixedTime(new Date("2026-09-08T12:00:00+09:00"));
-  await page.goto("/languages");
-  await page.evaluate(({ key, settings }) => localStorage.setItem(key, JSON.stringify({
+  await openLearnerPage(page, "/languages");
+  await seedServerJournal(page, {
     progress: null, studyDays: ["2026-09-07", "2026-09-08"],
     history: [1, 2].map(stage => ({
-      runId: `complete-${stage}`, lessonId: "morning-routine", lessonVersion: "fixture-v1", lessonName: "Morning Routine",
-      language: "english", level: 1, stage, nextPhrase: 3, nextUnit: 3, activeMs: 1000, settings,
+      runId: `complete-${stage}`, lessonId: "10000000-0000-4000-8000-000000000001", lessonVersion: "fixture-v1", lessonName: "Morning Routine",
+      language: "english", level: 1, stage, nextPhrase: 3, nextUnit: 3, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS,
       completedAt: `2026-09-08T01:0${stage}:00Z`,
     })),
-  })), { key: journalKey, settings: DEFAULT_SESSION_SETTINGS });
-  await page.goto(stages);
+  });
+  await openLearnerPage(page, stages);
   await expect(page.getByRole("button", { name: "현재 스테이지 3 시작", exact: true })).toBeEnabled();
   await page.evaluate(() => document.fonts.ready);
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 });
 
 test("desktop browse destinations retain a centered phone-width shell", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openStages(page);
-  for (const route of ["/languages", "/lessons?language=english", stages, "/settings?language=english&lesson=morning-routine", "/settings/session?language=english&lesson=morning-routine&stage=3&level=2"]) {
-    await page.goto(route);
+  for (const route of ["/languages", "/lessons?language=english", stages, "/settings?language=english&lesson=10000000-0000-4000-8000-000000000001", "/settings/session?language=english&lesson=10000000-0000-4000-8000-000000000001&stage=3&level=2"]) {
+    await openLearnerPage(page, route);
     await expect(page).toHaveTitle(/Meta Shadowing/);
     const box = (await page.getByRole("main").boundingBox())!;
     expect(box.width).toBeCloseTo(430, 0);
@@ -114,7 +115,7 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 900 
     const dialog = page.getByRole("dialog", { name: "완료 기록", exact: true });
     await expect(dialog.getByRole("table")).toBeVisible();
     await dialog.getByRole("button", { name: "설정 보기", exact: true }).first().click();
-    await expect(dialog.getByText("버전 fixture-v1", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("버전 2026-09-01T00:00:00+00:00", { exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "닫기", exact: true }).click();
     await expect(history).toBeFocused();
     const lastStage = page.getByRole("radio", { name: /^16 / });
@@ -153,14 +154,11 @@ test("scrolling upward over the short-screen path returns to the summary actions
 
 test("long resume metadata and a wrapping method remain separated and centered", async ({ page }) => {
   await openStages(page);
-  await page.evaluate(key => {
-    const journal = JSON.parse(localStorage.getItem(key)!);
-    journal.progress = { ...journal.history[0], runId: "resume-ten", stage: 10, level: 5, nextPhrase: 1, nextUnit: 1 };
-    localStorage.setItem(key, JSON.stringify(journal));
-  }, journalKey);
+  const journal = await readServerJournal(page);
+  await seedServerJournal(page, { ...journal, progress: { ...journal.history[0], runId: "resume-ten", stage: 10, level: 5, nextPhrase: 1, nextUnit: 1 } });
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 740 });
-    await page.goto(stages);
+    await openLearnerPage(page, stages);
     const start = page.getByRole("button", { name: "현재 스테이지 10 시작", exact: true });
     await expect(start).toBeEnabled();
     await page.evaluate(() => document.fonts.ready);

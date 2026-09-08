@@ -1,11 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { pauseCloudClock, advanceCloudClock, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
-async function openPlayer(page: Page, level: number, lesson = "morning-routine", query = "") {
+async function openPlayer(page: Page, level: number, lesson = "10000000-0000-4000-8000-000000000001", query = "") {
   await page.route("**/api/lessons/*/audio/*", (route) => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=${lesson}&level=${level}${query}`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=${lesson}&level=${level}${query}`);
   await page.waitForLoadState("networkidle");
 }
 
@@ -53,8 +54,8 @@ test("level 3 reveals both subtitles with S or touch and resets them on the next
 
 test("level 2 keeps full bilingual subtitles and allows two speaking turns without hiding the text", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
-  await openPlayer(page, 2, "morning-routine", "&mode=automatic&speed=0.5");
-  await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+  await openPlayer(page, 2, "10000000-0000-4000-8000-000000000001", "&mode=automatic&speed=0.5");
+  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const subtitles = page.getByRole("region", { name: "학습 자막" });
   await expect(subtitles.getByText("I wake up at seven.", { exact: true })).toBeVisible();
   await expect(subtitles.getByText("나는 일곱 시에 일어난다.", { exact: true })).toBeVisible();
@@ -65,18 +66,18 @@ test("level 2 keeps full bilingual subtitles and allows two speaking turns witho
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   // The 0.357-second recording at 0.5x allows about 2.36s for Level 2, versus 1.39s for Level 1.
   await expect(page.getByRole("timer")).toHaveText("2.4초");
-  await page.clock.runFor(2000);
+  await advanceCloudClock(page, 2000);
   await expect(page.getByRole("timer")).toHaveText("0.4초");
   await expect(subtitles.getByText("I wake up at seven.", { exact: true })).toBeVisible();
   await page.keyboard.press("s");
   await expect(subtitles.getByText("나는 일곱 시에 일어난다.", { exact: true })).toBeVisible();
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
-  await page.clock.runFor(400);
+  await advanceCloudClock(page, 400);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });
 
 test("Japanese hints preserve supplied spaces and segment an unspaced phrase after advancing", async ({ page, isMobile }) => {
-  await openPlayer(page, 3, "tokyo-walk");
+  await openPlayer(page, 3, "10000000-0000-4000-8000-000000000003");
   const subtitles = page.getByRole("region", { name: "학습 자막" });
   await expect(subtitles.getByText("私は", { exact: true })).toBeVisible();
   await expect(subtitles.getByText("나는", { exact: true })).toBeVisible();

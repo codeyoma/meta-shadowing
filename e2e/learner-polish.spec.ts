@@ -1,11 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { timedRecording } from "./fixtures/timed-audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, level = 1) {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: timedRecording }));
-  await page.goto(`/player?lesson=morning-routine&level=${level}&stage=${level * 2}&speed=2`);
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}&stage=${level * 2}&speed=2`);
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 }
 
@@ -115,15 +116,15 @@ for (const level of [1, 6]) test(`drawer returns level ${level} to its current l
   await openPlayer(page, level);
   await page.locator("#player-menu-trigger").click();
   await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(`/lessons/morning-routine/stages?stage=${level * 2}`);
+  await expect(page).toHaveURL(`/lessons/10000000-0000-4000-8000-000000000001/stages?stage=${level * 2}`);
   await expect(page.getByRole("radio", { name: new RegExp(`^${level * 2} `) })).toBeEnabled();
   await expect(page.getByRole("radio", { checked: true })).toHaveCount(0);
 });
 
 test("the entire scrolling stage path has one continuous gradient with transparent rows", async ({ page }, info) => {
   await page.setViewportSize({ width: 430, height: 932 });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/lessons/morning-routine/stages");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages");
   const path = page.getByRole("list", { name: "학습 단계", exact: true });
   await expect(path.getByRole("radio")).toHaveCount(16);
   await expect(path).toHaveCSS("background-image", /linear-gradient/);
@@ -137,8 +138,8 @@ test("five language choices show country flags and new languages retain truthful
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (["error", "warning"].includes(message.type())) errors.push(message.text()); });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/languages");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/languages");
   await expect(page.getByRole("heading", { name: "언어 선택", exact: true })).toBeVisible();
   const list = page.getByRole("region", { name: "언어 목록", exact: true });
   await expect(list.getByRole("link")).toHaveCount(5);
@@ -157,10 +158,10 @@ test("five language choices show country flags and new languages retain truthful
   for (const [id, label] of languages.slice(2)) {
     await list.getByRole("link", { name: new RegExp(`^${label} `) }).click();
     await expect(page.getByRole("heading", { name: `${label} 레슨`, exact: true })).toBeVisible();
-    await expect(page.getByRole("status")).toContainText("아직 게시된 레슨이 없습니다.");
+    await expect(page.getByRole("region", { name: "레슨 목록", exact: true }).getByRole("status")).toContainText("아직 게시된 레슨이 없습니다.");
     const navigation = page.getByRole("navigation", { name: "하단 탐색", exact: true });
     await navigation.getByRole("link", { name: "설정", exact: true }).click();
-    await page.reload();
+    await reloadLearnerPage(page);
     await navigation.getByRole("link", { name: "레슨", exact: true }).click();
     await expect(page).toHaveURL(`/lessons?language=${id}`);
     await expect(page.getByRole("heading", { name: `${label} 레슨`, exact: true })).toBeVisible();

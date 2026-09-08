@@ -1,24 +1,26 @@
-import { expect, test } from "@playwright/test";
+import { enterAccountPractice, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 });
 
 test("stored section and phrase totals reach lesson cards, stages, and the player", async ({ page }) => {
-  await page.goto("/lessons?language=english");
+  await openLearnerPage(page, "/lessons?language=english");
   const lesson = page.getByRole("link", { name: /Daily Conversation/ });
   await expect(lesson).toContainText("2개 섹션 · 10개 프레이즈");
   await expect(page.getByRole("link", { name: /Morning Routine/ })).toContainText("0개 섹션 · 3개 프레이즈");
   await lesson.click();
-  await expect(page).toHaveURL(/\/lessons\/daily-conversation\/stages$/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000002\/stages$/);
   await expect(page.locator('[aria-labelledby="setup-title"]').getByText("2개 섹션 · 10개 프레이즈", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "현재 스테이지 1 시작" }).click();
+  await enterAccountPractice(page);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await expect(page.locator("#player-menu-description")).toHaveText("Daily Conversation · 2개 섹션 · 10개 프레이즈");
 });
 
 test("section toggles preserve current focus, sentence selection, and reopened defaults", async ({ page }) => {
-  await page.goto("/player?lesson=daily-conversation&level=1&mode=manual");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&mode=manual");
   const menu = page.getByRole("dialog", { name: "문장 목록", exact: true });
   async function openSentences() {
     await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
@@ -57,7 +59,7 @@ test("section toggles preserve current focus, sentence selection, and reopened d
 
 test("switching sections in a short viewport scrolls only the list, never the drawer header", async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 600 });
-  await page.goto("/player?lesson=daily-conversation&level=1&mode=manual");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&mode=manual");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   const menu = page.getByRole("dialog", { name: "문장 목록", exact: true });

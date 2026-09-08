@@ -3,15 +3,14 @@
 import { Activity, createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { Lesson } from "@/lib/lessons";
-import { BROWSE_SELECTION_KEY, browseHref, resolveBrowseSelection, type BrowseSelection, type BrowseDestination } from "@/lib/browse-navigation";
-import { readLastSelection } from "@/lib/resume";
+import { browseHref, resolveBrowseSelection, type BrowseSelection, type BrowseDestination } from "@/lib/browse-navigation";
 import { BottomNavigation } from "./bottom-navigation";
 import { LearnerTopNavigation } from "./learner-top-navigation";
 import { Page } from "./ui";
 import styles from "./browse.module.css";
 import { CloudPreferencesProvider, useCloudPreferences } from "./cloud-preferences-provider";
 
-const BrowseContext = createContext<{ catalog: Lesson[]; selection: BrowseSelection; scrollPositions: Map<string, number>; cloud?: boolean } | null>(null);
+const BrowseContext = createContext<{ catalog: Lesson[]; selection: BrowseSelection; scrollPositions: Map<string, number> } | null>(null);
 
 export function useBrowse() {
   const value = useContext(BrowseContext);
@@ -42,10 +41,10 @@ export function useBrowseScroll(key: string) {
 }
 
 type ShellProps = { catalog: Lesson[]; children: ReactNode };
-export function BrowseShell({ catalog, children, accountId }: ShellProps & { accountId?: string }) {
-  return accountId ? <CloudPreferencesProvider key={accountId} accountId={accountId}>
+export function BrowseShell({ catalog, children, accountId }: ShellProps & { accountId: string }) {
+  return <CloudPreferencesProvider key={accountId} accountId={accountId}>
     <CloudBrowseShell catalog={catalog}>{children}</CloudBrowseShell>
-  </CloudPreferencesProvider> : <LegacyBrowseShell catalog={catalog}>{children}</LegacyBrowseShell>;
+  </CloudPreferencesProvider>;
 }
 
 function CloudBrowseShell({ catalog, children }: ShellProps) {
@@ -73,42 +72,19 @@ function CloudBrowseShell({ catalog, children }: ShellProps) {
     selectionIntent.current = null;
     cloud.save({ selection: intent.selection }, intent.revision);
   }, [catalog, cloud, explicit, params, pathname, route]);
-  return <BrowseFrame catalog={catalog} selection={selection} scrollPositions={scrollPositions} cloud>{children}</BrowseFrame>;
-}
-
-function LegacyBrowseShell({ catalog, children }: ShellProps) {
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const [saved, setSaved] = useState<BrowseSelection | null>(null);
-  const [ready, setReady] = useState(false);
-  const [scrollPositions] = useState(() => new Map<string, number>());
-  const selection = resolveBrowseSelection(pathname, new URLSearchParams(params.toString()), catalog, saved);
-  useEffect(() => {
-    try {
-      const value = JSON.parse(localStorage.getItem(BROWSE_SELECTION_KEY) ?? "null");
-      const last = readLastSelection();
-      setSaved(resolveBrowseSelection("", new URLSearchParams(), catalog, value ?? last));
-    } catch { /* Browsing remains available without storage. */ }
-    setReady(true);
-  }, [catalog]);
-  useEffect(() => {
-    if (!ready) return;
-    setSaved(previous => previous?.language === selection.language && previous.lessonId === selection.lessonId ? previous : selection);
-    try { localStorage.setItem(BROWSE_SELECTION_KEY, JSON.stringify(selection)); } catch { /* Best effort. */ }
-  }, [ready, selection.language, selection.lessonId]);
   return <BrowseFrame catalog={catalog} selection={selection} scrollPositions={scrollPositions}>{children}</BrowseFrame>;
 }
 
-function BrowseFrame({ catalog, selection, scrollPositions, cloud, children }: ShellProps & {
-  selection: BrowseSelection; scrollPositions: Map<string, number>; cloud?: boolean;
+function BrowseFrame({ catalog, selection, scrollPositions, children }: ShellProps & {
+  selection: BrowseSelection; scrollPositions: Map<string, number>;
 }) {
   const pathname = usePathname();
   const preferences = useCloudPreferences();
   const active: BrowseDestination = pathname.startsWith("/settings") ? "settings"
     : pathname.endsWith("/stages") ? "stages" : pathname === "/lessons" ? "lessons" : "languages";
-  return <BrowseContext.Provider value={{ catalog, selection, scrollPositions, cloud }}>
+  return <BrowseContext.Provider value={{ catalog, selection, scrollPositions }}>
     <Page className={styles.page}>
-      <LearnerTopNavigation className={styles.header} cloud={cloud} />
+      <LearnerTopNavigation className={styles.header} />
       <div className={styles.content}>
         {preferences ? <>
           <Activity mode={preferences.loading ? "hidden" : "visible"}>{children}</Activity>

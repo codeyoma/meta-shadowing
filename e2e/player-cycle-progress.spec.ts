@@ -1,11 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { timedRecording } from "./fixtures/timed-audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, level = 1) {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: timedRecording }));
-  await page.goto(`/player?lesson=morning-routine&level=${level}&speed=0.5`);
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}&speed=0.5`);
   await page.waitForLoadState("networkidle");
 }
 

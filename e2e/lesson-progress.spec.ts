@@ -1,10 +1,12 @@
-import { expect, test } from "@playwright/test";
-import { lessons } from "../src/lib/lessons";
+import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedServerJournal } from "./fixtures/cloud-journal";
+import { expect, test } from "./fixtures/cloud-ui";
+import { lessons } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 
 test("lesson totals and each card reflect unique completed stages of the current version", async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/lessons?language=english");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/lessons?language=english");
   const summary = page.getByRole("progressbar", { name: "레슨 학습 진척도", exact: true });
   const first = page.getByRole("progressbar", { name: "Morning Routine 스테이지 진척도", exact: true });
   const second = page.getByRole("progressbar", { name: "Daily Conversation 스테이지 진척도", exact: true });
@@ -26,8 +28,8 @@ test("lesson totals and each card reflect unique completed stages of the current
     { ...complete(1, 1), runId: "replay" }, complete(1, 16, "old"),
     ...Array.from({ length: 16 }, (_, index) => complete(2, index + 1)),
   ];
-  await page.evaluate(history => localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify({ progress: null, history })), history);
-  await page.reload();
+  await seedServerJournal(page, { progress: null, history });
+  await reloadLearnerPage(page);
   await expect(summary).toHaveAttribute("aria-valuenow", "1");
   await expect(summary).toHaveAttribute("aria-valuemax", "2");
   await expect(first).toHaveAttribute("aria-valuenow", "16");

@@ -34,6 +34,13 @@ Follow [administrator setup](admin-setup.md) on the existing Supabase project ex
 
 ## Repeatable local verification
 
+For the cloud-only candidate, follow [the #23 cutover checklist](cloud-learning-cutover.md).
+It supersedes the historical browser-fixture and transient-audio-only descriptions
+below: learner regressions require a disposable real database, and MP3 caching is
+the sole persistent application-data exception. `CLOUD_LEARNING_ENABLED=0` pauses
+learning; it does not re-enable legacy storage. The dated results below are not
+verification of the current candidate.
+
 Learner entry also requires [Google OAuth setup](learner-google-login.md): the Google provider, exact `/auth/callback` URLs, and a signup policy compatible with first-time learners. Verify beta-only requests cannot access learner pages/APIs, then complete a real Google sign-in in the intended environment. Keep administrator OTP redirects and authorization unchanged.
 
 Run from the MVP worktree. Use the installed Chrome executable only if the normal Playwright browser is unavailable; on this Mac, set `PLAYWRIGHT_CHROME_EXECUTABLE` to `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. Do not install browsers or stop unrelated user browsers as part of a test retry.

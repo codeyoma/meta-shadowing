@@ -1,14 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 });
 
 test("the settings segment is touch-sized within a borderless lesson heading", async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 932 });
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   const shortcut = page.getByRole("button", { name: /^재생 모드 및 속도:/ });
   await expect(shortcut).toBeVisible();
   await expect(shortcut).toHaveAttribute("data-selected", "false");
@@ -25,7 +26,7 @@ test("the settings segment is touch-sized within a borderless lesson heading", a
 
 for (const level of [1, 2, 3, 4, 5]) test(`level ${level} uses the main action below the listening progress`, async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.goto(`/player?lesson=morning-routine&level=${level}`);
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
   await expect(page.getByRole("button", { name: "재생 또는 일시정지", exact: true })).toHaveCount(0);
   const start = page.getByRole("button", { name: /^CONTINUE/ });
   const button = (await start.boundingBox())!;

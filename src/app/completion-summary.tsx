@@ -4,7 +4,6 @@ import { formatActiveTime, type CompletionRecord } from "@/lib/learning-records"
 import { RAPID_WPM } from "@/lib/rapid-session";
 import { stageForLevel } from "@/lib/learning-stages";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import styles from "./learner.module.css";
 
@@ -35,13 +34,12 @@ export function RecordDetails({ record }: { record: CompletionRecord }) {
   </>;
 }
 
-export function CompletionSummary({ record, storageFailed = false, onHome }: { record: CompletionRecord; storageFailed?: boolean; onHome: () => void }) {
+export function CompletionSummary({ record, onHome }: { record: CompletionRecord; onHome: () => void }) {
   return <div className={styles.completion}>
     <h2>레벨 {record.level} 학습 완료</h2>
     <p>스테이지 {stageForLevel(record.level, record.stage)}</p>
     <p className={styles.completionPercent}>100%</p>
     <RecordDetails record={record} />
-    {storageFailed ? <Alert variant="destructive"><AlertDescription>브라우저에 기록을 저장하지 못했습니다. 저장 공간과 권한을 확인해 주세요.</AlertDescription></Alert> : null}
     <Button type="button" className="w-full" onClick={onHome}>레슨 목록으로</Button>
   </div>;
 }

@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Locator, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
 async function bottomClose(page: Page, popup: Locator) {
@@ -21,7 +22,7 @@ async function bottomClose(page: Page, popup: Locator) {
 
 for (const [triggerName, popupName] of [["wake 뜻 보기", "wake 뜻"], ["문장 분석", "문장 분석"]])
 test(`${popupName} closes from a fixed bottom Cardinal action and returns focus`, async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.route("**/api/dictionary?**", route => route.fulfill({ json: { word: "wake", entries: [{
     headword: "wake", language: "en", pos: "verb", tags: ["intransitive"],
@@ -29,7 +30,7 @@ test(`${popupName} closes from a fixed bottom Cardinal action and returns focus`
     sourceUrl: "https://ko.wiktionary.org/wiki/wake", license: "CC BY-SA 4.0"
   }] } }));
   await page.route("**/syntax/*?**", route => route.fulfill({ json: { phraseNumber: 1, sentences: [] } }));
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   const trigger = page.getByRole("button", { name: triggerName, exact: true });
   for (const viewport of [{ width: 430, height: 932 }, { width: 320, height: 568 }, { width: 932, height: 430 }, { width: 568, height: 320 }, { width: 1280, height: 800 }]) {
     await page.setViewportSize(viewport);
@@ -65,8 +66,8 @@ test(`${popupName} closes from a fixed bottom Cardinal action and returns focus`
 });
 
 test("learning help uses a screen-bottom Cardinal close action", async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   const trigger = page.getByRole("button", { name: "메타쉐도잉 레벨 1", exact: true });
   await trigger.click();
   const popup = page.getByRole("dialog", { name: "학습 방법", exact: true });
@@ -78,8 +79,8 @@ test("learning help uses a screen-bottom Cardinal close action", async ({ page }
 });
 
 test("stage preview keeps Start reachable with only its X close action", async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/lessons/morning-routine/stages");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages");
   for (const viewport of [{ width: 430, height: 932 }, { width: 932, height: 430 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(viewport);
     const trigger = page.getByRole("radio", { name: /^2 자막 쉐도잉/ });

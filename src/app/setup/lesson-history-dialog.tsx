@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogViewportContent } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { completionHistoryForLesson, formatActiveTime, readLearningJournal, type CompletionRecord } from "@/lib/learning-records";
+import { completionHistoryForLesson, formatActiveTime, type CompletionRecord } from "@/lib/learning-records";
 import { stageForLevel } from "@/lib/learning-stages";
 import type { Lesson } from "@/lib/lessons";
 import { RecordSettings } from "../completion-summary";
@@ -47,16 +47,12 @@ function HistoryRow({ record }: { record: CompletionRecord }) {
 }
 
 export function LessonHistoryDialog({ lesson, disabled }: { lesson: Lesson; disabled?: boolean }) {
-  const cloud = useCloudPreferences();
+  const cloud = useCloudPreferences()!;
   const [open, setOpen] = useState(false);
-  const [localHistory, setHistory] = useState<CompletionRecord[]>([]);
-  const history = cloud ? completionHistoryForLesson(cloud.journal.history, lesson.id) : localHistory;
+  const history = completionHistoryForLesson(cloud.journal.history, lesson.id);
 
   function changeOpen(next: boolean) {
-    if (next) {
-      if (cloud) void cloud.refresh();
-      else setHistory(completionHistoryForLesson(readLearningJournal().history, lesson.id));
-    }
+    if (next) void cloud.refresh();
     setOpen(next);
   }
 

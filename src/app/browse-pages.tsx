@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import Link from "next/link";
 import { BookOpen, ChevronRight, CirclePlay } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { completedStagesForLesson, reconcileLearningJournal, type Journal } from "@/lib/learning-records";
+import { completedStagesForLesson } from "@/lib/learning-records";
 import { browseHref, stageHref } from "@/lib/browse-navigation";
 import { nextPracticeForLesson } from "@/lib/next-practice";
 import { LANGUAGE_CATALOG, languageInfo } from "@/lib/languages";
 import { learningStages } from "@/lib/learning-stages";
 import { useBrowse, useBrowseScroll } from "./browse-shell";
-import { VersionNotice } from "./version-notice";
 import styles from "./browse.module.css";
 import { useCloudPreferences } from "./cloud-preferences-provider";
+import { LearnerSignOut } from "./learner-sign-out";
 
 export function BrowsePageContent({ title, region, children, before }: { title: string; region: string; children: ReactNode; before?: ReactNode }) {
   const { selection } = useBrowse();
@@ -44,23 +44,13 @@ export function LanguagePage() {
 }
 
 export function LessonPage() {
-  const { catalog, selection, cloud } = useBrowse();
-  const account = useCloudPreferences();
-  const [localJournal, setJournal] = useState<Journal>({ progress: null, history: [], studyDays: [] });
-  const journal = account?.journal ?? localJournal;
-  const [reset, setReset] = useState<{ storageFailed: boolean } | null>(null);
-  useEffect(() => {
-    if (cloud) return;
-    const value = reconcileLearningJournal(catalog);
-    setJournal(value);
-    if (value.resetLessonId) setReset({ storageFailed: value.storageFailed });
-  }, [catalog, cloud]);
+  const { catalog, selection } = useBrowse();
+  const { journal } = useCloudPreferences()!;
   const lessons = catalog.filter(lesson => lesson.language === selection.language)
     .map(lesson => ({ lesson, count: completedStagesForLesson(journal.history, lesson).length }));
   const stageCount = learningStages.length;
   const completed = lessons.filter(({ count }) => count === stageCount).length;
   return <BrowsePageContent title={`${languageInfo(selection.language).koreanLabel} 레슨`} region="레슨 목록">
-    {reset ? <VersionNotice storageFailed={reset.storageFailed} /> : null}
     {lessons.length ? <div className={styles.summary}>
       <div className={styles.summaryLine}><span>완료한 레슨</span><span>{completed} / {lessons.length}</span></div>
       <Progress value={completed} max={lessons.length} aria-label="레슨 학습 진척도" />
@@ -100,5 +90,6 @@ export function SettingsPage() {
         <span className={styles.copy}><strong>세션 설정</strong></span><ChevronRight aria-hidden="true" data-icon="inline-end" />
       </Link>
     </Button></li></ul>
+    <LearnerSignOut />
   </BrowsePageContent>;
 }
