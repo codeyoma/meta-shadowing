@@ -16,7 +16,12 @@ function trackCloudRequests(page: Page) {
   if (!pending) {
     pending = new Set<Request>(); pendingRequests.set(page, pending);
     const requests = pending;
-    page.on("request", request => { if (request.url().includes("/api/learner/")) requests.add(request); });
+    // Read readiness is asserted through the entry/settings UI. Only writes
+    // (including renew/release) acknowledge a timed player's next transition;
+    // canceled reads from a departed route must not deadlock virtual time.
+    page.on("request", request => {
+      if (request.method() !== "GET" && request.url().includes("/api/learner/")) requests.add(request);
+    });
     page.on("requestfinished", request => requests.delete(request));
     page.on("requestfailed", request => requests.delete(request));
   }
@@ -24,10 +29,11 @@ function trackCloudRequests(page: Page) {
 }
 export async function advanceCloudClock(page: Page, milliseconds: number) {
   const pending = trackCloudRequests(page);
-  await expect.poll(() => pending.size, { intervals: [1,10,50,100] }).toBe(0);
+  const requests = () => [...pending].map(request => `${request.method()} ${new URL(request.url()).pathname}`);
+  await expect.poll(requests, { intervals: [1,10,50,100] }).toEqual([]);
   for (let remaining = milliseconds; remaining > 0; remaining -= 250) {
     await page.clock.runFor(Math.min(remaining, 250));
-    await expect.poll(() => pending!.size, { intervals: [1,10,50,100] }).toBe(0);
+    await expect.poll(requests, { intervals: [1,10,50,100] }).toEqual([]);
   }
 }
 

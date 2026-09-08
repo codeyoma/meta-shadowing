@@ -7,7 +7,7 @@ export function isPracticeVerificationCurrent(check: { epoch: number; startedAt:
   return check.epoch === epoch && now-check.startedAt < PRACTICE_MAX_VERIFICATION_AGE_MS;
 }
 
-export type PracticeLease = { accountId: string; record: ProgressRecord & Partial<CompletionRecord>; generation: number; revision: number; leaseUntil: string };
+export type PracticeLease = { accountId: string; record: ProgressRecord & Partial<CompletionRecord> & { unitStarts: number[] }; generation: number; revision: number; leaseUntil: string };
 export type CloudJournal = Journal & { accountId: string; activeLease?: { runId: string; generation: number; leaseUntil: string } | null };
 type Ownership = { accountId: string; instance: string; runId: string; generation: number };
 export type PracticeCommand =

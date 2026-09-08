@@ -17,8 +17,8 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { browseHref } from "@/lib/browse-navigation";
 
 type Props = { accountId: string; lesson: PublishedLesson; level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; stage: number; hints: SubtitleHint[]; lines: RapidLine[]; requestedRun?: string };
-function ActiveCloudPlayer({ lease, instance, lesson, level, stage, hints, lines, invalidateAccount }: Props & { lease: PracticeLease; instance: string; invalidateAccount: () => void }) {
-  const { recording, notice } = useCloudRecording(lease,instance,invalidateAccount);
+function ActiveCloudPlayer({ lease, instance, lesson, level, stage, hints, lines, invalidateAccount, restart }: Props & { lease: PracticeLease; instance: string; invalidateAccount: () => void; restart: (lease: PracticeLease) => void }) {
+  const { recording, notice } = useCloudRecording(lease,instance,invalidateAccount,restart);
   const start = useMemo(() => ({ selection: { ...lease.record.settings, language: lesson.language, lessonId: lesson.id, level, stage, runId: lease.record.runId }, progress: lease.record, completion: null }), [lease,lesson,level,stage]);
   const groups = useMemo(() => level === 4 || level === 5 ? groupLessonPhrases(lesson.entries,lease.record.settings.groupSize) : [],[lesson,level,lease]);
   if (level === 6 || level === 7 || level === 8) return <RapidPlayer lesson={lesson} level={level} lines={lines} settings={lease.record.settings} start={start} cloud={recording} notice={notice} />;
@@ -36,6 +36,14 @@ export function CloudLearningPlayer(props: Props) {
   const fetching = useRef(false);
   const accountValid = useRef(true);
   const lifecycleEpoch = useRef(0);
+  const acceptLease = useCallback((result: PracticeLease) => {
+    setLease(result);
+    const url = new URL(window.location.href);
+    url.searchParams.set("run",result.record.runId);
+    url.searchParams.set("level",String(result.record.level));
+    url.searchParams.set("stage",String(result.record.stage));
+    window.history.replaceState(null,"",url);
+  },[]);
   const invalidateAccount = useCallback(() => {
     accountValid.current = false;
     command.current = null;
@@ -102,9 +110,7 @@ export function CloudLearningPlayer(props: Props) {
       result = await sendPractice({action:"renew",accountId:props.accountId,instance:request.instance,runId:result.record.runId,generation:result.generation});
       if (!accountValid.current) return;
       if (document.hidden || !navigator.onLine || !isPracticeVerificationCurrent(check,lifecycleEpoch.current,performance.now())) throw new PracticeError("temporary-error");
-      setLease(result);
-      const url = new URL(window.location.href); url.searchParams.set("run",result.record.runId);
-      window.history.replaceState(null,"",url);
+      acceptLease(result);
     } catch(error) {
       if (!accountValid.current) return;
       const code = error instanceof PracticeError ? error.code : "temporary-error";
@@ -133,7 +139,7 @@ export function CloudLearningPlayer(props: Props) {
     setTakeoverTarget(null);
     void acquire();
   }
-  if (lease) return <ActiveCloudPlayer {...props} lease={lease} instance={command.current!.instance} invalidateAccount={invalidateAccount} />;
+  if (lease) return <ActiveCloudPlayer key={lease.record.runId} {...props} lease={lease} instance={command.current!.instance} invalidateAccount={invalidateAccount} restart={acceptLease} />;
   const completed = journal?.history.find(record => record.runId === props.requestedRun);
   return <main className="page mx-auto flex w-full max-w-sm flex-col gap-4 p-5">
     <h1>{props.lesson.name}</h1>

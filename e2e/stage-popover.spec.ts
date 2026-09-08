@@ -43,7 +43,17 @@ test("Settings-tab preferences apply when returning to a stage and explicitly st
   await page.getByRole("link", { name: "세션 설정", exact: true }).click();
   await expect(page.getByRole("heading", { name: "세션 설정", exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "학습 레벨", exact: true }).selectOption("4");
+  // Keep the real SQL write, but make a slow save receipt reproducible.
+  await page.route("**/api/learner/preferences", async route => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    await new Promise(resolve => setTimeout(resolve, 750));
+    await route.fulfill({ response });
+  });
   await page.getByLabel("묶음 크기").selectOption("4");
+  await expect(page.getByRole("status")).toContainText("계정에 저장했습니다");
+  await expect(page.getByLabel("묶음 크기")).toHaveValue("4");
   await page.getByRole("link", { name: "설정 목록으로 돌아가기" }).click();
   await page.getByRole("link", { name: "세션 설정", exact: true }).click();
   await page.getByRole("combobox", { name: "학습 레벨", exact: true }).selectOption("4");

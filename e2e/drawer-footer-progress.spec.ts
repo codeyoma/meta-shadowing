@@ -27,7 +27,12 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
     await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&mode=manual&stage=2");
     await expect(page).toHaveTitle(/Meta Shadowing/i);
     const practice = page.getByRole("button", { name: /^CONTINUE/ });
-    const appearance = await practice.evaluate(element => {
+    await expect(practice).toBeEnabled();
+    await page.mouse.move(0, 0);
+    const appearance = await practice.evaluate(async element => {
+      // The entry-button click can leave the pointer over this control on short
+      // screens. Compare settled idle designs, not hover/enable transitions.
+      await Promise.all(element.getAnimations().map(animation => animation.finished.catch(() => undefined)));
       const style = getComputedStyle(element);
       return { background: style.backgroundColor, shadow: style.boxShadow, radius: style.borderRadius, height: element.getBoundingClientRect().height };
     });

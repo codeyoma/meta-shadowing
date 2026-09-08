@@ -103,23 +103,48 @@ entire runner is explicitly ephemeral. Never use a blanket stop/reset command.
 
 ### Local working-tree verification — 2026-09-08
 
-Candidate changes are based on `788a966` (#22). These are local results, not
-hosted acceptance or authorization to release. No hosted database was changed.
+The cutover implementation is `27d03d4`, based on `788a966` (#22). The follow-up
+QA changes fix completed-run restart and receipt ordering, and are verified on
+isolated local stacks. These are local results, not hosted acceptance or
+authorization to release. No hosted database was changed.
 
 | Check | Observed result |
 | --- | --- |
-| Fresh isolated migrations and pgTAP | 10 files / 125 assertions passed |
-| Full Vitest run | 520 passed, 4 obsolete-fixture failures, 1 skipped; the four failures were corrected and passed in focused reruns, not a second full run |
-| Focused unit/source/recovery checks | Latest five-file run: 13 passed; typecheck, shared UI check and production build passed |
-| Production HTTPS practice | 52 desktop/mobile all-mode, handoff and failure cases passed; 4 additional read-failure cases passed |
-| Production account preferences | Both desktop/mobile cases passed |
-| Blocked storage and legacy values | 6 production desktop/mobile cases passed, including account defaults across lessons |
-| MP3 and streaming | All 18 desktop/mobile scenarios passed across focused runs; earlier failed timing/access assertions were corrected and rerun |
-| Production administration/publication/defaults | 9 passed initially; both version-resume timing failures were corrected and passed in a focused rerun |
-| Browser regression sweep | Auth/admin/disabled phase: 44 passed. Learner phase hit its 15-minute bound: 174 passed, 13 failed, 437 did not run. All 13 failures subsequently passed in focused desktop/mobile reruns; the complete sweep has **not** passed yet |
+| Fresh isolated migrations and pgTAP | All 12 migrations applied; 10 files / 125 assertions passed on three isolated stacks |
+| Full Vitest run | 526 passed, 1 opt-in integration test skipped; 65 files passed, 1 skipped |
+| Static checks and builds | Typecheck, shared UI check and production builds passed; CI YAML parsed successfully |
+| Production HTTPS practice | Complete desktop/mobile suite: 56 passed, including all eight modes, handoff, account isolation, read failures and lost save receipts |
+| Production HTTPS preferences, MP3 and administration | Complete selected suites: 42 passed (2 preferences, 18 MP3, 22 administration/publication/lifecycle/defaults); total production coverage: 98 passed |
+| Complete browser regression sweep | All four full shards passed: 44 auth/admin/disabled checks and 637 learner checks passed, with 3 intentional desktop skips for mobile-only layout tests (681 passed / 3 skipped total) |
+| Code review | Standards: 0 remaining findings; Spec: 0 remaining findings after regression-backed fixes |
 
-Keep the full regression sweep and the following real-device/hosted gates open.
-Do not treat a focused rerun as a clean full-suite result.
+The follow-up diagnosis found that selecting a sentence after completion still
+sent a checkpoint to a completed run. It now explicitly starts a new run,
+checkpoints the selected sentence against the new server-defined grouping, and
+remounts only after acknowledgment. Regression cases cover lost start/checkpoint
+receipts, changed group sizes in both directions, background completion and
+another device starting after real lease expiry. Completed screens do not renew
+an idle ownership lease.
+
+Other regression repairs remove stale fixture assumptions and wait for actual
+acknowledgments before advancing virtual time or navigating. A delayed real SQL
+preference receipt verifies that the successful-save journey waits for the
+saved-to-account status; the pending-save guard is unchanged. No successful
+persistence response is fabricated.
+
+Earlier sweeps exposed application defects and test timing/fixture failures.
+After correction, the affected shard was rerun in full, not just its failing
+case; its final result was 160 passed. The totals above use the passing complete
+shards, not interrupted attempts or focused reruns. Expected request cancellations
+can still produce development-server abort messages; this is not a claim of
+console-clean browser execution.
+
+CI browser and practice suite bounds were raised from 10 to 20 minutes after
+successful local runs exceeded the old limit (14.5 and 11.1 minutes respectively).
+The browser job bound is 30 minutes. No retries, assertions, skips, permissions
+or release gates were relaxed. Actual GitHub Actions execution remains unverified.
+
+Keep the following real-device/hosted gates open regardless of local results.
 
 Automated coverage is not proof of the following physical/hosted behavior:
 

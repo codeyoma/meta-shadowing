@@ -11,7 +11,6 @@ async function signIn(page: Page) {
 test("learner overrides become the next account session defaults across lessons and levels", async ({ page }) => {
   await signIn(page);
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
-  await page.waitForLoadState("networkidle");
   await page.getByRole("radio", { name: /7 다문장 암기/ }).click();
   await openSelectedStageSettings(page);
   await page.getByLabel("묶음 크기").selectOption("4");
@@ -27,7 +26,6 @@ test("learner overrides become the next account session defaults across lessons 
   await startSelectedStage(page);
   await expect(page).toHaveURL(/player/);
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000003");
-  await page.waitForLoadState("networkidle");
   await openSelectedStageSettings(page);
   await expect(page.getByLabel("재생속도")).toHaveValue("2");
   await expect(page.getByRole("radio", { name: "자동", exact: true })).toHaveAttribute("aria-checked", "true");
@@ -49,7 +47,6 @@ test("audio progress saves only after phrase advancement and manual speaking exc
   await signIn(page);
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
-  await page.waitForLoadState("networkidle");
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   await confirmManualListen(page);
@@ -112,7 +109,6 @@ test("grouped progress resumes the whole next group, not a recording inside an u
   await signIn(page);
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=5&group=2&groupGap=0");
-  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   for (let cycle = 1; cycle <= 3; cycle++) {
     await confirmManualListen(page);
@@ -125,7 +121,6 @@ test("grouped progress resumes the whole next group, not a recording inside an u
   const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");
   await expect(phrases.nth(1)).toHaveAttribute("aria-current", "true");
   await reloadLearnerPage(page);
-  await page.waitForLoadState("networkidle");
   await expect(page.getByText("묶음 2 / 4", { exact: true })).toBeVisible();
   await expect(page.getByText("3문장", { exact: true })).toBeVisible();
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
@@ -138,7 +133,6 @@ test("blocked browser storage still confirms completion in the account", async (
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await signIn(page);
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000003&level=8&mode=automatic&lineGap=0");
-  await page.waitForLoadState("networkidle");
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await advanceCloudClock(page, 20000);
@@ -149,7 +143,6 @@ test("blocked browser storage still confirms completion in the account", async (
 test("malformed legacy records cannot replace saved account settings", async ({ page }) => {
   await signIn(page);
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
-  await page.waitForLoadState("networkidle");
   await openSelectedStageSettings(page);
   await page.getByLabel("재생속도").selectOption("2");
   await page.keyboard.press("Escape");
@@ -174,16 +167,14 @@ test("changing an unrelated group-size preference does not restart a completed r
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await signIn(page);
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=6&mode=automatic&lineGap=0");
-  await page.waitForLoadState("networkidle");
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
-  await advanceCloudClock(page, 6900);
+  await advanceCloudClock(page, 8000);
   await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
   const completedUrl = page.url();
   // Let Next's client navigation timers run while outside timed practice.
   await page.clock.resume();
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000002");
-  await page.waitForLoadState("networkidle");
   await page.getByRole("radio", { name: /7 다문장 암기/ }).click();
   await openSelectedStageSettings(page);
   await page.getByLabel("묶음 크기").selectOption("4");
@@ -195,18 +186,16 @@ test("rapid resume commits complete lines, excludes pauses and background time, 
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await signIn(page);
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=6");
-  await page.waitForLoadState("networkidle");
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   await page.keyboard.press("Space");
   await advanceCloudClock(page, 2700); // 5 English + 4 Korean tokens at 200 WPM.
+  await expect(page.getByRole("button", { name: "CONTINUE · 다음 문장", exact: true })).toBeEnabled();
   await page.keyboard.press("Space");
   await advanceCloudClock(page, 300); // Partial second line must not be resumed in the middle.
   await openLearnerPage(page, "/lessons?language=english");
-  await page.waitForLoadState("networkidle");
   await page.getByRole("link", { name: /Morning Routine/ }).click();
   await page.getByRole("button", { name: "현재 스테이지 11 시작", exact: true }).click();
   await enterAccountPractice(page);
-  await page.waitForLoadState("networkidle");
   await expect(page.getByText("문장 2 / 3", { exact: true })).toBeVisible();
   await page.keyboard.press("Space");
   await advanceCloudClock(page, 300);
@@ -223,38 +212,41 @@ test("rapid resume commits complete lines, excludes pauses and background time, 
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
     document.dispatchEvent(new Event("visibilitychange"));
   });
+  await expect(page.getByRole("button", { name: /^CONTINUE/ })).toBeEnabled();
   await page.keyboard.press("Space");
-  await advanceCloudClock(page, 1500); // Remaining 2.1-second second line.
+  await expect(page.getByRole("button", { name: /^PAUSE/ })).toBeEnabled();
+  await advanceCloudClock(page, 1800); // Remaining active time plus the resume frame.
+  await expect(page.getByRole("button", { name: "CONTINUE · 다음 문장", exact: true })).toBeEnabled();
   await page.keyboard.press("Space");
-  await advanceCloudClock(page, 2100); // Third line: 4 English + 3 Korean.
+  await expect(page.getByRole("button", { name: /^PAUSE/ })).toBeEnabled();
+  await advanceCloudClock(page, 2400); // Third line: 4 English + 3 Korean; include its first frame.
   await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
   await expect(page.getByLabel("활성 학습시간")).toHaveText("6.9초");
   await expect(page.getByText("100%", { exact: true })).toBeVisible();
   await expect(page.getByLabel("완료 날짜")).toContainText("2026");
   await reloadLearnerPage(page);
-  await page.waitForLoadState("networkidle");
   await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
   await page.getByRole("button", { name: "레슨 목록으로", exact: true }).click();
+  await expect(page).toHaveURL(/\/lessons\?/);
   await expect(page.getByRole("region", { name: "완료 기록" })).toHaveCount(0);
   await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages");
   await page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "완료 기록", exact: true }).getByRole("button", { name: "설정 보기", exact: true })).toHaveCount(1);
   await page.clock.resume();
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
-  await page.waitForLoadState("networkidle");
   await page.getByRole("radio", { name: /11 속사포 영한/ }).click();
   await openSelectedStageSettings(page);
   await page.getByRole("radio", { name: "자동", exact: true }).click();
   await page.getByLabel("문장 간격 (초)").fill("0");
   await page.keyboard.press("Escape");
   await startSelectedStage(page);
-  await page.waitForLoadState("networkidle");
   await pauseCloudClock(page, await page.evaluate(() => Date.now() + 1000));
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect(page.getByRole("region", { name: "속사포 학습" })).toHaveText("I");
-  await advanceCloudClock(page, 6900);
+  await advanceCloudClock(page, 8000);
   await expect(page.getByLabel("활성 학습시간")).toHaveText("6.9초");
   await page.getByRole("button", { name: "레슨 목록으로", exact: true }).click();
+  await expect(page).toHaveURL(/\/lessons\?/);
   await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages");
   await page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true }).click();
   const history = page.getByRole("dialog", { name: "완료 기록", exact: true });

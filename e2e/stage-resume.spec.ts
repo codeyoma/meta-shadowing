@@ -1,4 +1,4 @@
-import { readServerJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { enterAccountPractice, readServerJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
@@ -16,6 +16,7 @@ test("the second grouped stage survives settings, a sentence jump, refresh and h
   await page.locator("#player-menu-trigger").click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await page.getByRole("button", { name: /^5번 문장/ }).click();
+  await expect(page.getByRole("progressbar", { name: "묶음 진행", exact: true })).toHaveAttribute("aria-valuenow", "1");
   const before = (await readServerJournal(page)).progress;
   expect(before).toMatchObject({ level: 4, stage: 8 });
   await reloadLearnerPage(page);
@@ -27,9 +28,11 @@ test("the second grouped stage survives settings, a sentence jump, refresh and h
   const resume = page.getByRole("button", { name: "현재 스테이지 8 시작", exact: true });
   await expect(resume).toContainText("이어서 학습 8");
   await resume.click();
+  await enterAccountPractice(page);
   await expect(page).toHaveURL(/level=4(?:&|$)/);
   await expect(page).toHaveURL(/stage=8(?:&|$)/);
-  await expect(page).toHaveURL(/speed=2(?:&|$)/);
+  await page.locator("#player-settings-trigger").click();
+  await expect(page.getByRole("combobox", { name: "재생속도", exact: true })).toHaveValue("2");
 });
 
 for (const query of ["level=4", "level=4&stage=9", "level=4&stage=99"]) {

@@ -10,6 +10,13 @@ async function openPlayer(page: Page, level: number) {
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 }
 
+async function leavePlayer(page: Page) {
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+  await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
+  // Wait for the normal exit's release attempt and navigation before re-entry.
+  await expect(page).toHaveURL(/\/lessons\/[^/]+\/stages/);
+}
+
 async function expectGuidancePopup(page: Page, level: number, instruction?: string, clockPaused = false) {
   const heading = page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true });
   // The modal dialog hides its background from assistive tech.
@@ -117,6 +124,7 @@ test("rapid learning help pauses word progress and remains available after setti
 for (let level = 1; level <= 8; level++) test(`level ${level} follows the script chapter above the speech bubble`, async ({ page }) => {
   await openPlayer(page, level);
   await expect(page.getByLabel("현재 챕터", { exact: true }).getByRole("heading")).toHaveCount(0);
+  await leavePlayer(page);
   await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000002&level=${level}&group=2`);
   const chapter = page.getByLabel("현재 챕터", { exact: true });
   await expect(chapter.getByRole("heading", { name: "At home", exact: true })).toBeVisible();
@@ -138,6 +146,7 @@ for (let level = 1; level <= 8; level++) test(`level ${level} follows the script
 
 test("section headings wrap long script titles without clipping or displacing the bottom action", async ({ page }) => {
   await openPlayer(page, 1);
+  await leavePlayer(page);
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1");
   const chapter = page.getByLabel("현재 챕터", { exact: true });
   await expect(chapter.getByRole("heading")).toBeVisible();

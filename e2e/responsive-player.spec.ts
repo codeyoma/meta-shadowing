@@ -150,7 +150,7 @@ for (const level of [1, 8]) test(`a level ${level} version-reset notice keeps th
   await page.setViewportSize({ width: 390, height: 844 });
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await seedServerJournal(page, { progress: {
-      runId: "previous-version-run", lessonId: "10000000-0000-4000-8000-000000000001", lessonVersion: "outdated-fixture",
+      runId: "previous-version-run", lessonId: "10000000-0000-4000-8000-000000000001", lessonVersion: "2026-08-01T00:00:00+00:00",
       lessonName: "Morning Routine", language: "english", level, nextUnit: 1, nextPhrase: 1, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS
     } });
   await page.goto(`/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);

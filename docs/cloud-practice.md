@@ -44,6 +44,12 @@ enabling hosted traffic, and physical Google/mobile acceptance require separate 
   waits are excluded. Only confirmed practice earns a study date, not visits,
   jumps, or a completion click by itself.
 - Completion preserves the published name/version and actual run settings.
+  Leaving a completion screen open does not renew its device lease. Selecting a
+  sentence after completion explicitly acquires a new run, saves the selected
+  position using that run's server-defined grouping, and verifies ownership before
+  displaying it. Lost start/checkpoint receipts retry the same operation; the old
+  completion remains unchanged. A completed screen acknowledged while hidden stays
+  read-only and can restart after returning, without renewing its old lease.
   Practice settings are revision-checked, idempotent changes to the current run.
   Account preferences affect new runs, not the run being resumed. Group size stays
   fixed for a run so saved group boundaries cannot change. Replaced versions

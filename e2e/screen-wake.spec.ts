@@ -87,7 +87,8 @@ test("rapid practice keeps the screen awake while running and releases it on com
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
-  await advanceCloudClock(page, 6900);
+  // Wall time also includes pauses at server-confirmed line boundaries.
+  await advanceCloudClock(page, 8000);
   await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
   await expect.poll(() => activeLocks(page)).toBe(0);
 });

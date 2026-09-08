@@ -159,9 +159,9 @@ for (const failure of ["unavailable", "rejected", "pending"] as const) {
   await enterAccountPractice(page);
     await expect(page).toHaveURL(/\/player\?.*stage=2(?:&|$)/);
     await openStages(page);
-    await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
+    await page.getByRole("button", { name: "현재 스테이지 2 시작", exact: true }).click();
   await enterAccountPractice(page);
-    await expect(page).toHaveURL(/\/player\?.*stage=1(?:&|$)/);
+    await expect(page).toHaveURL(/\/player\?.*stage=2(?:&|$)/);
     expect(errors).toEqual([]);
   });
 }

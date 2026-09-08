@@ -43,7 +43,7 @@ test("the summary and checkmarks reflect unique completed stages from the real j
   const record = { runId: "stage-complete", lessonId: lesson.id, lessonVersion: lesson.version,
     lessonName: lesson.name, language: lesson.language, level: 4, stage: 8, nextUnit: 3, nextPhrase: 3,
     activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS, completedAt: "2026-09-07T00:00:00Z" };
-  await seedServerJournal(page, { history: [record, { ...record, runId: "replay" }, { ...record, stage: 7, lessonVersion: "old" }] });
+  await seedServerJournal(page, { history: [record, { ...record, runId: "replay" }, { ...record, runId: "previous-version", stage: 7, lessonVersion: "2026-08-01T00:00:00+00:00" }] });
   await reloadLearnerPage(page);
   await expect(page.getByRole("progressbar", { name: "완료한 스테이지" })).toHaveAttribute("aria-valuenow", "1");
   await expect(page.getByRole("radio", { name: "8 다문장 암기 Lv 4 · 완료", exact: true })).toBeEnabled();

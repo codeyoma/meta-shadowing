@@ -135,8 +135,8 @@ test("Space on Continue confirms a pending listen exactly once", async ({ page }
 });
 
 test("switching modes in the open sheet keeps the speaking timer paused", async ({ page }) => {
-  await openPlayer(page, "automatic");
   await page.clock.install({ time: new Date("2026-09-07T00:00:00Z") });
+  await openPlayer(page, "automatic");
   await pauseCloudClock(page, new Date("2026-09-07T00:01:00Z"));
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   await expect(page.getByRole("timer")).toBeVisible();

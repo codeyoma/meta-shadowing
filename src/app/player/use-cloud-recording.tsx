@@ -27,13 +27,13 @@ export function PracticeFailure({ error, retry, navigate = href => window.locati
 }
 
 type PracticeStatus = "ready" | "saving" | "checking" | "leaving" | "paused" | PracticeErrorCode;
-export function useCloudRecording(initial: PracticeLease, instance: string, invalidateAccount: () => void) {
+export function useCloudRecording(initial: PracticeLease, instance: string, invalidateAccount: () => void, restart: (lease: PracticeLease) => void) {
   const lease = useRef(initial);
   const [record, setRecord] = useState(initial.record);
   const [status, setStatus] = useState<PracticeStatus>("ready");
   const statusRef = useRef<PracticeStatus>("ready");
   const alive = useRef(true);
-  const pending = useRef<{ command: PracticeCommand; resolve: () => void } | null>(null);
+  const pending = useRef<{ command: PracticeCommand; resolve: () => void; restartPhrase?: number } | null>(null);
   const inFlight = useRef(false);
   const clock = useRef({ active: false, anchor: 0, total: initial.record.activeMs });
   const lastVerified = useRef(performance.now());
@@ -52,6 +52,15 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
     inFlight.current = true; changeStatus("saving"); track(false);
     try {
       let accepted = await sendPractice(operation.command);
+      if (operation.command.action === "start" && operation.restartPhrase !== undefined) {
+        // Keep each command stable through retries, including a lost start receipt.
+        // A new run snapshots account settings, so use its server-defined grouping.
+        operation.command = { action: "checkpoint", accountId: initial.accountId, instance,
+          runId: accepted.record.runId, generation: accepted.generation, revision: accepted.revision,
+          operation: crypto.randomUUID(), kind: "jump", activeMs: 0,
+          nextUnit: Math.max(0, accepted.record.unitStarts.findLastIndex(phrase => phrase <= operation.restartPhrase!)) };
+        accepted = await sendPractice(operation.command);
+      }
       // Even a fast successful receipt may predate a takeover. Revalidate before
       // applying its player transition; the server, not the device clock, expires it.
       const check = { epoch: lifecycleEpoch.current, startedAt: performance.now() };
@@ -61,17 +70,22 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
       if (!isPracticeVerificationCurrent(check,lifecycleEpoch.current,performance.now())) throw new PracticeError("temporary-error");
       lease.current = accepted; lastVerified.current = check.startedAt; setRecord(accepted.record);
       pending.current = null;
+      if (operation.restartPhrase !== undefined) {
+        restart(accepted);
+        operation.resolve();
+        return;
+      }
       // Apply the accepted player transition before re-enabling its old button.
-      statusRef.current = document.hidden || !navigator.onLine ? "paused" : "ready";
+      statusRef.current = !accepted.record.completedAt && (document.hidden || !navigator.onLine) ? "paused" : "ready";
       operation.resolve();
       queueMicrotask(() => { if (alive.current) setStatus(statusRef.current); });
     } catch (error) {
       if (error instanceof PracticeError && ["unauthorized","account-changed"].includes(error.code)) { invalidateAccount(); return; }
       if (alive.current) changeStatus(error instanceof PracticeError ? error.code : "temporary-error");
     } finally { inFlight.current = false; }
-  }, [changeStatus,track,invalidateAccount,initial.accountId,instance]);
+  }, [changeStatus,track,invalidateAccount,initial.accountId,instance,restart]);
   const renew = useCallback(async function renew(resume = false): Promise<boolean> {
-    if (inFlight.current || pending.current || document.hidden || !navigator.onLine || record.completedAt) return false;
+    if (inFlight.current || pending.current || document.hidden || !navigator.onLine || lease.current.record.completedAt) return false;
     if (resume) { changeStatus("checking"); track(false); }
     inFlight.current = true;
     const check = { epoch: lifecycleEpoch.current, startedAt: performance.now() };
@@ -95,20 +109,29 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
       if (pending.current) void submit();
       else if (recheck && alive.current && !document.hidden && navigator.onLine) void renew(true);
     }
-  }, [changeStatus,ownership,record.completedAt,track,submit,invalidateAccount]);
+  }, [changeStatus,ownership,track,submit,invalidateAccount]);
   const updateRecord = useCallback((update: RecordUpdate): void | Promise<void> => {
     track(Boolean(update.active) && statusRef.current === "ready" && !document.hidden && navigator.onLine, update.elapsedMs);
     if (!update.checkpoint && !update.settings) return;
     track(false);
     if (pending.current || statusRef.current !== "ready") return;
     return new Promise<void>(resolve => {
+      if (lease.current.record.completedAt && update.kind === "jump" && update.checkpoint) {
+        const previous = lease.current.record;
+        pending.current = { resolve, restartPhrase: update.checkpoint.phrase, command: {
+          action: "start", accountId: initial.accountId, instance, operation: crypto.randomUUID(),
+          lessonId: previous.lessonId, lessonVersion: previous.lessonVersion, level: previous.level, stage: previous.stage!,
+        } };
+        void submit();
+        return;
+      }
       pending.current = { resolve, command: { action: "checkpoint", ...ownership(), operation: crypto.randomUUID(), revision: lease.current.revision,
         kind: update.settings ? "settings" : update.kind ?? (update.studied ? "studied" : "advance"), nextUnit: update.checkpoint?.unit ?? lease.current.record.nextUnit,
         activeMs: Math.floor(clock.current.total), ...(update.confirmedCycles !== undefined ? { confirmedCycles: update.confirmedCycles } : {}),
         ...(update.settings ? { settings: update.settings } : {}) } };
       void submit();
     });
-  }, [ownership,submit,track]);
+  }, [ownership,submit,track,initial.accountId,instance]);
   const exit = useCallback((href: string) => {
     if (pending.current && !window.confirm("확인되지 않은 저장이 있습니다. 마지막 서버 확인 지점만 보존됩니다. 나가시겠어요?")) return;
     track(false);
@@ -117,10 +140,11 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
   }, [changeStatus,ownership,track]);
   useEffect(() => {
     alive.current = true;
-    const pause = () => { track(false); if (statusRef.current === "ready") changeStatus("paused"); };
+    const pause = () => { track(false); if (statusRef.current === "ready" && !lease.current.record.completedAt) changeStatus("paused"); };
     const offline = () => { lifecycleEpoch.current++; pause(); };
-    const visibility = () => { lifecycleEpoch.current++; if (document.hidden) pause(); else if (!pending.current) void renew(true); };
+    const visibility = () => { lifecycleEpoch.current++; if (document.hidden) pause(); else if (!pending.current && !lease.current.record.completedAt) void renew(true); };
     const timer = window.setInterval(() => {
+      if (lease.current.record.completedAt) return;
       if (statusRef.current === "ready" && performance.now()-lastVerified.current >= PRACTICE_MAX_VERIFICATION_AGE_MS) { pause(); void renew(true); }
       else if (statusRef.current === "ready" && performance.now()-lastVerified.current >= PRACTICE_CHECK_INTERVAL_MS) void renew();
     },1000);
@@ -140,6 +164,9 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
   const recording: CloudRecording = { completion: record.completedAt ? record as CompletionRecord : null, blocked: status !== "ready", updateRecord, exit, verifyResume: () => renew(true),
     canAct: () => {
       if (statusRef.current !== "ready" || document.hidden || !navigator.onLine) return false;
+      // Completion is read-only and must not keep a device lease alive. An
+      // explicit jump acquires a new server-fenced run before enabling practice.
+      if (lease.current.record.completedAt) return true;
       if (performance.now()-lastVerified.current < PRACTICE_MAX_VERIFICATION_AGE_MS) return true;
       void renew(true); return false;
     } };
