@@ -64,6 +64,20 @@ async function lifecycleFixture(page: Page) {
   return { service, admin, owner, paths, draft, upload, publish, cleanup };
 }
 
+async function expectPreservedCompletion(page: Page, originalVersion: string) {
+  await page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "완료 기록", exact: true });
+  const table = dialog.getByRole("table", { name: "이 레슨의 완료 기록", exact: true });
+  const records = table.getByRole("row").filter({ has: page.getByRole("button", { name: "설정 보기", exact: true }) });
+  await expect(records).toHaveCount(1);
+  await expect(records.getByRole("rowheader")).toContainText("스테이지 11");
+  await expect(records.getByRole("rowheader")).toContainText("레벨 6");
+  await records.getByRole("button", { name: "설정 보기", exact: true }).click();
+  await expect(dialog.getByText(`버전 ${originalVersion}`, { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "완료 기록 닫기", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+}
+
 test("a validated replacement keeps the lesson ID and atomically advances its version", async ({ page }) => {
   const fixture = await lifecycleFixture(page);
   try {
@@ -99,6 +113,9 @@ for (const entry of ["home", "player"] as const) {
       const original = await fixture.draft("Versioned practice");
       await fixture.upload(original);
       await fixture.publish(original);
+      const { data: published, error } = await fixture.service.from("lesson_drafts").select("published_at").eq("id", original).single();
+      expect(error).toBeNull();
+      const originalVersion = published!.published_at as string;
       await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
       await page.goto(`/player?lesson=${original}&level=6&mode=automatic&lineGap=0`);
       await page.waitForLoadState("networkidle");
@@ -119,16 +136,19 @@ for (const entry of ["home", "player"] as const) {
       await page.goto(entry === "home" ? "/lessons?language=english" : oldRun);
       await expect(page.getByRole("alert", { name: "레슨 버전 변경" })).toContainText("레슨이 새 버전으로 변경되어 이전 진도를 초기화했습니다.");
       if (entry === "home") {
-        await expect(page.getByRole("region", { name: "완료 기록" }).getByRole("listitem")).toHaveCount(1);
         await page.getByRole("link", { name: /Updated practice/ }).click();
-        await page.getByRole("button", { name: /현재 스테이지 .* 시작/ }).click();
+        await expectPreservedCompletion(page, originalVersion);
+        await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
       }
-      await expect(page.getByText("문장 1 / 2", { exact: true })).toBeVisible();
+      const firstUnit = page.getByRole("navigation", { name: "학습 탐색", exact: true })
+        .getByText(entry === "home" ? "1 / 2" : "문장 1 / 2", { exact: true });
+      await expect(firstUnit).toBeVisible();
       expect(new URL(page.url()).searchParams.get("run")).not.toBe(new URL(oldRun).searchParams.get("run"));
       await page.reload();
-      await expect(page.getByText("문장 1 / 2", { exact: true })).toBeVisible();
+      await expect(firstUnit).toBeVisible();
       await page.goto("/lessons?language=english");
-      await expect(page.getByRole("region", { name: "완료 기록" }).getByRole("listitem")).toHaveCount(1);
+      await page.getByRole("link", { name: /Updated practice/ }).click();
+      await expectPreservedCompletion(page, originalVersion);
     } finally { await fixture.cleanup(); }
   });
 }

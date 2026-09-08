@@ -175,6 +175,7 @@
   .drawerNav, .drawer .sentenceList, .drawer .settingsBody { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .cycleRing circle { transition-property: none; }
   .cycleDots, .cycleStep, .cycleStep i, .cycleStep i::before, .cycleStep::before, .cycleStep + .cycleStep::after { transition-property: none; }
   .cycleStep:nth-child(n+4) i, .cycleStep:nth-child(n+4)::before { transition-property: none; }
 }

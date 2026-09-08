@@ -51,8 +51,38 @@ for (const level of [1, 3, 4, 6, 8]) test(`level ${level} exposes help and direc
 test("menu is bottom anchored and enters vertically with reduced-motion support", async ({ page }) => {
   await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
   await page.goto("/player?lesson=morning-routine&level=1");
-  await expect(page.getByRole("button", { name: "학습 메뉴", exact: true })).toBeVisible();
-  for (const viewport of [{ width: 430, height: 932 }, { width: 1066, height: 788 }, { width: 844, height: 390 }]) {
+  const menu = page.getByRole("button", { name: "학습 메뉴", exact: true });
+  await expect(menu).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const sheet = page.getByRole("dialog", { name: "학습 메뉴", exact: true });
+  async function expectMenuLayout(viewport: { width: number; height: number }) {
+    await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.y + box.height); }).toBe(viewport.height);
+    const box = (await sheet.boundingBox())!;
+    // Short screens allow a full-height sheet so the two footer actions fit;
+    // taller screens retain the 85dvh cap and visible space above the drawer.
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.height).toBeLessThanOrEqual(viewport.height * (viewport.height <= 540 ? 1 : 0.85) + 1);
+    expect(Math.abs(box.x - (viewport.width - box.width) / 2)).toBeLessThan(1);
+    await expect(sheet.getByRole("heading", { name: "학습 메뉴", exact: true })).toBeInViewport({ ratio: 0.999 });
+    const footer = sheet.locator('[data-slot="drawer-footer"]');
+    const footerBefore = await footer.boundingBox();
+    for (const name of ["확인", "스테이지 화면으로"]) {
+      const action = footer.getByRole("button", { name, exact: true });
+      await expect(action).toBeInViewport({ ratio: 0.999 });
+      await expect(action).toBeEnabled();
+    }
+    const items = sheet.getByRole("navigation", { name: "학습 메뉴 항목", exact: true });
+    for (const name of ["학습 설정", "문장 목록"]) {
+      const item = items.getByRole("button", { name, exact: true });
+      await item.scrollIntoViewIfNeeded();
+      await expect(item).toBeInViewport({ ratio: 0.999 });
+      expect(await footer.boundingBox()).toEqual(footerBefore);
+      expect(await sheet.boundingBox()).toEqual(box);
+    }
+    if (viewport.height === 320) expect(await items.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    await expect(sheet.getByRole("button", { name: /닫기/ })).toHaveCount(0);
+  }
+  for (const viewport of [{ width: 430, height: 932 }, { width: 1066, height: 788 }, { width: 844, height: 390 }, { width: 568, height: 320 }]) {
     await page.setViewportSize(viewport);
     // Capture at DOM insertion in the same browser turn, before a slow test
     // process can miss the finite entrance animation.
@@ -67,21 +97,21 @@ test("menu is bottom anchored and enters vertically with reduced-motion support"
       observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] });
       document.getElementById("player-menu-trigger")!.click();
     }));
-    const sheet = page.getByRole("dialog");
     expect(keyframes).toContainEqual(expect.stringMatching(/^translate3d\(0(?:px)?,\s*100%,\s*0(?:px)?\)$/));
-    await expect.poll(async () => { const b = (await sheet.boundingBox())!; return Math.round(b.y + b.height); }).toBe(viewport.height);
-    const box = (await sheet.boundingBox())!;
-    expect(box.y).toBeGreaterThan(24);
-    expect(Math.abs(box.x - (viewport.width - box.width) / 2)).toBeLessThan(1);
-    await expect(sheet.getByRole("button", { name: "스테이지 화면으로", exact: true })).toBeInViewport();
-    await expect(sheet.getByRole("button", { name: /닫기/ })).toHaveCount(0);
+    expect(keyframes).toContainEqual(expect.stringMatching(/^translate3d\(0(?:px)?,\s*0(?:px)?,\s*0(?:px)?\)$/));
+    await expectMenuLayout(viewport);
     await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+    await expect(menu).toBeFocused();
   }
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-  const sheet = page.getByRole("dialog");
+  await menu.click();
   await expect(sheet).toBeVisible();
   await expect.poll(() => sheet.evaluate(element => Math.max(...getComputedStyle(element).animationDuration.split(",").map(duration =>
     parseFloat(duration) / (duration.trim().endsWith("ms") ? 1000 : 1)
   )))).toBeLessThanOrEqual(0.01);
+  await expectMenuLayout(page.viewportSize()!);
+  await sheet.getByRole("button", { name: "확인", exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(menu).toBeFocused();
 });

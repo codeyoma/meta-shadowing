@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 async function expectFixedDocument(page: Page) {
   expect(await page.evaluate(() => ({
@@ -8,45 +8,113 @@ async function expectFixedDocument(page: Page) {
   }))).toEqual({ width: true, height: true, top: 0 });
 }
 
+async function expectFullyInViewport(locator: Locator) {
+  await expect(locator).toBeVisible();
+  // IntersectionObserver includes clipping by both nested scrollports. Allow one
+  // CSS pixel for fractional scroll positions, not a percentage of a large box.
+  await expect.poll(() => locator.evaluate(element => new Promise<number>(resolve => {
+    const observer = new IntersectionObserver(([entry]) => {
+      observer.disconnect();
+      resolve(Math.max(
+        entry.boundingClientRect.width - entry.intersectionRect.width,
+        entry.boundingClientRect.height - entry.intersectionRect.height
+      ));
+    });
+    observer.observe(element);
+  }))).toBeLessThanOrEqual(1);
+}
+
+async function revealControl(locator: Locator) {
+  // Center the target in each scrollable ancestor, including the outer shell on
+  // short screens; the nearest-edge scroll can leave fractional clipping.
+  await locator.evaluate(element => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
+  await expectFullyInViewport(locator);
+}
+
 for (const viewport of [{ width: 320, height: 568 }, { width: 430, height: 932 }, { width: 568, height: 320 }, { width: 667, height: 375 }, { width: 932, height: 430 }, { width: 1280, height: 900 }]) {
-  test(`stage scrolling keeps the document and lesson header stationary at ${viewport.width}px`, async ({ page }) => {
+  test(`all stages and summary controls remain reachable with fixed navigation at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
     await page.goto("/setup?lesson=morning-routine");
+    await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages$/);
+    await expect(page).toHaveTitle(/Meta Shadowing/);
     const heading = page.getByRole("heading", { level: 1 });
-    await expect(heading).toBeVisible();
-    await expectFixedDocument(page);
-    await expect(page.getByRole("radio", { name: /^1 자막 쉐도잉/ })).toBeInViewport({ ratio: 0.999 });
-    const before = await heading.boundingBox();
-    const last = page.getByRole("radio", { name: /16 속사포 한글/ });
-    await last.scrollIntoViewIfNeeded();
-    await expect(last).toBeInViewport({ ratio: 1 });
-    expect(await heading.boundingBox()).toEqual(before);
+    const currentStart = page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true });
+    await expect(currentStart).toBeEnabled();
+    await page.evaluate(() => document.fonts.ready);
+    await expectFullyInViewport(heading);
+    const topNavigation = page.getByRole("navigation", { name: "상단 탐색", exact: true });
+    const bottomNavigation = page.getByRole("navigation", { name: "하단 탐색", exact: true });
+    const topBefore = await topNavigation.boundingBox();
+    const bottomBefore = await bottomNavigation.boundingBox();
+    async function expectFixedNavigation() {
+      await expectFullyInViewport(topNavigation);
+      await expectFullyInViewport(bottomNavigation);
+      expect(await topNavigation.boundingBox()).toEqual(topBefore);
+      expect(await bottomNavigation.boundingBox()).toEqual(bottomBefore);
+      await expectFixedDocument(page);
+    }
+    await expectFixedNavigation();
+    const main = (await page.getByRole("main").boundingBox())!;
+    expect(main.width).toBeCloseTo(Math.min(430, viewport.width), 0);
+    expect(main.x + main.width / 2).toBeCloseTo(viewport.width / 2, 0);
+    const shell = page.getByRole("region", { name: "학습 단계", exact: true }).locator("..");
+    const outerOverflows = await shell.evaluate(element => element.scrollHeight > element.clientHeight);
     const viewportElement = page.getByRole("region", { name: "학습 단계 목록", exact: true });
+    const stages = viewportElement.getByRole("radio");
+    await expect(stages).toHaveCount(16);
+    for (let index = 0; index < 16; index++) {
+      const stage = stages.nth(index);
+      await expect(stage).toHaveAccessibleName(new RegExp(`^${index + 1} `));
+      await revealControl(stage);
+      await stage.click({ trial: true });
+      await expectFixedNavigation();
+    }
     expect(await viewportElement.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
-    await expectFixedDocument(page);
+    if (outerOverflows) expect(await shell.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+    const last = stages.last();
     await last.click();
     const popup = page.getByRole("dialog", { name: "속사포 한글", exact: true });
     await expect(popup).toBeVisible();
-    await expect(popup.getByRole("button", { name: "학습 시작", exact: true })).toBeInViewport();
+    await expectFullyInViewport(popup.getByRole("heading", { name: "속사포 한글", exact: true }));
+    await expectFullyInViewport(popup.getByRole("button", { name: "학습 시작", exact: true }));
     const box = (await popup.boundingBox())!;
-    expect(box.y).toBeGreaterThanOrEqual(0);
-    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    expect(box.x).toBeGreaterThanOrEqual(19);
+    expect(box.x + box.width).toBeLessThanOrEqual(viewport.width - 19);
+    expect(box.y).toBeGreaterThanOrEqual(19);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height - 19);
     await page.keyboard.press("Escape");
     await expect(last).toBeFocused();
-    await expectFixedDocument(page);
+    await expectFixedNavigation();
     // A middle node must leave a usable reading area, even in short landscape.
-    await page.getByRole("radio", { name: /^3 순간 암기/ }).click();
+    const middle = page.getByRole("radio", { name: /^3 순간 암기/ });
+    await revealControl(middle);
+    await middle.click();
     const preview = page.getByRole("dialog", { name: "순간 암기", exact: true });
-    await expect(preview.getByRole("heading", { name: "순간 암기", exact: true })).toBeInViewport({ ratio: 0.999 });
+    await expectFullyInViewport(preview.getByRole("heading", { name: "순간 암기", exact: true }));
     const readingArea = preview.getByRole("region", { name: "스테이지 안내", exact: true });
     expect(await readingArea.evaluate(el => el.clientHeight)).toBeGreaterThanOrEqual(64);
     const description = preview.locator("#stage-3-description");
     await description.scrollIntoViewIfNeeded();
-    // Allow subpixel intersection rounding at mobile device scale factors.
-    await expect(description).toBeInViewport({ ratio: 0.999 });
-    await expect(preview.getByRole("button", { name: "학습 시작", exact: true })).toBeInViewport({ ratio: 0.999 });
-    await expectFixedDocument(page);
+    await expectFullyInViewport(description);
+    await expectFullyInViewport(preview.getByRole("button", { name: "학습 시작", exact: true }));
+    await page.keyboard.press("Escape");
+    await expect(middle).toBeFocused();
+
+    // At the top of the inner path, an upward wheel must reach the summary in
+    // the outer shell. Its title and actions need not fit there simultaneously.
+    await viewportElement.evaluate(element => { element.scrollTop = 0; });
+    await viewportElement.hover();
+    await page.mouse.wheel(0, -1500);
+    await expect.poll(() => shell.evaluate(element => element.scrollTop)).toBe(0);
+    await expectFullyInViewport(heading);
+    const history = page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true });
+    for (const control of [history, currentStart]) {
+      await revealControl(control);
+      await expect(control).toBeEnabled();
+      expect(await control.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
+    await expectFixedNavigation();
   });
 }
 

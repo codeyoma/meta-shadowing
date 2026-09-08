@@ -48,6 +48,7 @@ test("reduced motion preserves the static current listening progress ring", asyn
   const ring = currentDot.getByRole("progressbar", { name: "원음 재생 진행", exact: true });
   await expect(ring).toBeVisible();
   await expect(ring).toHaveCSS("animation-name", "none");
+  await expect(ring.locator("circle")).toHaveCSS("transition-property", "none");
 });
 
 test("only player content scrolls while the safe-area navigation and footer stay anchored", async ({ page }) => {

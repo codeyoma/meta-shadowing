@@ -77,8 +77,8 @@ test("a saved 560-file draft recovers from a text timeout without reuploading an
     await page.route(`**/api/admin/drafts/${draftId}/publish`, route => route.fulfill({ status: 504, contentType: "text/plain", body: "An error occurred" }), { times: 1 });
     await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toBeVisible();
     await row.getByRole("button", { name: "업로드된 음성으로 게시" }).click();
-    const failureAlert = page.getByRole("main").locator('[data-slot="alert"][role="alert"]');
-    await expect(failureAlert).toContainText("시간");
+    const failureAlert = page.getByRole("main").getByRole("alert").filter({ hasText: "게시 검증 시간이 초과되었습니다." });
+    await expect(failureAlert).toContainText("업로드된 음성은 유지됩니다.");
     await expect(failureAlert).not.toContainText("Unexpected");
     const published = page.waitForResponse(response => response.url().endsWith(`/api/admin/drafts/${draftId}/publish`));
     const started = Date.now();
@@ -292,8 +292,8 @@ test("only a complete private audio package can be published and played by a bet
       status: 504, contentType: "text/plain", body: "An error occurred: FUNCTION_INVOCATION_TIMEOUT"
     }), { times: 1 });
     await page.getByRole("button", { name: "음성 업로드 후 게시" }).click();
-    const failureAlert = page.getByRole("main").locator('[data-slot="alert"][role="alert"]');
-    await expect(failureAlert).toContainText("시간");
+    const failureAlert = page.getByRole("main").getByRole("alert").filter({ hasText: "게시 검증 시간이 초과되었습니다." });
+    await expect(failureAlert).toContainText("업로드된 음성은 유지됩니다.");
     await expect(failureAlert).not.toContainText("Unexpected token");
     expect(uploadWrites).toBe(2);
     const publishedResponse = page.waitForResponse((response) =>

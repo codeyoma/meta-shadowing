@@ -33,11 +33,15 @@ test("the shortcut restores the current run and its saved playback settings", as
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
 });
 
-test("popup metadata is subordinate while the title and instructions remain white", async ({ page }) => {
+test("stage preview keeps a white title and compact dark-blue instructions", async ({ page }) => {
   await page.getByRole("radio", { name: /^1 자막 쉐도잉/ }).click();
   const popup = page.getByRole("dialog", { name: "자막 쉐도잉", exact: true });
-  await expect(popup.getByText("스테이지 1 · Lv 1", { exact: true })).not.toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(popup.getByRole("heading", { name: "자막 쉐도잉", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
+  const instructions = popup.getByText("자막을 보며 듣고, 따라 말한 뒤 원음과 비교하세요.", { exact: true });
+  await expect(instructions).toHaveCSS("color", "rgb(4, 44, 96)");
+  await expect(instructions).toHaveCSS("font-size", "14px");
+  await expect(popup.getByRole("button", { name: "세션 설정", exact: true })).toHaveCount(0);
+  await expect(popup.getByRole("button", { name: "학습 시작", exact: true })).toBeInViewport();
 });
 
 test("home keeps its brand and real streak together in a fixed top navigation", async ({ page }) => {
