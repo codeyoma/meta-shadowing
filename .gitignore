@@ -6,6 +6,7 @@ node_modules/
 coverage/
 playwright-report/
 test-results/
+ci-artifacts/
 .env
 .env.*
 !.env.example

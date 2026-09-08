@@ -86,17 +86,17 @@ test("R does not restart a paused rapid exercise", async ({ page }) => {
   await expect(display).toHaveText(before);
 });
 
-test("rapid mode labels leave readable room for all three controls on a narrow phone", async ({ page }, testInfo) => {
+// Each layout case owns its account/lease, avoiding cross-level lease contention
+// when the previous page's best-effort release has not completed.
+for (const level of [6, 7, 8]) test(`rapid mode labels leave readable room for all three controls on a narrow phone (level ${level})`, async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  for (const level of [6, 7, 8]) {
-    await openPlayer(page, level);
-    const controls = page.getByLabel("레슨 안내", { exact: true }).getByRole("button");
-    await expect(controls).toHaveCount(3);
-    for (const control of await controls.all()) {
-      await expect(control).toBeInViewport();
-      expect(await control.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-    }
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    if (level === 6) await page.screenshot({ path: testInfo.outputPath("rapid-320.png"), scale: "css", animations: "disabled" });
+  await openPlayer(page, level);
+  const controls = page.getByLabel("레슨 안내", { exact: true }).getByRole("button");
+  await expect(controls).toHaveCount(3);
+  for (const control of await controls.all()) {
+    await expect(control).toBeInViewport();
+    expect(await control.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  if (level === 6) await page.screenshot({ path: testInfo.outputPath("rapid-320.png"), scale: "css", animations: "disabled" });
 });

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { runPlaywright } from "./run-playwright.mjs";
 
 const args = process.argv.slice(2);
 if (!process.env.SUPABASE_TEST_WORKDIR && process.env.CI !== "true") {
@@ -10,6 +11,7 @@ for (const command of [
   ["npx", ["playwright", "test", "--pass-with-no-tests", ...args]],
   ["node", ["scripts/run-admin-persistence-integration.mjs", "--learner-ui", "--project=mobile", "--pass-with-no-tests", ...args]],
 ]) {
-  const result = spawnSync(command[0], command[1], { stdio: "inherit", env: process.env });
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  const status = command[0] === "npx" ? runPlaywright(command[1].slice(2))
+    : spawnSync(command[0], command[1], { stdio: "inherit", env: process.env }).status ?? 1;
+  if (status !== 0) process.exit(status);
 }

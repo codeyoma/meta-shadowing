@@ -149,7 +149,7 @@ export function CloudLearningPlayer(props: Props) {
       <p>저장 확인 전의 변경은 이 화면에만 남습니다. 화면을 닫거나 다시 시작하면 마지막 서버 확인 지점으로 돌아갑니다.</p>
       {journal?.progress?.lessonId === props.lesson.id && Date.parse(journal.progress.lessonVersion) !== Date.parse(props.lesson.version) ? <p>레슨 버전이 변경되어 이전 진도를 이어갈 수 없습니다. 새 버전의 처음부터 시작합니다. 과거 완료 기록은 유지됩니다.</p> : null}
       {error ? <PracticeFailure error={error} retry={() => journal ? begin() : setLoadAttempt(value => value + 1)} /> : null}
-      {journal?.activeLease && journal.progress && Date.parse(journal.progress.lessonVersion) === Date.parse(props.lesson.version) ? journal.progress.lessonId === props.lesson.id && journal.progress.stage === props.stage ? <Dialog open={Boolean(takeoverTarget)} onOpenChange={open => setTakeoverTarget(open ? journal.activeLease : null)}>
+      {journal?.activeLease && journal.progress && (journal.progress.lessonId !== props.lesson.id || Date.parse(journal.progress.lessonVersion) === Date.parse(props.lesson.version)) ? journal.progress.lessonId === props.lesson.id && journal.progress.stage === props.stage ? <Dialog open={Boolean(takeoverTarget)} onOpenChange={open => setTakeoverTarget(open ? journal.activeLease : null)}>
         <DialogTrigger asChild><Button disabled={busy}>이 기기에서 이어 학습</Button></DialogTrigger>
         <DialogContent showCloseButton={false}>
           <DialogHeader>

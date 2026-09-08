@@ -111,6 +111,8 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
     }
   }, [changeStatus,ownership,track,submit,invalidateAccount]);
   const updateRecord = useCallback((update: RecordUpdate): void | Promise<void> => {
+    // Completed settings are immutable; only an explicit jump starts a new run.
+    if (lease.current.record.completedAt && update.settings) return;
     track(Boolean(update.active) && statusRef.current === "ready" && !document.hidden && navigator.onLine, update.elapsedMs);
     if (!update.checkpoint && !update.settings) return;
     track(false);

@@ -87,7 +87,7 @@ export function RapidPlayer({ lesson, lines, level, settings, start, notice, clo
       initialView={surface === "settings" ? "settings" : "menu"} onViewChange={setDrawerView}
       settings={<>
         {cloud ? <p>이 설정은 현재 학습에만 적용됩니다. 계정 기본 설정은 새 학습부터 적용됩니다.</p> : null}
-        <RapidSessionControls disabled={cloud?.blocked} level={level} settings={session.settings} onChange={settings => send({ type: "settings", settings })} />
+        <RapidSessionControls disabled={complete || cloud.blocked} level={level} settings={session.settings} onChange={settings => send({ type: "settings", settings })} />
       </>}
       onSelect={lineIndex => send({ type: "jump", lineIndex })} onClose={() => setSurface(null)} onStages={() => navigate(stageHref(lesson.id, start.selection.stage))} />
     {dictionary.selection ? <DictionaryPopup selection={dictionary.selection} language={lesson.language} onClose={dictionary.close} /> : null}

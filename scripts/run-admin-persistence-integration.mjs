@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runPlaywright } from "./run-playwright.mjs";
 
 const learnerPreferences = process.argv.includes("--learner-preferences");
 const cloudPractice = process.argv.includes("--cloud-practice");
@@ -61,11 +62,8 @@ if (process.env.PLAYWRIGHT_PRODUCTION === "1") {
   if (build.status !== 0) process.exit(build.status ?? 1);
 }
 
-const result = spawnSync(
-  "npx",
+const result = runPlaywright(
   [
-    "playwright",
-    "test",
     ...(learnerUI ? [] : mp3Cache ? ["e2e/mp3-cache.integration.spec.ts"] : cloudPractice ? ["e2e/cloud-practice.integration.spec.ts", "e2e/cloud-practice-modes.integration.spec.ts", "e2e/cloud-practice-takeover.integration.spec.ts", "e2e/cloud-cutover.integration.spec.ts"] : learnerPreferences ? ["e2e/learner-preferences.integration.spec.ts"] : ["e2e/admin-persistence.integration.spec.ts",
     "e2e/lesson-publication.integration.spec.ts",
     "e2e/session-defaults.integration.spec.ts",
@@ -75,10 +73,7 @@ const result = spawnSync(
     `--output=${join(tmpdir(), `meta-shadowing-integration-${process.pid}`)}`,
     ...process.argv.slice(2).filter(argument => !["--learner-preferences", "--cloud-practice", "--mp3-cache", "--learner-ui"].includes(argument))
   ],
-  {
-    stdio: "inherit",
-    env: integrationEnvironment
-  }
+  integrationEnvironment
 );
 
-process.exit(result.status ?? 1);
+process.exit(result);

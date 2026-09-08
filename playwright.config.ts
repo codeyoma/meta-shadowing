@@ -58,7 +58,7 @@ export default defineConfig({
   use: {
     baseURL,
     ignoreHTTPSErrors: productionBuild,
-    trace: "on-first-retry",
+    trace: process.env.SAFE_CI_ARTIFACT_DIR ? "off" : "on-first-retry",
     launchOptions: chromeExecutable ? {
       executablePath: chromeExecutable,
       // Chrome's macOS updater can inherit stdio and keep worker teardown waiting.
