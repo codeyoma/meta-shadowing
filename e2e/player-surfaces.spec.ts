@@ -56,6 +56,7 @@ test("menu is bottom anchored and enters vertically with reduced-motion support"
   await page.evaluate(() => document.fonts.ready);
   const sheet = page.getByRole("dialog", { name: "학습 메뉴", exact: true });
   async function expectMenuLayout(viewport: { width: number; height: number }) {
+    await sheet.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
     await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.y + box.height); }).toBe(viewport.height);
     const box = (await sheet.boundingBox())!;
     // Short screens allow a full-height sheet so the two footer actions fit;

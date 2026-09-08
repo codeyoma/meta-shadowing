@@ -15,7 +15,7 @@ test("stage coins are flattened without distorting their icons and labels fit be
     for (const stage of await stages.all()) {
       const coin = stage.locator('[class*="levelNode"]');
       const coinBox = (await coin.boundingBox())!;
-      const iconBox = (await coin.locator("svg").boundingBox())!;
+      const iconBox = (await coin.locator(":scope > svg").boundingBox())!;
       const badgeBox = (await stage.getByText(/^Lv \d$/).boundingBox())!;
       const nameBox = (await stage.locator("strong").boundingBox())!;
       expect(coinBox.width / coinBox.height).toBeGreaterThan(1.1);

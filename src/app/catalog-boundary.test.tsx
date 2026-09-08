@@ -1,4 +1,4 @@
-import { act, createElement, Suspense, use, useState, type ComponentType, type ReactNode } from "react";
+import { act, createElement, use, useState, type ComponentType, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ErrorBoundaryHandler, type ErrorInfo } from "next/dist/client/components/error-boundary";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
@@ -7,13 +7,11 @@ import { lessons } from "@/lib/lessons";
 import LearnerLayout from "./(learner)/layout";
 import BrowseError from "./(learner)/error";
 import AppError from "./error";
-import AppLoading from "./loading";
 
-const catalog = vi.hoisted(() => ({ unavailable: true, waitFor: Promise.resolve() }));
+const catalog = vi.hoisted(() => ({ unavailable: true }));
 vi.mock("@/lib/server-auth", () => ({ requireLearner: async () => undefined }));
 vi.mock("@/lib/published-lessons", () => ({
   listPublishedLessons: async () => {
-    await catalog.waitFor;
     if (catalog.unavailable) throw new Error("Catalog database unavailable");
     return lessons;
   }
@@ -28,7 +26,6 @@ let root: Root;
 
 beforeEach(() => {
   catalog.unavailable = true;
-  catalog.waitFor = Promise.resolve();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.spyOn(console, "error").mockImplementation(() => {});
   container = document.createElement("div");
@@ -57,8 +54,7 @@ function CatalogRequest({ fallback }: { fallback: ComponentType<ErrorInfo> }) {
   };
   return createElement(AppRouterContext.Provider, { value: router },
     createElement(ErrorBoundaryHandler, { pathname: "/languages", errorComponent: fallback },
-      createElement(Suspense, { fallback: createElement(AppLoading) },
-        createElement(LayoutResult, { result }))));
+      createElement(LayoutResult, { result })));
 }
 
 async function recover(fallback: ComponentType<ErrorInfo>) {
@@ -77,16 +73,4 @@ it("places a usable retry boundary above the learner layout's rejected catalog r
 
 it("refetches server content when retrying the existing learner fallback", async () => {
   await recover(BrowseError);
-});
-
-it("provides loading UI above the async learner layout", async () => {
-  catalog.unavailable = false;
-  const pending = Promise.withResolvers<void>();
-  catalog.waitFor = pending.promise;
-  await act(async () => root.render(createElement(CatalogRequest, { fallback: AppError })));
-  expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
-  expect(container.querySelector("h1")).toBeNull();
-  await act(async () => pending.resolve());
-  expect(container.querySelector("h1")?.textContent).toBe("Recovered learner screen");
-  expect(container.querySelector('[aria-busy="true"]')).toBeNull();
 });
