@@ -97,8 +97,21 @@ for (const level of [1,4,5,6,7,8]) test(`level ${level} uses acknowledged units,
       for(let cycle=1;cycle<=3;cycle++) { await confirmManualListen(page); await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`); }
       await page.getByRole("button",{name:/NEXT/}).click();
       await expect.poll(async()=> (await journal()).progress.nextPhrase).toBe(2);
+      // The short recording at 2x can finish between Playwright polls. Pause at
+      // the visible second-phrase transition so this tests a stable mid-group exit.
+      await page.evaluate(()=>{
+        const list = document.querySelector('[aria-label="묶음 프레이즈"]')!;
+        const observer = new MutationObserver(()=>{
+          if(list.children[1]?.getAttribute("aria-current")!=="true") return;
+          const pause = document.querySelector<HTMLButtonElement>('button[aria-label^="PAUSE"]');
+          if(!pause) return;
+          observer.disconnect(); pause.click();
+        });
+        observer.observe(list,{subtree:true,attributes:true,attributeFilter:["aria-current"]});
+      });
       await page.getByRole("button",{name:/첫 원음 듣기/}).click();
       await expect(page.getByRole("list",{name:"묶음 프레이즈"}).getByRole("listitem").nth(1)).toHaveAttribute("aria-current","true");
+      await expect(page.locator("audio")).toHaveJSProperty("paused",true);
       await leave(page); await page.close();
       page = await a.newPage(); await open(page);
       await dropFinal(page);

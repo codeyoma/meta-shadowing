@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       settings = resolveSessionSettings(profile.overrides,defaults);
     }
     const { accountId: _accountId, ...verifiedCommand } = command;
-    const { data,error } = await client.rpc("learner_practice", { p_user_id: identity.id, p_command: { ...verifiedCommand, ...(settings ? { settings } : {}) } });
+    const { data,error } = await client.rpc(command.action === "takeover" ? "takeover_learner_practice" : "learner_practice", { p_user_id: identity.id, p_command: { ...verifiedCommand, ...(settings ? { settings } : {}) } });
     if (error) {
       const conflict = ["session-busy","ownership-lost","lesson-version-changed","operation-conflict","revision-conflict","run-completed","mode-unavailable"];
       if (conflict.includes(error.message)) return failure(error.message,409);

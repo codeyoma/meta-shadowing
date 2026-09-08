@@ -40,7 +40,8 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     if (event.type !== "pause" && (waiting.current || (cloudRef.current && !cloudRef.current.canAct()))) return;
     if (waiting.current && event.type === "pause") { audioRef.current?.pause(); updateRecord({ active: false }); return; }
     const previous = currentSession.current;
-    if (cloudRef.current && previous.phase === "paused" && (event.type === "space" || event.type === "retry") && !resumeVerified.current) {
+    const startsPlayback = previous.phase === "paused" || (previous.phase === "ready" && previous.completedCycles === 0);
+    if (cloudRef.current && startsPlayback && (event.type === "space" || event.type === "retry") && !resumeVerified.current) {
       waiting.current = true;
       void cloudRef.current.verifyResume().then(allowed => {
         waiting.current = false;

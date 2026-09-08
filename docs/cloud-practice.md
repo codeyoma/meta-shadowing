@@ -1,4 +1,4 @@
-# Server-confirmed practice (#19–20)
+# Server-confirmed practice (#19–21)
 
 This is a gated development slice of #17, not a public beta release. Keep
 `CLOUD_LEARNING_ENABLED` unset unless testing the cloud path. Deploying the SQL,
@@ -10,7 +10,7 @@ enabling hosted traffic, and physical Google/mobile acceptance require separate 
   and study dates in its stored timezone. Browser learning records are neither
   read, migrated, updated, nor deleted in cloud mode.
 - All eight levels, manual/automatic audio, grouped audio, and rapid display use
-  the same server-confirmed path. The explicit takeover action belongs to #21.
+  the same server-confirmed path, including explicit device takeover.
 - Pressing **계정 학습 시작** atomically acquires a 30-second account lease.
   The instance UUID exists only in memory; a run URL never grants ownership.
   Foreground checks run every eight seconds, on focus, and immediately before
@@ -18,6 +18,16 @@ enabling hosted traffic, and physical Google/mobile acceptance require separate 
 - Another active instance is blocked. Normal exit releases ownership; an offline
   or disconnected owner expires. Every checkpoint, renewal, and release verifies
   the run, instance, and generation using server time.
+- **이 기기에서 이어 학습** opens a confirmation. Cancel performs no write.
+  Confirm transfers the current run, actual settings, and latest committed
+  checkpoint in one transaction. A confirmation for an older generation cannot
+  steal a newer owner. If another lesson/stage is active, first navigate to that
+  run; browsing itself never takes ownership. Refresh creates a new RAM instance.
+- A connected previous device stops on its next ownership check and shows an
+  ownership-loss notice. Offline/background playback stops locally; returning
+  requires server verification. This is not an instantaneous remote mute.
+  Successful start/takeover/checkpoint receipts are revalidated before enabling
+  their player transition, including retries whose original response was lost.
 - The existing three/five-repeat player rules remain intact. Confirmed practice
   records the current unit; advancing and jumping wait for server acknowledgment.
   The completion screen is not confirmed until the final transaction succeeds.
@@ -46,8 +56,9 @@ enabling hosted traffic, and physical Google/mobile acceptance require separate 
 
 ## Security boundary
 
-`GET /api/learner/practice` reads the account journal. `POST` accepts start,
-checkpoint, renew, and release commands. The server verifies Google identity,
+`GET /api/learner/practice` reads the account journal and active generation (never
+the owner's instance ID). `POST` accepts start, takeover, checkpoint, renew, and
+release commands. The server verifies Google identity,
 beta access, same origin, body shape, and the stale-account guard. It never accepts
 a caller-supplied owner, unit plan, or starting settings snapshot. Validated in-run
 settings patches cannot change group size. The database transaction locks the
@@ -72,5 +83,9 @@ PLAYWRIGHT_PRODUCTION=1 npm run test:cloud-practice -- --project=mobile
 The integration test uses independent browser contexts with local Auth sessions,
 real persistence and RPC calls. Only the audio transport uses a small recording
 fixture. It exercises acknowledgments lost after commit, cross-account denial,
-concurrent acquisition/completion, ordinary exit, real lease expiration, history,
-and streaks. Browser emulation is not physical iOS/Android or hosted OAuth proof.
+concurrent acquisition/takeover/checkpoint/completion, cancellation, pending-save
+retry before and after commit, delayed acknowledgments, ordinary exit, real lease
+expiration, history, and streaks. The takeover scenario runs independently in
+manual mode; final all-mode takeover acceptance remains part of #23. Browser
+emulation and injected visibility events are not physical iOS/Android or hosted
+OAuth proof.

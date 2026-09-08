@@ -3,6 +3,13 @@ import { parsePracticeCommand } from "./cloud-practice";
 
 const id = "00000000-0000-4000-8000-000000000020";
 const owned = { accountId: id, instance: id, runId: id, generation: 1 };
+it("requires an observed run generation and an operation ID for explicit takeover", () => {
+  const takeover = { ...owned, action: "takeover", operation: id };
+  expect(parsePracticeCommand(takeover)).toEqual(takeover);
+  for (const patch of [{ generation: 0 }, { operation: undefined }, { runId: undefined }, { force: true }, { settings: { mode: "manual" } }]) {
+    expect(parsePracticeCommand({ ...takeover, ...patch })).toBeNull();
+  }
+});
 it("accepts every existing level but never a client unit plan or starting settings", () => {
   for (let level = 1; level <= 8; level++) {
     const start = { action: "start", accountId: id, instance: id, operation: id, lessonId: id, lessonVersion: "2026-09-08T00:00:00Z", level, stage: level * 2 };

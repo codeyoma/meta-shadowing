@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PracticeError, sendPractice, type CloudJournal, type PracticeCommand, type PracticeLease } from "@/lib/cloud-practice";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { isPracticeVerificationCurrent, PracticeError, sendPractice, type CloudJournal, type PracticeCommand, type PracticeLease } from "@/lib/cloud-practice";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { SubtitleHint } from "@/lib/practice-tokens";
 import type { CompletionRecord } from "@/lib/learning-records";
@@ -28,14 +29,21 @@ export function CloudLearningPlayer(props: Props) {
   const [journal,setJournal] = useState<CloudJournal | null>(null);
   const [error,setError] = useState<string | null>(null);
   const [busy,setBusy] = useState(false);
+  const [takeoverTarget,setTakeoverTarget] = useState<CloudJournal["activeLease"]>(null);
   const [loadAttempt,setLoadAttempt] = useState(0);
-  const command = useRef<Extract<PracticeCommand,{action:"start"}> | null>(null);
+  const command = useRef<Extract<PracticeCommand,{action:"start" | "takeover"}> | null>(null);
   const fetching = useRef(false);
   const accountValid = useRef(true);
+  const lifecycleEpoch = useRef(0);
   const invalidateAccount = useCallback(() => {
     accountValid.current = false;
     command.current = null;
     setLease(null); setJournal(null); setError("account-changed");
+  },[]);
+  useEffect(() => {
+    const changed = () => { lifecycleEpoch.current++; };
+    window.addEventListener("focus",changed); window.addEventListener("offline",changed); document.addEventListener("visibilitychange",changed);
+    return () => { window.removeEventListener("focus",changed); window.removeEventListener("offline",changed); document.removeEventListener("visibilitychange",changed); };
   },[]);
   useEffect(() => {
     accountValid.current = true;
@@ -73,27 +81,69 @@ export function CloudLearningPlayer(props: Props) {
     }).catch(error => { if (alive) setError(error instanceof PracticeError ? error.code : "temporary-error"); });
     return () => { alive = false; };
   },[props.accountId,props.lesson.id,props.lesson.version,props.stage,loadAttempt]);
-  async function begin() {
+  async function acquire() {
     if (fetching.current || !journal || !accountValid.current) return;
     fetching.current = true; setBusy(true); setError(null);
-    command.current ??= { action:"start",accountId:props.accountId,instance:crypto.randomUUID(),operation:crypto.randomUUID(),lessonId:props.lesson.id,lessonVersion:props.lesson.version,level:props.level,stage:props.stage };
     try {
-      const result = await sendPractice(command.current);
+      const request = command.current!;
+      let result = await sendPractice(request);
+      // An acquisition receipt can arrive after a different device took over.
+      const check = { epoch: lifecycleEpoch.current, startedAt: performance.now() };
+      result = await sendPractice({action:"renew",accountId:props.accountId,instance:request.instance,runId:result.record.runId,generation:result.generation});
       if (!accountValid.current) return;
+      if (document.hidden || !navigator.onLine || !isPracticeVerificationCurrent(check,lifecycleEpoch.current,performance.now())) throw new PracticeError("temporary-error");
       setLease(result);
       const url = new URL(window.location.href); url.searchParams.set("run",result.record.runId);
       window.history.replaceState(null,"",url);
-    } catch(error) { if (accountValid.current) setError(error instanceof PracticeError ? error.code : "temporary-error"); }
+    } catch(error) {
+      if (!accountValid.current) return;
+      const code = error instanceof PracticeError ? error.code : "temporary-error";
+      setError(code);
+      if (code !== "temporary-error") command.current = null;
+      if (["session-busy","ownership-lost"].includes(code)) {
+        try {
+          const response = await fetch("/api/learner/practice",{cache:"no-store",signal:AbortSignal.timeout(10000)});
+          if (response.ok) {
+            const latest: CloudJournal = await response.json();
+            if (latest.accountId !== props.accountId) invalidateAccount();
+            else if (accountValid.current) setJournal(latest);
+          }
+        } catch { /* Keep the last read; its generation is still fenced. */ }
+      }
+    }
     finally { fetching.current = false; setBusy(false); }
+  }
+  function begin() {
+    command.current ??= { action:"start",accountId:props.accountId,instance:crypto.randomUUID(),operation:crypto.randomUUID(),lessonId:props.lesson.id,lessonVersion:props.lesson.version,level:props.level,stage:props.stage };
+    void acquire();
+  }
+  function takeOver() {
+    if (fetching.current || !takeoverTarget) return;
+    command.current = {action:"takeover",accountId:props.accountId,instance:crypto.randomUUID(),operation:crypto.randomUUID(),runId:takeoverTarget.runId,generation:takeoverTarget.generation};
+    setTakeoverTarget(null);
+    void acquire();
   }
   if (lease) return <ActiveCloudPlayer {...props} lease={lease} instance={command.current!.instance} invalidateAccount={invalidateAccount} />;
   const completed = journal?.history.find(record => record.runId === props.requestedRun);
-  return <main className="page">
+  return <main className="page mx-auto flex w-full max-w-sm flex-col gap-4 p-5">
     <h1>{props.lesson.name}</h1>
     {completed ? <CompletionSummary record={completed as CompletionRecord} onHome={() => window.location.assign("/lessons")} /> : <>
       <p>마지막 서버 확인 지점에서 이어 학습합니다.</p>
       {journal?.progress?.lessonId === props.lesson.id && Date.parse(journal.progress.lessonVersion) !== Date.parse(props.lesson.version) ? <p>레슨 버전이 변경되어 이전 진도를 이어갈 수 없습니다. 새 버전의 처음부터 시작합니다. 과거 완료 기록은 유지됩니다.</p> : null}
-      {error ? <PracticeFailure error={error} retry={() => journal ? void begin() : setLoadAttempt(value => value + 1)} /> : null}
+      {error ? <PracticeFailure error={error} retry={() => journal ? begin() : setLoadAttempt(value => value + 1)} /> : null}
+      {journal?.activeLease && journal.progress ? journal.progress.lessonId === props.lesson.id && journal.progress.stage === props.stage ? <Dialog open={Boolean(takeoverTarget)} onOpenChange={open => setTakeoverTarget(open ? journal.activeLease : null)}>
+        <DialogTrigger asChild><Button disabled={busy}>이 기기에서 이어 학습</Button></DialogTrigger>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>학습 기기를 변경할까요?</DialogTitle>
+            <DialogDescription>마지막 서버 확인 지점에서 이어갑니다. 이전 기기는 다음 연결 확인 시 중지되며, 확인되지 않은 학습은 반영되지 않습니다.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTakeoverTarget(null)}>취소</Button>
+            <Button onClick={takeOver}>이어 학습 확인</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog> : <Button asChild variant="outline"><a href={`/player?lesson=${journal.progress.lessonId}&level=${journal.progress.level}&stage=${journal.progress.stage}`}>진행 중인 학습으로 이동</a></Button> : null}
       <Button disabled={busy || !journal} onClick={() => void begin()}>계정 학습 시작</Button>
     </>}
   </main>;

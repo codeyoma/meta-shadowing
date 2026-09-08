@@ -1,12 +1,19 @@
 import type { ProgressRecord, CompletionRecord, Journal } from "./learning-records";
 import { validSettingOverrides, type SessionSettings } from "./session-settings";
 
+export const PRACTICE_CHECK_INTERVAL_MS = 8000;
+export const PRACTICE_MAX_VERIFICATION_AGE_MS = 10000;
+export function isPracticeVerificationCurrent(check: { epoch: number; startedAt: number }, epoch: number, now: number) {
+  return check.epoch === epoch && now-check.startedAt < PRACTICE_MAX_VERIFICATION_AGE_MS;
+}
+
 export type PracticeLease = { accountId: string; record: ProgressRecord & Partial<CompletionRecord>; generation: number; revision: number; leaseUntil: string };
-export type CloudJournal = Journal & { accountId: string };
+export type CloudJournal = Journal & { accountId: string; activeLease?: { runId: string; generation: number; leaseUntil: string } | null };
 type Ownership = { accountId: string; instance: string; runId: string; generation: number };
 export type PracticeCommand =
   | { action: "start"; accountId: string; instance: string; operation: string; lessonId: string; lessonVersion: string; level: number; stage: number }
   | (Ownership & { action: "renew" | "release" })
+  | (Ownership & { action: "takeover"; operation: string })
   | (Ownership & { action: "checkpoint"; operation: string; revision: number; kind: "studied" | "advance" | "jump" | "line" | "settings"; nextUnit: number; activeMs: number; confirmedCycles?: number; settings?: Partial<SessionSettings> });
 const uuid = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const integer = (value: unknown, min = 0) => typeof value === "number" && Number.isSafeInteger(value) && value >= min;
@@ -34,6 +41,9 @@ export function parsePracticeCommand(value: unknown): PracticeCommand | null {
       if (!uuid(v.operation) || !integer(v.revision) || !integer(v.nextUnit) || !integer(v.activeMs)
         || !["studied", "advance", "jump", "line", "settings"].includes(String(v.kind))
         || (v.kind === "advance" && ![3, 5].includes(Number(v.confirmedCycles)))) return null;
+    } else if (v.action === "takeover") {
+      keys.push("operation");
+      if (!uuid(v.operation)) return null;
     } else if (v.action !== "renew" && v.action !== "release") return null;
   }
   return Object.keys(v).every(key => keys.includes(key)) ? value as PracticeCommand : null;

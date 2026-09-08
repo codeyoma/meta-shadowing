@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { PracticeError, sendPractice, type PracticeCommand, type PracticeLease, type PracticeErrorCode } from "@/lib/cloud-practice";
+import { isPracticeVerificationCurrent, PRACTICE_CHECK_INTERVAL_MS, PRACTICE_MAX_VERIFICATION_AGE_MS, PracticeError, sendPractice, type PracticeCommand, type PracticeLease, type PracticeErrorCode } from "@/lib/cloud-practice";
 import type { CompletionRecord } from "@/lib/learning-records";
 import type { CloudRecording, RecordUpdate } from "./use-learning-record";
 
@@ -13,7 +13,7 @@ export function PracticeFailure({ error, retry, navigate = href => window.locati
   const ownership = ["ownership-lost", "session-busy"].includes(error);
   return <Alert aria-label="학습 저장 알림">
     <AlertTitle>{temporary ? "저장을 확인하지 못했습니다." : auth ? "다시 로그인해 주세요." : ownership ? "다른 기기에서 학습 중이거나 학습 권한이 만료되었습니다." : "학습 상태가 변경되었습니다."}</AlertTitle>
-    <AlertDescription>{temporary ? "다음 단계로 이동하지 않았습니다. 같은 저장을 다시 시도할 수 있습니다." : "마지막 서버 확인 지점과 완료 기록은 보존됩니다."}</AlertDescription>
+    <AlertDescription>{temporary ? "다음 단계로 이동하지 않았습니다. 같은 저장을 다시 시도할 수 있습니다." : ownership ? "다른 기기로 인계되었거나 연결이 만료되어 이 기기의 학습을 중지했습니다. 마지막 서버 확인 지점과 완료 기록은 보존됩니다." : "마지막 서버 확인 지점과 완료 기록은 보존됩니다."}</AlertDescription>
     {temporary && retry ? <Button variant="outline" onClick={retry}>저장 재시도</Button> : null}
     <Button variant="outline" onClick={() => navigate(auth ? "/login" : "/lessons")}>{auth ? "로그인" : "레슨으로 돌아가기"}</Button>
   </Alert>;
@@ -30,7 +30,7 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
   const inFlight = useRef(false);
   const clock = useRef({ active: false, anchor: 0, total: initial.record.activeMs });
   const lastVerified = useRef(performance.now());
-  const visibilityEpoch = useRef(0);
+  const lifecycleEpoch = useRef(0);
   const changeStatus = useCallback((next: PracticeStatus) => { statusRef.current = next; setStatus(next); }, []);
   const track = useCallback((active: boolean, elapsedMs = 0) => {
     const now = performance.now(), value = clock.current;
@@ -43,20 +43,19 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
     const operation = pending.current;
     if (!operation || inFlight.current) return;
     inFlight.current = true; changeStatus("saving"); track(false);
-    const sentAt = performance.now(), epoch = visibilityEpoch.current;
     try {
       let accepted = await sendPractice(operation.command);
-      // A replay carries its original acknowledgment, not a fresh lease. Likewise
-      // an acknowledgment held across backgrounding must not resume stale audio.
-      if (!document.hidden && (epoch !== visibilityEpoch.current || performance.now()-sentAt > 8000 || Date.parse(accepted.leaseUntil)-Date.now() < 10000)) {
-        accepted = await sendPractice({ action:"renew", accountId:initial.accountId, instance,
-          runId:accepted.record.runId, generation:accepted.generation });
-      }
+      // Even a fast successful receipt may predate a takeover. Revalidate before
+      // applying its player transition; the server, not the device clock, expires it.
+      const check = { epoch: lifecycleEpoch.current, startedAt: performance.now() };
+      accepted = await sendPractice({ action:"renew", accountId:initial.accountId, instance,
+        runId:accepted.record.runId, generation:accepted.generation });
       if (!alive.current) return;
-      lease.current = accepted; lastVerified.current = performance.now(); setRecord(accepted.record);
+      if (!isPracticeVerificationCurrent(check,lifecycleEpoch.current,performance.now())) throw new PracticeError("temporary-error");
+      lease.current = accepted; lastVerified.current = check.startedAt; setRecord(accepted.record);
       pending.current = null;
       // Apply the accepted player transition before re-enabling its old button.
-      statusRef.current = document.hidden ? "paused" : "ready";
+      statusRef.current = document.hidden || !navigator.onLine ? "paused" : "ready";
       operation.resolve();
       queueMicrotask(() => { if (alive.current) setStatus(statusRef.current); });
     } catch (error) {
@@ -64,22 +63,31 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
       if (alive.current) changeStatus(error instanceof PracticeError ? error.code : "temporary-error");
     } finally { inFlight.current = false; }
   }, [changeStatus,track,invalidateAccount,initial.accountId,instance]);
-  const renew = useCallback(async (resume = false) => {
+  const renew = useCallback(async function renew(resume = false): Promise<boolean> {
     if (inFlight.current || pending.current || document.hidden || !navigator.onLine || record.completedAt) return false;
     if (resume) { changeStatus("checking"); track(false); }
     inFlight.current = true;
+    const check = { epoch: lifecycleEpoch.current, startedAt: performance.now() };
+    let recheck = false;
     try {
       const accepted = await sendPractice({ action: "renew", ...ownership() });
       if (!alive.current) return false;
-      lease.current = accepted; lastVerified.current = performance.now();
-      if (resume || statusRef.current === "checking") changeStatus(document.hidden ? "paused" : "ready");
-      return !document.hidden;
+      if (!isPracticeVerificationCurrent(check,lifecycleEpoch.current,performance.now())) {
+        track(false); changeStatus("paused"); recheck = true; return false;
+      }
+      lease.current = accepted; lastVerified.current = check.startedAt;
+      if (resume || statusRef.current === "checking") changeStatus(document.hidden || !navigator.onLine ? "paused" : "ready");
+      return !document.hidden && navigator.onLine;
     } catch (error) {
       track(false);
       if (error instanceof PracticeError && ["unauthorized","account-changed"].includes(error.code)) { invalidateAccount(); return false; }
       if (alive.current) changeStatus(error instanceof PracticeError ? error.code : "temporary-error");
       return false;
-    } finally { inFlight.current = false; if (pending.current) void submit(); }
+    } finally {
+      inFlight.current = false;
+      if (pending.current) void submit();
+      else if (recheck && alive.current && !document.hidden && navigator.onLine) void renew(true);
+    }
   }, [changeStatus,ownership,record.completedAt,track,submit,invalidateAccount]);
   const updateRecord = useCallback((update: RecordUpdate): void | Promise<void> => {
     track(Boolean(update.active) && statusRef.current === "ready" && !document.hidden && navigator.onLine, update.elapsedMs);
@@ -103,28 +111,29 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
   useEffect(() => {
     alive.current = true;
     const pause = () => { track(false); if (statusRef.current === "ready") changeStatus("paused"); };
-    const visibility = () => { visibilityEpoch.current++; if (document.hidden) pause(); else if (!pending.current) void renew(true); };
+    const offline = () => { lifecycleEpoch.current++; pause(); };
+    const visibility = () => { lifecycleEpoch.current++; if (document.hidden) pause(); else if (!pending.current) void renew(true); };
     const timer = window.setInterval(() => {
-      if (statusRef.current === "ready" && performance.now()-lastVerified.current > 10000) { pause(); void renew(true); }
-      else if (statusRef.current === "ready") void renew();
-    },8000);
+      if (statusRef.current === "ready" && performance.now()-lastVerified.current >= PRACTICE_MAX_VERIFICATION_AGE_MS) { pause(); void renew(true); }
+      else if (statusRef.current === "ready" && performance.now()-lastVerified.current >= PRACTICE_CHECK_INTERVAL_MS) void renew();
+    },1000);
     const unload = (event: BeforeUnloadEvent) => { if (pending.current) { event.preventDefault(); event.returnValue = ""; } };
     const release = () => {
       track(false);
       void fetch("/api/learner/practice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "release", ...ownership() }), keepalive: true }).catch(() => undefined);
     };
     window.addEventListener("beforeunload",unload); window.addEventListener("pagehide",release);
-    window.addEventListener("offline",pause); window.addEventListener("focus",visibility); document.addEventListener("visibilitychange",visibility);
+    window.addEventListener("offline",offline); window.addEventListener("focus",visibility); document.addEventListener("visibilitychange",visibility);
     return () => {
       alive.current = false; track(false); clearInterval(timer);
       window.removeEventListener("beforeunload",unload); window.removeEventListener("pagehide",release);
-      window.removeEventListener("offline",pause); window.removeEventListener("focus",visibility); document.removeEventListener("visibilitychange",visibility);
+      window.removeEventListener("offline",offline); window.removeEventListener("focus",visibility); document.removeEventListener("visibilitychange",visibility);
     };
   }, [changeStatus,ownership,renew,track]);
   const recording: CloudRecording = { completion: record.completedAt ? record as CompletionRecord : null, blocked: status !== "ready", updateRecord, exit, verifyResume: () => renew(true),
     canAct: () => {
       if (statusRef.current !== "ready" || document.hidden || !navigator.onLine) return false;
-      if (performance.now()-lastVerified.current <= 10000) return true;
+      if (performance.now()-lastVerified.current < PRACTICE_MAX_VERIFICATION_AGE_MS) return true;
       void renew(true); return false;
     } };
   const notice = status === "ready" ? null : ["saving","checking","leaving"].includes(status) ? <p role="status">서버 확인 중…</p>
