@@ -170,18 +170,32 @@ test("only the recommended stage has a clockwise border arc, even when preview s
   expect(initial.transform).toBe("none");
   expect(await arc.evaluate(el => getComputedStyle(el).strokeDasharray.split(/[ ,]+/).map(Number.parseFloat).every(n => n > 0))).toBe(true);
   await current.screenshot({ path: test.info().outputPath("current-stage-arc.png"), scale: "css" });
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(arc).toHaveCSS("animation-name", "none");
-  await expect(arc).toHaveCSS("transition-property", "none");
-  await expect.poll(() => ring.evaluate(el => el.getAnimations({ subtree: true }).map(animation => ({
-    property: animation instanceof CSSTransition ? animation.transitionProperty : "animation",
-    playState: animation.playState,
-    timing: animation.effect?.getTiming(),
-    target: ((animation.effect as KeyframeEffect | null)?.target as Element | null)?.tagName
-  })))).toEqual([]);
-  await expect(arc).toBeVisible();
-  expect(await arc.evaluate(el => parseFloat(getComputedStyle(el).strokeWidth))).toBeGreaterThan(0);
 });
+
+for (const initiallyReduced of [false, true]) {
+  test(`the current-stage ring respects reduced motion ${initiallyReduced ? "on arrival" : "when the preference changes"}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: initiallyReduced ? "reduce" : "no-preference" });
+    await seed(page, [complete(1), complete(2)]);
+    const current = page.getByRole("radio", { name: "3 순간 암기 Lv 2", exact: true });
+    const ring = current.locator('[data-stage-ring]');
+    const arc = ring.locator('[data-stage-arc]');
+    await current.scrollIntoViewIfNeeded();
+    // Keep this separate from direction sampling: script-paused CSS animations
+    // survive CSS removal in Chromium 145 and do not represent the learner flow.
+    if (!initiallyReduced) {
+      await expect.poll(() => arc.evaluate(el => el.getAnimations().filter(a => a.playState === "running").length)).toBe(1);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+    }
+    await expect(arc).toHaveCSS("animation-name", "none");
+    await expect(arc).toHaveCSS("transition-property", "none");
+    await expect.poll(() => ring.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+    await expect(arc).toHaveCSS("stroke-dashoffset", "50px");
+    await expect(arc).toBeVisible();
+    await expect(arc).toHaveCSS("stroke-width", "4px");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await expect.poll(() => arc.evaluate(el => el.getAnimations().filter(a => a.playState === "running").length)).toBe(1);
+  });
+}
 
 test("resuming a stage takes priority and a fully completed lesson has no ring", async ({ page }) => {
   await seed(page, [complete(1)], { ...complete(5), runId: "resume-five", nextPhrase: 1, nextUnit: 1 });
