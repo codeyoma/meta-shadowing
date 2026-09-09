@@ -129,7 +129,9 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await page.setViewportSize({ width: 375, height: 667 });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
-  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=5&group=4");
+  await test.step("Enter grouped player for keyboard checks", async () => {
+    await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=5&group=4");
+  });
   await page.getByRole("button", { name: "자막 보기", exact: true }).click();
   const canvas = page.getByRole("region", { name: "학습 자막", exact: true });
   await expect(canvas).toHaveAttribute("tabindex", "0");
@@ -156,8 +158,17 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeFocused();
+});
 
-  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=8&display=cumulative");
+// Each keyboard layout owns a fresh account lease. Cross-lesson page.goto()
+// must not make these accessibility checks depend on best-effort pagehide release.
+test("rapid cumulative subtitles are an explicit keyboard stop without advancing practice", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await test.step("Enter rapid player for keyboard checks", async () => {
+    await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=8&display=cumulative");
+  });
   const rapid = page.getByRole("region", { name: "속사포 학습" });
   await expect(rapid).toHaveAttribute("tabindex", "0");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).focus();

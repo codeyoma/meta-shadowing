@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, readdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -34,12 +34,13 @@ test("CI collector exports only failure metadata, never arbitrary report content
 });
 
 test("CI runner preserves a real Playwright failure while withholding its credentials", () => {
-  const directory = mkdtempSync(join(tmpdir(), "safe-ci-runner-"));
+  // Match CI's canonical temp path even where tmpdir() is a symlink (macOS).
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "safe-ci-runner-")));
   const secret = "fixture-unknown-session-token";
   try {
     const playwright = pathToFileURL(resolve("node_modules/@playwright/test/index.mjs")).href;
     writeFileSync(join(directory, "package.json"), JSON.stringify({ type: "module" }));
-    writeFileSync(join(directory, "mp3-cache.integration.spec.ts"), `import { test, expect } from ${JSON.stringify(playwright)};
+    writeFileSync(join(directory, "credential-safety-fixture.spec.ts"), `import { test, expect } from ${JSON.stringify(playwright)};
       test(${JSON.stringify(secret)}, async ({}, testInfo) => {
         await testInfo.attach('storage-state', { body: ${JSON.stringify(secret)}, contentType: 'text/plain' });
         await testInfo.attach('mp3-expiry-diagnostic-v1', { body: JSON.stringify({ downloads: 2, events: [
