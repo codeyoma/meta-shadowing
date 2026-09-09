@@ -115,16 +115,19 @@ test("headword icons open each entry's own source in a new tab without leaving p
   for (const width of [320, 430, 1280]) {
     await page.setViewportSize({ width, height: 932 });
     for (let index = 0; index < 3; index++) {
-      // A resize can recenter the dialog between separate browser calls.
-      // Compare the word and icon from the same layout frame.
-      const { headword, icon } = await headings.nth(index).evaluate(heading => ({
-        headword: heading.querySelector('[lang="en"]')!.getBoundingClientRect().toJSON(),
-        icon: heading.querySelector("a")!.getBoundingClientRect().toJSON(),
-      }));
-      expect(icon.x).toBeGreaterThanOrEqual(headword.x + headword.width);
-      expect(Math.abs(icon.y + icon.height / 2 - headword.y - headword.height / 2)).toBeLessThan(2);
-      expect(icon.width).toBeGreaterThanOrEqual(44);
-      expect(icon.height).toBeGreaterThanOrEqual(44);
+      // Drawer motion/resize can yield fractional translated rects (even a
+      // 44px target can measure 43.999996px). Wait for valid rendered geometry,
+      // keeping the touch-target minimum strict and both rects in one frame.
+      await expect(async () => {
+        const { headword, icon } = await headings.nth(index).evaluate(heading => ({
+          headword: heading.querySelector('[lang="en"]')!.getBoundingClientRect().toJSON(),
+          icon: heading.querySelector("a")!.getBoundingClientRect().toJSON(),
+        }));
+        expect(icon.x).toBeGreaterThanOrEqual(headword.x + headword.width);
+        expect(Math.abs(icon.y + icon.height / 2 - headword.y - headword.height / 2)).toBeLessThan(2);
+        expect(icon.width).toBeGreaterThanOrEqual(44);
+        expect(icon.height).toBeGreaterThanOrEqual(44);
+      }).toPass({ timeout: 5_000 });
       await expect(links.nth(index)).toBeInViewport();
     }
     expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);

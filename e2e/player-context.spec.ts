@@ -5,7 +5,12 @@ import { confirmManualListen, waitForManualListen } from "./fixtures/manual-prac
 
 async function openPlayer(page: Page, level: number) {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  // This idempotent beta-cookie setup may hit a reset keep-alive connection.
+  // Playwright retries only ECONNRESET, not HTTP failures or learner writes.
+  const entry = await page.request.post("/api/auth", {
+    data: { password: "integration-beta-password" }, maxRetries: 2,
+  });
+  expect(entry.status()).toBe(200);
   await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 }
