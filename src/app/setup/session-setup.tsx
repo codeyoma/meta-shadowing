@@ -39,24 +39,20 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   const cloud = useCloudPreferences()!;
   const cloudJournal = cloud.journal, overrides = cloud.profile.overrides;
   const language = lesson.language;
-  const [stage, setStage] = useState(1);
-  const level = learningStages[stage - 1].level;
-  const [settings, setSettings] = useState(defaults);
+  const settings = resolveSessionSettings(overrides, defaults);
   const [ready, setReady] = useState(false);
   const [previewStage, setPreviewStage] = useState<number | null>(null);
   const stageScrollRef = useBrowseScroll(`stages:${lesson.id}`);
   const shellScrollRef = useBrowseScroll(`stage-shell:${lesson.id}`);
-  const [completedStages, setCompletedStages] = useState<number[]>([]);
-  const [currentPractice, setCurrentPractice] = useState<ReturnType<typeof nextPracticeForLesson>>({ stage: 1, progress: null, review: false });
+  const completedStages = completedStagesForLesson(cloudJournal.history, lesson);
+  const currentPractice = nextPracticeForLesson(cloudJournal, lesson);
+  // Account refreshes update recommendations, not the user's open preview.
+  // The displayed selection and Start destination must share one source.
+  const stage = previewStage ?? initialStage ?? currentPractice.stage;
+  const level = learningStages[stage - 1].level;
   useEffect(() => {
-    setSettings(resolveSessionSettings(overrides,defaults));
-    const journal = cloudJournal;
-    const current = nextPracticeForLesson(journal, lesson);
-    setCompletedStages(completedStagesForLesson(journal.history, lesson));
-    setCurrentPractice(current);
-    setStage(initialStage ?? current.stage);
     setReady(true);
-  }, [defaults, lesson, initialStage, cloudJournal, overrides]);
+  }, []);
 
   function start(): void {
     playStageSound("start");
@@ -108,10 +104,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
           <h2 id="level-title" className="sr-only">학습 단계</h2>
           <ScrollArea className={styles.stageScroll} viewportProps={{ ref: stageScrollRef, role: "region", "aria-label": "학습 단계 목록", tabIndex: -1 }}>
           <div className={styles.pathInset}>
-          <ToggleGroup type="single" orientation="vertical" variant="path" value={previewStage === null ? "" : String(previewStage)} aria-labelledby="level-title" className="w-full" onValueChange={value => {
-            const selected = Number(value);
-            if (Number.isInteger(selected) && selected >= 1 && selected <= learningStages.length) setStage(selected);
-          }}>
+          <ToggleGroup type="single" orientation="vertical" variant="path" value={previewStage === null ? "" : String(previewStage)} aria-labelledby="level-title" className="w-full">
           <ol className={styles.levelPath} aria-labelledby="level-title">
             {learningStages.map(({ stage: number, level: methodLevel, name }, index) => {
               const offset = pathOffsets[index % pathOffsets.length];
@@ -129,7 +122,6 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
                     setPreviewStage(open ? number : null);
                     if (open) {
                       playStageSound("select");
-                      setStage(number);
                     }
                   }}>
                   <PopoverTrigger asChild>
