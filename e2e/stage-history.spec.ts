@@ -66,7 +66,7 @@ test("history moves off lessons into a lesson-only dialog, preserving old versio
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await dialog.getByRole("button", { name: "닫기", exact: true }).click();
+  await dialog.getByRole("button", { name: "확인", exact: true }).click();
   await expect(trigger).toBeFocused();
   await trigger.click();
   await dialog.getByRole("button", { name: "완료 기록 닫기", exact: true }).click();
@@ -228,7 +228,8 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
     await expect(records).toHaveCount(30);
     await expect(table).toHaveCSS("font-size", "12px");
     expect(await table.evaluate(el => el.parentElement!.scrollWidth <= el.parentElement!.clientWidth)).toBe(true);
-    const close = dialog.getByRole("button", { name: "닫기", exact: true });
+    const close = dialog.getByRole("button", { name: "확인", exact: true });
+    await close.click({ trial: true });
     const closeBefore = await close.boundingBox();
     const lastSettings = records.last().getByRole("button", { name: "설정 보기", exact: true });
     await lastSettings.click();

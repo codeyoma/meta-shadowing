@@ -41,18 +41,19 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
       const confirm = drawer.getByRole("button", { name: "확인", exact: true });
       const stages = drawer.getByRole("button", { name: "스테이지 화면으로", exact: true });
       await expect(confirm).toBeInViewport();
-      await expect(stages).toBeInViewport();
       await expect(confirm).toHaveCSS("background-color", appearance.background);
       await expect(confirm).toHaveCSS("box-shadow", appearance.shadow);
       await expect(confirm).toHaveCSS("border-radius", appearance.radius);
       expect((await confirm.boundingBox())!.height).toBe(appearance.height);
-      await expect(stages).toHaveCSS("color", "rgb(255, 75, 75)");
-      await expect(stages.locator("svg.lucide-map")).toHaveCount(1);
       const footer = drawer.locator('[data-slot="drawer-footer"]');
-      await expect(footer.getByRole("button")).toHaveCount(2);
-      const confirmBox = (await confirm.boundingBox())!;
-      expect((await stages.boundingBox())!.y).toBeGreaterThanOrEqual(confirmBox.y + confirmBox.height);
-      if (view === "menu") await expect(drawer.getByRole("navigation").getByRole("button")).toHaveCount(2);
+      await expect(footer.getByRole("button")).toHaveText(["확인"]);
+      if (view === "menu") {
+        await expect(drawer.getByRole("navigation").getByRole("button")).toHaveText(["학습 설정", "문장 목록", "스테이지 화면으로"]);
+        await stages.scrollIntoViewIfNeeded();
+        await expect(stages).toBeInViewport();
+        await expect(stages.getByText("스테이지 화면으로", { exact: true })).toHaveCSS("color", "rgb(255, 75, 75)");
+        await expect(stages.locator("svg.lucide-map")).toHaveCount(1);
+      } else await expect(stages).toHaveCount(0);
       if (view === "settings") {
         const speed = drawer.getByRole("combobox", { name: "재생속도", exact: true });
         await speed.scrollIntoViewIfNeeded();
@@ -93,10 +94,11 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
   });
 }
 
-test("every drawer view returns to the current lesson and stage through the footer map button", async ({ page }) => {
+test("every drawer view returns to the current lesson and stage through the third menu row", async ({ page }) => {
   for (const view of ["menu", "settings", "sentences"] as const) {
     await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&mode=manual&stage=2");
     const drawer = await openView(page, view);
+    if (view !== "menu") await drawer.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
     await drawer.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
     await expect(page).toHaveURL("/lessons/10000000-0000-4000-8000-000000000002/stages?stage=2");
   }

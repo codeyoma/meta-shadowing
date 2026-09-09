@@ -116,7 +116,7 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 900 
     await expect(dialog.getByRole("table")).toBeVisible();
     await dialog.getByRole("button", { name: "설정 보기", exact: true }).first().click();
     await expect(dialog.getByText("버전 2026-09-01T00:00:00+00:00", { exact: true })).toBeVisible();
-    await dialog.getByRole("button", { name: "닫기", exact: true }).click();
+    await dialog.getByRole("button", { name: "확인", exact: true }).click();
     await expect(history).toBeFocused();
     const lastStage = page.getByRole("radio", { name: /^16 / });
     await lastStage.click();

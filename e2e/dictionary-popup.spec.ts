@@ -72,7 +72,8 @@ test("a word pauses media, displays the source fixture, blocks shortcuts, and re
   await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
   await word.press("Enter");
   await expect(popup).toBeVisible();
-  await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 3, y: 3 } });
+  // The full-height drawer covers the backdrop on phone-sized screens.
+  await page.keyboard.press("Escape");
   await expect(popup).toHaveCount(0);
   await expect(word).toBeFocused();
 });

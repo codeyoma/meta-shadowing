@@ -30,11 +30,17 @@ test("selected sentences center after expansion without scrolling the sheet head
     await sheet.click({ trial: true });
     const selected = sheet.getByRole("button", { name: new RegExp(`^${number}번 문장`) });
     await expect(selected).toBeFocused();
+    // Focus can arrive before the drawer/accordion finishes laying out.
+    // Keep the same half-pixel alignment requirement, but observe settled UI.
+    if (number === 5) await expect.poll(async () => {
+      const row = (await selected.boundingBox())!;
+      const list = (await sheet.locator('[data-slot="sentence-list"]').boundingBox())!;
+      return Math.abs(row.y + row.height / 2 - list.y - list.height / 2);
+    }).toBeLessThan(0.5);
     const selectedBox = (await selected.boundingBox())!;
     const listBox = (await sheet.locator('[data-slot="sentence-list"]').boundingBox())!;
     expect(selectedBox.y).toBeGreaterThanOrEqual(listBox.y - 1);
     expect(selectedBox.y + selectedBox.height).toBeLessThanOrEqual(listBox.y + listBox.height + 1);
-    if (number === 5) expect(selectedBox.y + selectedBox.height / 2).toBeCloseTo(listBox.y + listBox.height / 2, 0);
     for (const view of ["sentences", "menu"]) {
       if (view === "menu") {
         await sheet.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();

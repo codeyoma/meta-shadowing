@@ -45,7 +45,7 @@ test("player header and screen-bottom modal actions stay usable without layout o
   const underlyingActions = page.locator('[role="group"][aria-label="학습 진행"]');
   await expect(underlyingActions).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath("dictionary-screen-close.png"), scale: "css", animations: "disabled" });
-  await popup.getByRole("button", { name: "닫기", exact: true }).click();
+  await popup.getByRole("button", { name: "확인", exact: true }).click();
   await expect(page.getByRole("button", { name: "wake 뜻 보기", exact: true })).toBeFocused();
   await expect(underlyingActions).toBeVisible();
   await context.getByRole("button", { name: "문장 분석", exact: true }).click();
@@ -53,7 +53,8 @@ test("player header and screen-bottom modal actions stay usable without layout o
   await expect(popup.getByRole("article")).toHaveCount(12);
   await expect(underlyingActions).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath("analysis-screen-close.png"), scale: "css", animations: "disabled" });
-  const close = popup.getByRole("button", { name: "닫기", exact: true });
+  const close = popup.getByRole("button", { name: "확인", exact: true });
+  await close.click({ trial: true });
   const before = (await close.boundingBox())!;
   const body = popup.locator('[aria-busy="false"]');
   await body.evaluate(element => { element.scrollTop = element.scrollHeight; });
@@ -61,13 +62,11 @@ test("player header and screen-bottom modal actions stay usable without layout o
   expect((await close.boundingBox())!.y).toBe(before.y);
   await expect(popup.getByRole("article", { name: "문장 12", exact: true })).toBeInViewport();
   await page.setViewportSize({ width: 568, height: 320 });
-  const panel = popup.locator('[data-slot="dialog-panel"]');
-  // In short landscape the title and note must scroll too: pinning them leaves
-  // less than one readable line of analysis between the fixed header/footer.
-  await expect.poll(() => panel.evaluate(element => element.scrollHeight > element.clientHeight + 100)).toBe(true);
+  // Full-height drawers scroll their content while keeping the action reachable.
+  await expect.poll(() => body.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
   const lastSentence = popup.getByRole("article", { name: "문장 12", exact: true });
   await lastSentence.scrollIntoViewIfNeeded();
-  expect(await panel.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  expect(await body.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
   await expect(lastSentence).toBeInViewport();
   await expect(close).toBeInViewport({ ratio: 0.99 });
   await page.keyboard.press("Escape");

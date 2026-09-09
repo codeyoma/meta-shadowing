@@ -38,14 +38,15 @@ export async function signInFixtureAdmin(page: Page) {
   await promoteLocalSessionToGoogle(url, service, client, profile.accountId, "admin");
 }
 
-export const test = base.extend({
-  context: async ({ context, baseURL }, use) => {
+export const test = base.extend<{ profileMetadata: Record<string, string> }>({
+  profileMetadata: [{}, { option: true }],
+  context: async ({ context, baseURL, profileMetadata }, use) => {
     const url = process.env.SUPABASE_INTEGRATION_URL!;
     assertLocalSupabaseUrl(url);
     const key = process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!;
     const service = createClient(url, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, options);
     const email = `cloud-ui-${randomUUID()}@example.com`, password = randomUUID();
-    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+    const created = await service.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: profileMetadata });
     if (created.error || !created.data.user) throw created.error ?? new Error("Fixture user missing");
     const id = created.data.user.id;
     try {

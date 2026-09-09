@@ -44,7 +44,7 @@ for (const level of [1, 3, 4, 6, 8]) test(`level ${level} exposes help and direc
   await expect(shortcut).toBeFocused();
   await stage.click();
   await help.click({ trial: true });
-  await page.mouse.click(2, 2);
+  await help.getByRole("button", { name: "닫기", exact: true }).click();
   await expect(help).toHaveCount(0);
   await expect(stage).toBeFocused();
 });
@@ -60,7 +60,7 @@ test("menu is bottom anchored and enters vertically with reduced-motion support"
     await sheet.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
     await expect.poll(async () => { const box = (await sheet.boundingBox())!; return Math.round(box.y + box.height); }).toBe(viewport.height);
     const box = (await sheet.boundingBox())!;
-    // Short screens allow a full-height sheet so the two footer actions fit;
+    // Short screens allow a full-height sheet so menu rows remain reachable;
     // taller screens retain the 85dvh cap and visible space above the drawer.
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.height).toBeLessThanOrEqual(viewport.height * (viewport.height <= 540 ? 1 : 0.85) + 1);
@@ -68,13 +68,13 @@ test("menu is bottom anchored and enters vertically with reduced-motion support"
     await expect(sheet.getByRole("heading", { name: "학습 메뉴", exact: true })).toBeInViewport({ ratio: 0.999 });
     const footer = sheet.locator('[data-slot="drawer-footer"]');
     const footerBefore = await footer.boundingBox();
-    for (const name of ["확인", "스테이지 화면으로"]) {
+    for (const name of ["확인"]) {
       const action = footer.getByRole("button", { name, exact: true });
       await expect(action).toBeInViewport({ ratio: 0.999 });
       await expect(action).toBeEnabled();
     }
     const items = sheet.getByRole("navigation", { name: "학습 메뉴 항목", exact: true });
-    for (const name of ["학습 설정", "문장 목록"]) {
+    for (const name of ["학습 설정", "문장 목록", "스테이지 화면으로"]) {
       const item = items.getByRole("button", { name, exact: true });
       await item.scrollIntoViewIfNeeded();
       await expect(item).toBeInViewport({ ratio: 0.999 });
