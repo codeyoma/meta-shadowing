@@ -231,7 +231,16 @@ test("account settings synchronize across browsers without sharing another accou
       await pageA.getByRole("link", { name: "설정", exact: true }).click();
       await pageA.getByRole("link", { name: "세션 설정", exact: true }).click();
       await expect(pageA.getByLabel("재생속도")).toHaveValue("2.75");
-      expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.selection).toEqual({ language: "german", lessonId: null });
+      const observed = (await (await a.context.request.get("/api/learner/preferences")).json()).profile.selection;
+      expect(observed).toEqual({ language: "german", lessonId: null });
+      // Old navigation links carry context, not a fresh language/lesson choice.
+      for (const path of ["/settings/session", "/languages"]) {
+        await pageA.goto(`${path}?language=english&lesson=${lessonIds[0]}`);
+        await pageA.waitForLoadState("networkidle");
+        expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.selection)
+          .toEqual({ language: "german", lessonId: null });
+      }
+      await pageA.goto("/settings/session");
       await pageA.getByLabel("학습 레벨").selectOption("7");
       const navigation = pageA.getByRole("navigation", { name: "하단 탐색" });
       await navigation.evaluate(el => el.setAttribute("data-persistent-proof", "yes"));

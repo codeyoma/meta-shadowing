@@ -54,7 +54,10 @@ function CloudBrowseShell({ catalog, children }: ShellProps) {
   const route = `${pathname}?${params.toString()}`;
   const [scrollPositions] = useState(() => new Map<string, number>());
   const selectionIntent = useRef<{ selection: BrowseSelection; revision: number } | null>(null);
-  const explicit = params.has("language") || params.has("lesson") || pathname.endsWith("/stages");
+  // Settings and the language chooser carry navigation context, not selection
+  // intent. Replaying an old link must not overwrite a newer account choice.
+  const explicit = pathname.endsWith("/stages") ||
+    (pathname === "/lessons" && (params.has("language") || params.has("lesson")));
   // URL parameters express intent, but the accepted server selection drives the UI.
   // In particular, a rejected intent must not leak into the next navigation's URL.
   const selection = cloud.profile.selection ?? { language: "english" as const, lessonId: null };
