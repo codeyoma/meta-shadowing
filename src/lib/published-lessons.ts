@@ -121,7 +121,12 @@ function readAudioManifest(value: unknown): PublishedAudioItem[] {
   });
 }
 
-export async function createPublishedAudioUrl(lessonId: string, phraseNumber: number, version?: string | null) {
+export async function getPublishedAudio(lessonId: string, phraseNumber: number, version?: string | null) {
+  if (isTestMode()) {
+    const lesson = await getPublishedLesson(lessonId);
+    if (!lesson || (version && lesson.version !== version) || !lesson.phrases.some(phrase => phrase.phraseNumber === phraseNumber)) return null;
+    return { version: lesson.version, audio: { phraseNumber, canonicalName: `${phraseNumber}.webm`, path: "" } };
+  }
   const supabase = createSecretSupabaseClient();
   if (!supabase) return null;
 
@@ -137,9 +142,16 @@ export async function createPublishedAudioUrl(lessonId: string, phraseNumber: nu
 
   const audio = readAudioManifest(lesson.audio_manifest).find((item) => item.phraseNumber === phraseNumber);
   if (!audio) return null;
+  return { version: lesson.published_at as string, audio };
+}
+
+export async function createPublishedAudioUrl(lessonId: string, phraseNumber: number, version?: string | null) {
+  const published = await getPublishedAudio(lessonId, phraseNumber, version);
+  const supabase = createSecretSupabaseClient();
+  if (!published || !supabase) return null;
   const { data, error } = await supabase.storage
     .from(LESSON_AUDIO_BUCKET)
-    .createSignedUrl(audio.path, 60);
+    .createSignedUrl(published.audio.path, 60);
   if (error) throw new Error(`Signed audio URL failed: ${error.message}`);
   return data.signedUrl;
 }

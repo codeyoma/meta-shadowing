@@ -1,10 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 
 for (const width of [320, 583, 1440]) {
   for (const level of [1, 8]) test(`level ${level} keeps live mode and speed beside the lesson at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-    await page.goto(`/player?lesson=morning-routine&level=${level}`);
+    await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+    await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
     await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
     const label = page.getByRole("button", { name: /^재생 모드 및 속도:/ });
     const title = page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true });

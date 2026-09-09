@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { pauseCloudClock, advanceCloudClock, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
@@ -34,8 +35,8 @@ async function activeLocks(page: Page) {
 test("screen wake covers manual speaking and releases on pause, settings, background and leaving practice", async ({ page }) => {
   await supportedWakeLock(page);
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).waitFor();
   expect(await activeLocks(page)).toBe(0);
   await page.keyboard.press("Space");
@@ -73,20 +74,21 @@ test("screen wake covers manual speaking and releases on pause, settings, backgr
   await expect.poll(() => activeLocks(page)).toBe(0);
   await page.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
   await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await expect.poll(() => activeLocks(page)).toBe(0);
 });
 
 test("rapid practice keeps the screen awake while running and releases it on completion", async ({ page }) => {
   await supportedWakeLock(page);
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=6&mode=automatic&lineGap=0");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=6&mode=automatic&lineGap=0");
   await page.waitForLoadState("networkidle");
-  await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
-  await page.clock.runFor(6900);
+  // Wall time also includes pauses at server-confirmed line boundaries.
+  await advanceCloudClock(page, 8000);
   await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
   await expect.poll(() => activeLocks(page)).toBe(0);
 });
@@ -99,8 +101,8 @@ for (const support of ["unsupported", "denied"] as const) {
       } });
     }, support);
     await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-    await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-    await page.goto("/player?lesson=morning-routine&level=1");
+    await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+    await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
     await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
     await confirmManualListen(page);
     await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
@@ -112,8 +114,8 @@ for (const support of ["unsupported", "denied"] as const) {
 
 test("a system-released screen wake stays silent and an explicit resume requests it again", async ({ page }) => {
   await supportedWakeLock(page);
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=6");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=6");
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect.poll(() => activeLocks(page)).toBe(1);
   await page.evaluate(() => (window as typeof window & { testScreenWake: { release: () => Promise<void> } }).testScreenWake.release());

@@ -9,9 +9,13 @@ export function readAuthEnvironment(): { password: string; secret: string } | nu
   return password && secret ? { password, secret } : null;
 }
 
-export async function requireLearner(): Promise<void> {
+type LearnerIdentity = { id: string; email: string; profile: { name: string; image: string | null } };
+
+export async function requireLearner(): Promise<LearnerIdentity> {
   if (!(await hasBetaAccess())) redirect("/");
-  if (!(await getGoogleLearnerIdentity())) redirect("/login");
+  const identity = await getGoogleLearnerIdentity();
+  if (!identity) redirect("/login");
+  return identity;
 }
 
 // The existing learner cookie is an invitation pass, not a user session.
@@ -21,7 +25,7 @@ export async function hasBetaAccess(): Promise<boolean> {
   return Boolean(config && verifyLearnerCookie(cookie, config.secret));
 }
 
-export async function getGoogleLearnerIdentity(): Promise<{ id: string; email: string } | null> {
+export async function getGoogleLearnerIdentity(): Promise<LearnerIdentity | null> {
   try {
     const supabase = await createServerSupabaseClient();
     if (!supabase) return null;
@@ -34,7 +38,14 @@ export async function getGoogleLearnerIdentity(): Promise<{ id: string; email: s
     if (error || !claims || !hasGoogle || claims.is_anonymous === true
       || claims.role !== "authenticated" || typeof claims.sub !== "string" || !claims.sub
       || typeof claims.email !== "string" || !claims.email) return null;
-    return { id: claims.sub, email: claims.email };
+    // User-editable metadata is display-only; never use it to authorize access.
+    const display = claims.user_metadata;
+    const name = [display?.full_name, display?.name].find(value => typeof value === "string" && value.trim());
+    const photo = [display?.avatar_url, display?.picture].find(value => typeof value === "string" && /^https:\/\//i.test(value));
+    return { id: claims.sub, email: claims.email, profile: {
+      name: typeof name === "string" ? name.trim() : "학습자",
+      image: typeof photo === "string" ? photo : null,
+    } };
   } catch {
     return null;
   }

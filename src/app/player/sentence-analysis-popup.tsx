@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Check } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogViewportContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerClose, DrawerViewportContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import type { PublishedLesson } from "@/lib/lessons";
 import { syntaxConnection, syntaxFeatures, syntaxPartLabel, syntaxRelationLabel, type PhraseSyntax, type SentenceAnalysis } from "@/lib/phrase-syntax";
@@ -96,18 +97,18 @@ export function SentenceAnalysisPopup({ lesson, selection, onClose }: {
     return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
   }, [lesson.id, lesson.version, selection.phraseNumber, attempt]);
 
-  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-    <DialogViewportContent panelClassName={styles.popup}
-      footer={<DialogClose asChild><Button type="button" variant="close" size="lg" className="w-full"><CloseIcon data-icon="inline-start" />닫기</Button></DialogClose>}
+  return <Drawer open onOpenChange={open => { if (!open) onClose(); }}>
+    <DrawerViewportContent panelClassName={styles.popup}
+      footer={<DrawerClose asChild><Button type="button" variant="practice" size="lg" className="w-full"><Check data-icon="inline-start" />확인</Button></DrawerClose>}
       onOpenAutoFocus={event => { event.preventDefault(); closeRef.current?.focus({ preventScroll: true }); }}
       onCloseAutoFocus={event => { event.preventDefault(); if (selection.trigger.isConnected) selection.trigger.focus({ preventScroll: true }); }}>
-      <DialogHeader>
+      <DrawerHeader>
         <div className={styles.heading}>
-          <DialogTitle>문장 분석</DialogTitle>
-          <DialogClose asChild><Button ref={closeRef} type="button" variant="ghost" size="icon" aria-label="문장 분석 닫기"><CloseIcon /></Button></DialogClose>
+          <DrawerTitle>문장 분석</DrawerTitle>
+          <DrawerClose asChild><Button ref={closeRef} type="button" variant="ghost" size="icon" aria-label="문장 분석 닫기"><CloseIcon /></Button></DrawerClose>
         </div>
-        <DialogDescription>{lesson.name} · {selection.phraseNumber}번 프레이즈<br />단어를 누르면 원형과 문장 속 역할을 볼 수 있어요.</DialogDescription>
-      </DialogHeader>
+        <DrawerDescription>{lesson.name} · {selection.phraseNumber}번 프레이즈<br />단어를 누르면 원형과 문장 속 역할을 볼 수 있어요.</DrawerDescription>
+      </DrawerHeader>
       <div data-slot="dialog-scroll-body" className={styles.body} aria-busy={lookup.status === "loading"}>
         {lookup.status === "loading" ? <Empty role="status"><EmptyDescription>저장된 분석을 불러오고 있어요…</EmptyDescription></Empty>
           : lookup.status === "unauthorized" ? <Alert><AlertDescription>접속이 만료되었어요. 앱에 다시 입장해 주세요.</AlertDescription></Alert>
@@ -119,6 +120,6 @@ export function SentenceAnalysisPopup({ lesson, selection, onClose }: {
           : lookup.result.sentences.map(sentence => <AnalyzedSentence key={`${selection.phraseNumber}-${sentence.sentenceNumber}`} sentence={sentence} />)}
       </div>
       <p className={styles.note}>Google 자동 분석 · 문맥에 따라 품사나 연결관계가 부정확할 수 있어요.</p>
-    </DialogViewportContent>
-  </Dialog>;
+    </DrawerViewportContent>
+  </Drawer>;
 }

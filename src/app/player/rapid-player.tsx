@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,7 @@ import { isRapidRunning, rapidDisplay, RAPID_WPM, type RapidLevel, type RapidLin
 import { Page, PauseIcon, PlayIcon } from "../ui";
 import { RapidSessionControls } from "../rapid-session-controls";
 import { useRapidSession } from "./use-rapid-session";
-import type { LearningStart } from "./use-learning-record";
+import type { LearningStart, CloudRecording } from "./recording-types";
 import { CompletionSummary } from "../completion-summary";
 import { ScreenWake } from "./screen-wake";
 import { PracticeContext, PracticeFooter, PracticeHeader, PracticeProgress, PracticeSection } from "./practice-layout";
@@ -23,14 +22,14 @@ import { DictionaryWords, type DictionaryWordSelect } from "./dictionary-words";
 import { SentenceAnalysisButton, SentenceAnalysisPopup, useSentenceAnalysis } from "./sentence-analysis-popup";
 import styles from "./practice.module.css";
 
-export function RapidPlayer({ lesson, lines, level, settings, start, notice }: { lesson: PublishedLesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings; start: LearningStart; notice?: ReactNode }) {
-  const router = useRouter();
+export function RapidPlayer({ lesson, lines, level, settings, start, notice, cloud }: { lesson: PublishedLesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings; start: LearningStart; notice?: ReactNode; cloud: CloudRecording }) {
   const [surface, setSurface] = useState<"menu" | "settings" | "help" | null>(null);
   const [drawerView, setDrawerView] = useState<DrawerView>("menu");
   const menuOpen = surface === "menu" || surface === "settings";
   const dictionary = useDictionaryPopup();
   const analysis = useSentenceAnalysis();
-  const { session, send, completion, storageFailed } = useRapidSession(lesson, lines, level, settings, surface === null && !dictionary.open && !analysis.open, start);
+  const { session, send, completion } = useRapidSession(lesson, lines, level, settings, surface === null && !dictionary.open && !analysis.open, start, cloud);
+  const navigate = (href: string) => cloud.exit(href);
   const openDictionary: DictionaryWordSelect = (word, trigger) => {
     send({ type: "pause" });
     dictionary.openWord(word, trigger);
@@ -64,7 +63,7 @@ export function RapidPlayer({ lesson, lines, level, settings, start, notice }: {
         analysis.show(lesson.phrases[session.lineIndex].phraseNumber, trigger);
       }} />} />
     <section className={styles.practice} aria-labelledby="player-title">
-      {completion ? <CompletionSummary record={completion} storageFailed={storageFailed} onHome={() => router.push(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : <>
+      {completion ? <CompletionSummary record={completion} onHome={() => navigate(browseHref("lessons", { language: lesson.language, lessonId: lesson.id }))} /> : <>
         <PracticeSection chapter={line?.chapter ?? null} startsSection={line?.boundary === "section"} />
         <Bubble variant="outline" className={cn(styles.bubble, styles.textOnly)}>
         <BubbleContent size="lg" className={styles.bubbleFrame}>
@@ -82,12 +81,15 @@ export function RapidPlayer({ lesson, lines, level, settings, start, notice }: {
     <ScreenWake active={running && surface === null && !dictionary.open && !analysis.open && !complete} />
     </div>
     {!complete ? <PracticeFooter actionsHidden={dictionary.open || analysis.open || surface === "help"}>
-      <Button type="button" variant="practice" size="lg" className={styles.action} aria-label={`${running ? "PAUSE" : "CONTINUE"} · ${actionLabel}`} onClick={() => send({ type: "space" })}>{running ? <PauseIcon data-icon="inline-start" /> : <PlayIcon data-icon="inline-start" />}{running ? "PAUSE" : "CONTINUE"}<Kbd>Space</Kbd></Button>
+      <Button disabled={cloud?.blocked} type="button" variant="practice" size="lg" className={styles.action} aria-label={`${running ? "PAUSE" : "CONTINUE"} · ${actionLabel}`} onClick={() => send({ type: "space" })}>{running ? <PauseIcon data-icon="inline-start" /> : <PlayIcon data-icon="inline-start" />}{running ? "PAUSE" : "CONTINUE"}<Kbd>Space</Kbd></Button>
     </PracticeFooter> : null}
     <PlayerDrawer open={menuOpen} lesson={lesson} currentPhraseNumbers={[session.lineIndex + 1]}
       initialView={surface === "settings" ? "settings" : "menu"} onViewChange={setDrawerView}
-      settings={<RapidSessionControls level={level} settings={session.settings} onChange={settings => send({ type: "settings", settings })} />}
-      onSelect={lineIndex => send({ type: "jump", lineIndex })} onClose={() => setSurface(null)} onStages={() => router.push(stageHref(lesson.id, start.selection.stage))} />
+      settings={<>
+        {cloud ? <p>이 설정은 현재 학습에만 적용됩니다. 계정 기본 설정은 새 학습부터 적용됩니다.</p> : null}
+        <RapidSessionControls disabled={complete || cloud.blocked} level={level} settings={session.settings} onChange={settings => send({ type: "settings", settings })} />
+      </>}
+      onSelect={lineIndex => send({ type: "jump", lineIndex })} onClose={() => setSurface(null)} onStages={() => navigate(stageHref(lesson.id, start.selection.stage))} />
     {dictionary.selection ? <DictionaryPopup selection={dictionary.selection} language={lesson.language} onClose={dictionary.close} /> : null}
     {analysis.selection ? <SentenceAnalysisPopup lesson={lesson} selection={analysis.selection} onClose={analysis.close} /> : null}
   </Page>;

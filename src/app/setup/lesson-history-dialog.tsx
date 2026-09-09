@@ -1,16 +1,19 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ChartColumn, ChevronDown, ChevronUp, X } from "lucide-react";
+import { ChartColumn, Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogViewportContent } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Drawer, DrawerClose, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger, DrawerViewportContent } from "@/components/ui/drawer";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { completionHistoryForLesson, formatActiveTime, readLearningJournal, type CompletionRecord } from "@/lib/learning-records";
+import { completionHistoryForLesson, formatActiveTime, type CompletionRecord } from "@/lib/learning-records";
 import { stageForLevel } from "@/lib/learning-stages";
 import type { Lesson } from "@/lib/lessons";
 import { RecordSettings } from "../completion-summary";
 import styles from "./lesson-history-dialog.module.css";
+import { useCloudPreferences } from "../cloud-preferences-provider";
 
 function HistoryRow({ record }: { record: CompletionRecord }) {
   const [expanded, setExpanded] = useState(false);
@@ -46,32 +49,38 @@ function HistoryRow({ record }: { record: CompletionRecord }) {
 }
 
 export function LessonHistoryDialog({ lesson, disabled }: { lesson: Lesson; disabled?: boolean }) {
+  const cloud = useCloudPreferences()!;
   const [open, setOpen] = useState(false);
-  const [history, setHistory] = useState<CompletionRecord[]>([]);
+  const history = completionHistoryForLesson(cloud.journal.history, lesson.id);
 
   function changeOpen(next: boolean) {
-    if (next) setHistory(completionHistoryForLesson(readLearningJournal().history, lesson.id));
+    if (next) void cloud.refresh();
     setOpen(next);
   }
 
-  return <Dialog open={open} onOpenChange={changeOpen}>
-    <DialogTrigger asChild>
+  return <Drawer autoFocus open={open} onOpenChange={changeOpen}>
+    <DrawerTrigger asChild>
       <Button type="button" variant="inverse" size="lg" className="h-auto w-full min-w-0 self-stretch gap-2 px-2 whitespace-normal" disabled={disabled} aria-label="이 레슨의 완료 기록">
         <ChartColumn data-icon="inline-start" />
         <span className="min-w-0">완료 기록</span>
       </Button>
-    </DialogTrigger>
-    <DialogViewportContent panelClassName={styles.panel} footer={
-      <DialogClose asChild><Button variant="close" size="lg" className="w-full"><X data-icon="inline-start" />닫기</Button></DialogClose>
+    </DrawerTrigger>
+    <DrawerViewportContent panelClassName={styles.panel} footer={
+      <DrawerClose asChild><Button variant="practice" size="lg" className="w-full"><Check data-icon="inline-start" />확인</Button></DrawerClose>
     }>
-      <DialogHeader>
+      <DrawerHeader>
         <div className="flex items-center justify-between gap-3">
-          <DialogTitle>완료 기록</DialogTitle>
-          <DialogClose asChild><Button variant="ghost" size="icon" aria-label="완료 기록 닫기"><X /></Button></DialogClose>
+          <DrawerTitle>완료 기록</DrawerTitle>
+          <DrawerClose asChild><Button variant="ghost" size="icon" aria-label="완료 기록 닫기"><X /></Button></DrawerClose>
         </div>
-        <DialogDescription>{lesson.name} · 총 {history.length}회 완료</DialogDescription>
-      </DialogHeader>
+        <DrawerDescription>{lesson.name} · 총 {history.length}회 완료</DrawerDescription>
+      </DrawerHeader>
       <div className={styles.body} data-slot="dialog-scroll-body">
+        {cloud.refreshing ? <div aria-busy="true" aria-label="완료 기록 새로고침"><Skeleton className="h-1 w-full" /></div> : null}
+        {cloud.refreshError ? <Alert aria-label="완료 기록 알림">
+          <AlertTitle>최신 완료 기록을 불러오지 못했습니다.</AlertTitle>
+          <Button variant="outline" onClick={() => void cloud.refresh()}>다시 불러오기</Button>
+        </Alert> : null}
         {history.length ? <Table density="compact" className="table-fixed" aria-label="이 레슨의 완료 기록">
           <TableHeader>
             <TableRow>
@@ -90,6 +99,6 @@ export function LessonHistoryDialog({ lesson, disabled }: { lesson: Lesson; disa
           </EmptyHeader>
         </Empty>}
       </div>
-    </DialogViewportContent>
-  </Dialog>;
+    </DrawerViewportContent>
+  </Drawer>;
 }

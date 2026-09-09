@@ -44,6 +44,7 @@
 .stageRing { position: absolute; inset: -7px; pointer-events: none; }
 .stageRing > svg { display: block; width: 100%; height: 100%; overflow: visible; fill: none; stroke: var(--practice-action); stroke-width: 4px; }
 .stageRingTrack { opacity: .2; }
+/* Keep dash lengths in the ellipse's pathLength coordinate system at its seam. */
 .stageRingArc { stroke-linecap: round; stroke-dasharray: 24 76; stroke-dashoffset: 50; animation: stageRingOrbit 2.4s linear infinite; }
 @keyframes stageRingOrbit {
   from { stroke-dashoffset: 50; }

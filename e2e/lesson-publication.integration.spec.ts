@@ -1,3 +1,4 @@
+import { openLearnerPage, enterAccountPractice, advanceCloudClock, pauseCloudClock } from "./fixtures/cloud-navigation";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -347,7 +348,7 @@ test("only a complete private audio package can be published and played by a bet
     expect(storedAudio.status()).toBe(200);
     expect(Buffer.from(await storedAudio.body())).toEqual(audioBytes);
 
-    await page.goto(`/player?lesson=${draftId}&level=1`);
+    await openLearnerPage(page, `/player?lesson=${draftId}&level=1`);
     await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
     const menu = page.getByRole("dialog", { name: "학습 메뉴", exact: true });
     await expect(menu).toHaveAccessibleDescription(new RegExp(title));
@@ -380,7 +381,7 @@ test("only a complete private audio package can be published and played by a bet
     await page.keyboard.press("Space");
     await expect(page.getByRole("heading", { name: "레벨 1 학습 완료" })).toBeVisible();
     for (const level of [2, 3, 4, 5]) {
-      await page.goto(`/player?lesson=${draftId}&level=${level}`);
+      await openLearnerPage(page, `/player?lesson=${draftId}&level=${level}`);
       await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
       const subtitles = page.getByRole("region", { name: "학습 자막" });
       if (level === 3 || level === 5) {
@@ -419,7 +420,7 @@ test("only a complete private audio package can be published and played by a bet
     await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
     await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
     for (const level of [6, 7, 8]) {
-      await page.goto(`/player?lesson=${draftId}&level=${level}&wpm=6&mode=automatic&sectionGap=0.5`);
+      await openLearnerPage(page, `/player?lesson=${draftId}&level=${level}&wpm=6&mode=automatic&sectionGap=0.5`);
       await page.waitForLoadState("networkidle");
       await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
       await expect(page.getByLabel("현재 챕터")).toHaveText("First chapter");
@@ -428,24 +429,24 @@ test("only a complete private audio package can be published and played by a bet
       const canvas = page.getByRole("region", { name: "속사포 학습" });
       await page.keyboard.press("Space");
       await expect(canvas).toHaveText(level === 6 ? "Good" : "좋은");
-      await page.clock.runFor(600);
+      await advanceCloudClock(page, 600);
       if (level === 6) {
         await expect(canvas).toHaveText("좋은");
-        await page.clock.runFor(600);
+        await advanceCloudClock(page, 600);
       } else {
         await expect(page.getByRole("timer")).toHaveText("1.1초");
-        await page.clock.runFor(1100);
+        await advanceCloudClock(page, 1100);
         if (level === 7) {
           await expect(canvas).toHaveText("Good");
-          await page.clock.runFor(600);
+          await advanceCloudClock(page, 600);
         }
       }
       await expect(page.getByRole("timer")).toHaveText("0.5초");
-      await page.clock.runFor(500);
+      await advanceCloudClock(page, 500);
       await expect(canvas).toHaveText(level === 6 ? "I" : "세수합니다.");
       await expect(page.getByLabel("현재 챕터")).toHaveText("Second chapter");
       await expect(page.getByRole("separator", { name: "구간 경계" })).toHaveCount(0);
-      await page.clock.runFor(5000);
+      await advanceCloudClock(page, 5000);
       await expect(page.getByRole("heading", { name: `레벨 ${level} 학습 완료` })).toBeVisible();
     }
     expect(rapidAudioRequests).toEqual([]);

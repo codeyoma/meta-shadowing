@@ -1,27 +1,29 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import Link from "next/link";
 import { BookOpen, ChevronRight, CirclePlay } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { completedStagesForLesson, reconcileLearningJournal, type Journal } from "@/lib/learning-records";
+import { completedStagesForLesson } from "@/lib/learning-records";
 import { browseHref, stageHref } from "@/lib/browse-navigation";
 import { nextPracticeForLesson } from "@/lib/next-practice";
 import { LANGUAGE_CATALOG, languageInfo } from "@/lib/languages";
 import { learningStages } from "@/lib/learning-stages";
 import { useBrowse, useBrowseScroll } from "./browse-shell";
-import { VersionNotice } from "./version-notice";
 import styles from "./browse.module.css";
+import { useCloudPreferences } from "./cloud-preferences-provider";
+import { LearnerSignOut } from "./learner-sign-out";
 
-export function BrowsePageContent({ title, region, children, before }: { title: string; region: string; children: ReactNode; before?: ReactNode }) {
+export function BrowsePageContent({ title, region, children, before, after }: { title: string; region: string; children: ReactNode; before?: ReactNode; after?: ReactNode }) {
   const { selection } = useBrowse();
   const ref = useBrowseScroll(`${region}:${selection.language}`);
   return <ScrollArea className={styles.scroll} viewportProps={{ ref, role: "region", "aria-label": region }}>
     <div className={styles.body}>
-      <div className={styles.titleRow}>{before}<h1 className={styles.heading}>{title}</h1></div>
+      <div className={styles.titleRow}>{before}<h1 className={styles.heading}>{title}</h1>{after}</div>
       {children}
     </div>
   </ScrollArea>;
@@ -44,19 +46,12 @@ export function LanguagePage() {
 
 export function LessonPage() {
   const { catalog, selection } = useBrowse();
-  const [journal, setJournal] = useState<Journal>({ progress: null, history: [], studyDays: [] });
-  const [reset, setReset] = useState<{ storageFailed: boolean } | null>(null);
-  useEffect(() => {
-    const value = reconcileLearningJournal(catalog);
-    setJournal(value);
-    if (value.resetLessonId) setReset({ storageFailed: value.storageFailed });
-  }, [catalog]);
+  const { journal } = useCloudPreferences()!;
   const lessons = catalog.filter(lesson => lesson.language === selection.language)
     .map(lesson => ({ lesson, count: completedStagesForLesson(journal.history, lesson).length }));
   const stageCount = learningStages.length;
   const completed = lessons.filter(({ count }) => count === stageCount).length;
   return <BrowsePageContent title={`${languageInfo(selection.language).koreanLabel} 레슨`} region="레슨 목록">
-    {reset ? <VersionNotice storageFailed={reset.storageFailed} /> : null}
     {lessons.length ? <div className={styles.summary}>
       <div className={styles.summaryLine}><span>완료한 레슨</span><span>{completed} / {lessons.length}</span></div>
       <Progress value={completed} max={lessons.length} aria-label="레슨 학습 진척도" />
@@ -88,13 +83,22 @@ export function LessonPage() {
   </BrowsePageContent>;
 }
 
-export function SettingsPage() {
+export function SettingsPage({ profile }: { profile: { name: string; image: string | null } }) {
   const { selection } = useBrowse();
-  return <BrowsePageContent title="설정" region="설정 목록">
+  return <BrowsePageContent title="설정" region="설정 목록" after={
+    <div className="ml-auto flex min-w-0 max-w-[65%] items-center gap-2" aria-label="Google 계정">
+      <Avatar>
+        <AvatarImage src={profile.image ?? undefined} alt="" referrerPolicy="no-referrer" />
+        <AvatarFallback>{Array.from(profile.name)[0]}</AvatarFallback>
+      </Avatar>
+      <span className="truncate" title={profile.name}>{profile.name}</span>
+    </div>
+  }>
     <ul className={styles.rows}><li><Button asChild variant="choice" size="row" className="w-full">
       <Link href={browseHref("session", selection)} scroll={false}>
         <span className={styles.copy}><strong>세션 설정</strong></span><ChevronRight aria-hidden="true" data-icon="inline-end" />
       </Link>
     </Button></li></ul>
+    <LearnerSignOut settingsRow />
   </BrowsePageContent>;
 }

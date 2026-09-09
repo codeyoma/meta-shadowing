@@ -1,10 +1,11 @@
-import { expect, test, type Page } from "@playwright/test";
+import { enterAccountPractice, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 
 type Cue = { notes: { frequency: number; at: number; until: number; ended: boolean }[]; peakGains: number[]; closed: boolean };
 declare global { interface Window { stageCues: Cue[] } }
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 });
 
 // Observe the real browser audio device; do not replace synthesis or playback.
@@ -49,7 +50,7 @@ async function observeCues(page: Page) {
 }
 
 async function openStages(page: Page) {
-  await page.goto("/lessons/morning-routine/stages?stage=2");
+  await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages?stage=2");
   await expect(page.getByRole("radio", { name: /^1 자막 쉐도잉/ })).toBeEnabled();
 }
 
@@ -111,7 +112,7 @@ test("stage activation makes one short pop, while load, focus, and dismissals st
   }
 });
 
-test("both start buttons play the same ascending cue and keep their own stage destination", async ({ page }) => {
+test("preview and account resume buttons play the same ascending cue and retain the started stage", async ({ page }) => {
   await observeCues(page);
   const startNotes: number[][] = [];
   for (const source of ["preview", "current"]) {
@@ -121,9 +122,12 @@ test("both start buttons play the same ascending cue and keep their own stage de
       await expect.poll(() => page.evaluate(() => window.stageCues.at(-1)?.closed)).toBe(true);
       await page.getByRole("button", { name: "학습 시작", exact: true }).press("Enter");
     } else {
-      await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
+      // Starting stage 2 creates account progress; returning must resume it,
+      // not reset the header action to the first uncompleted stage.
+      await page.getByRole("button", { name: "현재 스테이지 2 시작", exact: true }).click();
     }
-    await expect(page).toHaveURL(new RegExp(`/player\\?.*stage=${source === "preview" ? 2 : 1}(?:&|$)`));
+    await enterAccountPractice(page);
+    await expect(page).toHaveURL(/\/player\?.*stage=2(?:&|$)/);
     await expect.poll(() => page.evaluate(() => window.stageCues.find(cue => cue.notes.length === 2)?.closed)).toBe(true);
     const cues = await page.evaluate(() => window.stageCues.filter(cue => cue.notes.length === 2));
     expect(cues).toHaveLength(1);
@@ -154,10 +158,12 @@ for (const failure of ["unavailable", "rejected", "pending"] as const) {
     await page.getByRole("radio", { name: /^2 자막 쉐도잉/ }).click();
     await expect(page.getByRole("dialog", { name: "자막 쉐도잉", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "학습 시작", exact: true }).click();
+  await enterAccountPractice(page);
     await expect(page).toHaveURL(/\/player\?.*stage=2(?:&|$)/);
     await openStages(page);
-    await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
-    await expect(page).toHaveURL(/\/player\?.*stage=1(?:&|$)/);
+    await page.getByRole("button", { name: "현재 스테이지 2 시작", exact: true }).click();
+  await enterAccountPractice(page);
+    await expect(page).toHaveURL(/\/player\?.*stage=2(?:&|$)/);
     expect(errors).toEqual([]);
   });
 }

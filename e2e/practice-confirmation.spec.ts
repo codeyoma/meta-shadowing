@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { pauseCloudClock, advanceCloudClock, readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
 async function openPlayer(page: Page, mode = "manual") {
@@ -14,8 +15,8 @@ async function openPlayer(page: Page, mode = "manual") {
     };
   });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/player?lesson=morning-routine&level=1&mode=${mode}`);
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=1&mode=${mode}`);
 }
 
 const tones = (page: Page) => page.evaluate(() => (window as typeof window & { successTones: number[] }).successTones);
@@ -54,9 +55,9 @@ test("manual confirmations add checks and play one success chime on the third, n
 });
 
 test("automatic checks wait for the full timer and the third check chimes without advancing", async ({ page }) => {
-  await openPlayer(page, "automatic");
   await page.clock.install({ time: new Date("2026-09-07T00:00:00Z") });
-  await page.clock.pauseAt(new Date("2026-09-07T00:01:00Z"));
+  await openPlayer(page, "automatic");
+  await pauseCloudClock(page, new Date("2026-09-07T00:01:00Z"));
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   const progress = page.getByLabel("완료한 듣기", { exact: true });
   for (let count = 1; count <= 3; count++) {
@@ -64,15 +65,15 @@ test("automatic checks wait for the full timer and the third check chimes withou
     await expect(progress).toHaveText(`필수 ${count - 1} / 3`);
     expect(await tones(page)).toHaveLength(0);
     const remainingMs = Number((await page.getByRole("timer").innerText()).replace("초", "")) * 1000;
-    await page.clock.runFor(remainingMs + 100);
+    await advanceCloudClock(page, remainingMs + 100);
     await expect(progress).toHaveText(`필수 ${count} / 3`);
-    const journal = await page.evaluate(() => JSON.parse(localStorage.getItem("meta-shadowing:learning:v1")!));
+    const journal = await readServerJournal(page);
     expect(journal.studyDays).toHaveLength(1);
     expect(journal.progress.nextPhrase).toBe(0);
   }
   await expect.poll(() => tones(page)).toHaveLength(3);
   await expect(page.getByRole("button", { name: /^REPEAT/ })).toBeVisible();
-  await page.clock.runFor(60000);
+  await advanceCloudClock(page, 60000);
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행", exact: true })).toHaveAttribute("aria-valuenow", "0");
   expect(await tones(page)).toHaveLength(3);
 });
@@ -134,21 +135,21 @@ test("Space on Continue confirms a pending listen exactly once", async ({ page }
 });
 
 test("switching modes in the open sheet keeps the speaking timer paused", async ({ page }) => {
-  await openPlayer(page, "automatic");
   await page.clock.install({ time: new Date("2026-09-07T00:00:00Z") });
-  await page.clock.pauseAt(new Date("2026-09-07T00:01:00Z"));
+  await openPlayer(page, "automatic");
+  await pauseCloudClock(page, new Date("2026-09-07T00:01:00Z"));
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   await expect(page.getByRole("timer")).toBeVisible();
   await page.locator("#player-settings-trigger").click();
   await page.getByRole("radio", { name: "수동", exact: true }).click();
   await page.getByRole("radio", { name: "자동", exact: true }).click();
-  await page.clock.runFor(60000);
+  await advanceCloudClock(page, 60000);
   await page.keyboard.press("Escape");
   await expect(page.getByLabel("완료한 듣기", { exact: true })).toHaveText("필수 0 / 3");
   await expect(page.locator("audio")).toHaveJSProperty("paused", true);
   await page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true }).click();
   const remainingMs = Number((await page.getByRole("timer").innerText()).replace("초", "")) * 1000;
-  await page.clock.runFor(remainingMs + 100);
+  await advanceCloudClock(page, remainingMs + 100);
   await expect(page.getByLabel("완료한 듣기", { exact: true })).toHaveText("필수 1 / 3");
 });
 

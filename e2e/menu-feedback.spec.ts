@@ -1,12 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 for (const menu of ["player-menu", "sentences", "audio-settings", "rapid-settings"] as const) {
   test(`${menu} dismisses only a complete outside pointer gesture`, async ({ page, isMobile }) => {
     await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-    await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-    await page.goto(`/player?lesson=morning-routine&level=${menu === "rapid-settings" ? 6 : 1}&mode=manual`);
+    await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+    await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${menu === "rapid-settings" ? 6 : 1}&mode=manual`);
     const trigger = page.getByRole("button", { name: "학습 메뉴", exact: true });
     // Cover browsers where mouse activation does not focus its button.
     await trigger.evaluate(button => button.addEventListener("mousedown", event => event.preventDefault()));
@@ -57,8 +58,8 @@ for (const menu of ["player-menu", "sentences", "audio-settings", "rapid-setting
 for (const reducedMotion of ["no-preference", "reduce"] as const) test(`completed listens fill the circle and connector with ${reducedMotion}`, async ({ page }) => {
   await page.emulateMedia({ reducedMotion });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=1&mode=manual");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&mode=manual");
   const cycles = page.getByLabel("완료한 듣기");
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   await confirmManualListen(page);

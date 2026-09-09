@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, signInFixtureAdmin, type Locator, type Page } from "./fixtures/cloud-ui";
 
 async function expectFixedDocument(page: Page) {
   expect(await page.evaluate(() => ({
@@ -34,9 +35,9 @@ async function revealControl(locator: Locator) {
 for (const viewport of [{ width: 320, height: 568 }, { width: 430, height: 932 }, { width: 568, height: 320 }, { width: 667, height: 375 }, { width: 932, height: 430 }, { width: 1280, height: 900 }]) {
   test(`all stages and summary controls remain reachable with fixed navigation at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
-    await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-    await page.goto("/setup?lesson=morning-routine");
-    await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages$/);
+    await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+    await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
+    await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages$/);
     await expect(page).toHaveTitle(/Meta Shadowing/);
     const heading = page.getByRole("heading", { level: 1 });
     const currentStart = page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true });
@@ -120,10 +121,10 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 430, height: 932 }
 
 test("home and administrator screens scroll their content without moving their navigation", async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 600 });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.request.post("/api/admin/auth/verify", { data: { email: "admin@example.com", token: "123456" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await signInFixtureAdmin(page);
   for (const route of ["/home", "/admin", "/admin/lessons", "/admin/settings"]) {
-    await page.goto(route);
+    await openLearnerPage(page, route);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expectFixedDocument(page);
     const header = page.locator("main > header, main > section > header").first();
@@ -137,20 +138,20 @@ test("home and administrator screens scroll their content without moving their n
 
 test("short entry screens retain access to the expanded install guide without document scrolling", async ({ page }) => {
   await page.setViewportSize({ width: 568, height: 320 });
-  await page.goto("/");
+  await openLearnerPage(page, "/");
   await page.getByText("설치 및 온라인 이용 안내", { exact: true }).click();
   await page.getByText(/iPhone.*Safari/).scrollIntoViewIfNeeded();
   await expect(page.getByText(/iPhone.*Safari/)).toBeInViewport();
   await expectFixedDocument(page);
-  await page.getByLabel("베타 비밀번호").fill("test-beta-password");
+  await page.getByLabel("베타 비밀번호").fill("integration-beta-password");
   await page.getByRole("button", { name: "입장하기", exact: true }).click();
   await expect(page).toHaveURL(/\/languages$/);
 });
 
 test("practice keeps its bottom controls stationary while long subtitles scroll", async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 600 });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=daily-conversation&level=1");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1");
   const footer = page.locator("main > footer");
   await expect(footer).toBeVisible();
   const before = (await footer.boundingBox())!;

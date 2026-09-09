@@ -1,10 +1,11 @@
-import { expect, test, type Page } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, signInFixtureAdmin, type Page } from "./fixtures/cloud-ui";
 
 const draftId = "44444444-4444-4444-8444-444444444444";
 const initial = { configured: true, total: 3, complete: 0, pending: 3, processing: 0, failed: 0, estimatedUnits: 3, errors: [] as string[] };
 async function importDraft(page: Page) {
-  await page.request.post("/api/admin/auth/verify", { data: { email: "admin@example.com", token: "123456" } });
-  await page.goto("/admin");
+  await signInFixtureAdmin(page);
+  await openLearnerPage(page, "/admin");
   await expect(page.locator('form[data-admin-ready="true"]')).toBeVisible();
   await page.getByLabel("레슨 제목").fill("Syntax example");
   await page.getByLabel("통합 스크립트", { exact: true }).setInputFiles({

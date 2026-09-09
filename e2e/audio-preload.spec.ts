@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
@@ -17,8 +18,8 @@ test("only current and next recordings preload, and the buffered next recording 
     requested.push(Number(url.pathname.split("/").at(-1)));
     return route.fulfill({ contentType: "audio/webm", body: testRecording });
   });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   await page.waitForLoadState("networkidle");
   expect(new Set(requested)).toEqual(new Set([1, 2]));
   // Development Strict Mode may abort its first mount's preload. Once settled,
@@ -43,7 +44,7 @@ test("only current and next recordings preload, and the buffered next recording 
   expect(await page.evaluate(() => (window as typeof window & { liveAudioBuffers: number }).liveAudioBuffers)).toBeLessThanOrEqual(2);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await expect.poll(() => page.evaluate(() => (window as typeof window & { liveAudioBuffers: number }).liveAudioBuffers)).toBe(0);
 });
 
@@ -53,8 +54,8 @@ test("a corrupt prefetched recording stops safely and a fresh retry never counts
     const second = new URL(route.request().url()).pathname.endsWith("/2");
     return route.fulfill({ contentType: "audio/webm", body: second && corrupt ? Buffer.from("not audio") : testRecording });
   });
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   await page.waitForLoadState("networkidle");
   await page.keyboard.press("Space");
   for (const cycle of [1, 2, 3]) {
@@ -62,6 +63,7 @@ test("a corrupt prefetched recording stops safely and a fresh retry never counts
     await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
   }
   await page.keyboard.press("Space");
+  await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
   await page.keyboard.press("Space");
   await expect(page.getByRole("button", { name: "RETRY · 다시 시도", exact: true })).toBeVisible();
   await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);

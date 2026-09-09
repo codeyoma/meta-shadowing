@@ -16,8 +16,11 @@
     "import:kaikki": "node --env-file-if-exists=.env.local scripts/import-kaikki.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:browser": "playwright test",
+    "test:browser": "node scripts/run-browser-regressions.mjs",
     "test:integration": "node scripts/run-admin-persistence-integration.mjs",
+    "test:learner-preferences": "node scripts/run-admin-persistence-integration.mjs --learner-preferences",
+    "test:cloud-practice": "node scripts/run-admin-persistence-integration.mjs --cloud-practice",
+    "test:mp3-cache": "node scripts/run-admin-persistence-integration.mjs --mp3-cache",
     "test:db": "npx --yes supabase@2.116.0 test db --local"
   },
   "dependencies": {

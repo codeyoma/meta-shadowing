@@ -1,5 +1,6 @@
+import { openLearnerPage } from "./fixtures/cloud-navigation";
 import { openSelectedStageSettings } from "./fixtures/stage-preview";
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, signInFixtureAdmin, type Locator } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
@@ -17,12 +18,12 @@ test("empty form fields have a clearly distinguishable boundary on the white can
     });
     expect(contrast).toBeGreaterThanOrEqual(3);
   }
-  await page.goto("/");
+  await openLearnerPage(page, "/");
   await expectFieldBoundary(page.locator("#beta-password"));
-  await page.goto("/admin");
+  await openLearnerPage(page, "/admin");
   await expectFieldBoundary(page.locator("#admin-email"));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/setup?lesson=morning-routine");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
   await openSelectedStageSettings(page);
   await expectFieldBoundary(page.getByRole("combobox", { name: "재생속도", exact: true }));
 });
@@ -43,19 +44,19 @@ test("the online-only install manifest and all home-screen icons work without le
     expect(png.readUInt32BE(16)).toBe(size);
     expect(png.readUInt32BE(20)).toBe(size);
   }
-  await page.goto("/");
+  await openLearnerPage(page, "/");
   const appleIcon = await page.locator('link[rel="apple-touch-icon"]').getAttribute("href");
   const applePng = await (await request.get(appleIcon!)).body();
   expect(applePng.readUInt32BE(16)).toBe(180);
   await page.getByText("설치 및 온라인 이용 안내", { exact: true }).click();
-  await expect(page.getByText("학습에는 인터넷 연결이 필요합니다. 레슨과 음성은 오프라인 저장하지 않습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByText("학습에는 인터넷 연결이 필요합니다. 진행상황과 설정은 계정에 저장하며, MP3 음성만 이 기기에 임시 보관합니다. 음성을 들을 때마다 20일 보관 기간이 갱신됩니다.", { exact: true })).toBeVisible();
   await expect(page.getByText(/iPhone.*Safari/)).toBeVisible();
   expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
 });
 
 test("setup exposes large touch targets, visible keyboard focus and a legible selected level", async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/setup?lesson=morning-routine");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
   await page.getByRole("radio", { name: /1 자막 쉐도잉/ }).waitFor();
   for (const button of await page.getByRole("main").getByRole("button").or(page.getByRole("main").getByRole("radio")).all()) {
     const box = await button.boundingBox();
@@ -96,8 +97,8 @@ test("setup exposes large touch targets, visible keyboard focus and a legible se
 for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }]) test(`a ${viewport.width} by ${viewport.height} phone never covers practice actions with its playback dock`, async ({ page }) => {
   await page.setViewportSize(viewport);
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=morning-routine&level=3");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=3");
   await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
   await confirmManualListen(page);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
@@ -110,11 +111,8 @@ for (const viewport of [{ width: 375, height: 667 }, { width: 390, height: 844 }
 });
 
 test("administrator header navigation has touch-sized targets and visible keyboard focus", async ({ page }) => {
-  await page.goto("/admin");
-  await page.getByLabel("이메일").fill("admin@example.com");
-  await page.getByRole("button", { name: "로그인 코드 받기" }).click();
-  await page.getByLabel("인증 코드").fill("123456");
-  await page.getByRole("button", { name: "확인하고 계속" }).click();
+  await signInFixtureAdmin(page);
+  await openLearnerPage(page, "/admin");
   for (const name of ["레슨 관리", "전역 학습 기본값"]) {
     const link = page.getByRole("link", { name, exact: true });
     await expect(link).toBeVisible();
@@ -130,8 +128,10 @@ test("administrator header navigation has touch-sized targets and visible keyboa
 test("overflowing bilingual subtitles are an explicit keyboard stop and scroll without advancing practice", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/player?lesson=daily-conversation&level=5&group=4");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await test.step("Enter grouped player for keyboard checks", async () => {
+    await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=5&group=4");
+  });
   await page.getByRole("button", { name: "자막 보기", exact: true }).click();
   const canvas = page.getByRole("region", { name: "학습 자막", exact: true });
   await expect(canvas).toHaveAttribute("tabindex", "0");
@@ -158,8 +158,17 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeFocused();
+});
 
-  await page.goto("/player?lesson=morning-routine&level=8&display=cumulative");
+// Each keyboard layout owns a fresh account lease. Cross-lesson page.goto()
+// must not make these accessibility checks depend on best-effort pagehide release.
+test("rapid cumulative subtitles are an explicit keyboard stop without advancing practice", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await test.step("Enter rapid player for keyboard checks", async () => {
+    await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=8&display=cumulative");
+  });
   const rapid = page.getByRole("region", { name: "속사포 학습" });
   await expect(rapid).toHaveAttribute("tabindex", "0");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).focus();
@@ -176,20 +185,20 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await expect(page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true })).toBeVisible();
 });
 
-test("a tall player keeps a compact canvas and a bottom-aligned action", async ({ page }) => {
+// Layout cases need independent account leases, not a successful best-effort
+// pagehide release from the previous level.
+for (const level of [3, 8]) test(`a tall player keeps a compact canvas and a bottom-aligned action (level ${level})`, async ({ page }) => {
   await page.setViewportSize({ width: 853, height: 1844 });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  for (const level of [3, 8]) {
-    await page.goto(`/player?lesson=morning-routine&level=${level}`);
-    const canvas = page.getByRole("region", { name: level === 3 ? "학습 자막" : "속사포 학습" });
-    await expect(canvas).toBeVisible();
-    const box = (await canvas.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(104);
-    expect(box.height).toBeLessThanOrEqual(280);
-    const actions = (await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox())!;
-    expect(box.y + box.height).toBeLessThan(actions.y);
-    expect(1844 - actions.y - actions.height).toBeLessThanOrEqual(32);
-    expect(actions.y + actions.height).toBeLessThanOrEqual(1844);
-  }
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
+  const canvas = page.getByRole("region", { name: level === 3 ? "학습 자막" : "속사포 학습" });
+  await expect(canvas).toBeVisible();
+  const box = (await canvas.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(104);
+  expect(box.height).toBeLessThanOrEqual(280);
+  const actions = (await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox())!;
+  expect(box.y + box.height).toBeLessThan(actions.y);
+  expect(1844 - actions.y - actions.height).toBeLessThanOrEqual(32);
+  expect(actions.y + actions.height).toBeLessThanOrEqual(1844);
 });

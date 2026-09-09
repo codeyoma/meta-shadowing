@@ -90,11 +90,11 @@ export function PlayerDrawer({ open, lesson, initialView, settings, currentPhras
     {view === "menu" ? <nav className={styles.drawerNav} aria-label="학습 메뉴 항목">
       <Button type="button" variant="ghost" size="row" data-drawer-view="settings" onClick={() => show("settings")}><GearIcon data-icon="inline-start" /><span>학습 설정</span><ArrowIcon data-icon="inline-end" /></Button>
       <Button type="button" variant="ghost" size="row" data-drawer-view="sentences" onClick={() => show("sentences")}><LessonIcon data-icon="inline-start" /><span>문장 목록</span><ArrowIcon data-icon="inline-end" /></Button>
+      <Button type="button" variant="ghost" size="row" onClick={() => { close(); onStages(); }}><Map aria-hidden="true" data-icon="inline-start" /><span className="text-close-action">스테이지 화면으로</span><ArrowIcon data-icon="inline-end" /></Button>
     </nav> : view === "settings" ? <div className={styles.settingsBody}>{settings}</div> :
       <SentenceList lesson={lesson} currentPhraseNumbers={currentPhraseNumbers} onSelect={index => { close(); onSelect(index); }} />}
     <DrawerFooter className={styles.drawerFooter}>
       <Button type="button" variant="practice" size="lg" onClick={close}><CheckIcon data-icon="inline-start" />확인</Button>
-      <Button type="button" variant="stage-exit" size="sm" onClick={() => { close(); onStages(); }}><Map aria-hidden="true" data-icon="inline-start" />스테이지 화면으로</Button>
     </DrawerFooter>
   </DrawerContent></Drawer>;
 }

@@ -4,16 +4,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createAudioSession, isAudioRepeatAvailable, transitionAudioSession, type AudioPracticeLevel, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { PhraseGroup } from "@/lib/phrase-groups";
-import { useLearningRecord, type LearningStart } from "./use-learning-record";
+import type { LearningStart, CloudRecording } from "./recording-types";
 import { createAudioPreloader } from "@/lib/audio-preloader";
 import { createSuccessChime } from "@/lib/success-chime";
+import { useAudioCacheAccount } from "../audio-cache-scope";
 
 function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
 }
 
-export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart) {
-  const { completion, storageFailed, updateRecord } = useLearningRecord(lesson, start);
+export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart, cloud: CloudRecording) {
+  const audioAccount = useAudioCacheAccount();
+  const { completion, updateRecord } = cloud;
+  const cloudRef = useRef(cloud); cloudRef.current = cloud;
+  const shortcutsRef = useRef(shortcutsEnabled); shortcutsRef.current = shortcutsEnabled;
+  const waiting = useRef(false);
+  const resumeVerified = useRef(false);
+  const preparedGesture = useRef<{ attempt: number; until: number } | null>(null);
+  const alive = useRef(true);
   const [session, setSession] = useState(() => createAudioSession({ phraseCount: lesson.phrases.length, groupSizes: groups.map(group => group.phrases.length), level, ...settings, initialGroupIndex: start.progress?.nextUnit }));
   const currentSession = useRef(session);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -24,36 +32,64 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
   const prepareAudio = useCallback((index: number, refresh = false) => {
     if (!audioRef.current) return;
     preloader.current ??= createAudioPreloader(audioRef.current, lesson.phrases.map(phrase =>
-      `/api/lessons/${lesson.id}/audio/${phrase.phraseNumber}?version=${encodeURIComponent(lesson.version)}`));
+      `/api/lessons/${lesson.id}/audio/${phrase.phraseNumber}?version=${encodeURIComponent(lesson.version)}`), audioAccount);
     preloader.current.select(index, refresh);
-  }, [lesson]);
+  }, [lesson, audioAccount]);
 
   const send = useCallback(function send(event: AudioSessionEvent) {
+    if (!["space", "retry"].includes(event.type)) preparedGesture.current = null;
+    if (event.type !== "pause" && (waiting.current || (cloudRef.current && !cloudRef.current.canAct()))) return;
+    if (waiting.current && event.type === "pause") { audioRef.current?.pause(); updateRecord({ active: false }); return; }
     const previous = currentSession.current;
+    const startsPlayback = previous.phase === "paused" || (previous.phase === "ready" && previous.completedCycles === 0);
+    // A browser gesture rejection already followed a successful ownership and
+    // media-access check. Permit only its immediate, same-attempt second tap;
+    // canAct above still fences stale/offline/hidden ownership before playback.
+    const freshGesture = preparedGesture.current?.attempt === previous.attempt && performance.now() < preparedGesture.current.until;
+    if (cloudRef.current && startsPlayback && (event.type === "space" || event.type === "retry") && !resumeVerified.current && !freshGesture) {
+      waiting.current = true;
+      void cloudRef.current.verifyResume().then(allowed => {
+        waiting.current = false;
+        if (!allowed || !alive.current || !shortcutsRef.current) return;
+        resumeVerified.current = true;
+        send(event);
+        resumeVerified.current = false;
+      });
+      return;
+    }
+    preparedGesture.current = null;
     const next = transitionAudioSession(previous, event);
     if (next === previous) return;
     if (["space", "next", "retry"].includes(event.type)) {
       successChime.current ??= createSuccessChime();
       successChime.current.unlock();
     }
-    if (next.groupIndex === previous.groupIndex && previous.confirmedCycles < 3 && next.confirmedCycles === 3) successChime.current?.play();
     const finished = next.phase === "completed";
-    const boundary = finished || event.type === "jump" || next.groupIndex > previous.groupIndex;
-    const studied = next.groupIndex === previous.groupIndex && next.confirmedCycles > previous.confirmedCycles;
+    const boundary = finished || event.type === "jump" || next.groupIndex !== previous.groupIndex;
+    const studied = !boundary && next.confirmedCycles > previous.confirmedCycles;
     if (boundary) successChime.current?.cancelPending();
-    updateRecord({
-      restartCompleted: event.type === "jump",
+    const saved = updateRecord({
+      kind: studied ? "studied" : event.type === "jump" || event.type === "previous" ? "jump" : "advance",
+      confirmedCycles: event.type === "tick" && previous.phase === "speaking" ? previous.completedCycles : previous.confirmedCycles,
       studied,
       active: shortcutsEnabled && !document.hidden && (["playing", "gap", "speaking", "countdown"].includes(next.phase) || (next.phase === "ready" && next.completedCycles > 0)),
       ...(boundary || studied ? { checkpoint: { unit: finished ? next.groupSizes.length : next.groupIndex,
-        phrase: finished ? lesson.phrases.length : studied && groups.length ? groups[next.groupIndex].phrases[0].phraseNumber - 1 : next.phraseIndex }, finished } : {}),
+        // Preserve the chosen sentence before the old grouping snaps it to its
+        // start. A completed run may restart with a different account group size.
+        phrase: event.type === "jump" ? event.phraseIndex : finished ? lesson.phrases.length : studied && groups.length ? groups[next.groupIndex].phrases[0].phraseNumber - 1 : next.phraseIndex }, finished } : {}),
       ...(event.type === "settings" ? { settings: {
         ...(event.mode !== undefined ? { mode: next.mode } : {}), ...(event.playbackRate !== undefined ? { speed: next.playbackRate } : {}),
         ...(event.advanceDelayMs !== undefined ? { advanceDelayMs: next.advanceDelayMs } : {}), ...(event.groupGapMs !== undefined ? { groupGapMs: next.groupGapMs } : {})
       } } : {})
     });
-    currentSession.current = next;
-    setSession(next);
+    const apply = () => {
+    if (!alive.current) return;
+    if (next.groupIndex === previous.groupIndex && previous.confirmedCycles < 3 && next.confirmedCycles === 3) successChime.current?.play();
+    const accepted = cloudRef.current && (document.hidden || !shortcutsRef.current || !cloudRef.current.canAct()) && !finished
+      ? transitionAudioSession(next, { type: "pause" }) : next;
+    currentSession.current = accepted;
+    setSession(accepted);
+    if (cloudRef.current) updateRecord({ active: shortcutsRef.current && !document.hidden && (["playing", "gap", "speaking", "countdown"].includes(accepted.phase) || (accepted.phase === "ready" && accepted.completedCycles > 0)) });
 
     const audio = audioRef.current;
     if (!audio) return;
@@ -82,28 +118,41 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
         send({ type: "audio-ended", attempt, durationMs: duration * 1000 });
       };
       audio.onerror = () => {
-        if (audio.error) send({ type: "audio-error", attempt });
+        send({ type: "audio-error", attempt });
       };
       audio.onpause = () => {
         if (!audio.ended && audio.paused && currentSession.current.attempt === attempt) send({ type: "pause" });
       };
     }
-
     audio.playbackRate = next.playbackRate;
-    if (next.phase === "loading" && (previous.phase !== "loading" || next.attempt !== previous.attempt)) {
+    if (accepted.phase === "loading" && (previous.phase !== "loading" || next.attempt !== previous.attempt)) {
       const request = ++playRequest.current;
-      // Keep play() in the keyboard/touch action to preserve mobile user activation.
-      void audio.play().catch(() => {
-        if (request === playRequest.current) send({ type: "audio-error", attempt: next.attempt });
+      void (preloader.current?.play() ?? audio.play()).catch(error => {
+        if (request !== playRequest.current || error?.name === "AbortError") return;
+        if (error?.name === "NotAllowedError") {
+          send({ type: "pause" });
+          if (alive.current && shortcutsRef.current && cloudRef.current.canAct()) {
+            preparedGesture.current = { attempt: next.attempt, until: performance.now() + 3000 };
+          }
+        } else send({ type: "audio-error", attempt: next.attempt });
       });
-    } else if (["paused", "error", "completed"].includes(next.phase)) {
+    } else if (["paused", "error", "completed"].includes(accepted.phase)) {
       playRequest.current++;
-      audio.pause();
+      if (preloader.current) preloader.current.pause(); else audio.pause();
     }
+    };
+    if (saved instanceof Promise) {
+      waiting.current = true;
+      void saved.then(() => { waiting.current = false; apply(); });
+    } else apply();
   }, [lesson, groups, shortcutsEnabled, updateRecord, prepareAudio]);
 
   useEffect(() => {
-    if (!["gap", "speaking", "countdown"].includes(session.phase)) return;
+    if (cloud?.blocked) send({ type: "pause" });
+  }, [cloud?.blocked, send]);
+
+  useEffect(() => {
+    if (cloud?.blocked || !["gap", "speaking", "countdown"].includes(session.phase)) return;
     let lastTick = performance.now();
     const timer = window.setInterval(() => {
       const now = performance.now();
@@ -111,7 +160,7 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       lastTick = now;
     }, 100);
     return () => window.clearInterval(timer);
-  }, [session.phase, session.attempt, send]);
+  }, [cloud?.blocked, session.phase, session.attempt, send]);
 
   useEffect(() => {
     let handledSpace = false;
@@ -140,22 +189,29 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
       handledSpace = false;
     }
     function onVisibilityChange() {
+      preparedGesture.current = null;
       if (document.hidden) send({ type: "pause" });
     }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onVisibilityChange);
+    window.addEventListener("offline", onVisibilityChange);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onVisibilityChange);
+      window.removeEventListener("offline", onVisibilityChange);
     };
   }, [send, shortcutsEnabled]);
 
   useEffect(() => {
+    alive.current = true;
     const audio = audioRef.current;
     prepareAudio(currentSession.current.phraseIndex);
     return () => {
+      alive.current = false;
       playRequest.current++;
       successChime.current?.dispose();
       successChime.current = null;
@@ -166,5 +222,5 @@ export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLev
     };
   }, [prepareAudio]);
 
-  return { session, send, audioRef, completion, storageFailed };
+  return { session, send, audioRef, completion };
 }

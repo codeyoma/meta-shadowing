@@ -44,6 +44,7 @@ const serverEnvironment = runSupabaseIntegration
       NEXT_PUBLIC_SUPABASE_URL: fakeSupabaseUrl,
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: FAKE_SUPABASE_PUBLISHABLE_KEY,
       ADMIN_TEST_MODE: "1",
+      CLOUD_LEARNING_ENABLED: "0",
       ADMIN_TEST_EMAIL: "admin@example.com",
       ADMIN_TEST_OTP: "123456",
       ADMIN_TEST_SESSION_SECRET: "test-admin-cookie-secret"
@@ -51,11 +52,13 @@ const serverEnvironment = runSupabaseIntegration
 
 export default defineConfig({
   testDir: "./e2e",
+  testMatch: !runSupabaseIntegration ? ["**/admin-import.spec.ts", "**/combined-import.spec.ts", "**/google-login*.spec.ts", "**/cloud-disabled.spec.ts"] : undefined,
+  testIgnore: process.env.LEARNER_UI_REGRESSION === "1" ? ["**/*.integration.spec.ts", "**/admin-import.spec.ts", "**/combined-import.spec.ts", "**/google-login*.spec.ts", "**/cloud-disabled.spec.ts"] : undefined,
   fullyParallel: true,
   use: {
     baseURL,
     ignoreHTTPSErrors: productionBuild,
-    trace: "on-first-retry",
+    trace: process.env.SAFE_CI_ARTIFACT_DIR ? "off" : "on-first-retry",
     launchOptions: chromeExecutable ? {
       executablePath: chromeExecutable,
       // Chrome's macOS updater can inherit stdio and keep worker teardown waiting.

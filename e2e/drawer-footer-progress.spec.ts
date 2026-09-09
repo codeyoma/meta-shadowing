@@ -1,8 +1,10 @@
-import { expect, test, type Page } from "@playwright/test";
+import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedServerJournal } from "./fixtures/cloud-journal";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
 });
 
@@ -22,10 +24,15 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (["error", "warning"].includes(message.type())) errors.push(message.text()); });
     await page.setViewportSize(viewport);
-    await page.goto("/player?lesson=daily-conversation&level=1&mode=manual&stage=2");
+    await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&mode=manual&stage=2");
     await expect(page).toHaveTitle(/Meta Shadowing/i);
     const practice = page.getByRole("button", { name: /^CONTINUE/ });
-    const appearance = await practice.evaluate(element => {
+    await expect(practice).toBeEnabled();
+    await page.mouse.move(0, 0);
+    const appearance = await practice.evaluate(async element => {
+      // The entry-button click can leave the pointer over this control on short
+      // screens. Compare settled idle designs, not hover/enable transitions.
+      await Promise.all(element.getAnimations().map(animation => animation.finished.catch(() => undefined)));
       const style = getComputedStyle(element);
       return { background: style.backgroundColor, shadow: style.boxShadow, radius: style.borderRadius, height: element.getBoundingClientRect().height };
     });
@@ -34,18 +41,19 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
       const confirm = drawer.getByRole("button", { name: "확인", exact: true });
       const stages = drawer.getByRole("button", { name: "스테이지 화면으로", exact: true });
       await expect(confirm).toBeInViewport();
-      await expect(stages).toBeInViewport();
       await expect(confirm).toHaveCSS("background-color", appearance.background);
       await expect(confirm).toHaveCSS("box-shadow", appearance.shadow);
       await expect(confirm).toHaveCSS("border-radius", appearance.radius);
       expect((await confirm.boundingBox())!.height).toBe(appearance.height);
-      await expect(stages).toHaveCSS("color", "rgb(255, 75, 75)");
-      await expect(stages.locator("svg.lucide-map")).toHaveCount(1);
       const footer = drawer.locator('[data-slot="drawer-footer"]');
-      await expect(footer.getByRole("button")).toHaveCount(2);
-      const confirmBox = (await confirm.boundingBox())!;
-      expect((await stages.boundingBox())!.y).toBeGreaterThanOrEqual(confirmBox.y + confirmBox.height);
-      if (view === "menu") await expect(drawer.getByRole("navigation").getByRole("button")).toHaveCount(2);
+      await expect(footer.getByRole("button")).toHaveText(["확인"]);
+      if (view === "menu") {
+        await expect(drawer.getByRole("navigation").getByRole("button")).toHaveText(["학습 설정", "문장 목록", "스테이지 화면으로"]);
+        await stages.scrollIntoViewIfNeeded();
+        await expect(stages).toBeInViewport();
+        await expect(stages.getByText("스테이지 화면으로", { exact: true })).toHaveCSS("color", "rgb(255, 75, 75)");
+        await expect(stages.locator("svg.lucide-map")).toHaveCount(1);
+      } else await expect(stages).toHaveCount(0);
       if (view === "settings") {
         const speed = drawer.getByRole("combobox", { name: "재생속도", exact: true });
         await speed.scrollIntoViewIfNeeded();
@@ -86,18 +94,19 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
   });
 }
 
-test("every drawer view returns to the current lesson and stage through the footer map button", async ({ page }) => {
+test("every drawer view returns to the current lesson and stage through the third menu row", async ({ page }) => {
   for (const view of ["menu", "settings", "sentences"] as const) {
-    await page.goto("/player?lesson=daily-conversation&level=1&mode=manual&stage=2");
+    await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&mode=manual&stage=2");
     const drawer = await openView(page, view);
+    if (view !== "menu") await drawer.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
     await drawer.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-    await expect(page).toHaveURL("/lessons/daily-conversation/stages?stage=2");
+    await expect(page).toHaveURL("/lessons/10000000-0000-4000-8000-000000000002/stages?stage=2");
   }
 });
 
 test("only filled player progress shimmers and reduced motion disables the reflection", async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.goto("/player?lesson=daily-conversation&level=1&mode=manual");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&mode=manual");
   const progress = page.getByRole("progressbar", { name: "프레이즈 진행", exact: true });
   const indicator = progress.locator('[data-slot="progress-indicator"]');
   const animation = () => indicator.evaluate(element => getComputedStyle(element, "::after").animationName);
@@ -126,14 +135,10 @@ test("only filled player progress shimmers and reduced motion disables the refle
   // Seed one completion in this isolated browser fixture so neither zero progress
   // nor reduced-motion preferences can mask an accidentally global shimmer.
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.evaluate(() => {
-    const journal = JSON.parse(localStorage.getItem("meta-shadowing:learning:v1")!);
-    if (!journal.progress) throw new Error("Expected the selected phrase to be saved");
-    journal.history = [{ ...journal.progress, completedAt: "2026-09-08T00:00:00Z" }];
-    journal.progress = null;
-    localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify(journal));
-  });
-  await page.goto("/lessons/daily-conversation/stages?stage=1");
+  const journal = await readServerJournal(page);
+  if (!journal.progress) throw new Error("Expected the selected phrase to be saved");
+  await seedServerJournal(page, { history: [{ ...journal.progress, completedAt: "2026-09-08T00:00:00Z" }] });
+  await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000002/stages?stage=1");
   const stageProgress = page.getByRole("progressbar");
   await expect(stageProgress).toHaveAttribute("aria-valuenow", "1");
   const generic = stageProgress.locator('[data-slot="progress-indicator"]');

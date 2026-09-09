@@ -1,8 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test } from "./fixtures/cloud-ui";
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto("/home");
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/home");
 });
 
 test("four colored destinations stay fixed and identify the selected section", async ({ page }) => {
@@ -31,7 +32,7 @@ test("four colored destinations stay fixed and identify the selected section", a
 test("settings opens a list and detail page without starting practice", async ({ page }) => {
   const nav = page.getByRole("navigation", { name: "하단 탐색" });
   await nav.getByRole("link", { name: "스테이지", exact: true }).click();
-  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await nav.getByRole("link", { name: "설정", exact: true }).click();
   await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "세션 설정", exact: true }).click();
@@ -41,7 +42,7 @@ test("settings opens a list and detail page without starting practice", async ({
   await expect(nav.getByRole("link", { name: "설정", exact: true })).toHaveAttribute("aria-current", "location");
   await page.getByRole("link", { name: "세션 설정", exact: true }).click();
   await expect(page.getByLabel("재생속도", { exact: true })).toHaveValue("1.5");
-  expect(await page.evaluate(() => localStorage.getItem("meta-shadowing:last-selection"))).toBeNull();
+  expect((await readServerJournal(page)).progress).toBeNull();
 });
 
 test("each tap dips the whole button then returns, with no independent icon bounce", async ({ page }) => {
@@ -98,16 +99,16 @@ test("reduced motion preserves selection without the spatial bounce", async ({ p
 });
 
 test("practice keeps its existing footer rather than the browsing navigation", async ({ page }) => {
-  await page.goto("/player?lesson=morning-routine&level=1&mode=manual");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&mode=manual");
   await expect(page.getByRole("button", { name: /^CONTINUE/ })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "하단 탐색" })).toHaveCount(0);
 });
 
 test("returning to lessons preserves the Japanese lesson context", async ({ page }) => {
-  await page.goto("/setup?lesson=tokyo-walk");
+  await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000003");
   const nav = page.getByRole("navigation", { name: "하단 탐색" });
   await nav.getByRole("link", { name: "레슨", exact: true }).click();
   await expect(page.getByRole("heading", { name: "일본어 레슨", exact: true })).toBeInViewport();
   await nav.getByRole("link", { name: "스테이지", exact: true }).click();
-  await expect(page).toHaveURL(/\/lessons\/tokyo-walk\/stages/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000003\/stages/);
 });

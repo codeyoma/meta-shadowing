@@ -1,3 +1,4 @@
+import { openLearnerPage, enterAccountPractice, advanceCloudClock, pauseCloudClock } from "./fixtures/cloud-navigation";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -117,16 +118,18 @@ for (const entry of ["home", "player"] as const) {
       expect(error).toBeNull();
       const originalVersion = published!.published_at as string;
       await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
-      await page.goto(`/player?lesson=${original}&level=6&mode=automatic&lineGap=0`);
+      await openLearnerPage(page, `/player?lesson=${original}&level=6&mode=automatic&lineGap=0`);
       await page.waitForLoadState("networkidle");
-      await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
+      await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
       await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
-      await page.clock.runFor(2100);
+      // Include timer-tick boundaries around real checkpoint acknowledgments.
+      // This scenario checks version/history behavior, not exact word timing.
+      await advanceCloudClock(page, 3000);
       await expect(page.getByRole("heading", { name: "레벨 6 학습 완료" })).toBeVisible();
-      await page.goto(`/player?lesson=${original}&level=6&mode=manual`);
+      await openLearnerPage(page, `/player?lesson=${original}&level=6&mode=manual`);
       await page.waitForLoadState("networkidle");
       await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
-      await page.clock.runFor(900);
+      await advanceCloudClock(page, 1500);
       await page.keyboard.press("Space");
       await expect(page.getByText("문장 2 / 2", { exact: true })).toBeVisible();
       const oldRun = page.url();
@@ -134,17 +137,18 @@ for (const entry of ["home", "player"] as const) {
       await fixture.upload(replacement);
       await fixture.publish(replacement);
       await page.goto(entry === "home" ? "/lessons?language=english" : oldRun);
-      await expect(page.getByRole("alert", { name: "레슨 버전 변경" })).toContainText("레슨이 새 버전으로 변경되어 이전 진도를 초기화했습니다.");
       if (entry === "home") {
         await page.getByRole("link", { name: /Updated practice/ }).click();
         await expectPreservedCompletion(page, originalVersion);
         await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
-      }
+      } else await expect(page.getByText(/레슨 버전이 변경되어 이전 진도를 이어갈 수 없습니다/)).toBeVisible();
+      await enterAccountPractice(page);
       const firstUnit = page.getByRole("navigation", { name: "학습 탐색", exact: true })
         .getByText(entry === "home" ? "1 / 2" : "문장 1 / 2", { exact: true });
       await expect(firstUnit).toBeVisible();
       expect(new URL(page.url()).searchParams.get("run")).not.toBe(new URL(oldRun).searchParams.get("run"));
       await page.reload();
+      await enterAccountPractice(page);
       await expect(firstUnit).toBeVisible();
       await page.goto("/lessons?language=english");
       await page.getByRole("link", { name: /Updated practice/ }).click();
@@ -223,7 +227,8 @@ test(`an administrator replaces from files, unpublishes without loss, and confir
 test("partial Storage deletion remains hidden and can be retried after a reload", async ({ page }) => {
   const fixture = await lifecycleFixture(page);
   const fault = `test_cleanup_${randomUUID().replaceAll("-", "")}`;
-  const query = (sql: string) => execFileSync("npx", ["--yes", "supabase@2.116.0", "db", "query", "--local", sql], { stdio: "pipe" });
+  const query = (sql: string) => execFileSync("npx", ["--yes", "supabase@2.116.0", "db", "query", "--local",
+    ...(process.env.SUPABASE_TEST_WORKDIR ? ["--workdir", process.env.SUPABASE_TEST_WORKDIR] : []), sql], { stdio: "pipe" });
   let faultInstalled = false;
   try {
     const original = await fixture.draft("Cleanup original");

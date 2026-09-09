@@ -3,7 +3,6 @@ import { isLanguage } from "./languages";
 
 export type BrowseDestination = "languages" | "lessons" | "stages" | "settings";
 export type BrowseSelection = { language: Language; lessonId: string | null };
-export const BROWSE_SELECTION_KEY = "meta-shadowing:browse-selection:v1";
 
 export function resolveBrowseSelection(pathname: string, query: URLSearchParams, catalog: Lesson[], saved?: Partial<BrowseSelection> | null): BrowseSelection {
   const routeId = pathname.match(/^\/lessons\/([^/]+)\/stages$/)?.[1];

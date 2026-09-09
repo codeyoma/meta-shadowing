@@ -9,7 +9,10 @@ import BrowseError from "./(learner)/error";
 import AppError from "./error";
 
 const catalog = vi.hoisted(() => ({ unavailable: true }));
-vi.mock("@/lib/server-auth", () => ({ requireLearner: async () => undefined }));
+vi.mock("@/lib/server-auth", () => ({ requireLearner: async () => ({ id: "catalog-boundary-user" }) }));
+vi.mock("@/lib/cloud-learning", () => ({ cloudLearningEnabled: () => true }));
+// This seam exercises Next's catalog error boundary, not account persistence.
+vi.mock("./browse-shell", () => ({ BrowseShell: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@/lib/published-lessons", () => ({
   listPublishedLessons: async () => {
     if (catalog.unavailable) throw new Error("Catalog database unavailable");

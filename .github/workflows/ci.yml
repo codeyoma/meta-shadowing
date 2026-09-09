@@ -54,8 +54,10 @@ jobs:
 
   ci-browser-shards:
     name: ci-browser-shard-${{ matrix.shard }}
+    env:
+      SAFE_CI_ARTIFACT_DIR: ci-artifacts
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -70,7 +72,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser -- --workers=2 --reporter=line --global-timeout=600000 --shard=${{ matrix.shard }}/4
+      - name: Configure this runner's disposable cloud database
+        run: cp supabase/config.test.toml supabase/config.toml
+      - run: npx --yes supabase@2.116.0 start
+      - run: npm run test:browser -- --workers=1 --reporter=line --global-timeout=1200000 --shard=${{ matrix.shard }}/4
+      - name: Retain credential-safe browser results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-results-${{ matrix.shard }}
+          path: ci-artifacts/*.json
+          retention-days: 7
+      - name: Stop this runner's disposable database
+        if: always()
+        run: npx --yes supabase@2.116.0 stop --project-id meta-shadowing-browser-tests --no-backup
 
   ci-browser:
     name: ci-browser
@@ -86,6 +101,8 @@ jobs:
 
   ci-database:
     name: ci-database
+    env:
+      SAFE_CI_ARTIFACT_DIR: ci-artifacts
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -99,15 +116,36 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Start disposable local database
-        run: npx --yes supabase@2.116.0 start
+        run: |
+          cp supabase/config.test.toml supabase/config.toml
+          npx --yes supabase@2.116.0 start
       - run: npm run test:db
       - name: Test production build against local Supabase over HTTPS
         run: npm run test:integration -- --reporter=line --global-timeout=600000
         env:
           PLAYWRIGHT_PRODUCTION: "1"
+      - name: Test cloud account preferences on desktop and mobile
+        run: npm run test:learner-preferences -- --project=mobile --reporter=line --global-timeout=600000
+        env:
+          PLAYWRIGHT_PRODUCTION: "1"
+      - name: Test confirmed cloud practice on desktop and mobile
+        run: npm run test:cloud-practice -- --project=mobile --reporter=line --global-timeout=1200000
+        env:
+          PLAYWRIGHT_PRODUCTION: "1"
+      - name: Test account-scoped MP3 caching on desktop and mobile
+        run: npm run test:mp3-cache -- --project=mobile --reporter=line --global-timeout=600000
+        env:
+          PLAYWRIGHT_PRODUCTION: "1"
+      - name: Retain credential-safe integration results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: database-browser-results
+          path: ci-artifacts/*.json
+          retention-days: 7
       - name: Stop this runner's disposable database
         if: always()
-        run: npx --yes supabase@2.116.0 stop --project-id meta-shadowing-mvp --no-backup
+        run: npx --yes supabase@2.116.0 stop --project-id meta-shadowing-browser-tests --no-backup
 
   release-approval:
     name: release-approval

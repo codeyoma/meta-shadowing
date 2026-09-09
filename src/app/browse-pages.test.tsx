@@ -2,7 +2,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { lessons } from "@/lib/lessons";
-import type { CompletionRecord } from "@/lib/learning-records";
+import type { CompletionRecord, Journal } from "@/lib/learning-records";
 import { DEFAULT_SESSION_SETTINGS } from "@/lib/session-settings";
 import { LanguagePage, LessonPage } from "./browse-pages";
 
@@ -10,12 +10,16 @@ vi.mock("./browse-shell", () => ({
   useBrowse: () => ({ catalog: lessons, selection: { language: "english", lessonId: lessons[0].id } }),
   useBrowseScroll: () => ({ current: null }),
 }));
+// Presentation-only input: persistence and provider behavior are exercised
+// through real Supabase browser integration, not emulated by this unit test.
+let journal: Journal;
+vi.mock("./cloud-preferences-provider", () => ({ useCloudPreferences: () => ({ journal }) }));
 
 let container: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  localStorage.clear();
+  journal = { history: [], progress: null, studyDays: [] };
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -23,7 +27,6 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
-  localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -45,7 +48,7 @@ it("counts fully completed current-version lessons, not stages, duplicate runs, 
     completion(1, 16, "old-version"),
     ...Array.from({ length: 16 }, (_, i) => completion(2, i + 1)),
   ];
-  localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify({ history, progress: null, studyDays: [] }));
+  journal = { history, progress: null, studyDays: [] };
   await render();
   expect(container.textContent).toContain("완료한 레슨");
   expect(progress("레슨 학습 진척도")?.getAttribute("aria-valuenow")).toBe("1");
@@ -58,7 +61,7 @@ it("counts fully completed current-version lessons, not stages, duplicate runs, 
 
 it("does not mistake a resumed stage 14 for completed stages", async () => {
   const { completedAt: _, ...saved } = completion(0, 14);
-  localStorage.setItem("meta-shadowing:learning:v1", JSON.stringify({ history: [], progress: { ...saved, nextUnit: 0, nextPhrase: 0 }, studyDays: [] }));
+  journal = { history: [], progress: { ...saved, nextUnit: 0, nextPhrase: 0 }, studyDays: [] };
   await render();
   expect(container.textContent).toContain("스테이지 14 이어서 학습");
   expect(progress("레슨 학습 진척도")?.getAttribute("aria-valuenow")).toBe("0");

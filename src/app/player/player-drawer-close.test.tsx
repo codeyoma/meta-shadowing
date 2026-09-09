@@ -30,6 +30,8 @@ afterEach(() => {
 });
 
 it("keeps menu actions and its accessible title without close buttons", async () => {
+  const onClose = vi.fn();
+  const onStages = vi.fn();
   await act(async () => root.render(createElement(PlayerDrawer, {
     lesson,
     open: true,
@@ -37,8 +39,8 @@ it("keeps menu actions and its accessible title without close buttons", async ()
     settings: createElement("p", null, "Settings"),
     currentPhraseNumbers: [1],
     onSelect: vi.fn(),
-    onClose: vi.fn(),
-    onStages: vi.fn(),
+    onClose,
+    onStages,
     onViewChange: vi.fn()
   })));
 
@@ -46,6 +48,12 @@ it("keeps menu actions and its accessible title without close buttons", async ()
   expect(buttons.some(button => /닫기/.test(button.getAttribute("aria-label") ?? button.textContent ?? ""))).toBe(false);
   expect(document.getElementById("player-menu-title")?.textContent).toBe("학습 메뉴");
   expect(buttons.some(button => button.textContent === "학습 설정")).toBe(true);
+  const rows = [...document.querySelectorAll<HTMLButtonElement>('nav[aria-label="학습 메뉴 항목"] button')];
+  expect(rows.map(button => button.textContent)).toEqual(["학습 설정", "문장 목록", "스테이지 화면으로"]);
+  expect([...document.querySelectorAll('[data-slot="drawer-footer"] button')].map(button => button.textContent)).toEqual(["확인"]);
+  await act(async () => rows[2].click());
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(onStages).toHaveBeenCalledTimes(1);
 });
 
 it("shows the sentence list without extra helper copy in the drawer description", async () => {

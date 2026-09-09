@@ -1,37 +1,38 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedServerJournal, fixtureVersion } from "./fixtures/cloud-journal";
+import { expect, test, type Locator, type Page } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 import type { CompletionRecord, ProgressRecord } from "../src/lib/learning-records";
 
-const key = "meta-shadowing:learning:v1";
-const stages = "/lessons/morning-routine/stages";
+const stages = "/lessons/10000000-0000-4000-8000-000000000001/stages";
 const recordsIn = (dialog: Locator) => dialog.getByRole("row").filter({ has: dialog.page().getByRole("button", { name: "설정 보기", exact: true }) });
 async function settingsFor(button: Locator) {
   return button.page().locator(`[id="${await button.getAttribute("aria-controls")}"]`);
 }
 const complete = (stage: number, overrides: Partial<CompletionRecord> = {}): CompletionRecord => ({
-  runId: `stage-${stage}`, lessonId: "morning-routine", lessonVersion: "fixture-v1", lessonName: "Morning Routine",
+  runId: `stage-${stage}`, lessonId: "10000000-0000-4000-8000-000000000001", lessonVersion: "fixture-v1", lessonName: "Morning Routine",
   language: "english", level: Math.ceil(stage / 2), stage, nextUnit: 3, nextPhrase: 3, activeMs: stage * 1000,
   settings: DEFAULT_SESSION_SETTINGS, completedAt: `2026-09-08T01:${String(stage).padStart(2, "0")}:00Z`, ...overrides,
 });
 async function seed(page: Page, history: CompletionRecord[], progress: ProgressRecord | null = null) {
-  await page.goto("/languages");
-  await page.evaluate(({ key, history, progress }) => localStorage.setItem(key, JSON.stringify({ history, progress, studyDays: [] })), { key, history, progress });
-  await page.goto(stages);
+  await openLearnerPage(page, "/languages");
+  await seedServerJournal(page, { history, progress, studyDays: [] });
+  await openLearnerPage(page, stages);
   await expect(page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true })).toBeEnabled();
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 });
 
 test("history moves off lessons into a lesson-only dialog, preserving old versions and saved data", async ({ page }) => {
   const records = [complete(1), complete(8, { runId: "old", lessonVersion: "old-v1", completedAt: "2026-09-07T01:00:00Z" }),
-    complete(4, { lessonId: "daily-conversation" }), complete(2)];
+    complete(4, { lessonId: "10000000-0000-4000-8000-000000000002" }), complete(2)];
   await seed(page, records);
-  const original = await page.evaluate(key => localStorage.getItem(key), key);
-  await page.goto("/lessons?language=english");
+  const original = await readServerJournal(page);
+  await openLearnerPage(page, "/lessons?language=english");
   await expect(page.getByRole("region", { name: "완료 기록", exact: true })).toHaveCount(0);
-  await page.goto(stages);
+  await openLearnerPage(page, stages);
   const trigger = page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true });
   const start = page.getByRole("button", { name: "현재 스테이지 3 시작", exact: true });
   await expect(trigger).toBeEnabled();
@@ -65,26 +66,22 @@ test("history moves off lessons into a lesson-only dialog, preserving old versio
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await dialog.getByRole("button", { name: "닫기", exact: true }).click();
+  await dialog.getByRole("button", { name: "확인", exact: true }).click();
   await expect(trigger).toBeFocused();
   await trigger.click();
   await dialog.getByRole("button", { name: "완료 기록 닫기", exact: true }).click();
   await expect(trigger).toBeFocused();
-  expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(original);
+  expect(await readServerJournal(page)).toEqual(original);
   await expect(page).toHaveURL(new RegExp(`${stages}$`));
 });
 
 test("empty history is meaningful and each opening reads freshly saved records", async ({ page }) => {
-  await seed(page, [complete(1, { lessonId: "daily-conversation" })]);
+  await seed(page, [complete(1, { lessonId: "10000000-0000-4000-8000-000000000002" })]);
   const trigger = page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true });
   await trigger.click();
   await expect(page.getByRole("dialog")).toContainText("아직 완료한 학습이 없습니다.");
   await page.keyboard.press("Escape");
-  await page.evaluate(({ key, record }) => {
-    const journal = JSON.parse(localStorage.getItem(key)!);
-    journal.history.push(record);
-    localStorage.setItem(key, JSON.stringify(journal));
-  }, { key, record: complete(1) });
+  await seedServerJournal(page, { history: [...(await readServerJournal(page)).history, complete(1, { runId: "new-completion" })] });
   await trigger.click();
   await expect(recordsIn(page.getByRole("dialog"))).toHaveCount(1);
 });
@@ -231,11 +228,12 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
     await expect(records).toHaveCount(30);
     await expect(table).toHaveCSS("font-size", "12px");
     expect(await table.evaluate(el => el.parentElement!.scrollWidth <= el.parentElement!.clientWidth)).toBe(true);
-    const close = dialog.getByRole("button", { name: "닫기", exact: true });
+    const close = dialog.getByRole("button", { name: "확인", exact: true });
+    await close.click({ trial: true });
     const closeBefore = await close.boundingBox();
     const lastSettings = records.last().getByRole("button", { name: "설정 보기", exact: true });
     await lastSettings.click();
-    await expect(await settingsFor(lastSettings)).toContainText("버전 fixture-v1");
+    await expect(await settingsFor(lastSettings)).toContainText(`버전 ${fixtureVersion}`);
     await (await settingsFor(lastSettings)).scrollIntoViewIfNeeded();
     const closeAfter = (await close.boundingBox())!;
     expect(closeAfter.y).toBeCloseTo(closeBefore!.y, 0);
@@ -243,8 +241,8 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const firstSettings = records.first().getByRole("button", { name: "설정 보기", exact: true });
     await firstSettings.click();
-    await expect(await settingsFor(firstSettings)).toContainText("버전 fixture-v1");
-    await expect((await settingsFor(firstSettings)).getByText("버전 fixture-v1", { exact: true })).toHaveCSS("font-size", "12px");
+    await expect(await settingsFor(firstSettings)).toContainText(`버전 ${fixtureVersion}`);
+    await expect((await settingsFor(firstSettings)).getByText(`버전 ${fixtureVersion}`, { exact: true })).toHaveCSS("font-size", "12px");
     await page.screenshot({ path: test.info().outputPath(`history-${viewport.width}.png`), animations: "disabled", scale: "css" });
     await page.keyboard.press("Tab");
     expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);

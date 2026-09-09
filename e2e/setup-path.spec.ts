@@ -1,9 +1,10 @@
-import { expect, test, type Page } from "@playwright/test";
+import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { openSelectedStageSettings, returnToStages, startSelectedStage } from "./fixtures/stage-preview";
 
-async function openSetup(page: Page, lesson = "morning-routine") {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
-  await page.goto(`/setup?lesson=${lesson}`);
+async function openSetup(page: Page, lesson = "10000000-0000-4000-8000-000000000001") {
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, `/setup?lesson=${lesson}`);
   await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio").first()).toBeEnabled();
 }
 
@@ -18,7 +19,7 @@ test("setup places shared brand and streak navigation above the book summary", a
   expect(headingBox.y).toBeGreaterThan(navBox.y + navBox.height);
   expect(headingBox.y).toBeLessThan(160);
   expect(await heading.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(22);
-  await expect(page.getByText("0개 섹션 · 3개 프레이즈", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText("0개 섹션 · 3개 프레이즈", { exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "하단 탐색" }).getByRole("link", { name: "레슨", exact: true }).click();
   await expect(page).toHaveURL(/\/lessons\?/);
 });
@@ -57,7 +58,7 @@ test("path selection preserves grouped and rapid preferences without starting pr
   await page.getByRole("radio", { name: "누적 단어", exact: true }).click();
   await page.getByLabel("말하기 추가 시간 (초)").fill("1.5");
   await expect(page).toHaveURL(/\/settings\/session/);
-  await page.reload();
+  await reloadLearnerPage(page);
   await returnToStages(page);
   await path.getByRole("radio", { name: /8 다문장 암기/ }).click();
   await openSelectedStageSettings(page);
@@ -69,7 +70,7 @@ test("path selection preserves grouped and rapid preferences without starting pr
   await expect(page.getByLabel("단어 속도")).toHaveValue("6");
   await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("1.5");
   await returnToStages(page);
-  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await startSelectedStage(page);
   await expect(page).toHaveURL(/level=7/);
   await expect(page).toHaveURL(/wpm=6/);
@@ -79,11 +80,11 @@ test("path selection preserves grouped and rapid preferences without starting pr
 for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
   test(`the learning path keeps readable labels and keyboard order at ${viewport.width}px`, async ({ page }) => {
     await page.setViewportSize(viewport);
-    await openSetup(page, "tokyo-walk");
+    await openSetup(page, "10000000-0000-4000-8000-000000000003");
     const path = page.getByRole("list", { name: "학습 단계", exact: true });
     const nodes = path.getByRole("radio");
     await expect(page.getByRole("heading", { name: "東京の散歩", exact: true })).toBeVisible();
-    await expect(page.getByText("도쿄 산책", { exact: true }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByText("東京の散歩", { exact: true }).filter({ visible: true })).toBeVisible();
     await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).focus();
     await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toBeFocused();
     for (let index = 0; index < 16; index++) {
@@ -112,6 +113,6 @@ test("the sentence menu returns to the current lesson's stage screen", async ({ 
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await page.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await expect(page.getByRole("list", { name: "학습 단계", exact: true })).toBeVisible();
 });

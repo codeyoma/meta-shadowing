@@ -50,6 +50,7 @@ afterEach(() => {
 function render() {
   act(() => root.render(createElement(AudioPhrasePlayer, {
     lesson, level: session.level, settings: session, hints: phrases,
+    cloud: { completion: null, blocked: false, canAct: () => true, verifyResume: async () => true, updateRecord: vi.fn(), exit: vi.fn() },
     groups: phrases.map(phrase => ({ phrases: [phrase], chapter: null, startsSection: false })),
     start: { progress: null, completion: null, selection: {
       ...DEFAULT_SESSION_SETTINGS, lessonId: lesson.id, language: lesson.language, level: 1, runId: "speaker-test-run"

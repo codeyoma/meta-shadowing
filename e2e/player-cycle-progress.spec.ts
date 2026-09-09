@@ -1,11 +1,12 @@
-import { expect, test, type Page } from "@playwright/test";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { timedRecording } from "./fixtures/timed-audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, level = 1) {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: timedRecording }));
-  await page.goto(`/player?lesson=morning-routine&level=${level}&speed=0.5`);
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}&speed=0.5`);
   await page.waitForLoadState("networkidle");
 }
 
@@ -85,17 +86,17 @@ test("R does not restart a paused rapid exercise", async ({ page }) => {
   await expect(display).toHaveText(before);
 });
 
-test("rapid mode labels leave readable room for all three controls on a narrow phone", async ({ page }, testInfo) => {
+// Each layout case owns its account/lease, avoiding cross-level lease contention
+// when the previous page's best-effort release has not completed.
+for (const level of [6, 7, 8]) test(`rapid mode labels leave readable room for all three controls on a narrow phone (level ${level})`, async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  for (const level of [6, 7, 8]) {
-    await openPlayer(page, level);
-    const controls = page.getByLabel("레슨 안내", { exact: true }).getByRole("button");
-    await expect(controls).toHaveCount(3);
-    for (const control of await controls.all()) {
-      await expect(control).toBeInViewport();
-      expect(await control.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-    }
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    if (level === 6) await page.screenshot({ path: testInfo.outputPath("rapid-320.png"), scale: "css", animations: "disabled" });
+  await openPlayer(page, level);
+  const controls = page.getByLabel("레슨 안내", { exact: true }).getByRole("button");
+  await expect(controls).toHaveCount(3);
+  for (const control of await controls.all()) {
+    await expect(control).toBeInViewport();
+    expect(await control.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  if (level === 6) await page.screenshot({ path: testInfo.outputPath("rapid-320.png"), scale: "css", animations: "disabled" });
 });

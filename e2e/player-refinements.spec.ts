@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { openSelectedStageSettings, returnToStages, startSelectedStage } from "./fixtures/stage-preview";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
@@ -12,12 +13,12 @@ wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
 wav.write("data", 36); wav.writeUInt32LE(wav.length - 44, 40);
 
 async function login(page: Page) {
-  await page.request.post("/api/auth", { data: { password: "test-beta-password" } });
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 }
 
 for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} keeps top-bar progress above the help trigger without a book title`, async ({ page }) => {
   await login(page);
-  await page.goto(`/player?lesson=morning-routine&level=${level}`);
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
   const context = page.getByLabel("레슨 안내", { exact: true });
   const guidance = context.getByRole("button", { name: `메타쉐도잉 레벨 ${level}`, exact: true });
   const progress = page.locator("main > header").getByRole("progressbar");
@@ -36,7 +37,7 @@ for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} keeps top-bar
 test("the current cycle follows real audio progress through pause, completion, repeat and the next phrase", async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: wav }));
   await login(page);
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   const ring = page.getByRole("progressbar", { name: "원음 재생 진행", exact: true });
   await expect(ring).toBeVisible();
   await expect(ring).toHaveAttribute("aria-valuenow", "0");
@@ -94,7 +95,7 @@ test("the current cycle follows real audio progress through pause, completion, r
 test("unknown-duration audio never invents a percentage and still reaches completion", async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await login(page);
-  await page.goto("/player?lesson=morning-routine&level=1&speed=0.5");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&speed=0.5");
   const ring = page.getByRole("progressbar", { name: "원음 재생 진행", exact: true });
   await expect(ring).toBeVisible();
   // Chrome can discover this WebM's duration during preload. Control only the
@@ -117,7 +118,7 @@ test("unknown-duration audio never invents a percentage and still reaches comple
 test("grouped listening keeps completed progress in each gap and resets it for the next recording", async ({ page }) => {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: wav }));
   await login(page);
-  await page.goto("/player?lesson=morning-routine&level=4&group=3&groupGap=0.5");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=4&group=3&groupGap=0.5");
   const ring = page.getByRole("progressbar", { name: "원음 재생 진행", exact: true });
   const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
@@ -134,7 +135,7 @@ test("grouped listening keeps completed progress in each gap and resets it for t
 test("session preferences page preserves grouped and rapid options before starting through the stage preview", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await login(page);
-  await page.goto("/setup?lesson=morning-routine");
+  await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
   await expect(page.getByRole("button", { name: "세션 설정", exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox")).toHaveCount(0);
   const title = (await page.getByRole("heading", { level: 1 }).boundingBox())!;
@@ -160,14 +161,14 @@ test("session preferences page preserves grouped and rapid options before starti
   await page.getByRole("combobox", { name: "단어 속도", exact: true }).selectOption("6");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await returnToStages(page);
-  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
-  await page.reload();
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
+  await reloadLearnerPage(page);
   await page.getByRole("radio", { name: /13 속사포 한영/ }).click();
   await openSelectedStageSettings(page);
   await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("1.5");
   await expect(page.getByRole("combobox", { name: "단어 속도", exact: true })).toHaveValue("6");
   await returnToStages(page);
-  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await startSelectedStage(page);
   await expect(page).toHaveURL(/level=7/);
   await expect(page).toHaveURL(/wpm=6/);
@@ -175,12 +176,12 @@ test("session preferences page preserves grouped and rapid options before starti
 
 test("drawer views have no Close actions and return to stage selection through the menu", async ({ page }) => {
   await login(page);
-  await page.goto("/player?lesson=morning-routine&level=1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   const home = page.getByRole("button", { name: "스테이지 화면으로", exact: true });
   await expect(page.getByRole("dialog").getByRole("button", { name: /닫기/ })).toHaveCount(0);
   await page.getByRole("button", { name: "메뉴로 돌아가기", exact: true }).click();
   await home.click();
-  await expect(page).toHaveURL(/\/lessons\/morning-routine\/stages/);
+  await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
 });

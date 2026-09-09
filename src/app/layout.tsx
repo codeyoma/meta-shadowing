@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AudioCacheLifecycle } from "./audio-cache-scope";
 import "./globals.css";
 import "@fontsource-variable/nunito";
 import "@fontsource-variable/quicksand";
@@ -25,7 +26,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body><AudioCacheLifecycle />{children}</body>
     </html>
   );
 }

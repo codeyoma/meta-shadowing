@@ -15,8 +15,16 @@ export function centerCurrentSentence(list: HTMLOListElement) {
   if (!current) return;
   // Keep scrolling inside the list; scrollIntoView can also move the sheet.
   const row = current.getBoundingClientRect();
-  list.scrollTop += row.top - list.getBoundingClientRect().top
+  const target = list.scrollTop + row.top - list.getBoundingClientRect().top
     - Math.max(0, (list.clientHeight - row.height) / 2);
+  // A short final section can leave too little scrollable space to reach the
+  // center. Extend only the missing trailing space instead of clamping early.
+  const missingSpace = target - (list.scrollHeight - list.clientHeight);
+  if (missingSpace > 0) {
+    const padding = parseFloat(getComputedStyle(list).paddingBottom) || 0;
+    list.style.paddingBottom = `${padding + Math.ceil(missingSpace)}px`;
+  }
+  list.scrollTop = target;
 }
 
 export function SentenceList({ lesson, currentPhraseNumbers, onSelect }: {
