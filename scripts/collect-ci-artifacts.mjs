@@ -3,10 +3,10 @@ import { resolve, relative, join } from "node:path";
 
 // Reconstruct an allowlist, rather than redacting free-form errors/attachments.
 // Playwright reports can contain cookies, signed URLs and storage state anywhere.
-function sourceFiles(directory) {
+function sourceFiles(directory, specsOnly = true) {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const path = join(directory, entry.name);
-    return entry.isDirectory() ? sourceFiles(path) : /\.spec\.ts$/.test(path) ? [relative("e2e", path)] : [];
+    return entry.isDirectory() ? sourceFiles(path, specsOnly) : (specsOnly ? /\.spec\.ts$/ : /\.tsx?$/).test(path) ? [relative("e2e", path)] : [];
   });
 }
 const statuses = new Set(["passed", "failed", "timedOut", "skipped", "interrupted"]);
@@ -20,11 +20,44 @@ function category(error) {
   return "other";
 }
 
+// Values are reconstructed from local source inventory and fixed enums. Never
+// serialize error messages, stack frames, selectors, URLs or step titles.
+const operations = ["locator.click", "locator.tap", "locator.selectOption", "locator.fill", "locator.press", "locator.evaluate",
+  "locator.waitFor", "page.goto", "page.reload", "page.waitForResponse", "page.waitForLoadState", "page.setViewportSize",
+  "apiRequestContext.get", "apiRequestContext.post", "apiRequestContext.patch", "apiRequestContext.delete", "route.fetch", "route.fulfill"];
+function operation(error) {
+  const message = typeof error?.message === "string" ? error.message : "";
+  return operations.find(name => message.includes(`${name}:`))
+    ?? (/expect\(|AssertionError/.test(message) ? "assertion" : undefined);
+}
+
+function failureLocation(result, files) {
+  function validate(location) {
+    if (typeof location?.file !== "string" || /[?\r\n]|:\/\//.test(location.file)) return;
+    const normalized = location.file.replaceAll("\\", "/");
+    const file = normalized.startsWith("e2e/") ? normalized.slice(4) : normalized.split("/e2e/").at(-1);
+    const lines = files.get(file);
+    if (!lines || !Number.isInteger(location.line) || location.line < 1 || location.line > lines.length
+      || !Number.isInteger(location.column) || location.column < 1 || location.column > lines[location.line - 1].length + 1) return;
+    return { file: `e2e/${file}`, line: location.line, column: location.column };
+  }
+  const direct = validate(result.errorLocation);
+  if (direct) return direct;
+  const stack = typeof result.error?.stack === "string" ? result.error.stack : "";
+  for (const frame of stack.split("\n")) {
+    const match = frame.match(/^\s+at (?:.*\()?([^()]+):(\d+):(\d+)\)?$/);
+    if (!match) continue;
+    const location = validate({ file: match[1], line: Number(match[2]), column: Number(match[3]) });
+    if (location) return location;
+  }
+}
+
 try {
   const [input, output] = process.argv.slice(2);
   const report = JSON.parse(readFileSync(input, "utf8"));
   if (!Array.isArray(report.suites)) throw new Error("Invalid report");
   const sources = new Set(sourceFiles("e2e"));
+  const locations = new Map(sourceFiles("e2e", false).map(file => [file, readFileSync(join("e2e", file), "utf8").split("\n")]));
   const tests = [];
   function visit(suite) {
     for (const spec of suite.specs ?? []) {
@@ -34,7 +67,10 @@ try {
           project: ["desktop", "mobile"].includes(test.projectName) ? test.projectName : "unknown",
           expectedStatus: status(test.expectedStatus),
           attempts: (test.results ?? []).map(result => ({ status: status(result.status), durationMs: numeric(result.duration),
-            retry: numeric(result.retry), ...(result.error ? { failure: category(result.error) } : {}) })),
+            retry: numeric(result.retry), ...(result.error ? { failure: category(result.error),
+              ...(operation(result.error) ? { operation: operation(result.error) } : {}),
+              ...(failureLocation(result, locations) ? { failureLocation: failureLocation(result, locations) } : {}),
+            } : {}) })),
         });
       }
     }
