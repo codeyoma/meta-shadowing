@@ -135,22 +135,41 @@ for (const scenario of ["restart and retention", "expiry during access check", "
       let release!: () => void, held!: () => void, intercept = true, downloads = 0;
       const pending = new Promise<void>(resolve => { release = resolve; });
       const intercepted = new Promise<void>(resolve => { held = resolve; });
-      page.on("request", request => { if (request.url().includes("/storage/v1/object/sign/lesson-audio/")) downloads++; });
+      // Node's monotonic clock is unaffected by the browser's 20-day time jump.
+      const started = performance.now();
+      type ExpiryEvent = "download" | "access-held" | "expiry-released" | "assertion";
+      const events: { event: ExpiryEvent; phrase: number; elapsedMs: number }[] = [];
+      const record = (event: ExpiryEvent, phrase = 1) => {
+        if (events.length < 64) events.push({ event, phrase, elapsedMs: Math.round(performance.now() - started) });
+      };
+      page.on("request", request => {
+        if (!request.url().includes("/storage/v1/object/sign/lesson-audio/")) return;
+        downloads++;
+        const pathname = new URL(request.url()).pathname;
+        const phrase = paths.findIndex(path => pathname.endsWith(`/lesson-audio/${path}`)) + 1;
+        record("download", phrase);
+      });
       await page.route("**/audio/1/access?*", async route => {
         if (!intercept) return route.continue();
         intercept = false;
         const response = await route.fetch();
-        held(); await pending;
+        record("access-held"); held(); await pending;
         await route.fulfill({ response });
       });
       await page.getByRole("button", { name: /첫 원음 듣기/ }).click();
       await intercepted;
       await page.clock.setFixedTime(new Date(initialTime + 1728000000));
-      release();
+      record("expiry-released"); release();
       await expect(page.getByRole("button", { name: /듣기 완료 확인/ })).toBeVisible();
-      expect(downloads).toBe(1);
-      expect((await cacheMetadata(page)).find(entry => JSON.parse(entry.key)[3] === "1.mp3")?.createdAt).toBe(initialTime + 1728000000);
-      expect(errors).toEqual([]);
+      record("assertion");
+      const diagnostic = JSON.stringify({ downloads, events });
+      try {
+        expect(downloads).toBe(1);
+        expect((await cacheMetadata(page)).find(entry => JSON.parse(entry.key)[3] === "1.mp3")?.createdAt).toBe(initialTime + 1728000000);
+        expect(errors).toEqual([]);
+      } finally {
+        await testInfo.attach("mp3-expiry-diagnostic-v1", { body: diagnostic, contentType: "application/json" });
+      }
       return;
     }
     if (scenario === "invalid bytes") {

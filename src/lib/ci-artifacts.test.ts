@@ -38,9 +38,17 @@ test("CI runner preserves a real Playwright failure while withholding its creden
   const secret = "fixture-unknown-session-token";
   try {
     const playwright = pathToFileURL(resolve("node_modules/@playwright/test/index.mjs")).href;
-    writeFileSync(join(directory, "credential.spec.mjs"), `import { test, expect } from ${JSON.stringify(playwright)};
+    writeFileSync(join(directory, "package.json"), JSON.stringify({ type: "module" }));
+    writeFileSync(join(directory, "mp3-cache.integration.spec.ts"), `import { test, expect } from ${JSON.stringify(playwright)};
       test(${JSON.stringify(secret)}, async ({}, testInfo) => {
         await testInfo.attach('storage-state', { body: ${JSON.stringify(secret)}, contentType: 'text/plain' });
+        await testInfo.attach('mp3-expiry-diagnostic-v1', { body: JSON.stringify({ downloads: 2, events: [
+          { event: 'download', phrase: 1, elapsedMs: 12, url: ${JSON.stringify(secret)} },
+          { event: 'download', phrase: 2, elapsedMs: 15 },
+          { event: ${JSON.stringify(secret)}, phrase: 1, elapsedMs: 20 },
+          { event: 'download', phrase: ${JSON.stringify(secret)}, elapsedMs: 22 },
+          { event: 'download', phrase: 1, elapsedMs: -1 }
+        ], token: ${JSON.stringify(secret)} }), contentType: 'application/json' });
         expect(${JSON.stringify(secret)}).toBe('different');
       });`);
     const config = join(directory, "playwright.config.mjs");
@@ -57,9 +65,12 @@ test("CI runner preserves a real Playwright failure while withholding its creden
     expect(output).not.toContain(secret);
     expect(JSON.parse(output).tests[0].attempts[0].status).toBe("failed");
     expect(JSON.parse(output).tests[0]).toMatchObject({ file: "unknown", project: "desktop", line: 2 });
+    expect(JSON.parse(output).tests[0].attempts[0].mp3Expiry).toEqual({ downloads: 2, events: [
+      { event: "download", phrase: 1, elapsedMs: 12 }, { event: "download", phrase: 2, elapsedMs: 15 }
+    ] });
     // Failed uploads must not erase the only credential-safe test identifier.
     expect(result.stdout).toMatch(/CI failure: unknown:2:\d+ \[desktop\] retry=0 status=failed category=assertion/);
-    expect(result.stdout).toContain("CI detail: operation=assertion location=unknown");
+    expect(result.stdout).toContain('CI MP3 expiry: {"downloads":2,"events":');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 20000);
 
@@ -71,6 +82,39 @@ test("CI collector fails closed on malformed input without echoing it", () => {
     const result = spawnSync(process.execPath, ["scripts/collect-ci-artifacts.mjs", input, join(directory, "safe.json")], { encoding: "utf8" });
     expect(result.status).not.toBe(0);
     expect(result.stdout + result.stderr).not.toContain("credential-sensitive-malformed-input");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("MP3 diagnostics reject malformed or oversized bodies and never read attachment paths", () => {
+  const directory = mkdtempSync(join(tmpdir(), "safe-mp3-bounds-"));
+  const input = join(directory, "raw.json"), output = join(directory, "safe.json");
+  const secret = "fixture-private-audio-token";
+  const attachment = (value: unknown) => ({ name: "mp3-expiry-diagnostic-v1", contentType: "application/json",
+    body: Buffer.from(JSON.stringify(value)).toString("base64") });
+  const valid = { downloads: 0, events: [{ event: "assertion", phrase: 1, elapsedMs: 0 }] };
+  try {
+    const privateFile = join(directory, "private.json");
+    writeFileSync(privateFile, JSON.stringify(valid));
+    const attachments = [
+      attachment({ ...valid, downloads: secret }), attachment({ ...valid, downloads: -1 }),
+      attachment({ ...valid, downloads: 10001 }), attachment({ ...valid, events: null }),
+      { ...attachment(valid), body: "not-json" }, { ...attachment(valid), body: "x".repeat(32769) },
+      { name: "mp3-expiry-diagnostic-v1", contentType: "application/json", path: privateFile },
+      attachment({ downloads: 2, events: Array.from({ length: 70 }, () => ({ event: "download", phrase: 2, elapsedMs: 10, cookie: secret })) }),
+      attachment(valid),
+    ];
+    writeFileSync(input, JSON.stringify({ suites: [{ specs: [{ file: "mp3-cache.integration.spec.ts", tests: [{
+      projectName: "desktop", results: attachments.map(item => ({ status: "failed", attachments: [item] }))
+    }] }] }] }));
+    const result = spawnSync(process.execPath, ["scripts/collect-ci-artifacts.mjs", input, output], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    const text = readFileSync(output, "utf8");
+    expect(text + result.stdout + result.stderr).not.toContain(secret);
+    expect(text).not.toContain(privateFile);
+    const attempts = JSON.parse(text).tests[0].attempts;
+    for (const attempt of attempts.slice(0, 7)) expect(attempt).not.toHaveProperty("mp3Expiry");
+    expect(attempts[7].mp3Expiry.events).toHaveLength(64);
+    expect(attempts[8].mp3Expiry).toEqual(valid);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 

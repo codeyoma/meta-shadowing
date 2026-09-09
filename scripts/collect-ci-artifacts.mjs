@@ -12,6 +12,21 @@ function sourceFiles(directory, specsOnly = true) {
 const statuses = new Set(["passed", "failed", "timedOut", "skipped", "interrupted"]);
 const numeric = value => Number.isFinite(value) && value >= 0 ? value : 0;
 const status = value => statuses.has(value) ? value : "unknown";
+function mp3Expiry(result) {
+  const attachment = result.attachments?.find(item => item.name === "mp3-expiry-diagnostic-v1"
+    && item.contentType === "application/json" && typeof item.body === "string" && item.body.length <= 32768);
+  if (!attachment) return;
+  try {
+    const value = JSON.parse(Buffer.from(attachment.body, "base64").toString("utf8"));
+    if (!Number.isSafeInteger(value?.downloads) || value.downloads < 0 || value.downloads > 10000 || !Array.isArray(value.events)) return;
+    const events = value.events.slice(0, 64).filter(item => item
+      && ["download", "access-held", "expiry-released", "assertion"].includes(item.event)
+      && [0, 1, 2].includes(item.phrase)
+      && Number.isSafeInteger(item.elapsedMs) && item.elapsedMs >= 0 && item.elapsedMs <= 120000)
+      .map(item => ({ event: item.event, phrase: item.phrase, elapsedMs: item.elapsedMs }));
+    return { downloads: value.downloads, events };
+  } catch { /* Invalid diagnostic bodies are withheld, not echoed. */ }
+}
 function category(error) {
   const message = typeof error?.message === "string" ? error.message : "";
   if (/socket hang up|ECONNRESET/.test(message)) return "network-reset";
@@ -66,11 +81,14 @@ try {
         tests.push({ file, line: numeric(spec.line), column: numeric(spec.column),
           project: ["desktop", "mobile"].includes(test.projectName) ? test.projectName : "unknown",
           expectedStatus: status(test.expectedStatus),
-          attempts: (test.results ?? []).map(result => ({ status: status(result.status), durationMs: numeric(result.duration),
-            retry: numeric(result.retry), ...(result.error ? { failure: category(result.error),
+          attempts: (test.results ?? []).map(result => {
+            const expiry = mp3Expiry(result);
+            return { status: status(result.status), durationMs: numeric(result.duration),
+            retry: numeric(result.retry), ...(expiry ? { mp3Expiry: expiry } : {}), ...(result.error ? { failure: category(result.error),
               ...(operation(result.error) ? { operation: operation(result.error) } : {}),
               ...(failureLocation(result, locations) ? { failureLocation: failureLocation(result, locations) } : {}),
-            } : {}) })),
+            } : {}) };
+          }),
         });
       }
     }
