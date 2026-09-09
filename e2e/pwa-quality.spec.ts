@@ -174,20 +174,20 @@ test("overflowing bilingual subtitles are an explicit keyboard stop and scroll w
   await expect(page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true })).toBeVisible();
 });
 
-test("a tall player keeps a compact canvas and a bottom-aligned action", async ({ page }) => {
+// Layout cases need independent account leases, not a successful best-effort
+// pagehide release from the previous level.
+for (const level of [3, 8]) test(`a tall player keeps a compact canvas and a bottom-aligned action (level ${level})`, async ({ page }) => {
   await page.setViewportSize({ width: 853, height: 1844 });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
-  for (const level of [3, 8]) {
-    await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
-    const canvas = page.getByRole("region", { name: level === 3 ? "학습 자막" : "속사포 학습" });
-    await expect(canvas).toBeVisible();
-    const box = (await canvas.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(104);
-    expect(box.height).toBeLessThanOrEqual(280);
-    const actions = (await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox())!;
-    expect(box.y + box.height).toBeLessThan(actions.y);
-    expect(1844 - actions.y - actions.height).toBeLessThanOrEqual(32);
-    expect(actions.y + actions.height).toBeLessThanOrEqual(1844);
-  }
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
+  const canvas = page.getByRole("region", { name: level === 3 ? "학습 자막" : "속사포 학습" });
+  await expect(canvas).toBeVisible();
+  const box = (await canvas.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(104);
+  expect(box.height).toBeLessThanOrEqual(280);
+  const actions = (await page.getByRole("group", { name: "학습 진행", exact: true }).boundingBox())!;
+  expect(box.y + box.height).toBeLessThan(actions.y);
+  expect(1844 - actions.y - actions.height).toBeLessThanOrEqual(32);
+  expect(actions.y + actions.height).toBeLessThanOrEqual(1844);
 });

@@ -44,7 +44,7 @@ test("CI runner preserves a real Playwright failure while withholding its creden
         throw new Error(${JSON.stringify(secret)});
       });`);
     const config = join(directory, "playwright.config.mjs");
-    writeFileSync(config, `export default { testDir: ${JSON.stringify(directory)}, retries: 0, workers: 1 };`);
+    writeFileSync(config, `export default { testDir: ${JSON.stringify(directory)}, retries: 0, workers: 1, projects: [{ name: 'desktop' }] };`);
     const artifacts = join(directory, "safe");
     const result = spawnSync(process.execPath, ["--input-type=module", "-e",
       `import { runPlaywright } from './scripts/run-playwright.mjs'; process.exit(runPlaywright(${JSON.stringify(["--config", config, "--output", join(directory, "private-output"), "--reporter=line"])}));`,
@@ -56,6 +56,9 @@ test("CI runner preserves a real Playwright failure while withholding its creden
     const output = readFileSync(join(artifacts, files[0]), "utf8");
     expect(output).not.toContain(secret);
     expect(JSON.parse(output).tests[0].attempts[0].status).toBe("failed");
+    expect(JSON.parse(output).tests[0]).toMatchObject({ file: "unknown", project: "desktop", line: 2 });
+    // Failed uploads must not erase the only credential-safe test identifier.
+    expect(result.stdout).toMatch(/CI failure: unknown:2:\d+ \[desktop\] retry=0 status=failed category=other/);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 20000);
 

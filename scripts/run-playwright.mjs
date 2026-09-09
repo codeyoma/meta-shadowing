@@ -26,6 +26,12 @@ export function runPlaywright(args, env = process.env) {
     if (collected.status !== 0) return 1;
     const report = JSON.parse(readFileSync(safe, "utf8"));
     console.log(`Playwright exit=${result.status ?? 1}; ${report.tests.length} test results retained in credential-safe artifacts.`);
+    // Uploads can fail independently of Playwright. Keep only the collector's
+    // allowlisted failure identifiers in the job log, never raw report content.
+    for (const test of report.tests) for (const attempt of test.attempts) {
+      if (!["failed", "timedOut", "interrupted"].includes(attempt.status)) continue;
+      console.log(`CI failure: ${test.file}:${test.line}:${test.column} [${test.project}] retry=${attempt.retry} status=${attempt.status} category=${attempt.failure ?? "other"}`);
+    }
     return result.status ?? 1;
   } finally {
     rmSync(temporary, { recursive: true, force: true });
