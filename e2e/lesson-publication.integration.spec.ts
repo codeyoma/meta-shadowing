@@ -413,6 +413,12 @@ test("only a complete private audio package can be published and played by a bet
         if (level === 5) await page.getByRole("button", { name: "자막 보기", exact: true }).click();
         await expect(subtitles.getByText("I wash my face.", { exact: true })).toBeVisible();
       }
+      // These runs are deliberately unfinished. Use the normal exit so its
+      // lease release settles before starting a different stage; document
+      // navigation alone races the unload release against the next acquisition.
+      await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+      await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
+      await expect(page).toHaveURL(/\/lessons\/[^/]+\/stages/);
     }
 
     const rapidAudioRequests: string[] = [];

@@ -141,12 +141,25 @@ for (const entry of ["home", "player"] as const) {
         await page.getByRole("link", { name: /Updated practice/ }).click();
         await expectPreservedCompletion(page, originalVersion);
         await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
-      } else await expect(page.getByText(/레슨 버전이 변경되어 이전 진도를 이어갈 수 없습니다/)).toBeVisible();
+      }
+      // Version replacement automatically acquires a fresh run. Its preparation
+      // notice is transient, so verify the settled player and persisted outcome
+      // rather than requiring a particular intermediate render to be observed.
       await enterAccountPractice(page);
       const firstUnit = page.getByRole("navigation", { name: "학습 탐색", exact: true })
         .getByText(entry === "home" ? "1 / 2" : "문장 1 / 2", { exact: true });
       await expect(firstUnit).toBeVisible();
       expect(new URL(page.url()).searchParams.get("run")).not.toBe(new URL(oldRun).searchParams.get("run"));
+      const journalResponse = await page.request.get("/api/learner/practice");
+      expect(journalResponse.status()).toBe(200);
+      const journal = await journalResponse.json();
+      expect(journal.progress).toMatchObject({
+        lessonId: original, lessonName: "Updated practice", nextUnit: 0,
+        runId: new URL(page.url()).searchParams.get("run"),
+      });
+      expect(Date.parse(journal.progress.lessonVersion)).toBeGreaterThan(Date.parse(originalVersion));
+      expect(journal.history).toHaveLength(1);
+      expect(journal.history[0]).toMatchObject({ lessonId: original, lessonVersion: originalVersion, level: 6 });
       await page.reload();
       await enterAccountPractice(page);
       await expect(firstUnit).toBeVisible();
