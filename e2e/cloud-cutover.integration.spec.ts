@@ -93,7 +93,7 @@ for (const level of [1,2,3,4,5,6,7,8]) for (const committed of [false, true]) {
         await page.getByRole("button", { name: "저장 재시도", exact: true }).click();
       }
       await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toContainText("다른 기기");
-      await expect(page.getByRole("button", { name: /CONTINUE/ })).toBeDisabled();
+      await expect(page.getByRole("button", { name: /CONTINUE/, includeHidden: true })).toBeDisabled();
       expect((await a.request.post("/api/learner/practice", { data: checkpoint })).status()).toBe(409);
       expect((await c.request.post("/api/learner/practice", { data: { action: "renew", ...ownership } })).status()).toBe(409);
       expect((await readServerJournal(second)).progress).toEqual(confirmed.progress);

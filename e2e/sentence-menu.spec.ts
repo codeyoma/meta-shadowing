@@ -139,7 +139,16 @@ test("a stale tab cannot write after takeover and can explicitly start again aft
   await expect(otherTab.getByRole("heading", { name: "레벨 1 학습 완료", exact: true })).toBeVisible();
   await page.bringToFront();
   await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toContainText("다른 기기");
-  await expect(page.getByRole("button", { name: /^CONTINUE/ })).toBeDisabled();
+  const stoppedDialog = page.getByRole("dialog", { name: "다른 기기에서 학습 중이거나 학습 권한이 만료되었습니다." });
+  await expect(stoppedDialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(stoppedDialog).toBeVisible();
+  await expect(page.getByRole("button", { name: /^CONTINUE/, includeHidden: true })).toBeDisabled();
+  const bounds = await stoppedDialog.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(Math.abs(bounds!.x + bounds!.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(1);
+  expect(Math.abs(bounds!.y + bounds!.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(1);
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCSS("backdrop-filter", /blur/);
   await reloadLearnerPage(page);
   await expect(page.getByRole("heading", { name: "레벨 1 학습 완료", exact: true })).toBeVisible();
   // A new explicit entry, not a stale device's checkpoint, may create a new run.

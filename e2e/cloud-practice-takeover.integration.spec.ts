@@ -108,7 +108,7 @@ test("explicit takeover cancels safely and fences the previous browser", async (
     expect(await second.locator("audio").evaluate((audio:HTMLAudioElement)=>audio.paused)).toBe(true);
     release();
     await expect(first.getByRole("alert",{name:"학습 저장 알림"})).toContainText("다른 기기",{timeout:15000});
-    await expect(first.getByRole("button",{name:/CONTINUE/})).toBeDisabled();
+    await expect(first.getByRole("button",{name:/CONTINUE/,includeHidden:true})).toBeDisabled();
     expect(await first.locator("audio").evaluate((audio:HTMLAudioElement)=>audio.paused)).toBe(true);
     expect((await journal()).progress).toEqual(confirmed);
     await first.unroute("**/api/learner/practice");
@@ -217,7 +217,7 @@ test("explicit takeover cancels safely and fences the previous browser", async (
       release();
       await expect(resuming.getByRole("alert",{name:"학습 저장 알림"})).toContainText("다른 기기",{timeout:5000});
       expect(await resuming.locator("audio").evaluate((audio:HTMLAudioElement)=>audio.paused)).toBe(true);
-      await expect(resuming.getByRole("button",{name:/CONTINUE/})).toBeDisabled();
+      await expect(resuming.getByRole("button",{name:/CONTINUE/,includeHidden:true})).toBeDisabled();
     });
     await test.step("an open confirmation never adopts a newer owner on focus refresh",async()=>{
       const confirming = await b.newPage(); await open(confirming);
