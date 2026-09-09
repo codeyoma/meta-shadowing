@@ -211,6 +211,8 @@ test("long source entries scroll inside a bounded dialog with contained keyboard
   await page.getByRole("button", { name: "wake 뜻 보기", exact: true }).click();
   const popup = page.getByRole("dialog", { name: "wake 뜻", exact: true });
   await expect(popup.locator("li")).toHaveCount(32);
+  // A bottom drawer translates during entry; measure only after it settles.
+  await popup.click({ trial: true });
   const bounds = await popup.boundingBox();
   expect(bounds!.y).toBeGreaterThanOrEqual(0);
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);

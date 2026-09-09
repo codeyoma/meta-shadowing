@@ -49,9 +49,9 @@ test("explicit takeover cancels safely and fences the previous browser", async (
     expect((await service.from("lesson_drafts").insert({id:lessonId,created_by:id,title:"Takeover fixture",language:"english",target_filename:"en.txt",korean_filename:"ko.txt",target_source:"Hello",korean_source:"안녕",
       parsed_entries:[1,2].map(phraseNumber=>({kind:"phrase",sourceLine:phraseNumber,phraseNumber,target:`Hello ${phraseNumber}.`,korean:`안녕 ${phraseNumber}.`})),validation_status:"validated",phrase_count:2,chapter_count:0,section_count:0,publication_status:"published",published_at:version,audio_manifest:testAudioManifest(2)})).error).toBeNull();
     const first = await a.newPage(), second = await b.newPage();
-    await open(first);
     const starting = first.waitForResponse(response=>response.request().method()==="POST" && response.url().endsWith("/api/learner/practice") && response.request().postDataJSON()?.action==="start");
-    await first.getByRole("button",{name:"계정 학습 시작",exact:true}).click();
+    await open(first);
+
     const startResponse = await starting, oldStart = startResponse.request().postDataJSON(), oldLease = await startResponse.json();
     await expect(first.getByRole("button",{name:/첫 원음 듣기/})).toBeVisible();
     await open(second);
@@ -60,7 +60,7 @@ test("explicit takeover cancels safely and fences the previous browser", async (
     expect((await b.request.patch("/api/learner/preferences",{data:{accountId:id,revision:profile.revision,changes:{speed:2}}})).status()).toBe(200);
     expect((await journal()).progress).toEqual(before.progress);
     expect((await journal()).activeLease.generation).toBe(before.activeLease.generation);
-    await second.getByRole("button",{name:"계정 학습 시작",exact:true}).click();
+
     await second.getByRole("button",{name:"이 기기에서 이어 학습",exact:true}).click();
     const dialog = second.getByRole("dialog",{name:"학습 기기를 변경할까요?"});
     await expect(dialog).toBeVisible();
@@ -75,10 +75,16 @@ test("explicit takeover cancels safely and fences the previous browser", async (
       const response = await route.fetch(); await firstCheckHeld; await route.fulfill({response});
     });
     await first.getByRole("button",{name:/첫 원음 듣기/}).click();
-    await expect(first.getByRole("status")).toContainText("서버 확인 중");
+    await expect(first.getByLabel("학습 동기화")).toHaveAttribute("aria-busy", "true");
     expect(await first.locator("audio").evaluate((audio:HTMLAudioElement)=>audio.paused)).toBe(true);
     releaseFirstCheck();
     await first.unroute("**/api/learner/practice");
+    await expect(first.getByLabel("학습 동기화")).toHaveCount(0);
+    // An expired verification consumes the attempted action while it renews.
+    // The first explicit audio gesture after automatic entry can need a retry.
+    if (await first.getByRole("button", { name: /첫 원음 듣기/ }).isVisible()) {
+      await first.getByRole("button", { name: /첫 원음 듣기/ }).click();
+    }
     await expect(first.getByRole("button",{name:/듣기 완료 확인/})).toBeVisible();
     // Commit A's checkpoint, but hold its successful response until after B owns it.
     let release!: () => void, committed!: () => void;

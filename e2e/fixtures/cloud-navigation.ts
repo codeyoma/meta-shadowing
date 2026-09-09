@@ -37,20 +37,19 @@ export async function advanceCloudClock(page: Page, milliseconds: number) {
   }
 }
 
-/** Presentation tests explicitly acquire ownership; takeover behavior itself is
+/** Presentation tests await automatic entry; takeover behavior itself is
  * covered by the A/B/C integration tests, not bypassed by this helper. */
 export async function enterAccountPractice(page: Page) {
   trackCloudRequests(page);
-  const start = page.getByRole("button", { name: "계정 학습 시작", exact: true, disabled: false });
+  const start = page.getByRole("button", { name: /CONTINUE/ });
   const completed = page.getByRole("button", { name: "레슨 목록으로", exact: true });
-  await expect(start.or(completed)).toBeVisible();
-  if (await completed.count()) return;
-  await expect(start).toBeEnabled();
   const takeover = page.getByRole("button", { name: "이 기기에서 이어 학습", exact: true });
+  await expect(start.or(completed).or(takeover)).toBeVisible();
+  if (await completed.count()) return;
   if (await takeover.count()) {
     await takeover.click();
     await page.getByRole("button", { name: "이어 학습 확인", exact: true }).click();
-  } else await start.click();
+  }
   await expect(page.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
 }
 

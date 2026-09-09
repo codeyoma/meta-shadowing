@@ -24,7 +24,7 @@ for (const endpoint of ["practice", "preferences"]) {
     await page.route(route, request => request.fulfill({ status: 503, json: { error: "temporary-error" } }));
     await page.goto(`/player?lesson=${lessonIds[0]}&level=1&stage=1&run=${runId}`);
     await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toContainText("학습 기록을 불러오지 못했습니다.");
-    await expect(page.getByRole("button", { name: "계정 학습 시작", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /CONTINUE/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "레슨 목록으로", exact: true })).toHaveCount(0);
     expect((await readServerJournal(page)).history).toHaveLength(1);
     await page.unroute(route);

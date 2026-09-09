@@ -172,7 +172,7 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
       if (performance.now()-lastVerified.current < PRACTICE_MAX_VERIFICATION_AGE_MS) return true;
       void renew(true); return false;
     } };
-  const notice = status === "ready" ? null : ["saving","checking","leaving"].includes(status) ? <p role="status">서버 확인 중…</p>
+  const notice = status === "ready" ? null : ["saving","checking","leaving"].includes(status) ? <span aria-busy="true" aria-label="학습 동기화" />
     : status === "paused" ? <Button variant="outline" onClick={() => void renew(true)}>학습 연결 확인</Button>
     : <PracticeFailure error={status} retry={() => pending.current ? void submit() : void renew(true)} navigate={exit} />;
   return { recording, notice };

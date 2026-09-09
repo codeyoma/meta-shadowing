@@ -85,7 +85,7 @@ function BrowseFrame({ catalog, selection, scrollPositions, children }: ShellPro
   return <BrowseContext.Provider value={{ catalog, selection, scrollPositions }}>
     <Page className={styles.page}>
       <LearnerTopNavigation className={styles.header} />
-      <div className={styles.content}>
+      <div className={`${styles.content} flex-col`}>
         {preferences ? <>
           <Activity mode={preferences.loading ? "hidden" : "visible"}>{children}</Activity>
           {preferences.gate}

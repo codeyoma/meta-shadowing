@@ -99,7 +99,7 @@ export function CloudLearningPlayer(props: Props) {
     });
     return () => { alive = false; };
   },[props.accountId,props.lesson.id,props.lesson.version,props.stage,loadAttempt]);
-  async function acquire() {
+  const acquire = useCallback(async () => {
     if (fetching.current || !journal || !accountValid.current) return;
     fetching.current = true; setBusy(true); setError(null);
     try {
@@ -128,11 +128,17 @@ export function CloudLearningPlayer(props: Props) {
       }
     }
     finally { fetching.current = false; setBusy(false); }
-  }
-  function begin() {
+  }, [journal, props.accountId, acceptLease, invalidateAccount]);
+  const begin = useCallback(() => {
     command.current ??= { action:"start",accountId:props.accountId,instance:crypto.randomUUID(),operation:crypto.randomUUID(),lessonId:props.lesson.id,lessonVersion:props.lesson.version,level:props.level,stage:props.stage };
     void acquire();
-  }
+  }, [acquire, props.accountId, props.lesson.id, props.lesson.version, props.level, props.stage]);
+  const completed = journal?.history.find(record => record.runId === props.requestedRun);
+  const versionChanged = journal?.progress?.lessonId === props.lesson.id
+    && Date.parse(journal.progress.lessonVersion) !== Date.parse(props.lesson.version);
+  useEffect(() => {
+    if (journal && (!journal.activeLease || versionChanged) && !lease && !completed && !error && !busy) begin();
+  }, [journal, versionChanged, lease, completed, error, busy, begin]);
   function takeOver() {
     if (fetching.current || !takeoverTarget) return;
     command.current = {action:"takeover",accountId:props.accountId,instance:crypto.randomUUID(),operation:crypto.randomUUID(),runId:takeoverTarget.runId,generation:takeoverTarget.generation};
@@ -140,13 +146,9 @@ export function CloudLearningPlayer(props: Props) {
     void acquire();
   }
   if (lease) return <ActiveCloudPlayer key={lease.record.runId} {...props} lease={lease} instance={command.current!.instance} invalidateAccount={invalidateAccount} restart={acceptLease} />;
-  const completed = journal?.history.find(record => record.runId === props.requestedRun);
   return <main className="page mx-auto flex w-full max-w-sm flex-col gap-4 p-5">
-    <h1>{props.lesson.name}</h1>
+    {completed || error || journal?.activeLease ? <h1>{props.lesson.name}</h1> : <div aria-busy="true" aria-label="학습 준비" />}
     {completed ? <CompletionSummary record={completed as CompletionRecord} onHome={() => window.location.assign(browseHref("lessons", { language: props.lesson.language, lessonId: props.lesson.id }))} /> : <>
-      <p>마지막 서버 확인 지점에서 이어 학습합니다.</p>
-      <p>학습 기록과 설정은 계정에 저장합니다. 기존 브라우저 기록은 가져오거나 삭제하지 않으며, 계정 기록이 없으면 새로 시작합니다.</p>
-      <p>저장 확인 전의 변경은 이 화면에만 남습니다. 화면을 닫거나 다시 시작하면 마지막 서버 확인 지점으로 돌아갑니다.</p>
       {journal?.progress?.lessonId === props.lesson.id && Date.parse(journal.progress.lessonVersion) !== Date.parse(props.lesson.version) ? <p>레슨 버전이 변경되어 이전 진도를 이어갈 수 없습니다. 새 버전의 처음부터 시작합니다. 과거 완료 기록은 유지됩니다.</p> : null}
       {error ? <PracticeFailure error={error} retry={() => journal ? begin() : setLoadAttempt(value => value + 1)} /> : null}
       {journal?.activeLease && journal.progress && (journal.progress.lessonId !== props.lesson.id || Date.parse(journal.progress.lessonVersion) === Date.parse(props.lesson.version)) ? journal.progress.lessonId === props.lesson.id && journal.progress.stage === props.stage ? <Dialog open={Boolean(takeoverTarget)} onOpenChange={open => setTakeoverTarget(open ? journal.activeLease : null)}>
@@ -162,7 +164,6 @@ export function CloudLearningPlayer(props: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog> : <Button asChild variant="outline"><a href={`/player?lesson=${journal.progress.lessonId}&level=${journal.progress.level}&stage=${journal.progress.stage}`}>진행 중인 학습으로 이동</a></Button> : null}
-      <Button disabled={busy || !journal} onClick={() => void begin()}>계정 학습 시작</Button>
     </>}
   </main>;
 }

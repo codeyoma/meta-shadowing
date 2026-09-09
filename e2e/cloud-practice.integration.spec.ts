@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
 import { testRecording, testAudioManifest } from "./fixtures/audio";
+import { enterAccountPractice } from "./fixtures/cloud-navigation";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
 test("manual practice ownership and acknowledged progress survive independent browsers", async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
@@ -105,7 +106,7 @@ test("manual practice ownership and acknowledged progress survive independent br
     });
     await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
     await page.goto(`/player?lesson=${lessonId}&level=1&stage=1`);
-    await page.getByRole("button", { name: "계정 학습 시작", exact: true }).click();
+
     await expect(page.getByRole("button", { name: /첫 원음 듣기/ })).toBeVisible();
     await page.getByRole("button", { name: /첫 원음 듣기/ }).click();
     await expect(page.getByRole("button", { name: /듣기 완료 확인/ })).toBeVisible();
@@ -129,7 +130,7 @@ test("manual practice ownership and acknowledged progress survive independent br
     await page.getByRole("button", { name: "저장 재시도", exact: true }).click();
     await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
     acknowledge();
-    await expect(page.locator('[role="status"]').filter({ hasText: "서버 확인 중" })).toHaveCount(0);
+    await expect(page.getByLabel("학습 동기화")).toHaveCount(0);
     await page.getByRole("button", { name: "확인", exact: true }).click();
     await page.unroute("**/api/learner/practice");
     const checkedResume = page.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "renew");
@@ -154,7 +155,7 @@ test("manual practice ownership and acknowledged progress survive independent br
         await route.fulfill({response});
       });
       await page.getByRole("button", {name:/REPEAT/}).click();
-      await expect(page.getByRole("status")).toContainText("서버 확인 중");
+      await expect(page.getByLabel("학습 동기화")).toHaveAttribute("aria-busy", "true");
       expect(await page.locator("audio").evaluate((audio:HTMLAudioElement) => audio.paused)).toBe(true);
       releaseRenewal();
       await page.unroute("**/api/learner/practice");
@@ -173,9 +174,9 @@ test("manual practice ownership and acknowledged progress survive independent br
     page = await a.context.newPage();
     page.on("pageerror",error => errors.push(error.message));
     await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType:"audio/webm",body:testRecording }));
-    await page.goto(`/player?lesson=${lessonId}&level=1&stage=1`);
     const resumed = page.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
-    await page.getByRole("button", { name: "계정 학습 시작", exact: true }).click();
+    await page.goto(`/player?lesson=${lessonId}&level=1&stage=1`);
+
     expect((await (await resumed).json()).record).toMatchObject({nextUnit:1,settings:confirmedProgress.settings,activeMs:confirmedProgress.activeMs});
     await expect(page.getByText("Hello 2.", { exact: true })).toBeVisible();
     await test.step("an uncommitted operation stays in RAM and warns before exit", async () => {
@@ -195,9 +196,8 @@ test("manual practice ownership and acknowledged progress survive independent br
       await page.unroute("**/api/learner/practice");
       page.once("dialog",dialog => dialog.accept());
       await page.reload();
-      // Reload is a new RAM-only instance; a lost pagehide release uses expiry.
-      await waitForLeaseExpiry(a.id);
-      await page.getByRole("button", { name: "계정 학습 시작", exact: true }).click();
+      // Reload resumes automatically, or explicitly takes over a lost release.
+      await enterAccountPractice(page);
       await expect(page.getByText("Hello 2.", { exact: true })).toBeVisible();
       await expect(page.getByRole("group", { name: "완료한 듣기", exact: true })).toContainText("필수 0 / 3");
     });
@@ -233,18 +233,19 @@ test("manual practice ownership and acknowledged progress survive independent br
     expect(errors).toEqual([]);
 
     await test.step("expired offline owner cannot overwrite the next device", async () => {
-      await page.goto(`/player?lesson=${lessonId}&level=1&stage=2`);
       const starting = page.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
-      await page.getByRole("button", { name: "계정 학습 시작", exact: true }).click();
+      await page.goto(`/player?lesson=${lessonId}&level=1&stage=2`);
+
       const oldStart = await starting, oldBody = oldStart.request().postDataJSON(), oldLease = await oldStart.json();
       expect(oldStart.status()).toBe(200);
       await page.context().setOffline(true);
       await map.goto(`/player?lesson=${lessonId}&level=1&stage=2`);
-      await map.getByRole("button", { name: "계정 학습 시작", exact: true }).click();
-      await expect(map.getByRole("alert", { name: "학습 저장 알림" })).toContainText("다른 기기");
+
+      await expect(map.getByRole("button", { name: "이 기기에서 이어 학습", exact: true })).toBeVisible();
       await waitForLeaseExpiry(a.id);
       const takeover = map.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
-      await map.getByRole("button", { name: "계정 학습 시작", exact: true }).click();
+      await map.reload();
+
       expect((await takeover).status()).toBe(200);
       await expect(map.getByText("Hello 1.", { exact: true })).toBeVisible();
       await page.context().setOffline(false);

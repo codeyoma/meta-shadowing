@@ -25,6 +25,18 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("two-step learner access", () => {
+  it("includes Google display metadata for the settings header", async () => {
+    getClaims.mockResolvedValue({ data: { claims: { ...googleClaims, user_metadata: {
+      full_name: "Test Learner", avatar_url: "https://lh3.googleusercontent.com/test-photo"
+    } } }, error: null });
+    expect((await requireLearner()).profile).toEqual({ name: "Test Learner", image: "https://lh3.googleusercontent.com/test-photo" });
+  });
+  it("uses safe display fallbacks for missing or malformed profile metadata", async () => {
+    getClaims.mockResolvedValue({ data: { claims: { ...googleClaims, user_metadata: {
+      full_name: {}, avatar_url: "javascript:alert(1)"
+    } } }, error: null });
+    expect((await requireLearner()).profile).toEqual({ name: "학습자", image: null });
+  });
   it("allows a verified Google session only after beta entry", async () => {
     expect(await hasLearnerAccess()).toBe(true);
     stored.clear();

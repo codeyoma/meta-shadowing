@@ -4,6 +4,7 @@ import { type ReactNode } from "react";
 import Link from "next/link";
 import { BookOpen, ChevronRight, CirclePlay } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
@@ -17,12 +18,12 @@ import styles from "./browse.module.css";
 import { useCloudPreferences } from "./cloud-preferences-provider";
 import { LearnerSignOut } from "./learner-sign-out";
 
-export function BrowsePageContent({ title, region, children, before }: { title: string; region: string; children: ReactNode; before?: ReactNode }) {
+export function BrowsePageContent({ title, region, children, before, after }: { title: string; region: string; children: ReactNode; before?: ReactNode; after?: ReactNode }) {
   const { selection } = useBrowse();
   const ref = useBrowseScroll(`${region}:${selection.language}`);
   return <ScrollArea className={styles.scroll} viewportProps={{ ref, role: "region", "aria-label": region }}>
     <div className={styles.body}>
-      <div className={styles.titleRow}>{before}<h1 className={styles.heading}>{title}</h1></div>
+      <div className={styles.titleRow}>{before}<h1 className={styles.heading}>{title}</h1>{after}</div>
       {children}
     </div>
   </ScrollArea>;
@@ -82,14 +83,22 @@ export function LessonPage() {
   </BrowsePageContent>;
 }
 
-export function SettingsPage() {
+export function SettingsPage({ profile }: { profile: { name: string; image: string | null } }) {
   const { selection } = useBrowse();
-  return <BrowsePageContent title="설정" region="설정 목록">
+  return <BrowsePageContent title="설정" region="설정 목록" after={
+    <div className="ml-auto flex min-w-0 max-w-[65%] items-center gap-2" aria-label="Google 계정">
+      <Avatar>
+        <AvatarImage src={profile.image ?? undefined} alt="" referrerPolicy="no-referrer" />
+        <AvatarFallback>{Array.from(profile.name)[0]}</AvatarFallback>
+      </Avatar>
+      <span className="truncate" title={profile.name}>{profile.name}</span>
+    </div>
+  }>
     <ul className={styles.rows}><li><Button asChild variant="choice" size="row" className="w-full">
       <Link href={browseHref("session", selection)} scroll={false}>
         <span className={styles.copy}><strong>세션 설정</strong></span><ChevronRight aria-hidden="true" data-icon="inline-end" />
       </Link>
     </Button></li></ul>
-    <LearnerSignOut />
+    <LearnerSignOut settingsRow />
   </BrowsePageContent>;
 }

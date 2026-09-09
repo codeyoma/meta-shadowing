@@ -244,12 +244,7 @@ test("a completed screen stops renewing and permits another device after lease e
     // The real server lease expires; no database timestamp changes or takeover.
     await expect.poll(async () => {
       if (await next.locator("#player-title").isVisible()) return true;
-      const start = next.getByRole("button", { name: "계정 학습 시작", exact: true });
-      await expect(start).toBeEnabled();
-      const response = next.waitForResponse(response => response.request().method() === "POST"
-        && response.url().endsWith("/api/learner/practice") && response.request().postDataJSON().action === "start");
-      await start.click();
-      await response;
+      await next.reload();
       return next.locator("#player-title").isVisible();
     }, { timeout: 40000, intervals: [1000] }).toBe(true);
     expect((await readServerJournal(next)).history).toHaveLength(1);

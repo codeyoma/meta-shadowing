@@ -51,8 +51,12 @@ test("Settings-tab preferences apply when returning to a stage and explicitly st
     await new Promise(resolve => setTimeout(resolve, 750));
     await route.fulfill({ response });
   });
+  const saved = page.waitForResponse(response => response.url().includes("/api/learner/preferences") && response.request().method() === "PATCH" && response.status() === 200);
   await page.getByLabel("묶음 크기").selectOption("4");
-  await expect(page.getByRole("status")).toContainText("계정에 저장했습니다");
+  await expect(page.getByText("저장 중…", { exact: true })).toHaveCount(0);
+  await saved;
+  await expect(page.getByLabel("묶음 크기")).toBeEnabled();
+  await expect(page.getByText("계정에 저장했습니다. 다음 학습부터 적용됩니다.", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("묶음 크기")).toHaveValue("4");
   await page.getByRole("link", { name: "설정 목록으로 돌아가기" }).click();
   await page.getByRole("link", { name: "세션 설정", exact: true }).click();

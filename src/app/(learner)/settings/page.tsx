@@ -1,2 +1,7 @@
 import { SettingsPage } from "../../browse-pages";
-export default SettingsPage;
+import { requireLearner } from "@/lib/server-auth";
+
+export default async function Settings() {
+  const { profile } = await requireLearner();
+  return <SettingsPage profile={profile} />;
+}

@@ -80,6 +80,19 @@ function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+/** Full-height learner panels keep their actions outside the scrolling body. */
+function DrawerViewportContent({ children, footer, panelClassName, style, ...props }: React.ComponentProps<typeof DrawerContent> & {
+  footer: React.ReactNode
+  panelClassName?: string
+}) {
+  return <DrawerContent {...props} style={{ ...style, height: "100dvh", maxHeight: "100dvh", marginTop: 0, width: "100%", maxWidth: 430, marginInline: "auto", borderRadius: 0, paddingTop: "env(safe-area-inset-top)" }}>
+    <div data-slot="drawer-panel" className={cn("grid min-h-0 flex-1 gap-4 overflow-hidden px-5 py-4 [&>[data-slot=drawer-header]]:p-0", panelClassName)} style={{ height: "auto", width: "100%", maxWidth: "100%" }}>
+      {children}
+    </div>
+    <DrawerFooter className="shrink-0">{footer}</DrawerFooter>
+  </DrawerContent>
+}
+
 function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -126,6 +139,7 @@ export {
   DrawerTrigger,
   DrawerClose,
   DrawerContent,
+  DrawerViewportContent,
   DrawerHeader,
   DrawerFooter,
   DrawerTitle,

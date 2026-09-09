@@ -30,7 +30,7 @@ const methodIcons = [Headphones, Brain, TextCursorInput, Layers, WholeWord, Lang
 const stageRing = <span className={styles.stageRing} data-stage-ring="" aria-hidden="true">
   <svg viewBox="0 0 100 86" preserveAspectRatio="none" focusable="false">
     <ellipse className={styles.stageRingTrack} cx="50" cy="43" rx="48" ry="41" vectorEffect="non-scaling-stroke" />
-    <ellipse className={styles.stageRingArc} data-stage-arc="" cx="50" cy="43" rx="48" ry="41" pathLength="100" vectorEffect="non-scaling-stroke" />
+    <ellipse className={styles.stageRingArc} data-stage-arc="" cx="50" cy="43" rx="48" ry="41" pathLength="100" />
   </svg>
 </span>;
 

@@ -49,7 +49,7 @@ for (const level of [1,2,3,4,5,6,7,8]) test(`level ${level} uses acknowledged un
     });
     await page.route("**/api/lessons/*/audio/*",route=>route.fulfill({contentType:"audio/webm",body:testRecording}));
     await page.goto(playerUrl);
-    await page.getByRole("button",{name:"계정 학습 시작",exact:true}).click();
+
     await expect(page.getByRole("button",{name:/CONTINUE/})).toBeVisible();
   }
   async function leave(page: Page) {

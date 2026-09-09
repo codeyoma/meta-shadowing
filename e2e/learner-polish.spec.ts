@@ -54,7 +54,7 @@ test("large learning help previews all eight levels and closes at the viewport b
     await dialog.getByRole("tab", { name: `Lv ${level}`, exact: true }).click();
     await expect(dialog.getByRole("tabpanel")).toContainText("상세 학습 방법은 준비 중입니다.");
   }
-  const panel = dialog.locator('[data-slot="dialog-panel"]');
+  const panel = dialog.locator('[data-slot="drawer-panel"]');
   expect((await panel.boundingBox())!.height).toBeGreaterThan(450);
   const close = dialog.getByRole("button", { name: "닫기", exact: true });
   expect((await close.boundingBox())!.y).toBeGreaterThan(840);

@@ -221,7 +221,7 @@ test("account settings synchronize across browsers without sharing another accou
       const value = await service.from("learner_preferences").select("selection").eq("user_id", a.id).single();
       expect(value.data?.selection).toEqual({ language: "english", lessonId: lessonIds[0] });
       await pageA.goto(`/player?lesson=${lessonIds[0]}`);
-      await expect(pageA.getByRole("button", { name: "계정 학습 시작", exact: true })).toBeVisible();
+      await expect(pageA.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
       await pageA.goto("/settings/session");
     });
 
@@ -244,8 +244,9 @@ test("account settings synchronize across browsers without sharing another accou
       await pageA.route("**/api/learner/preferences?*", async route => { await hold; await route.continue(); });
       const response = pageA.waitForResponse(response => response.url().includes("/api/learner/preferences?") && response.request().method() === "GET");
       await pageA.evaluate(() => window.dispatchEvent(new Event("focus")));
-      await expect(pageA.getByText("계정 설정을 불러오는 중…")).toBeVisible();
-      await expect(pageA.getByLabel("학습 레벨")).toBeHidden();
+      await expect(pageA.getByText("계정 설정을 불러오는 중…")).toHaveCount(0);
+      await expect(pageA.getByLabel("학습 레벨")).toBeVisible();
+      await expect(pageA.getByLabel("학습 레벨")).toBeDisabled();
       await expect(navigation).toHaveAttribute("data-persistent-proof", "yes");
       release();
       await response;

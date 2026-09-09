@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { setAudioCacheAccount } from "@/lib/mp3-cache";
 
-export function LearnerSignOut() {
+export function LearnerSignOut({ settingsRow = false }: { settingsRow?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   async function signOut() {
@@ -23,7 +23,7 @@ export function LearnerSignOut() {
     } catch { setFailed(true); setBusy(false); }
   }
   return <>
-    <Button variant="outline" disabled={busy} onClick={() => void signOut()}>{busy ? "로그아웃 중…" : "로그아웃"}</Button>
+    <Button variant={settingsRow ? "choice" : "outline"} size={settingsRow ? "row" : "default"} className={settingsRow ? "w-full text-[var(--accent-cardinal)]" : undefined} disabled={busy} onClick={() => void signOut()}>{busy ? "로그아웃 중…" : "로그아웃"}</Button>
     {failed ? <p role="alert">로그아웃하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.</p> : null}
   </>;
 }

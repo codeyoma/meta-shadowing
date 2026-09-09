@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Dialog, DialogClose, DialogViewportContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerClose, DrawerViewportContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { dictionaryTransitivityTags, type DictionaryEntry } from "@/lib/dictionary";
 import type { Language } from "@/lib/lessons";
@@ -77,21 +77,21 @@ export function DictionaryPopup({ selection, language, onClose }: {
     return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
   }, [language, selection.word, attempt]);
 
-  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-    <DialogViewportContent panelClassName={styles.popup}
-      footer={<DialogClose asChild><Button type="button" variant="close" size="lg" className="w-full"><CloseIcon data-icon="inline-start" />닫기</Button></DialogClose>}
+  return <Drawer open onOpenChange={open => { if (!open) onClose(); }}>
+    <DrawerViewportContent panelClassName={styles.popup}
+      footer={<DrawerClose asChild><Button type="button" variant="practice" size="lg" className="w-full"><Check data-icon="inline-start" />확인</Button></DrawerClose>}
       onOpenAutoFocus={event => { event.preventDefault(); closeRef.current?.focus({ preventScroll: true }); }}
       onCloseAutoFocus={event => {
         event.preventDefault();
         if (selection.trigger.isConnected) selection.trigger.focus({ preventScroll: true });
       }}>
-      <DialogHeader>
+      <DrawerHeader>
         <div className={styles.heading}>
-          <DialogTitle><span lang={targetLanguage}>{selection.word}</span> 뜻</DialogTitle>
-          <DialogClose asChild><Button ref={closeRef} type="button" variant="ghost" size="icon" aria-label="사전 닫기"><CloseIcon /></Button></DialogClose>
+          <DrawerTitle><span lang={targetLanguage}>{selection.word}</span> 뜻</DrawerTitle>
+          <DrawerClose asChild><Button ref={closeRef} type="button" variant="ghost" size="icon" aria-label="사전 닫기"><CloseIcon /></Button></DrawerClose>
         </div>
-        <DialogDescription>한국어 위키낱말사전의 뜻을 확인하세요.</DialogDescription>
-      </DialogHeader>
+        <DrawerDescription>한국어 위키낱말사전의 뜻을 확인하세요.</DrawerDescription>
+      </DrawerHeader>
       <div data-slot="dialog-scroll-body" className={styles.body} aria-busy={lookup.status === "loading"}>
         {lookup.status === "loading" ? <Empty role="status"><EmptyDescription>뜻을 찾고 있어요…</EmptyDescription></Empty> : lookup.status === "error" ? <Alert variant="destructive"><AlertDescription>
           <p>뜻을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
@@ -122,6 +122,6 @@ export function DictionaryPopup({ selection, language, onClose }: {
         </article>)}
       </div>
       <DictionaryAttribution word={selection.word} entries={lookup.status === "loaded" ? lookup.entries : []} />
-    </DialogViewportContent>
-  </Dialog>;
+    </DrawerViewportContent>
+  </Drawer>;
 }
