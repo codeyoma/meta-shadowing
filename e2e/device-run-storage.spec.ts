@@ -12,7 +12,7 @@ async function openPublicStore(page: Page) {
 test("durable runs cover independent lessons and all stage families across reload", async ({ page }) => {
   await openPublicStore(page);
   const started = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const lesson = {
       id: "storage-lesson-a", version: "2026-09-10T00:00:00.000Z", language: "english" as const,
       name: "Storage A", localizedName: "Storage A", phraseCount: 12, sectionCount: 2, entries: [], phrases: [],
@@ -51,7 +51,7 @@ test("durable runs cover independent lessons and all stage families across reloa
 test("invalid stages, mappings, and cycle data cannot replace prior durable data", async ({ page }) => {
   await openPublicStore(page);
   const result = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const lesson = {
       id: "validation-lesson", version: "2026-09-10T00:00:00.000Z", language: "english" as const,
       name: "Validation", localizedName: "Validation", phraseCount: 12, sectionCount: 2, entries: [], phrases: [],
@@ -81,7 +81,7 @@ test("invalid stages, mappings, and cycle data cannot replace prior durable data
 test("revision fencing, completion deduplication, and settings updates preserve run snapshots", async ({ page }) => {
   await openPublicStore(page);
   const result = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const lesson = {
       id: "completion-lesson", version: "2026-09-10T00:00:00.000Z", language: "english" as const,
       name: "Completion", localizedName: "Completion", phraseCount: 12, sectionCount: 2, entries: [], phrases: [],
@@ -109,9 +109,9 @@ test("revision fencing, completion deduplication, and settings updates preserve 
 test("schema-one settings upgrade without losing legacy preferences", async ({ page }) => {
   await openPublicStore(page);
   const result = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     await new Promise<void>((resolve, reject) => {
-      const open = indexedDB.open(window.deviceStore.DEVICE_LEARNING_DATABASE, 1);
+      const open = indexedDB.open(window.deviceStore.DEVICE_LEARNING_DATABASE);
       open.onerror = () => reject(open.error);
       open.onsuccess = () => {
         const transaction = open.result.transaction("accounts", "readwrite");
@@ -136,7 +136,7 @@ test("schema-one settings upgrade without losing legacy preferences", async ({ p
 test("stage-less schema-two level-one runs normalize and survive later mutations", async ({ page }) => {
   await openPublicStore(page);
   const result = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const settings = {
       mode: "manual", display: "current", speed: 1, advanceDelayMs: 1000, groupSize: 2, groupGapMs: 500,
       wpmLevel: 3, speakingExtraMs: 500, lineGapMs: 1000, sectionGapMs: 2000,
@@ -146,7 +146,7 @@ test("stage-less schema-two level-one runs normalize and survive later mutations
       language: "english", level: 1, nextUnit: 0, nextPhrase: 0, activeMs: 0, settings, confirmedCycles: 0, revision: 0,
     };
     await new Promise<void>((resolve, reject) => {
-      const open = indexedDB.open(window.deviceStore.DEVICE_LEARNING_DATABASE, 1);
+      const open = indexedDB.open(window.deviceStore.DEVICE_LEARNING_DATABASE);
       open.onerror = () => reject(open.error);
       open.onsuccess = () => {
         const transaction = open.result.transaction("accounts", "readwrite");
@@ -176,7 +176,7 @@ test("stage-less schema-two level-one runs normalize and survive later mutations
 test("study days are validated, deduplicated, and committed atomically with confirmed progress", async ({ page }) => {
   await openPublicStore(page);
   const result = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const lesson = {
       id: "study-day-lesson", version: "2026-09-10T00:00:00.000Z", language: "english" as const,
       name: "Study day", localizedName: "Study day", phraseCount: 12, sectionCount: 2, entries: [], phrases: [],
@@ -197,9 +197,9 @@ test("study days are validated, deduplicated, and committed atomically with conf
 test("missing study days stay empty and malformed legacy dates are rejected", async ({ page }) => {
   await openPublicStore(page);
   const result = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const write = (studyDays?: unknown) => new Promise<void>((resolve, reject) => {
-      const open = indexedDB.open(window.deviceStore.DEVICE_LEARNING_DATABASE, 1);
+      const open = indexedDB.open(window.deviceStore.DEVICE_LEARNING_DATABASE);
       open.onerror = () => reject(open.error);
       open.onsuccess = () => {
         const tx = open.result.transaction("accounts", "readwrite");

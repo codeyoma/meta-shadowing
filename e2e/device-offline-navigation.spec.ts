@@ -67,7 +67,7 @@ for (const failure of ["rejected", "held"] as const) test(`offline catalog and m
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=6&stage=11");
   await loadPackageModules(page);
   const saved = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const journal = (await window.deviceStore.readDeviceLearningRecord(access.accountId))!;
     const run = journal.runs.find(value => value.stage === 11)!;
     return window.deviceStore.saveDeviceRun(access, { ...run, nextUnit: 2, nextPhrase: 2 }, run.revision);
@@ -157,7 +157,7 @@ test("offline catalog and browser history switch lessons while preserving distin
   }
   await loadPackageModules(page);
   await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const firstPackage = (await window.packageStore.listLessonPackages(access.accountId)).find(row => row.lessonId.endsWith("1"))!;
     const secondPackage = (await window.packageStore.listLessonPackages(access.accountId)).find(row => row.lessonId.endsWith("2"))!;
     const firstLesson = (await window.packageStore.readLessonPackage(access.accountId, firstPackage.lessonId, firstPackage.version))!.manifest.lesson;
@@ -210,7 +210,7 @@ test("requested run selects its exact retained version and cold reload keeps tha
   await openLearnerPage(page, `/player?lesson=${lessonId}&level=4&stage=7`);
   await loadPackageModules(page);
   const seeded = await page.evaluate(async lessonId => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const inventory = (await window.packageStore.listLessonPackages(access.accountId)).find(row => row.lessonId === lessonId)!;
     const current = (await window.packageStore.readLessonPackage(access.accountId, lessonId, inventory.version))!;
     const oldVersion = "2026-08-10T00:00:00.000Z";
@@ -257,7 +257,7 @@ test("stage preview starts every level with device settings", async ({ page }) =
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&stage=1");
   await loadPackageModules(page);
   await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     await window.deviceStore.writeDeviceLearningSettings(access.accountId, 4, { speed: 2, groupSize: 3 }, access);
   });
   await page.goto("/lessons/10000000-0000-4000-8000-000000000002/stages");

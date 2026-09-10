@@ -249,7 +249,7 @@ test("atomic settings updates preserve progress and deduplicated completion, and
   await openLearnerPage(page, player);
   await loadPackageModules(page);
   const result = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const before = (await window.deviceStore.readDeviceLearningRecord(access.accountId))!;
     const run = before.runs[0];
     const wrongAccount = await window.deviceStore.writeDeviceLearningSettings("another-account", 1, {}, access).then(() => "accepted", () => "fenced");
@@ -280,9 +280,9 @@ test("schema one settings upgrade when learning starts without importing cloud p
   await expect.poll(() => page.evaluate(() => Boolean(localStorage.getItem("meta-shadowing:device-access:v1")))).toBe(true);
   await loadPackageModules(page);
   await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     await new Promise<void>((resolve, reject) => {
-      const open = indexedDB.open("meta-shadowing-device-learning-v1", 1);
+      const open = indexedDB.open("meta-shadowing-device-learning-v1");
       open.onupgradeneeded = () => open.result.createObjectStore("accounts", { keyPath: "accountId" });
       open.onerror = () => reject(open.error);
       open.onsuccess = () => {
@@ -362,7 +362,7 @@ for (const operation of ["delete", "revoke"] as const) test(`cold-shell package 
     await page.getByRole("button", { name: /CONTINUE/ }).click();
     await expect(page.locator("audio")).toHaveJSProperty("paused", false);
     await other.evaluate(async operation => {
-      const access = window.deviceAccess.readDeviceAccess()!;
+      const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
       if (operation === "delete") await window.packageStore.deleteLessonPackage("10000000-0000-4000-8000-000000000001");
       else await window.packageStore.invalidatePackageAccount(access.accountId, true);
     }, operation);
@@ -402,7 +402,7 @@ test("stage resume retains old and current local runs and ignores legacy cloud p
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await openLearnerPage(page, stages); await loadPackageModules(page);
   const runs = await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     const inventory = await window.packageStore.listLessonPackages(access.accountId);
     const pack = await window.packageStore.readLessonPackage(access.accountId, inventory[0].lessonId, inventory[0].version);
     const lesson = pack!.manifest.lesson;

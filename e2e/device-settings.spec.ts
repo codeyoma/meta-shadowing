@@ -138,7 +138,7 @@ test("malformed and unsupported account records fail explicitly", async ({ page 
     { schemaVersion: 1, accountId, preferredLevel: 9, settings: { speed: 2 } },
   ]) {
     await page.evaluate(({ record }) => new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open("meta-shadowing-device-learning-v1", 1);
+      const request = indexedDB.open("meta-shadowing-device-learning-v1");
       request.onupgradeneeded = () => request.result.createObjectStore("accounts", { keyPath: "accountId" });
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {

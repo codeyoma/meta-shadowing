@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { assertDeviceAccess } from "@/lib/device-access";
-import { startDeviceRun, saveDeviceRun, type DeviceRun } from "@/lib/device-learning-store";
+import { readDeviceLearningState, subscribeDeviceSnapshot, startDeviceRun, saveDeviceRun, type DeviceRun, type DeviceWriter } from "@/lib/device-learning-store";
 import type { PublishedLesson } from "@/lib/lessons";
 import { groupLessonPhrases } from "@/lib/phrase-groups";
 import type { RapidLine } from "@/lib/rapid-session";
@@ -41,26 +41,30 @@ export function LocalLearningPlayer({ lesson, stage, hints = [], lines = [], req
   const [run, setRun] = useState<DeviceRun | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [writer, setWriter] = useState<DeviceWriter | null>(null);
   useEffect(() => {
     let alive = true;
-    void startDeviceRun(access, lesson, stage, requestedRun).then(value => {
+    void readDeviceLearningState(access).then(async ({ writer: loadedWriter }) => {
       if (!alive) return;
+      const value = await startDeviceRun(loadedWriter, lesson, stage, requestedRun);
+      if (!alive) return;
+      setWriter(loadedWriter);
       replaceRunUrl(value);
       setRun(value);
     }).catch(() => { if (alive) setFailed(true); });
-    return () => { alive = false; };
+    const unsubscribe = subscribeDeviceSnapshot(() => { alive = false; setRun(null); setWriter(null); setFailed(true); });
+    return () => { alive = false; unsubscribe(); };
   }, [access, lesson, stage, requestedRun, attempt]);
   if (!run) return <main className="page mx-auto flex w-full max-w-md flex-col gap-4 p-5"><h1>{lesson.name}</h1>
     {onCatalog ? <CatalogExit onExit={onCatalog} /> : null}
     {failed ? <LocalSaveFailure retry={() => { setFailed(false); setAttempt(value => value + 1); }} /> : <p role="status">기기 학습 기록을 읽고 있어요…</p>}
   </main>;
-  return <ActiveLocalPlayer key={run.runId} initial={run} lesson={lesson} hints={hints} lines={lines} packageBlocked={packageBlocked} canUsePackage={canUsePackage} onCatalog={onCatalog} restart={value => {
+  return <ActiveLocalPlayer key={run.runId} writer={writer!} initial={run} lesson={lesson} hints={hints} lines={lines} packageBlocked={packageBlocked} canUsePackage={canUsePackage} onCatalog={onCatalog} restart={value => {
     replaceRunUrl(value); setRun(value);
   }} />;
 }
 
-function ActiveLocalPlayer({ initial, lesson, hints, lines, restart, packageBlocked, canUsePackage, onCatalog }: { initial: DeviceRun; lesson: PublishedLesson; hints: SubtitleHint[]; lines: RapidLine[]; restart: (run: DeviceRun) => void; packageBlocked: boolean; canUsePackage: () => boolean; onCatalog?: () => void }) {
-  const access = useDeviceAccess()!;
+function ActiveLocalPlayer({ initial, writer: access, lesson, hints, lines, restart, packageBlocked, canUsePackage, onCatalog }: { initial: DeviceRun; writer: DeviceWriter; lesson: PublishedLesson; hints: SubtitleHint[]; lines: RapidLine[]; restart: (run: DeviceRun) => void; packageBlocked: boolean; canUsePackage: () => boolean; onCatalog?: () => void }) {
   const current = useRef(initial);
   const [record, setRecord] = useState(initial);
   const [status, setStatus] = useState<"ready" | "saving" | "error">("ready");

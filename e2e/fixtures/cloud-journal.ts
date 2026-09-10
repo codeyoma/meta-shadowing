@@ -42,7 +42,7 @@ export async function seedLearningJournal(page: Page, journal: Partial<Journal>)
   if (!/^https?:/.test(page.url())) await page.goto("/offline");
   await page.evaluate(async ({ accountId, progress, history, studyDays }) => {
     await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open("meta-shadowing-device-learning-v1", 1);
+      const request = indexedDB.open("meta-shadowing-device-learning-v1");
       request.onupgradeneeded = () => request.result.createObjectStore("accounts", { keyPath: "accountId" });
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {

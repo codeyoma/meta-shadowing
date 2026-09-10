@@ -113,8 +113,11 @@ export async function openLearnerPage(page: Page, href: string) {
       await page.goto("/languages", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await loadPackageModules(page);
+      await expect.poll(() => page.evaluate(accountId =>
+        window.deviceAccess.readDeviceAccess()?.accountId === accountId, profile.accountId)).toBe(true);
       await page.evaluate(async ({ accountId, changes, level }) => {
-        await window.deviceStore.writeDeviceLearningSettings(accountId, level, changes);
+        const { writer } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
+        await window.deviceStore.writeDeviceLearningSettings(accountId, level, changes, writer);
       }, { accountId: profile.accountId, changes, level: Number(q.get("level") ?? 1) });
     }
   }

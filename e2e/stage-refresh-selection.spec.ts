@@ -8,7 +8,7 @@ for (const [stage, groupSize] of [[7, 3], [8, 4]] as const) {
     await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages");
     await loadPackageModules(page);
     await page.evaluate(async ({ groupSize }) => {
-      const access = window.deviceAccess.readDeviceAccess()!;
+      const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
       await window.deviceStore.writeDeviceLearningSettings(access.accountId, 4, { groupSize }, access);
     }, { groupSize });
     const selected = page.getByRole("radio", { name: new RegExp(`^${stage} 다문장 암기`) });

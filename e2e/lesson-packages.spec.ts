@@ -146,9 +146,12 @@ test("public installation resumes verified bytes, requires account grants and de
   try {
     await page.goto("/languages");
     await loadPackageModules(page);
+    await expect.poll(() => page.evaluate(accountId =>
+      window.deviceAccess.readDeviceAccess()?.accountId === accountId, fixture.accountId)).toBe(true);
     const result = await page.evaluate(async ({ accountId, lessonId, version }) => {
       const store = window.packageStore;
-      await window.deviceStore.writeDeviceLearningSettings(accountId, 4, { speed: 2 });
+      const { writer } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
+      await window.deviceStore.writeDeviceLearningSettings(accountId, 4, { speed: 2 }, writer);
       const downloader = window.packageDownloader.createLessonPackageDownloader(accountId);
       await downloader.download({ id: lessonId, version });
       const installed = await store.readLessonPackage(accountId, lessonId, version);

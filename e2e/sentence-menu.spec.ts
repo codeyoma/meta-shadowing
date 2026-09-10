@@ -263,7 +263,7 @@ for (const [oldSize, newSize, sentence, nextUnit, nextPhrase, count] of [[2, 4, 
   const oldRun = new URL(page.url()).searchParams.get("run");
   await loadPackageModules(page);
   await page.evaluate(async ({ groupSize }) => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     await window.deviceStore.writeDeviceLearningSettings(access.accountId, 4, { groupSize, speed: 2 }, access);
   }, { groupSize: newSize });
   await selectSentence(page, sentence);

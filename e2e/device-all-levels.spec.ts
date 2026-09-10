@@ -177,7 +177,7 @@ test("saved automatic grouped settings drive offline boundaries and survive relo
   await loadPackageModules(page);
   await expect.poll(() => page.evaluate(() => Boolean(window.deviceAccess.readDeviceAccess()))).toBe(true);
   await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     await window.deviceStore.writeDeviceLearningSettings(access.accountId, 4, { mode: "automatic", groupSize: 3, advanceDelayMs: 0, groupGapMs: 0 }, access);
   });
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=4&stage=7");
@@ -201,7 +201,7 @@ test("automatic rapid settings complete offline with one durable completion iden
   await page.goto("/languages"); await loadPackageModules(page);
   await expect.poll(() => page.evaluate(() => Boolean(window.deviceAccess.readDeviceAccess()))).toBe(true);
   await page.evaluate(async () => {
-    const access = window.deviceAccess.readDeviceAccess()!;
+    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
     await window.deviceStore.writeDeviceLearningSettings(access.accountId, 8, { mode: "automatic", wpmLevel: 6, speakingExtraMs: 0, lineGapMs: 0, sectionGapMs: 0 }, access);
   });
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=8&stage=15");

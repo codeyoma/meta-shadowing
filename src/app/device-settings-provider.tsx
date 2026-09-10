@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Drawer, DrawerClose, DrawerDescription, DrawerHeader, DrawerTitle, DrawerViewportContent } from "@/components/ui/drawer";
 import { Field, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { readDeviceLearningRecord, writeDeviceLearningSettings } from "@/lib/device-learning-store";
+import { readDeviceLearningState, subscribeDeviceSnapshot, writeDeviceLearningSettings, type DeviceWriter } from "@/lib/device-learning-store";
 import { DEFAULT_SESSION_SETTINGS, resolveSessionSettings, type SessionSettings } from "@/lib/session-settings";
 import { isGroupSize } from "@/lib/phrase-groups";
 import { levelNames } from "@/lib/lessons";
@@ -16,6 +16,7 @@ import { RapidSessionControls } from "./rapid-session-controls";
 import { LearnerSignOut } from "./learner-sign-out";
 import { PackageDownloads, useLessonPackages } from "./lesson-packages-provider";
 import { useDeviceAccess } from "./device-access-provider";
+import { AccountSnapshotControls } from "./account-snapshot-controls";
 
 export const DEVICE_SETTINGS_EXTENSION_POINTS = ["packages", "manual-transfer", "local-recovery"] as const;
 
@@ -44,33 +45,39 @@ export function DeviceSettingsProvider({ accountId, profile, children }: {
   const identityInvalidRef = useRef(false);
   const generation = useRef(0);
   const writeQueue = useRef(Promise.resolve());
+  const writer = useRef<DeviceWriter | null>(null);
 
   const load = useCallback(() => {
-    if (identityInvalidRef.current) return Promise.resolve();
+    if (identityInvalidRef.current || !access || access.accountId !== accountId) return Promise.resolve();
     const token = ++generation.current;
     setStatus("loading");
-    return readDeviceLearningRecord(accountId).then(record => {
+    writer.current = null;
+    return readDeviceLearningState(access).then(({ record, writer: loadedWriter }) => {
       if (token !== generation.current) return;
+      writer.current = loadedWriter;
       setSettings(resolveSessionSettings(record?.settings));
       setLevel(record?.preferredLevel ?? 1);
       setStatus("ready");
     }).catch(() => {
       if (token === generation.current) setStatus("error");
     });
-  }, [accountId]);
+  }, [accountId, access]);
 
   useEffect(() => {
     void load();
-    return () => { generation.current += 1; };
+    const unsubscribe = subscribeDeviceSnapshot(() => void load());
+    return () => { generation.current += 1; writer.current = null; unsubscribe(); };
   }, [load]);
 
   const persist = useCallback((nextSettings: SessionSettings, nextLevel: number) => {
     if (identityInvalidRef.current || status === "loading" || status === "error") return;
     setStatus("saving");
     const token = generation.current;
+    const capturedWriter = writer.current;
+    if (!capturedWriter) return;
     writeQueue.current = writeQueue.current.then(async () => {
       if (token !== generation.current || identityInvalidRef.current) return;
-      await writeDeviceLearningSettings(accountId, nextLevel, nextSettings, access ?? undefined);
+      await writeDeviceLearningSettings(accountId, nextLevel, nextSettings, capturedWriter);
       if (token === generation.current) {
         setSettings(nextSettings);
         setLevel(nextLevel);
@@ -134,6 +141,7 @@ export function DeviceSettingsProvider({ accountId, profile, children }: {
           </FieldSet>
           <p className="mt-4 text-sm text-muted-foreground">모든 레벨이 이 기기에 저장된 설정을 사용합니다.</p>
           <PackageDownloads />
+          {!identityInvalid && open ? <AccountSnapshotControls /> : null}
           <div className="mt-6"><LearnerSignOut settingsRow /></div>
         </div>
       </DrawerViewportContent>
