@@ -4,6 +4,7 @@ import { openSelectedStageSettings, returnToStages, startSelectedStage } from ".
 import { testRecording } from "./fixtures/audio";
 import { packageResources } from "./fixtures/package-resources";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
+import { loginBeta } from "./fixtures/beta-login";
 
 // Real PCM audio with known duration, so progress assertions exercise browser media.
 const wav = Buffer.alloc(44 + 8_000 * 2 * 2);
@@ -14,7 +15,7 @@ wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
 wav.write("data", 36); wav.writeUInt32LE(wav.length - 44, 40);
 
 async function login(page: Page) {
-  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await loginBeta(page.request);
 }
 
 for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} keeps top-bar progress above the help trigger without a book title`, async ({ page }) => {

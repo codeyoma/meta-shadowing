@@ -3,15 +3,19 @@ import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { openSelectedStageSettings, startSelectedStage } from "./fixtures/stage-preview";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
+import { loginBeta } from "./fixtures/beta-login";
 
 async function openPlayer(page: Page, query = "") {
   await page.route("**/api/lessons/*/audio/*", (route) => route.fulfill({
     contentType: "audio/webm", body: testRecording
   }));
-  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
-  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=1${query}`);
-  // Keyboard input does not auto-wait for the streamed page's client listeners.
-  await page.waitForLoadState("networkidle");
+  await test.step("player:sign-in", () => loginBeta(page.request));
+  await test.step("player:open", () => openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=1${query}`));
+  // Local playback readiness is independent of background network activity.
+  await test.step("player:ready", async () => {
+    await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
+    await expect(page.locator("audio")).toHaveCount(1);
+  });
 }
 
 test("keyboard confirmation counts three required and two extra listens before Next advances", async ({ page }) => {
@@ -42,6 +46,30 @@ test("keyboard confirmation counts three required and two extra listens before N
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
 });
 
+test("installed player accepts keyboard input while an unrelated request is pending", async ({ page }) => {
+  let release!: () => void;
+  let requested = false;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/__fixture_pending_read", async route => {
+    requested = true;
+    await held;
+    await route.fulfill({ status: 204 });
+  });
+  await page.addInitScript(() => {
+    if (location.pathname === "/player") void fetch("/__fixture_pending_read").catch(() => {});
+  });
+  try {
+    await openPlayer(page);
+    expect(requested).toBe(true);
+    await page.keyboard.press("Space");
+    await confirmManualListen(page, "keyboard");
+    await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
+
 test("automatic mode waits after three, then Repeat runs both extras with speaking windows and advances", async ({ page }) => {
   await openPlayer(page, "&mode=automatic&speed=0.5&gap=3");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
@@ -64,27 +92,37 @@ test("automatic mode waits after three, then Repeat runs both extras with speaki
 
 test("Space pauses and resumes live audio while r and R leave the unfinished listen unchanged", async ({ page }) => {
   await openPlayer(page, "&speed=0.5");
-  await page.keyboard.press("Space");
-  await expect.poll(() => page.locator("audio").evaluate((element) => {
-    const audio = element as HTMLAudioElement;
-    return audio.currentTime > 0 && !audio.paused;
-  })).toBe(true);
-  await page.keyboard.press("Space");
-  await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
-  const pausedTime = await page.locator("audio").evaluate((audio) => (audio as HTMLAudioElement).currentTime);
-  await page.waitForTimeout(900);
-  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
-  expect(await page.locator("audio").evaluate((audio) => (audio as HTMLAudioElement).currentTime)).toBe(pausedTime);
-  await page.keyboard.press("r");
-  await page.keyboard.press("R");
-  await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
-  expect(await page.locator("audio").evaluate(audio => (audio as HTMLAudioElement).currentTime)).toBe(pausedTime);
-  await expect(page.locator("audio")).toHaveJSProperty("paused", true);
-  await page.keyboard.press("Space");
-  await waitForManualListen(page);
-  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
-  await confirmManualListen(page, "keyboard");
-  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
+  await test.step("player:start", async () => {
+    await page.keyboard.press("Space");
+    await expect.poll(() => page.locator("audio").evaluate((element) => {
+      const audio = element as HTMLAudioElement;
+      return audio.currentTime > 0 && !audio.paused;
+    })).toBe(true);
+  });
+  await test.step("player:pause", async () => {
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
+  });
+  await test.step("player:remain-paused", async () => {
+    const pausedTime = await page.locator("audio").evaluate((audio) => (audio as HTMLAudioElement).currentTime);
+    await page.waitForTimeout(900);
+    await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
+    expect(await page.locator("audio").evaluate((audio) => (audio as HTMLAudioElement).currentTime)).toBe(pausedTime);
+    await page.keyboard.press("r");
+    await page.keyboard.press("R");
+    await expect(page.getByRole("button", { name: "CONTINUE · 계속 재생", exact: true })).toBeVisible();
+    expect(await page.locator("audio").evaluate(audio => (audio as HTMLAudioElement).currentTime)).toBe(pausedTime);
+    await expect(page.locator("audio")).toHaveJSProperty("paused", true);
+  });
+  await test.step("player:resume", async () => {
+    await page.keyboard.press("Space");
+    await waitForManualListen(page);
+    await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
+  });
+  await test.step("player:confirm", async () => {
+    await confirmManualListen(page, "keyboard");
+    await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
+  });
 });
 
 test("touch controls recover a failed recording and complete every phrase without keyboard input", async ({ page, isMobile }) => {
@@ -99,7 +137,7 @@ test("touch controls recover a failed recording and complete every phrase withou
   });
   // Installed audio no longer streams. Inject a real media-boundary failure.
   await reloadLearnerPage(page);
-  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
   const activate = async (locator: ReturnType<Page["getByRole"]>) => isMobile ? locator.tap() : locator.click();
   await activate(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }));
   const retry = page.getByRole("button", { name: "RETRY · 다시 시도", exact: true });

@@ -55,6 +55,18 @@ function mp3Expiry(result) {
     return { downloads: value.downloads, events };
   } catch { /* Invalid diagnostic bodies are withheld, not echoed. */ }
 }
+function playerTimings(result) {
+  if (!Array.isArray(result.steps)) return [];
+  return result.steps.slice(0, 128).flatMap(step => {
+    const match = typeof step?.title === "string"
+      ? /^player:(sign-in|open|ready|start|pause|remain-paused|resume|confirm)$/.exec(step.title) : null;
+    if (!match) return [];
+    if (step.duration === -1 && ["timedOut", "interrupted"].includes(result.status))
+      return [{ phase: match[1], durationMs: null, unfinished: true }];
+    if (!Number.isSafeInteger(step.duration) || step.duration < 0 || step.duration > 120000) return [];
+    return [{ phase: match[1], durationMs: step.duration, failed: Boolean(step.error) }];
+  }).slice(0, 64);
+}
 function category(error) {
   const message = typeof error?.message === "string" ? error.message : "";
   if (/socket hang up|ECONNRESET/.test(message)) return "network-reset";
@@ -113,7 +125,9 @@ try {
             const expiry = mp3Expiry(result);
             const timings = resumeTimings(result);
             const records = recordTimings(result);
+            const player = playerTimings(result);
             return { status: status(result.status), durationMs: numeric(result.duration),
+            ...(player.length ? { playerTimings: player } : {}),
             ...(records.length ? { recordTimings: records } : {}),
             retry: numeric(result.retry), ...(timings.length ? { resumeTimings: timings } : {}), ...(expiry ? { mp3Expiry: expiry } : {}), ...(result.error ? { failure: category(result.error),
               ...(operation(result.error) ? { operation: operation(result.error) } : {}),

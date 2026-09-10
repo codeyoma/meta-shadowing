@@ -34,6 +34,7 @@ test("resume timing diagnostics retain only fixed phases and bounded numeric fie
 });
 
 for (const diagnostic of [
+  { step: "player:pause", field: "playerTimings", prefix: "CI player timings:", expected: { phase: "pause", durationMs: null, unfinished: true } },
   { step: "resume:fonts:320", field: "resumeTimings", prefix: "CI resume timings:", expected: { phase: "fonts", width: 320, durationMs: null, unfinished: true } },
   { step: "records:player-ready", field: "recordTimings", prefix: "CI record timings:", expected: { phase: "player-ready", durationMs: null, unfinished: true } },
 ]) test(`a real timed-out Playwright step retains safe ${diagnostic.field} in artifacts and job output`, () => {
@@ -63,12 +64,15 @@ for (const diagnostic of [
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 20000);
 
-test("record timings export only allowlisted phases and bounded durations", () => {
+for (const variant of [
+  { prefix: "records", field: "recordTimings", first: "sign-in", second: "change-speed", active: "player-ready" },
+  { prefix: "player", field: "playerTimings", first: "sign-in", second: "start", active: "pause" },
+]) test(`${variant.prefix} timings export only allowlisted phases and bounded durations`, () => {
   const directory = mkdtempSync(join(tmpdir(), "safe-record-timing-"));
   const secret = "fixture-private-record-token";
   try {
     const input = join(directory, "raw.json"), output = join(directory, "safe.json");
-    writeFileSync(input, JSON.stringify({ suites: [{ specs: [{ file: "session-records.spec.ts", tests: [{
+    const raw = JSON.stringify({ suites: [{ specs: [{ file: "session-records.spec.ts", tests: [{
       projectName: "desktop", results: [{ status: "timedOut", steps: [
         { title: "records:sign-in", duration: 12, steps: [{ title: secret, duration: 1 }] },
         { title: "records:change-speed", duration: 40, error: { message: secret }, url: secret },
@@ -81,18 +85,20 @@ test("record timings export only allowlisted phases and bounded durations", () =
         { title: "records:sign-in", duration: "12" },
         null,
       ] }, { status: "passed", steps: [{ title: "records:player-ready", duration: -1 }] }],
-    }] }] }] }));
+    }] }] }] });
+    writeFileSync(input, variant.prefix === "records" ? raw : raw
+      .replaceAll("records:", "player:").replaceAll("change-speed", "start").replaceAll("player-ready", "pause"));
     const result = spawnSync(process.execPath, ["scripts/collect-ci-artifacts.mjs", input, output], { encoding: "utf8" });
     expect(result.status).toBe(0);
     const contents = readFileSync(output, "utf8");
     expect(contents + result.stdout + result.stderr).not.toContain(secret);
     const attempts = JSON.parse(contents).tests[0].attempts;
-    expect(attempts[0].recordTimings).toEqual([
-      { phase: "sign-in", durationMs: 12, failed: false },
-      { phase: "change-speed", durationMs: 40, failed: true },
-      { phase: "player-ready", durationMs: null, unfinished: true },
+    expect(attempts[0][variant.field]).toEqual([
+      { phase: variant.first, durationMs: 12, failed: false },
+      { phase: variant.second, durationMs: 40, failed: true },
+      { phase: variant.active, durationMs: null, unfinished: true },
     ]);
-    expect(attempts[1]).not.toHaveProperty("recordTimings");
+    expect(attempts[1]).not.toHaveProperty(variant.field);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
