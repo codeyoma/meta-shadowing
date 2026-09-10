@@ -150,7 +150,12 @@ test("cold offline reload restores a non-level-one installed stage and checkpoin
   expect(new URL(page.url()).searchParams.get("stage")).toBe("7");
 });
 
-test("offline catalog and browser history switch lessons while preserving distinct checkpoints", async ({ page, context }) => {
+for (const startup of ["ready", "delayed", "revalidated"] as const) test(`offline catalog and browser history switch lessons while preserving distinct checkpoints (${startup} startup)`, async ({ page, context }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => {
+    if (["error", "warning"].includes(message.type()) && !message.text().includes("net::ERR_INTERNET_DISCONNECTED")) errors.push(message.text());
+  });
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   for (const lesson of ["10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002"]) {
     await openLearnerPage(page, `/player?lesson=${lesson}&level=1&stage=1`);
@@ -184,13 +189,43 @@ test("offline catalog and browser history switch lessons while preserving distin
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
   await page.getByRole("button", { name: "다른 다운로드 레슨", exact: true }).click();
   await expect(page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ })).toBeVisible();
+  if (startup !== "ready") await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function(...args: Parameters<IDBObjectStore["put"]>) {
+      const request = original.apply(this, args);
+      if (this.name === "accounts") {
+        IDBObjectStore.prototype.put = original;
+        // Delay the real startup transaction, not the player or History API.
+        // A Back traversal must win even before React unmounts the old player.
+        const store = this;
+        let released = false;
+        const keepAlive = () => { if (!released) store.get("fixture-keepalive").onsuccess = keepAlive; };
+        keepAlive();
+        Object.assign(window, { fixtureStartupHeld: true });
+        window.addEventListener("release-held-startup", () => { released = true; IDBObjectStore.prototype.put = original; }, { once: true });
+      }
+      return request;
+    };
+  });
   await page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ }).getByRole("link", { name: /스테이지 7 · Lv 4/ }).click();
-  await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
-  await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
+  if (startup !== "ready") await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { fixtureStartupHeld?: boolean }).fixtureStartupHeld))).toBe(true);
+  if (startup === "revalidated") await page.evaluate(() => {
+    // A same-package change notification temporarily fences playback, but it
+    // must not abandon startup when the URL and installed bytes stay current.
+    window.dispatchEvent(new CustomEvent("lesson-packages-changed", { detail: { lessonId: "10000000-0000-4000-8000-000000000002" } }));
+    window.dispatchEvent(new Event("release-held-startup"));
+  });
+  if (startup !== "delayed") {
+    await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
+    await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
+  }
   await page.goBack();
+  if (startup === "delayed") await page.evaluate(() => window.dispatchEvent(new Event("release-held-startup")));
   await expect(page).toHaveURL(/\/offline$/);
   await expect(first).toBeVisible();
   await expect(second).toBeVisible();
+  await expect(page).toHaveURL(/\/offline$/);
   await page.goBack();
   await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 2", exact: true })).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
@@ -202,6 +237,10 @@ test("offline catalog and browser history switch lessons while preserving distin
   await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
   expect(new URL(page.url()).searchParams.get("stage")).toBe("7");
+  await expect(page).toHaveTitle(/Meta Shadowing/i);
+  await expect(page.locator("nextjs-portal").getByText(/Runtime Error|Build Error/)).toHaveCount(0);
+  expect(errors).toEqual([]);
+  await page.screenshot({ path: test.info().outputPath("offline-history-restored.png"), animations: "disabled" });
 });
 
 test("requested run selects its exact retained version and cold reload keeps that pin", async ({ page, context }) => {

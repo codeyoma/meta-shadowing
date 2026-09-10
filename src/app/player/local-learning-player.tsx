@@ -44,14 +44,18 @@ export function LocalLearningPlayer({ lesson, stage, hints = [], lines = [], req
   const [writer, setWriter] = useState<DeviceWriter | null>(null);
   useEffect(() => {
     let alive = true;
+    const href = location.href;
+    // History can change before async catalog restoration unmounts this player.
+    // A late startup belongs to its original URL, not the new history entry.
+    const isCurrent = () => alive && location.href === href;
     void readDeviceLearningState(access).then(async ({ writer: loadedWriter }) => {
-      if (!alive) return;
+      if (!isCurrent()) return;
       const value = await startDeviceRun(loadedWriter, lesson, stage, requestedRun);
-      if (!alive) return;
+      if (!isCurrent()) return;
       setWriter(loadedWriter);
       replaceRunUrl(value);
       setRun(value);
-    }).catch(() => { if (alive) setFailed(true); });
+    }).catch(() => { if (isCurrent()) setFailed(true); });
     const unsubscribe = subscribeDeviceSnapshot(() => { alive = false; setRun(null); setWriter(null); setFailed(true); });
     return () => { alive = false; unsubscribe(); };
   }, [access, lesson, stage, requestedRun, attempt]);
