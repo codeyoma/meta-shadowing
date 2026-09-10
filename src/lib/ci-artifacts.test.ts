@@ -33,7 +33,10 @@ test("resume timing diagnostics retain only fixed phases and bounded numeric fie
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("a real timed-out Playwright step retains safe resume diagnostics in artifacts and job output", () => {
+for (const diagnostic of [
+  { step: "resume:fonts:320", field: "resumeTimings", prefix: "CI resume timings:", expected: { phase: "fonts", width: 320, durationMs: null, unfinished: true } },
+  { step: "records:player-ready", field: "recordTimings", prefix: "CI record timings:", expected: { phase: "player-ready", durationMs: null, unfinished: true } },
+]) test(`a real timed-out Playwright step retains safe ${diagnostic.field} in artifacts and job output`, () => {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "safe-resume-timeout-")));
   const secret = "fixture-timeout-cookie-never-export";
   try {
@@ -42,7 +45,7 @@ test("a real timed-out Playwright step retains safe resume diagnostics in artifa
     writeFileSync(join(directory, "resume-timeout-fixture.spec.ts"), `import { test } from ${JSON.stringify(playwright)};
       test(${JSON.stringify(secret)}, async () => {
         console.log(${JSON.stringify(secret)});
-        await test.step('resume:fonts:320', () => new Promise(() => {}));
+        await test.step(${JSON.stringify(diagnostic.step)}, () => new Promise(() => {}));
       });`);
     const config = join(directory, "playwright.config.mjs");
     writeFileSync(config, `export default { testDir: ${JSON.stringify(directory)}, timeout: 1000, retries: 0, workers: 1, projects: [{ name: 'desktop' }] };`);
@@ -55,11 +58,43 @@ test("a real timed-out Playwright step retains safe resume diagnostics in artifa
     expect(output + result.stdout + result.stderr).not.toContain(secret);
     const attempt = JSON.parse(output).tests[0].attempts[0];
     expect(attempt.status).toBe("timedOut");
-    expect(attempt.resumeTimings).toHaveLength(1);
-    expect(attempt.resumeTimings[0]).toEqual({ phase: "fonts", width: 320, durationMs: null, unfinished: true });
-    expect(result.stdout).toContain("CI resume timings:");
+    expect(attempt[diagnostic.field]).toEqual([diagnostic.expected]);
+    expect(result.stdout).toContain(diagnostic.prefix);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 20000);
+
+test("record timings export only allowlisted phases and bounded durations", () => {
+  const directory = mkdtempSync(join(tmpdir(), "safe-record-timing-"));
+  const secret = "fixture-private-record-token";
+  try {
+    const input = join(directory, "raw.json"), output = join(directory, "safe.json");
+    writeFileSync(input, JSON.stringify({ suites: [{ specs: [{ file: "session-records.spec.ts", tests: [{
+      projectName: "desktop", results: [{ status: "timedOut", steps: [
+        { title: "records:sign-in", duration: 12, steps: [{ title: secret, duration: 1 }] },
+        { title: "records:change-speed", duration: 40, error: { message: secret }, url: secret },
+        { title: "records:player-ready", duration: -1 },
+        { title: `records:${secret}`, duration: 2 },
+        { title: "records:open-setup?token=" + secret, duration: 2 },
+        { title: "records:sign-in", duration: -2 },
+        { title: "records:sign-in", duration: 120001 },
+        { title: "records:sign-in", duration: 1.5 },
+        { title: "records:sign-in", duration: "12" },
+        null,
+      ] }, { status: "passed", steps: [{ title: "records:player-ready", duration: -1 }] }],
+    }] }] }] }));
+    const result = spawnSync(process.execPath, ["scripts/collect-ci-artifacts.mjs", input, output], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    const contents = readFileSync(output, "utf8");
+    expect(contents + result.stdout + result.stderr).not.toContain(secret);
+    const attempts = JSON.parse(contents).tests[0].attempts;
+    expect(attempts[0].recordTimings).toEqual([
+      { phase: "sign-in", durationMs: 12, failed: false },
+      { phase: "change-speed", durationMs: 40, failed: true },
+      { phase: "player-ready", durationMs: null, unfinished: true },
+    ]);
+    expect(attempts[1]).not.toHaveProperty("recordTimings");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 test("CI collector exports only failure metadata, never arbitrary report content", () => {
   const directory = mkdtempSync(join(tmpdir(), "safe-ci-test-"));

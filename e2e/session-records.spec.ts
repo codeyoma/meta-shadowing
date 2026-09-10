@@ -138,26 +138,31 @@ test("blocked identity storage shows the device gate and never pretends completi
 });
 
 test("malformed legacy records cannot replace saved device settings", async ({ page }) => {
-  await signIn(page);
-  await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
-  await openSelectedStageSettings(page);
-  await page.getByLabel("재생속도").selectOption("2");
-  await page.keyboard.press("Escape");
-  await startSelectedStage(page);
-  await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).waitFor();
-  await page.evaluate(() => {
+  // Allowlisted labels preserve the active boundary on timeout without data.
+  await test.step("records:sign-in", () => signIn(page));
+  await test.step("records:open-setup", () => openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001"));
+  await test.step("records:open-settings", () => openSelectedStageSettings(page));
+  await test.step("records:change-speed", () => page.getByLabel("재생속도").selectOption("2"));
+  await test.step("records:close-settings", () => page.keyboard.press("Escape"));
+  await test.step("records:start-stage", () => startSelectedStage(page));
+  await test.step("records:player-ready", () => page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).waitFor());
+  await test.step("records:seed-legacy", () => page.evaluate(() => {
     localStorage.setItem("meta-shadowing:preferences:v1", "not-json");
     localStorage.setItem("meta-shadowing:learning:v1", "not-json");
+  }));
+  await test.step("records:open-lessons", () => openLearnerPage(page, "/lessons?language=english"));
+  await test.step("records:assert-lessons", async () => {
+    await expect(page.getByRole("link", { name: /Morning Routine/ })).toBeVisible();
+    await expect(page.getByRole("region", { name: "완료 기록" })).toHaveCount(0);
   });
-  await openLearnerPage(page, "/lessons?language=english");
-  await expect(page.getByRole("link", { name: /Morning Routine/ })).toBeVisible();
-  await expect(page.getByRole("region", { name: "완료 기록" })).toHaveCount(0);
-  await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
-  await openSelectedStageSettings(page);
-  await expect(page.getByLabel("재생속도")).toHaveValue("2");
-  await returnToStages(page);
-  await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio").first()).toBeEnabled();
-  await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio", { checked: true })).toHaveCount(0);
+  await test.step("records:reopen-setup", () => openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001"));
+  await test.step("records:reopen-settings", () => openSelectedStageSettings(page));
+  await test.step("records:assert-speed", () => expect(page.getByLabel("재생속도")).toHaveValue("2"));
+  await test.step("records:return-stages", () => returnToStages(page));
+  await test.step("records:assert-stages", async () => {
+    await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio").first()).toBeEnabled();
+    await expect(page.getByRole("list", { name: "학습 단계", exact: true }).getByRole("radio", { checked: true })).toHaveCount(0);
+  });
 });
 
 test("changing an unrelated group-size preference does not restart a completed rapid run", async ({ page }) => {
