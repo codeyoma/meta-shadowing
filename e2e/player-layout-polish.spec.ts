@@ -1,6 +1,7 @@
 import { openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
+import { packageResources } from "./fixtures/package-resources";
 
 test("player header and screen-bottom modal actions stay usable without layout or runtime errors", async ({ page }, testInfo) => {
   const errors: string[] = [];
@@ -11,18 +12,18 @@ test("player header and screen-bottom modal actions stay usable without layout o
   await page.setViewportSize(testInfo.project.name === "mobile" ? { width: 430, height: 932 } : { width: 1280, height: 800 });
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.route("**/api/dictionary?**", route => route.fulfill({ json: { word: "wake", entries: [{
+  await packageResources(page, { dictionary: { word: "wake", entries: [{
     headword: "wake", language: "en", pos: "verb", tags: ["intransitive"],
     senses: [{ glosses: ["잠에서 깨다. 일어나다."], examples: [{ text: "I wake up at seven.", translation: "나는 일곱 시에 일어난다." }] }],
     sourceUrl: "https://ko.wiktionary.org/wiki/wake", license: "CC BY-SA 4.0"
-  }] } }));
-  await page.route("**/syntax/*?**", route => route.fulfill({ json: { phraseNumber: 1, sentences: Array.from({ length: 12 }, (_, index) => ({
+  }] },
+  syntax: { phraseNumber: 1, sentences: Array.from({ length: 12 }, (_, index) => ({
     sentenceNumber: index + 1, beginOffset: index * 20, text: "I wake up at seven.", language: "en", status: "complete", tokens: [
       { text: { content: "I", beginOffset: 0 }, lemma: "I", partOfSpeech: { tag: "PRON" }, dependencyEdge: { headTokenIndex: 1, label: "NSUBJ" } },
       { text: { content: "wake", beginOffset: 2 }, lemma: "wake", partOfSpeech: { tag: "VERB", tense: "PRESENT" }, dependencyEdge: { headTokenIndex: 1, label: "ROOT" } },
       { text: { content: "up", beginOffset: 7 }, lemma: "up", partOfSpeech: { tag: "PRT" }, dependencyEdge: { headTokenIndex: 1, label: "PRT" } }
     ]
-  })) } }));
+  })) } });
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   await expect(page).toHaveURL(url => url.pathname === "/player" && url.searchParams.get("lesson") === "10000000-0000-4000-8000-000000000001" && url.searchParams.get("level") === "1");
   await expect(page).toHaveTitle("Meta Shadowing");

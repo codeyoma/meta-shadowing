@@ -1,11 +1,12 @@
 "use client";
 
-import type { RefObject } from "react";
+import { Fragment, type RefObject } from "react";
 import Link from "next/link";
 import { BookOpen, Languages, Map, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import styles from "./bottom-navigation.module.css";
+import { DrawerTrigger } from "@/components/ui/drawer";
 
 const destinations = [
   { id: "languages", label: "언어", icon: Languages },
@@ -25,7 +26,9 @@ export function BottomNavigation({ active, onSelect, lessonAvailable = true, set
   return <nav className={styles.navigation} aria-label="하단 탐색">
     <Separator />
     <div className={styles.items}>
-      {destinations.map(({ id, label, icon: Icon }) => <Button key={id} asChild={!!hrefs} type={hrefs ? undefined : "button"} variant="navigation" size="navigation"
+      {destinations.map(({ id, label, icon: Icon }) => {
+        const linked = !!hrefs && id !== "settings";
+        const button = <Button asChild={linked} type={linked ? undefined : "button"} variant="navigation" size="navigation"
         ref={id === "settings" ? settingsRef : undefined} data-destination={id}
         aria-current={active === id ? "location" : undefined}
         disabled={!hrefs && !lessonAvailable && id === "stages"}
@@ -45,9 +48,11 @@ export function BottomNavigation({ active, onSelect, lessonAvailable = true, set
           }
           onSelect?.(id, event.currentTarget);
         }}>
-        {hrefs ? <Link href={hrefs[id]} scroll={false}><span data-nav-icon className="grid"><Icon aria-hidden="true" data-icon="inline-start" /></span><span>{label}</span></Link>
+        {linked ? <Link href={hrefs![id]} scroll={false}><span data-nav-icon className="grid"><Icon aria-hidden="true" data-icon="inline-start" /></span><span>{label}</span></Link>
           : <><span data-nav-icon className="grid"><Icon aria-hidden="true" data-icon="inline-start" /></span><span>{label}</span></>}
-      </Button>)}
+      </Button>;
+        return id === "settings" ? <DrawerTrigger key={id} asChild>{button}</DrawerTrigger> : <Fragment key={id}>{button}</Fragment>;
+      })}
     </div>
   </nav>;
 }

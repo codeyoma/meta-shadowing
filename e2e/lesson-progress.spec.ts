@@ -1,5 +1,5 @@
 import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
-import { seedServerJournal } from "./fixtures/cloud-journal";
+import { seedLearningJournal } from "./fixtures/cloud-journal";
 import { expect, test } from "./fixtures/cloud-ui";
 import { lessons } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
@@ -28,7 +28,7 @@ test("lesson totals and each card reflect unique completed stages of the current
     { ...complete(1, 1), runId: "replay" }, complete(1, 16, "old"),
     ...Array.from({ length: 16 }, (_, index) => complete(2, index + 1)),
   ];
-  await seedServerJournal(page, { progress: null, history });
+  await seedLearningJournal(page, { progress: null, history });
   await reloadLearnerPage(page);
   await expect(summary).toHaveAttribute("aria-valuenow", "1");
   await expect(summary).toHaveAttribute("aria-valuemax", "2");

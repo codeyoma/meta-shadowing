@@ -16,6 +16,7 @@ import { learningStages } from "@/lib/learning-stages";
 import { useBrowse, useBrowseScroll } from "./browse-shell";
 import styles from "./browse.module.css";
 import { useCloudPreferences } from "./cloud-preferences-provider";
+import { useDeviceJournal } from "./use-device-journal";
 import { LearnerSignOut } from "./learner-sign-out";
 
 export function BrowsePageContent({ title, region, children, before, after }: { title: string; region: string; children: ReactNode; before?: ReactNode; after?: ReactNode }) {
@@ -46,7 +47,8 @@ export function LanguagePage() {
 
 export function LessonPage() {
   const { catalog, selection } = useBrowse();
-  const { journal } = useCloudPreferences()!;
+  const cloud = useCloudPreferences()!;
+  const { journal } = useDeviceJournal(cloud.journal);
   const lessons = catalog.filter(lesson => lesson.language === selection.language)
     .map(lesson => ({ lesson, count: completedStagesForLesson(journal.history, lesson).length }));
   const stageCount = learningStages.length;

@@ -1,8 +1,5 @@
-import { requireLearner } from "@/lib/server-auth";
-import { getSessionDefaults } from "@/lib/session-defaults-repository";
-import { SessionPreferencesPage } from "../../../session-preferences-page";
+import { SettingsRouteOpener } from "../../../settings-route-opener";
 
-export default async function SessionSettingsPage() {
-  await requireLearner();
-  return <SessionPreferencesPage defaults={await getSessionDefaults()} />;
+export default function SessionSettingsPage() {
+  return <SettingsRouteOpener />;
 }

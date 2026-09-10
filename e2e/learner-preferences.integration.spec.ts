@@ -16,7 +16,7 @@ async function saveSilently(page: Page, action: () => Promise<unknown>) {
   await expect(page.getByRole("alert", { name: "계정 설정 알림" })).toHaveCount(0);
 }
 
-test("account settings synchronize across browsers without sharing another account's preferences", async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
+test("legacy preference API and selection remain account-isolated for the server player boundary", async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
   test.setTimeout(90000);
   const device = { viewport, isMobile, hasTouch, deviceScaleFactor, userAgent };
   const url = process.env.SUPABASE_INTEGRATION_URL!;
@@ -69,11 +69,12 @@ test("account settings synchronize across browsers without sharing another accou
     pageA.on("pageerror", error => errors.push(error.message));
     pageA.on("console", message => { if (message.text().startsWith("cloud-storage-access:")) storageAccesses.push(message.text()); });
     await pageA.addInitScript(() => {
+      const legacyKeys = new Set(["meta-shadowing:preferences:v1", "meta-shadowing:learning:v1"]);
       localStorage.setItem("meta-shadowing:preferences:v1", JSON.stringify({ speed: 3 }));
       localStorage.setItem("meta-shadowing:learning:v1", "existing-record-do-not-import-or-delete");
       const original = Storage.prototype.getItem;
       Storage.prototype.getItem = function(key) {
-        if (key.startsWith("meta-shadowing:")) {
+        if (legacyKeys.has(key)) {
           console.warn(`cloud-storage-access:read:${key}`);
           throw new Error(`Cloud path read local learning data: ${key}`);
         }
@@ -82,55 +83,23 @@ test("account settings synchronize across browsers without sharing another accou
       for (const method of ["setItem", "removeItem"] as const) {
         const originalMutation = Storage.prototype[method];
         Storage.prototype[method] = function(key: string, value?: string) {
-          if (key.startsWith("meta-shadowing:")) console.warn(`cloud-storage-access:${method}:${key}`);
+          if (legacyKeys.has(key)) console.warn(`cloud-storage-access:${method}:${key}`);
           return originalMutation.call(this, key, value!);
         };
       }
     });
-    await pageA.goto("/settings/session");
-    await expect(pageA.getByLabel("재생속도")).toBeEnabled();
-    await saveSilently(pageA, () => pageA.getByLabel("재생속도").selectOption("2"));
+    const initialProfile = (await (await a.context.request.get("/api/learner/preferences?timezone=Asia%2FSeoul")).json()).profile;
+    expect((await a.context.request.patch("/api/learner/preferences", { data: { accountId: a.id, revision: initialProfile.revision, changes: { speed: 2 } } })).status()).toBe(200);
     const b = await browser.newContext({ ...device, baseURL, ignoreHTTPSErrors: true, timezoneId: "America/New_York", storageState: { cookies: await a.context.cookies(), origins: [] } });
     contexts.push(b);
     const pageB = await b.newPage();
-    await pageB.goto("/settings/session");
-    await expect(pageB.getByLabel("재생속도")).toHaveValue("2");
+    expect((await (await b.request.get("/api/learner/preferences")).json()).profile.overrides.speed).toBe(2);
     const c = await account(browser);
     const pageC = await c.context.newPage();
-    await pageC.goto("/settings/session");
-    await expect(pageC.getByLabel("재생속도")).toHaveValue("1");
+    expect((await (await c.context.request.get("/api/learner/preferences")).json()).profile.overrides).toEqual({});
     const stored = await service.from("learner_preferences").select("settings, study_timezone").eq("user_id", a.id).single();
     expect(stored.error).toBeNull();
     expect(stored.data).toEqual({ settings: { speed: 2 }, study_timezone: "Asia/Seoul" });
-
-    await test.step("independent edits merge; same-field conflicts display the latest value", async () => {
-      // B retains revision 1 while A edits speed. No tab-focus refresh is dispatched here.
-      await saveSilently(pageA, () => pageA.getByLabel("재생속도").selectOption("2.5"));
-      await saveSilently(pageB, () => pageB.getByRole("radio", { name: "자동", exact: true }).click());
-      await expect(pageB.getByLabel("재생속도")).toHaveValue("2.5");
-      await saveSilently(pageA, () => pageA.getByLabel("재생속도").selectOption("3"));
-      await pageB.getByLabel("재생속도").selectOption("1.5");
-      await expect(pageB.getByRole("alert", { name: "계정 설정 알림" })).toContainText("최신 설정");
-      await expect(pageB.getByLabel("재생속도")).toHaveValue("3");
-      await saveSilently(pageB, () => pageB.getByLabel("재생속도").selectOption("1.5"));
-    });
-
-    await test.step("failed reads and writes stay explicit and can be retried", async () => {
-      await pageB.route("**/api/learner/preferences*", route => route.fulfill({ status: 503, json: { error: "test-unavailable" } }));
-      await pageB.reload();
-      await expect(pageB.getByRole("alert", { name: "계정 설정 알림" })).toContainText("불러오지 못했습니다");
-      await expect(pageB.getByLabel("재생속도")).toHaveCount(0);
-      await pageB.unroute("**/api/learner/preferences*");
-      await pageB.getByRole("button", { name: "다시 불러오기" }).click();
-      await expect(pageB.getByLabel("재생속도")).toHaveValue("1.5");
-      await pageB.route("**/api/learner/preferences", route => route.fulfill({ status: 503, json: { error: "test-unavailable" } }));
-      await pageB.getByLabel("재생속도").selectOption("1.75");
-      await expect(pageB.getByRole("alert", { name: "계정 설정 알림" })).toContainText("저장을 확인하지 못했습니다");
-      await expect(pageB.getByText(/계정에 저장했습니다/)).toHaveCount(0);
-      await pageB.unroute("**/api/learner/preferences");
-      await saveSilently(pageB, () => pageB.getByRole("button", { name: "저장 재시도" }).click());
-      await expect(pageB.getByLabel("재생속도")).toHaveValue("1.75");
-    });
 
     await test.step("HTTP ownership forgery and direct authenticated DB access are denied", async () => {
       const patch = { accountId: a.id, revision: 0, changes: { speed: 3 } };
@@ -159,47 +128,6 @@ test("account settings synchronize across browsers without sharing another accou
       expect((await service.from("learner_preferences").select("user_id").eq("user_id", newAccount.id)).data).toEqual([]);
     });
 
-    await test.step("a lost save acknowledgement can be retried without a second revision", async () => {
-      await pageB.route("**/api/learner/preferences", async route => {
-        expect((await route.fetch()).status()).toBe(200);
-        await route.fulfill({ status: 503, json: { error: "lost-acknowledgement" } });
-      });
-      await pageB.getByLabel("재생속도").selectOption("1.25");
-      await expect(pageB.getByRole("alert", { name: "계정 설정 알림" })).toContainText("저장을 확인하지 못했습니다");
-      const before = (await (await a.context.request.get("/api/learner/preferences")).json()).profile;
-      await pageB.unroute("**/api/learner/preferences");
-      await saveSilently(pageB, () => pageB.getByRole("button", { name: "저장 재시도" }).click());
-      expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.revision).toBe(before.revision);
-    });
-
-    await test.step("untouched fields inherit admin defaults, including group and rapid controls", async () => {
-      const original = await service.from("session_defaults").select("settings").eq("id", true).single();
-      expect(original.error).toBeNull();
-      try {
-        expect((await service.from("session_defaults").update({ settings: { ...original.data!.settings, speed: 2.25, groupSize: 3, wpmLevel: 5 } }).eq("id", true)).error).toBeNull();
-        await pageB.reload();
-        await expect(pageB.getByLabel("재생속도")).toHaveValue("1.25");
-        await pageB.getByLabel("학습 레벨").selectOption("4");
-        await expect(pageB.getByLabel("묶음 크기", { exact: true })).toHaveValue("3");
-        async function saved(action: () => Promise<unknown>) {
-          await saveSilently(pageB, action);
-        }
-        await saved(() => pageB.getByLabel("묶음 크기", { exact: true }).selectOption("4"));
-        await saved(() => pageB.getByLabel("묶음 원음 간격 (초)").fill("2"));
-        await pageB.getByLabel("학습 레벨").selectOption("7");
-        await expect(pageB.getByLabel("단어 속도")).toHaveValue("5");
-        await saved(() => pageB.getByLabel("단어 속도").selectOption("6"));
-        await saved(() => pageB.getByRole("radio", { name: "누적 단어" }).click());
-        await saved(() => pageB.getByLabel("말하기 추가 시간 (초)").fill("1.5"));
-        await saved(() => pageB.getByLabel("문장 간격 (초)").fill("2"));
-        await saved(() => pageB.getByLabel("구간 간격 (초)").fill("3"));
-        const profile = (await (await a.context.request.get("/api/learner/preferences")).json()).profile;
-        expect(profile.overrides).toMatchObject({ speed: 1.25, groupSize: 4, groupGapMs: 2000, wpmLevel: 6, display: "cumulative", speakingExtraMs: 1500, lineGapMs: 2000, sectionGapMs: 3000 });
-      } finally {
-        await service.from("session_defaults").update({ settings: original.data!.settings }).eq("id", true);
-      }
-    });
-
     await test.step("last language and non-default lesson persist; refocusing an older URL never writes it back", async () => {
       await pageA.goto("/languages");
       let savedSelection = pageA.waitForResponse(response => response.url().endsWith("/api/learner/preferences") && response.request().method() === "PATCH");
@@ -207,7 +135,7 @@ test("account settings synchronize across browsers without sharing another accou
       expect((await savedSelection).status()).toBe(200);
       await expect(pageA.getByLabel("계정 설정 알림")).toHaveCount(0);
       savedSelection = pageA.waitForResponse(response => response.url().endsWith("/api/learner/preferences") && response.request().method() === "PATCH");
-      await pageA.getByRole("link", { name: /Account lesson 1/ }).click();
+      await pageA.getByRole("link", { name: /Account lesson 1/ }).and(pageA.locator(`[href="/lessons/${lessonIds[1]}/stages"]`)).click();
       expect((await (await savedSelection).json()).profile.selection.lessonId).toBe(lessonIds[1]);
       await pageB.goto("/lessons");
       await expect(pageB.getByRole("heading", { name: "일본어 레슨" })).toBeVisible();
@@ -220,55 +148,11 @@ test("account settings synchronize across browsers without sharing another accou
       const value = await service.from("learner_preferences").select("selection").eq("user_id", a.id).single();
       expect(value.data?.selection).toEqual({ language: "english", lessonId: lessonIds[0] });
       await pageA.goto(`/player?lesson=${lessonIds[0]}`);
-      await expect(pageA.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
-      await pageA.goto("/settings/session");
-    });
-
-    await test.step("client route entry refreshes settings while focus preserves account-local UI state", async () => {
-      await pageA.getByRole("link", { name: "언어", exact: true }).click();
-      const before = (await (await a.context.request.get("/api/learner/preferences")).json()).profile;
-      expect((await a.context.request.patch("/api/learner/preferences", { data: { accountId: a.id, revision: before.revision, changes: { speed: 2.75, selection: { language: "german", lessonId: null } } } })).status()).toBe(200);
-      await pageA.getByRole("link", { name: "설정", exact: true }).click();
-      await pageA.getByRole("link", { name: "세션 설정", exact: true }).click();
-      await expect(pageA.getByLabel("재생속도")).toHaveValue("2.75");
-      expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.selection).toEqual({ language: "german", lessonId: null });
-      await pageA.getByLabel("학습 레벨").selectOption("7");
-      const navigation = pageA.getByRole("navigation", { name: "하단 탐색" });
-      await navigation.evaluate(el => el.setAttribute("data-persistent-proof", "yes"));
-      const content = pageA.getByRole("region", { name: "세션 설정 항목" });
-      await content.evaluate(el => { el.scrollTop = 100; });
-      const scrollTop = await content.evaluate(el => el.scrollTop);
-      let release!: () => void;
-      const hold = new Promise<void>(resolve => { release = resolve; });
-      await pageA.route("**/api/learner/preferences?*", async route => { await hold; await route.continue(); });
-      const response = pageA.waitForResponse(response => response.url().includes("/api/learner/preferences?") && response.request().method() === "GET");
-      await pageA.evaluate(() => window.dispatchEvent(new Event("focus")));
-      await expect(pageA.getByText("계정 설정을 불러오는 중…")).toHaveCount(0);
-      await expect(pageA.getByLabel("학습 레벨")).toBeVisible();
-      await expect(pageA.getByLabel("학습 레벨")).toBeDisabled();
-      await expect(navigation).toHaveAttribute("data-persistent-proof", "yes");
-      release();
-      await response;
-      await pageA.unroute("**/api/learner/preferences?*");
-      await expect(pageA.getByLabel("학습 레벨")).toBeVisible();
-      await expect(pageA.getByLabel("학습 레벨")).toHaveValue("7");
-      await expect.poll(() => content.evaluate(el => el.scrollTop)).toBe(scrollTop);
-      await expect(navigation).toHaveAttribute("data-persistent-proof", "yes");
-    });
-
-    await test.step("selection intent keeps the revision the user saw before a route refetch", async () => {
-      await pageA.getByRole("link", { name: "언어", exact: true }).click();
-      await expect(pageA.getByRole("heading", { name: "언어 선택", exact: true })).toBeVisible();
-      // The page remains visible during background refresh. Settle that read
-      // before making the deliberately unseen change from another device.
-      await pageA.waitForLoadState("networkidle");
-      const before = (await (await a.context.request.get("/api/learner/preferences")).json()).profile;
-      const latestSelection = { language: "english", lessonId: lessonIds[0] };
-      expect((await a.context.request.patch("/api/learner/preferences", { data: { accountId: a.id, revision: before.revision, changes: { selection: latestSelection } } })).status()).toBe(200);
-      await pageA.getByRole("link", { name: /일본어/ }).click();
-      await expect(pageA.getByRole("alert", { name: "계정 설정 알림" })).toContainText("최신 설정");
-      await expect(pageA.getByRole("heading", { name: "영어 레슨" })).toBeVisible();
-      expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.selection).toEqual(latestSelection);
+      // This catalog-only fixture has no installable audio. Entry must stop at
+      // the package gate, not bypass acquisition to test account selection.
+      await expect(pageA.getByText("이 레슨 전체를 다운로드해 주세요.", { exact: true })).toBeVisible();
+      await expect(pageA.getByRole("button", { name: /CONTINUE/ })).toHaveCount(0);
+      await pageA.goto("/languages");
     });
 
     await test.step("a last-selection conflict displays the server choice and never resaves the rejected URL", async () => {
@@ -287,9 +171,7 @@ test("account settings synchronize across browsers without sharing another accou
       await expect(pageA.getByRole("alert", { name: "계정 설정 알림" })).toContainText("최신 설정");
       await pageA.unroute("**/api/learner/preferences");
       await expect(pageA.getByRole("heading", { name: "독일어 레슨" })).toBeVisible();
-      await pageA.getByRole("link", { name: "설정", exact: true }).click();
-      await pageA.getByRole("link", { name: "세션 설정", exact: true }).click();
-      await expect(pageA.getByLabel("재생속도")).toHaveValue("2.75");
+      expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.overrides.speed).toBe(2);
       expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.selection).toEqual({ language: "german", lessonId: null });
     });
 
@@ -298,11 +180,15 @@ test("account settings synchronize across browsers without sharing another accou
       await b.addCookies(await c.context.cookies());
       await pageB.evaluate(() => window.dispatchEvent(new Event("focus")));
       await expect(pageB.getByLabel("재생속도")).toHaveCount(0);
-      await expect(pageB.getByRole("alert", { name: "계정 설정 알림" })).toContainText("계정이 변경");
-      await pageB.getByRole("button", { name: "새 계정 불러오기" }).click();
+      await expect(pageB.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+      expect(await pageB.evaluate(() => localStorage.getItem("meta-shadowing:device-access:v1"))).toBeNull();
+      // The outer device-access gate now invalidates the old account before
+      // the legacy preference alert can render. Re-enter without A's URL.
+      await pageB.goto("/languages");
       // An old account's route parameters must not become the new account's selection.
       await pageB.waitForLoadState("networkidle");
       expect((await (await c.context.request.get("/api/learner/preferences")).json()).profile.selection).toBeNull();
+      await pageB.getByRole("button", { name: "설정", exact: true }).click();
       await expect(pageB.getByLabel("재생속도")).toHaveValue("1");
     });
     expect(await pageA.evaluate(() => ({ ...localStorage }))).toMatchObject({

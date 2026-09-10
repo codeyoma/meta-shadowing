@@ -1,4 +1,3 @@
-import { openSelectedStageSettings } from "./fixtures/stage-preview";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
@@ -10,7 +9,7 @@ import {
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1", "requires the project-local Supabase stack");
 
-test("admin defaults persist behind authorization and reach learners without overwriting account overrides", async ({ page }) => {
+test("admin defaults persist behind authorization without replacing device-local learner settings", async ({ page }) => {
   const url = process.env.SUPABASE_INTEGRATION_URL!;
   assertLocalSupabaseUrl(url);
   const options = { auth: { persistSession: false, autoRefreshToken: false } };
@@ -53,31 +52,38 @@ test("admin defaults persist behind authorization and reach learners without ove
     const crossOrigin = await page.request.put("/api/admin/settings", { headers: { Origin: "https://example.invalid" }, data: saved.data?.settings });
     expect(crossOrigin.status()).toBe(403);
 
-    const draft = await page.request.post("/api/admin/drafts", { multipart: {
-      title: "Defaults integration lesson", language: "english",
-      scriptFile: { name: "script.txt", mimeType: "text/plain", buffer: Buffer.from("Hello.\n안녕.") }
-    } });
-    expect(draft.status()).toBe(201);
-    const { draftId } = await draft.json();
-    // Catalog fixture only; private-audio publication is exercised by its own real integration test.
-    const publication = await service.from("lesson_drafts").update({ publication_status: "published", published_at: "2026-09-06T00:00:00Z", audio_manifest: [{}] }).eq("id", draftId);
-    expect(publication.error).toBeNull();
-    await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+    // Settings are available without acquiring a lesson. A new device starts
+    // from app defaults, not the legacy server account's merged preferences.
+    let preferenceWrites = 0;
+    page.on("request", request => {
+      if (new URL(request.url()).pathname === "/api/learner/preferences" && request.method() === "PATCH") preferenceWrites++;
+    });
+    expect((await page.request.post("/api/auth", { data: { password: "integration-beta-password" } })).status()).toBe(200);
     expect((await page.request.get("/api/learner/preferences")).status()).toBe(200);
-    await page.goto(`/setup?lesson=${draftId}`);
-    await openSelectedStageSettings(page);
-    await expect(page.getByLabel("재생속도")).toHaveValue("2");
+    await page.goto("/languages");
+    await page.getByRole("button", { name: "설정", exact: true }).click();
+    await expect(page.getByLabel("재생속도")).toHaveValue("1");
     await page.getByLabel("재생속도").selectOption("3");
+    await expect(page.getByLabel("재생속도")).toBeEnabled();
     await page.getByLabel("학습 레벨").selectOption("4");
-    await expect(page.getByLabel("묶음 크기")).toHaveValue("3");
+    await expect(page.getByLabel("학습 레벨")).toBeEnabled();
+    await expect(page.getByLabel("묶음 크기")).toHaveValue("2");
+    await page.getByLabel("묶음 크기").selectOption("3");
+    await expect(page.getByLabel("묶음 크기")).toBeEnabled();
     await page.getByLabel("학습 레벨").selectOption("6");
-    await expect(page.getByLabel("단어 속도")).toHaveValue("5");
+    await expect(page.getByLabel("학습 레벨")).toBeEnabled();
+    await page.getByLabel("단어 속도").selectOption("5");
+    await expect(page.getByLabel("단어 속도")).toBeEnabled();
     expect((await page.request.put("/api/admin/settings", { data: { ...saved.data?.settings, speed: 1.5, wpmLevel: 6 } })).status()).toBe(200);
-    await page.goto(`/setup?lesson=${draftId}`);
-    await openSelectedStageSettings(page);
+    await page.reload();
+    await page.getByRole("button", { name: "설정", exact: true }).click();
+    await expect(page.getByLabel("학습 레벨")).toHaveValue("6");
+    await expect(page.getByLabel("단어 속도")).toHaveValue("5");
+    await page.getByLabel("학습 레벨").selectOption("4");
+    await expect(page.getByLabel("학습 레벨")).toBeEnabled();
     await expect(page.getByLabel("재생속도")).toHaveValue("3");
-    await page.getByLabel("학습 레벨").selectOption("6");
-    await expect(page.getByLabel("단어 속도")).toHaveValue("6");
+    await expect(page.getByLabel("묶음 크기")).toHaveValue("3");
+    expect(preferenceWrites).toBe(0);
   } finally {
     if (original.data) await service.from("session_defaults").update({ settings: original.data.settings }).eq("id", true);
     if (created.data.user) await service.auth.admin.deleteUser(created.data.user.id);

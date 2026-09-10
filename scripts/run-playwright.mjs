@@ -32,6 +32,7 @@ export function runPlaywright(args, env = process.env) {
       if (!["failed", "timedOut", "interrupted"].includes(attempt.status)) continue;
       console.log(`CI failure: ${test.file}:${test.line}:${test.column} [${test.project}] retry=${attempt.retry} status=${attempt.status} category=${attempt.failure ?? "other"}`);
       const location = attempt.failureLocation;
+      if (attempt.resumeTimings) console.log(`CI resume timings: ${JSON.stringify(attempt.resumeTimings)}`);
       if (attempt.mp3Expiry) console.log(`CI MP3 expiry: ${JSON.stringify(attempt.mp3Expiry)}`);
       if (location || attempt.operation) console.log(`CI detail: operation=${attempt.operation ?? "unknown"} location=${location ? `${location.file}:${location.line}:${location.column}` : "unknown"}`);
     }

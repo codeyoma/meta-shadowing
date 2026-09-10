@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./fixtures/cloud-ui";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
 
 test.beforeEach(async ({ page }) => {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
@@ -7,7 +8,7 @@ test.beforeEach(async ({ page }) => {
 test("player help, analysis, and dictionary use full-height drawers", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  await page.goto("/player?lesson=10000000-0000-4000-8000-000000000001&level=1&stage=1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&stage=1");
   await expect(page.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
   for (const trigger of [page.locator("#practice-help-trigger"), page.getByRole("button", { name: "문장 분석", exact: true }), page.getByRole("button", { name: "wake 뜻 보기", exact: true })]) {
     await trigger.click();

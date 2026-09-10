@@ -42,7 +42,7 @@ for (const [index, level] of expectedLevels.entries()) test(`stage ${index + 1} 
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 });
 
-test("path selection preserves grouped and rapid preferences without starting practice early", async ({ page }) => {
+test("path selection preserves device-local grouped and rapid preferences without navigation", async ({ page }) => {
   await openSetup(page);
   const path = page.getByRole("list", { name: "학습 단계", exact: true });
   await path.getByRole("radio", { name: /8 다문장 암기/ }).click();
@@ -57,9 +57,10 @@ test("path selection preserves grouped and rapid preferences without starting pr
   await page.getByRole("radio", { name: "자동", exact: true }).click();
   await page.getByRole("radio", { name: "누적 단어", exact: true }).click();
   await page.getByLabel("말하기 추가 시간 (초)").fill("1.5");
-  await expect(page).toHaveURL(/\/settings\/session/);
+  await expect(page).toHaveURL(/\/lessons\/[^/]+\/stages/);
+  await expect(page.getByRole("dialog", { name: "설정", exact: true })).toBeVisible();
   await reloadLearnerPage(page);
-  await returnToStages(page);
+  await expect(page.getByRole("dialog", { name: "설정", exact: true })).toHaveCount(0);
   await path.getByRole("radio", { name: /8 다문장 암기/ }).click();
   await openSelectedStageSettings(page);
   await expect(page.getByLabel("묶음 크기")).toHaveValue("4");
@@ -71,10 +72,9 @@ test("path selection preserves grouped and rapid preferences without starting pr
   await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("1.5");
   await returnToStages(page);
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
-  await startSelectedStage(page);
-  await expect(page).toHaveURL(/level=7/);
-  await expect(page).toHaveURL(/wpm=6/);
-  await expect(page).toHaveURL(/display=cumulative/);
+  // The global drawer owns device settings; legacy level-seven run settings
+  // remain a separate contract until that player's migration.
+  await expect(page.getByRole("button", { name: /^CONTINUE/ })).toHaveCount(0);
 });
 
 for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {

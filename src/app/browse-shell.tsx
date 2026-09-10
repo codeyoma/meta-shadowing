@@ -9,6 +9,9 @@ import { LearnerTopNavigation } from "./learner-top-navigation";
 import { Page } from "./ui";
 import styles from "./browse.module.css";
 import { CloudPreferencesProvider, useCloudPreferences } from "./cloud-preferences-provider";
+import { DeviceSettingsProvider } from "./device-settings-provider";
+import { LessonPackagesProvider } from "./lesson-packages-provider";
+import { DeviceAccessProvider } from "./device-access-provider";
 
 const BrowseContext = createContext<{ catalog: Lesson[]; selection: BrowseSelection; scrollPositions: Map<string, number> } | null>(null);
 
@@ -41,10 +44,12 @@ export function useBrowseScroll(key: string) {
 }
 
 type ShellProps = { catalog: Lesson[]; children: ReactNode };
-export function BrowseShell({ catalog, children, accountId }: ShellProps & { accountId: string }) {
-  return <CloudPreferencesProvider key={accountId} accountId={accountId}>
-    <CloudBrowseShell catalog={catalog}>{children}</CloudBrowseShell>
-  </CloudPreferencesProvider>;
+export function BrowseShell({ catalog, children, accountId, profile }: ShellProps & { accountId: string; profile: { name: string; image: string | null } }) {
+  return <DeviceAccessProvider key={accountId} accountId={accountId}><LessonPackagesProvider accountId={accountId} catalog={catalog}><DeviceSettingsProvider accountId={accountId} profile={profile}>
+    <CloudPreferencesProvider accountId={accountId}>
+      <CloudBrowseShell catalog={catalog}>{children}</CloudBrowseShell>
+    </CloudPreferencesProvider>
+  </DeviceSettingsProvider></LessonPackagesProvider></DeviceAccessProvider>;
 }
 
 function CloudBrowseShell({ catalog, children }: ShellProps) {
@@ -54,7 +59,10 @@ function CloudBrowseShell({ catalog, children }: ShellProps) {
   const route = `${pathname}?${params.toString()}`;
   const [scrollPositions] = useState(() => new Map<string, number>());
   const selectionIntent = useRef<{ selection: BrowseSelection; revision: number } | null>(null);
-  const explicit = params.has("language") || params.has("lesson") || pathname.endsWith("/stages");
+  // Settings and the language chooser carry navigation context, not selection
+  // intent. Replaying an old link must not overwrite a newer account choice.
+  const explicit = pathname.endsWith("/stages") ||
+    (pathname === "/lessons" && (params.has("language") || params.has("lesson")));
   // URL parameters express intent, but the accepted server selection drives the UI.
   // In particular, a rejected intent must not leak into the next navigation's URL.
   const selection = cloud.profile.selection ?? { language: "english" as const, lessonId: null };
@@ -91,7 +99,7 @@ function BrowseFrame({ catalog, selection, scrollPositions, children }: ShellPro
           {preferences.gate}
         </> : children}
       </div>
-      <div className="contents" inert={preferences?.loading}>
+      <div className="contents">
       <BottomNavigation active={active} hrefs={{
         languages: browseHref("languages", selection), lessons: browseHref("lessons", selection),
         stages: browseHref("stages", selection), settings: browseHref("settings", selection),

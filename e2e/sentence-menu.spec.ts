@@ -1,4 +1,4 @@
-import { enterAccountPractice, pauseCloudClock, advanceCloudClock, readServerJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { enterAccountPractice, pauseCloudClock, advanceCloudClock, readServerJournal, readDeviceJournal, installPlayerPackage, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen } from "./fixtures/manual-practice";
@@ -119,11 +119,14 @@ for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} selects any s
   await expect(progress).toHaveAttribute("aria-valuenow", "0");
   const journal = await readServerJournal(page);
   expect(journal.history).toHaveLength(0);
-  expect(journal.progress.nextPhrase).toBe(0);
+  if (level === 1) {
+    expect(journal.progress).toBeNull();
+    expect((await readDeviceJournal(page))?.runs[0].nextPhrase).toBe(0);
+  } else expect(journal.progress.nextPhrase).toBe(0);
 });
 
-test("a stale tab cannot write after takeover and can explicitly start again after the other tab completes", async ({ page, context }) => {
-  await open(page, 1, "10000000-0000-4000-8000-000000000001");
+test("a legacy level-two tab cannot write after takeover and can explicitly restart after completion", async ({ page, context }) => {
+  await open(page, 2, "10000000-0000-4000-8000-000000000001");
   const oldRun = new URL(page.url()).searchParams.get("run");
   const otherTab = await context.newPage();
   await otherTab.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
@@ -136,16 +139,25 @@ test("a stale tab cannot write after takeover and can explicitly start again aft
     await expect(otherTab.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
   }
   await otherTab.getByRole("button", { name: /^NEXT/ }).click();
-  await expect(otherTab.getByRole("heading", { name: "레벨 1 학습 완료", exact: true })).toBeVisible();
+  await expect(otherTab.getByRole("heading", { name: "레벨 2 학습 완료", exact: true })).toBeVisible();
   await page.bringToFront();
   await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toContainText("다른 기기");
-  await expect(page.getByRole("button", { name: /^CONTINUE/ })).toBeDisabled();
+  const stoppedDialog = page.getByRole("dialog", { name: "다른 기기에서 학습 중이거나 학습 권한이 만료되었습니다." });
+  await expect(stoppedDialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(stoppedDialog).toBeVisible();
+  await expect(page.getByRole("button", { name: /^CONTINUE/, includeHidden: true })).toBeDisabled();
+  const bounds = await stoppedDialog.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(Math.abs(bounds!.x + bounds!.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(1);
+  expect(Math.abs(bounds!.y + bounds!.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(1);
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCSS("backdrop-filter", /blur/);
   await reloadLearnerPage(page);
-  await expect(page.getByRole("heading", { name: "레벨 1 학습 완료", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "레벨 2 학습 완료", exact: true })).toBeVisible();
   // A new explicit entry, not a stale device's checkpoint, may create a new run.
   await otherTab.getByRole("button", { name: "레슨 목록으로", exact: true }).click();
   await expect(otherTab).toHaveURL(/\/lessons\?/);
-  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&stage=1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=2&stage=3");
   await selectSentence(page, 2);
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행", exact: true })).toHaveAttribute("aria-valuenow", "1");
   await expect.poll(() => new URL(page.url()).searchParams.get("run")).not.toBe(oldRun);
@@ -196,8 +208,8 @@ test("jumping from an unfinished listen resets its cycles, hides hints, and pres
   await expect(canvas).toContainText("I wash my face.");
 });
 
-test("completion acknowledged in the background allows an explicit restart after returning", async ({ page }) => {
-  await open(page, 1, "10000000-0000-4000-8000-000000000001");
+test("legacy completion acknowledged in the background allows an explicit restart after returning", async ({ page }) => {
+  await open(page, 2, "10000000-0000-4000-8000-000000000001");
   await selectSentence(page, 3);
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   for (let cycle = 1; cycle <= 3; cycle++) {
@@ -215,7 +227,7 @@ test("completion acknowledged in the background allows an explicit restart after
     await route.fulfill({ response });
   });
   await page.getByRole("button", { name: /^NEXT/ }).click();
-  await expect(page.getByRole("heading", { name: "레벨 1 학습 완료", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "레벨 2 학습 완료", exact: true })).toBeVisible();
   await page.unroute("**/api/learner/practice");
   await page.evaluate(() => {
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
@@ -246,7 +258,8 @@ test("a completed screen stops renewing and permits another device after lease e
   const other = await browser.newContext({ baseURL, storageState: { cookies: await page.context().cookies(), origins: [] } });
   try {
     const next = await other.newPage();
-    await next.goto("/player?lesson=10000000-0000-4000-8000-000000000001&level=1&stage=1");
+    await next.goto("/player?lesson=10000000-0000-4000-8000-000000000001&level=2&stage=3");
+    await installPlayerPackage(next);
     // The real server lease expires; no database timestamp changes or takeover.
     await expect.poll(async () => {
       if (await next.locator("#player-title").isVisible()) return true;
@@ -285,12 +298,13 @@ for (const [oldSize, newSize, sentence, nextUnit, nextPhrase, count] of [[2, 4, 
   expect(journal.history[0]).toMatchObject({ runId: oldRun, settings: { groupSize: oldSize, speed: 1 } });
 });
 
-for (const level of [1, 8]) for (const lostReceipt of [null, "start", "checkpoint"] as const) test(`level ${level} sentence selection after completion starts a fresh run without changing completion history${lostReceipt ? ` after a lost ${lostReceipt} receipt` : ""}`, async ({ page }) => {
+// Server receipt recovery belongs to legacy levels; level one restarts locally.
+for (const level of [1, 2, 8]) for (const lostReceipt of (level === 1 ? [null] : [null, "start", "checkpoint"]) as readonly (null | "start" | "checkpoint")[]) test(`level ${level} sentence selection after completion starts a fresh run without changing completion history${lostReceipt ? ` after a lost ${lostReceipt} receipt` : ""}`, async ({ page }) => {
   if (level === 8) await page.clock.install();
   await open(page, level, "10000000-0000-4000-8000-000000000001");
   if (level === 8) await pauseCloudClock(page, new Date(Date.now() + 1000));
   await selectSentence(page, 3);
-  if (level === 1) {
+  if (level < 6) {
     await page.getByRole("button", { name: /^CONTINUE/ }).click();
     for (let cycle = 1; cycle <= 3; cycle++) {
       await confirmManualListen(page);
@@ -304,6 +318,7 @@ for (const level of [1, 8]) for (const lostReceipt of [null, "start", "checkpoin
   await expect(page.getByRole("heading", { name: `레벨 ${level} 학습 완료`, exact: true })).toBeVisible();
   const oldRun = new URL(page.url()).searchParams.get("run");
   const retriedCommands: unknown[] = [];
+  if (level === 1) await page.route("**/api/learner/practice", route => route.abort());
   let loseReceipt = Boolean(lostReceipt);
   if (lostReceipt) await page.route("**/api/learner/practice", async route => {
     if (route.request().method() !== "POST" || route.request().postDataJSON().action !== lostReceipt) return route.continue();
@@ -327,11 +342,12 @@ for (const level of [1, 8]) for (const lostReceipt of [null, "start", "checkpoin
     expect(retriedCommands[1]).toEqual(retriedCommands[0]);
     await page.unroute("**/api/learner/practice");
   }
-  if (level === 1) await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
+  if (level < 6) await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await reloadLearnerPage(page);
-  if (level === 1) await expect(page.getByRole("region", { name: "학습 자막" })).toContainText("I wash my face.");
+  if (level < 6) await expect(page.getByRole("region", { name: "학습 자막" })).toContainText("I wash my face.");
   else await expect(page.getByRole("progressbar", { name: "문장 진행", exact: true })).toHaveAttribute("aria-valuenow", "1");
-  const journal = await readServerJournal(page);
+  const local = level === 1 ? await readDeviceJournal(page) : null;
+  const journal = local ? { history: local.history, progress: local.runs.find(run => run.runId === new URL(page.url()).searchParams.get("run"))! } : await readServerJournal(page);
   expect(journal.history).toHaveLength(1);
   expect(journal.history[0].runId).toBe(oldRun);
   expect(journal.progress.nextPhrase).toBe(1);

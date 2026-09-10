@@ -1,5 +1,5 @@
-import { enterAccountPractice, openLearnerPage, readServerJournal } from "./fixtures/cloud-navigation";
-import { seedServerJournal, fixtureVersion } from "./fixtures/cloud-journal";
+import { enterAccountPractice, installPlayerPackage, openLearnerPage, readDeviceJournal, readServerJournal } from "./fixtures/cloud-navigation";
+import { seedLearningJournal, fixtureVersion, fixtureRunId } from "./fixtures/cloud-journal";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
@@ -153,16 +153,23 @@ for (const level of [1, 8]) test(`level ${level} automatically starts a new less
       runId: "previous-version-run", lessonId: "10000000-0000-4000-8000-000000000001", lessonVersion: "2026-08-01T00:00:00+00:00",
       lessonName: "Morning Routine", language: "english" as const, level, nextUnit: 1, nextPhrase: 1, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS
   };
-  await seedServerJournal(page, { progress: previous, history: [{
+  await seedLearningJournal(page, { progress: previous, history: [{
     ...previous, runId: "completed-previous-version", nextUnit: 3, nextPhrase: 3, completedAt: "2026-08-02T00:00:00Z",
   }] });
-  const before = await readServerJournal(page);
+  const read = async () => {
+    if (level !== 1) return readServerJournal(page);
+    const local = await readDeviceJournal(page);
+    const runId = new URL(page.url()).searchParams.get("run") ?? fixtureRunId("previous-version-run");
+    return { progress: local?.runs.find(run => run.runId === runId), history: local?.history };
+  };
+  const before = await read();
   await page.goto(`/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
+  await installPlayerPackage(page);
   // Entry is automatic: a transient pre-entry notice is not the contract.
   // Do not use the takeover helper to silently accept an unexpected prompt.
   await expect(page.getByRole("button", { name: /^CONTINUE/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "이 기기에서 이어 학습", exact: true })).toHaveCount(0);
-  const after = await readServerJournal(page);
+  const after = await read();
   expect(after.progress).toMatchObject({ lessonId: previous.lessonId, level, nextUnit: 0, nextPhrase: 0, activeMs: 0 });
   expect(Date.parse(after.progress.lessonVersion)).toBe(Date.parse(fixtureVersion));
   expect(after.progress.runId).not.toBe(before.progress.runId);

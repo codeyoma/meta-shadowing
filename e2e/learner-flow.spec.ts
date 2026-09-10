@@ -1,4 +1,4 @@
-import { openLearnerPage } from "./fixtures/cloud-navigation";
+import { openLearnerPage, installStagePackage } from "./fixtures/cloud-navigation";
 import { expect, test } from "./fixtures/cloud-ui";
 import { startSelectedStage } from "./fixtures/stage-preview";
 
@@ -44,6 +44,7 @@ test("takes an authorized learner from password entry through session setup to t
   await page.getByRole("link", { name: /Morning Routine/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Morning Routine", exact: true })).toBeVisible();
   await expect(page.getByText("Morning Routine", { exact: true })).toBeVisible();
+  await installStagePackage(page);
   await page.getByRole("radio", { name: /5 첫 단어 힌트/ }).click();
   await startSelectedStage(page);
 

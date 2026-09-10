@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerViewportContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import type { PublishedLesson } from "@/lib/lessons";
+import { usePackageContent } from "./package-content";
 import { syntaxConnection, syntaxFeatures, syntaxPartLabel, syntaxRelationLabel, type PhraseSyntax, type SentenceAnalysis } from "@/lib/phrase-syntax";
 import { CloseIcon } from "../ui";
 import styles from "./sentence-analysis-popup.module.css";
@@ -68,11 +69,17 @@ function AnalyzedSentence({ sentence }: { sentence: SentenceAnalysis }) {
 export function SentenceAnalysisPopup({ lesson, selection, onClose }: {
   lesson: Pick<PublishedLesson, "id" | "name" | "version">; selection: Selection; onClose: () => void;
 }) {
+  const packageContent = usePackageContent();
   const [lookup, setLookup] = useState<Lookup>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    if (packageContent) {
+      const result = packageContent.manifest.syntax.find(phrase => phrase.phraseNumber === selection.phraseNumber);
+      setLookup(result ? { status: "loaded", result } : { status: "error" });
+      return;
+    }
     const controller = new AbortController();
     let active = true;
     setLookup({ status: "loading" });
@@ -95,7 +102,7 @@ export function SentenceAnalysisPopup({ lesson, selection, onClose }: {
       .catch(() => { if (active && !controller.signal.aborted) setLookup({ status: "error" }); })
       .finally(() => window.clearTimeout(timeout));
     return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
-  }, [lesson.id, lesson.version, selection.phraseNumber, attempt]);
+  }, [lesson.id, lesson.version, selection.phraseNumber, attempt, packageContent]);
 
   return <Drawer open onOpenChange={open => { if (!open) onClose(); }}>
     <DrawerViewportContent panelClassName={styles.popup}

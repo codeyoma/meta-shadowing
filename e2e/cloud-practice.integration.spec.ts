@@ -3,8 +3,9 @@ import { expect, test, type BrowserContext } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
-import { testRecording, testAudioManifest } from "./fixtures/audio";
-import { enterAccountPractice } from "./fixtures/cloud-navigation";
+import { testRecording } from "./fixtures/audio";
+import { createVerifiedTestAudio } from "./fixtures/verified-audio";
+import { enterAccountPractice, installPlayerPackage } from "./fixtures/cloud-navigation";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
 test("manual practice ownership and acknowledged progress survive independent browsers", async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
@@ -15,6 +16,7 @@ test("manual practice ownership and acknowledged progress survive independent br
   const options = { auth: { persistSession: false, autoRefreshToken: false } };
   const service = createClient(url, process.env.SUPABASE_INTEGRATION_SECRET_KEY!, options);
   const users: string[] = []; const contexts: BrowserContext[] = [];
+  let cleanupAudio = async () => {};
   async function waitForLeaseExpiry(id: string) {
     await expect.poll(async () => {
       const {data,error} = await service.from("learner_practice_accounts").select("lease_until").eq("user_id",id).single();
@@ -44,13 +46,16 @@ test("manual practice ownership and acknowledged progress survive independent br
     const a = await account(), other = await account();
     const b = await browser.newContext({ baseURL, ignoreHTTPSErrors: true, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, storageState: { cookies: await a.context.cookies(), origins: [] } }); contexts.push(b);
     const lessonId = randomUUID(), version = new Date().toISOString();
+    const audio = createVerifiedTestAudio(service, a.id, lessonId, 2);
+    cleanupAudio = audio.cleanup;
     expect((await service.from("lesson_drafts").insert({ id: lessonId, created_by: a.id, title: "Cloud practice fixture", language: "english",
       target_filename: "en.txt", korean_filename: "ko.txt", target_source: "Hello.", korean_source: "안녕.",
       parsed_entries: [1,2].map(phraseNumber => ({ kind: "phrase", sourceLine: phraseNumber, phraseNumber, target: `Hello ${phraseNumber}.`, korean: `안녕 ${phraseNumber}.` })),
       validation_status: "validated", phrase_count: 2, chapter_count: 0, section_count: 0,
-      publication_status: "published", published_at: version, audio_manifest: testAudioManifest(2),
+      publication_status: "published", published_at: version, audio_manifest: audio.manifest,
     })).error).toBeNull();
-    const start = { action: "start", accountId: a.id, instance: randomUUID(), operation: randomUUID(), lessonId, lessonVersion: version, level: 1, stage: 1 };
+    await audio.upload();
+    const start = { action: "start", accountId: a.id, instance: randomUUID(), operation: randomUUID(), lessonId, lessonVersion: version, level: 2, stage: 3 };
     const first = await a.context.request.post("/api/learner/practice", { data: start });
     expect(first.status()).toBe(200);
     const acquired = await first.json();
@@ -99,14 +104,14 @@ test("manual practice ownership and acknowledged progress survive independent br
       for (const name of ["getItem","setItem","removeItem"] as const) {
         const original = Storage.prototype[name] as (this: Storage, key: string, value?: string) => string | null | void;
         Object.defineProperty(Storage.prototype,name,{ configurable:true,value:function(this: Storage,key: string, value?: string) {
-          if (key.startsWith("meta-shadowing:")) throw new Error(`Cloud practice touched browser learning storage: ${name}`);
+          if (key.startsWith("meta-shadowing:") && !["meta-shadowing:device-access:v1", "meta-shadowing:device-access-fence:v1"].includes(key)) throw new Error(`Cloud practice touched browser learning storage: ${name}`);
           return original.call(this,key,value!);
         } });
       }
     });
     await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-    await page.goto(`/player?lesson=${lessonId}&level=1&stage=1`);
-
+    await page.goto(`/player?lesson=${lessonId}&level=2&stage=3`);
+    await installPlayerPackage(page);
     await expect(page.getByRole("button", { name: /첫 원음 듣기/ })).toBeVisible();
     await page.getByRole("button", { name: /첫 원음 듣기/ }).click();
     await expect(page.getByRole("button", { name: /듣기 완료 확인/ })).toBeVisible();
@@ -175,8 +180,8 @@ test("manual practice ownership and acknowledged progress survive independent br
     page.on("pageerror",error => errors.push(error.message));
     await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType:"audio/webm",body:testRecording }));
     const resumed = page.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
-    await page.goto(`/player?lesson=${lessonId}&level=1&stage=1`);
-
+    await page.goto(`/player?lesson=${lessonId}&level=2&stage=3`);
+    await installPlayerPackage(page);
     expect((await (await resumed).json()).record).toMatchObject({nextUnit:1,settings:confirmedProgress.settings,activeMs:confirmedProgress.activeMs});
     await expect(page.getByText("Hello 2.", { exact: true })).toBeVisible();
     await test.step("an uncommitted operation stays in RAM and warns before exit", async () => {
@@ -228,19 +233,19 @@ test("manual practice ownership and acknowledged progress survive independent br
     await expect(map.getByText("완료 1 / 16", { exact: true })).toBeVisible();
     await expect(map.getByLabel("1일 연속 학습")).toBeVisible();
     await map.getByRole("button", { name: "이 레슨의 완료 기록" }).click();
-    await expect(map.getByRole("table", { name: "이 레슨의 완료 기록" })).toContainText("스테이지 1");
+    await expect(map.getByRole("table", { name: "이 레슨의 완료 기록" })).toContainText("스테이지 3");
     await map.screenshot({ path: testInfo.outputPath("cloud-completion-history.png"), fullPage: true });
     expect(errors).toEqual([]);
 
     await test.step("expired offline owner cannot overwrite the next device", async () => {
       const starting = page.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
-      await page.goto(`/player?lesson=${lessonId}&level=1&stage=2`);
+      await page.goto(`/player?lesson=${lessonId}&level=2&stage=4`);
 
       const oldStart = await starting, oldBody = oldStart.request().postDataJSON(), oldLease = await oldStart.json();
       expect(oldStart.status()).toBe(200);
       await page.context().setOffline(true);
-      await map.goto(`/player?lesson=${lessonId}&level=1&stage=2`);
-
+      await map.goto(`/player?lesson=${lessonId}&level=2&stage=4`);
+      await installPlayerPackage(map);
       await expect(map.getByRole("button", { name: "이 기기에서 이어 학습", exact: true })).toBeVisible();
       await waitForLeaseExpiry(a.id);
       const takeover = map.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
@@ -259,5 +264,6 @@ test("manual practice ownership and acknowledged progress survive independent br
   } finally {
     await Promise.all(contexts.map(context => context.close()));
     for (const id of users) await service.auth.admin.deleteUser(id);
+    await cleanupAudio();
   }
 });

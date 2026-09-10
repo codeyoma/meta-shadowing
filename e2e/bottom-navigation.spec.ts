@@ -9,10 +9,11 @@ test.beforeEach(async ({ page }) => {
 test("four colored destinations stay fixed and identify the selected section", async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 600 });
   const nav = page.getByRole("navigation", { name: "하단 탐색" });
-  await expect(nav.getByRole("link")).toHaveText(["언어", "레슨", "스테이지", "설정"]);
+  await expect(nav.getByRole("link")).toHaveText(["언어", "레슨", "스테이지"]);
+  await expect(nav.getByRole("button", { name: "설정", exact: true })).toBeVisible();
   await expect(nav.getByRole("link", { name: "언어", exact: true })).toHaveAttribute("aria-current", "location");
   await expect(nav.getByRole("link", { name: "언어", exact: true })).toHaveCSS("background-color", "rgb(215, 255, 184)");
-  const colors = await nav.locator("a svg").evaluateAll(icons => icons.map(icon => getComputedStyle(icon).color));
+  const colors = await nav.locator("[data-destination] svg").evaluateAll(icons => icons.map(icon => getComputedStyle(icon).color));
   expect(new Set(colors).size).toBe(4);
   const before = await nav.boundingBox();
   await nav.getByRole("link", { name: "레슨", exact: true }).click();
@@ -24,23 +25,22 @@ test("four colored destinations stay fixed and identify the selected section", a
   await page.getByRole("region", { name: "레슨 목록" }).evaluate(el => { el.scrollTop = el.scrollHeight; });
   expect(await nav.boundingBox()).toEqual(before);
   expect(await page.evaluate(() => scrollY === 0 && document.documentElement.scrollHeight <= innerHeight)).toBe(true);
-  const widths = await nav.getByRole("link").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width));
+  const widths = await nav.locator("[data-destination]").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().width));
   expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(1);
   expect(await nav.getByRole("link").first().evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
 });
 
-test("settings opens a list and detail page without starting practice", async ({ page }) => {
+test("settings opens one local drawer without starting practice", async ({ page }) => {
   const nav = page.getByRole("navigation", { name: "하단 탐색" });
   await nav.getByRole("link", { name: "스테이지", exact: true }).click();
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
-  await nav.getByRole("link", { name: "설정", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "세션 설정", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByLabel("재생속도", { exact: true }).selectOption("1.5");
-  await page.getByRole("link", { name: "설정 목록으로 돌아가기" }).click();
-  await expect(nav.getByRole("link", { name: "설정", exact: true })).toHaveAttribute("aria-current", "location");
-  await page.getByRole("link", { name: "세션 설정", exact: true }).click();
+  await nav.getByRole("button", { name: "설정", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "설정", exact: true });
+  await expect(drawer).toBeVisible();
+  await drawer.getByLabel("재생속도", { exact: true }).selectOption("1.5");
+  await expect(drawer.getByLabel("재생속도", { exact: true })).toBeEnabled();
+  await drawer.getByRole("button", { name: "닫기", exact: true }).click();
+  await nav.getByRole("button", { name: "설정", exact: true }).click();
   await expect(page.getByLabel("재생속도", { exact: true })).toHaveValue("1.5");
   expect((await readServerJournal(page)).progress).toBeNull();
 });

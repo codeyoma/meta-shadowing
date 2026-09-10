@@ -1,6 +1,7 @@
 import { pauseCloudClock, advanceCloudClock, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import type { PhraseSyntax, SyntaxToken } from "../src/lib/phrase-syntax";
+import { packageResources } from "./fixtures/package-resources";
 
 // Explicit stored-response fixture; live Google parsing is not run by this test.
 const token = (content: string, offset: number, lemma: string, tag: string, head: number, label: string, tense?: string): SyntaxToken => ({
@@ -26,6 +27,7 @@ function recording() {
   return wav;
 }
 async function openPlayer(page: Page, level = 1, lesson = "10000000-0000-4000-8000-000000000002") {
+  await packageResources(page, { audio: { bytes: recording(), mimeType: "audio/wav" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: recording() }));
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await openLearnerPage(page, `/player?lesson=${lesson}&level=${level}&mode=manual`);
@@ -35,9 +37,7 @@ async function openPlayer(page: Page, level = 1, lesson = "10000000-0000-4000-80
 test("header action reads multiple sentences, pauses audio, explains words, and restores focus", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  let resolve!: () => void;
-  const ready = new Promise<void>(done => { resolve = done; });
-  await page.route("**/syntax/*?**", async route => { await ready; await route.fulfill({ json: analysis }); });
+  await packageResources(page, { syntax: analysis });
   await openPlayer(page);
   const trigger = page.getByRole("button", { name: "문장 분석", exact: true });
   const heading = page.getByRole("heading", { name: "At home", exact: true });
@@ -49,9 +49,7 @@ test("header action reads multiple sentences, pauses audio, explains words, and 
   await expect.poll(() => page.locator("audio").evaluate(el => !(el as HTMLAudioElement).paused)).toBe(true);
   await trigger.click();
   const popup = page.getByRole("dialog", { name: "문장 분석", exact: true });
-  await expect(popup.getByRole("status")).toContainText("저장된 분석을 불러오고 있어요");
   await expect.poll(() => page.locator("audio").evaluate(el => (el as HTMLAudioElement).paused)).toBe(true);
-  resolve();
   await expect(popup.getByRole("article")).toHaveCount(2);
   await popup.getByRole("article", { name: "문장 1", exact: true }).getByRole("button", { name: "I 분석 보기", exact: true }).click();
   await expect(popup).toContainText("‘wake’에 ‘주어’ 관계로 연결돼요.");
@@ -73,23 +71,23 @@ test("header action reads multiple sentences, pauses audio, explains words, and 
   expect(errors).toEqual([]);
 });
 
-test("missing analysis and failed reads are distinguishable, and retry reloads the stored result", async ({ page }) => {
-  let fail = true;
-  await page.route("**/syntax/*?**", route => route.fulfill(fail ? { status: 503, json: { error: "syntax-unavailable" } } : { json: { phraseNumber: 1, sentences: [] } }));
+test("missing package analysis is explicit and does not request live analysis", async ({ page }) => {
+  let requests = 0;
+  page.on("request", request => { if (request.url().includes("/syntax/")) requests++; });
+  await packageResources(page, { syntax: { phraseNumber: 1, sentences: [] } });
   await openPlayer(page);
   await page.getByRole("button", { name: "문장 분석", exact: true }).click();
   const popup = page.getByRole("dialog", { name: "문장 분석", exact: true });
-  await expect(popup.getByRole("alert")).toContainText("분석을 불러오지 못했어요");
-  fail = false;
-  await popup.getByRole("button", { name: "다시 시도", exact: true }).click();
   await expect(popup.getByRole("status")).toContainText("저장된 분석이 없어요");
   await popup.getByRole("button", { name: "문장 분석 닫기", exact: true }).click();
   await expect(popup).toHaveCount(0);
+  expect(requests).toBe(0);
 });
 
 test("hint levels require revealing subtitles before showing full analysis", async ({ page }) => {
   let calls = 0;
-  await page.route("**/syntax/*?**", route => { calls++; return route.fulfill({ json: analysis }); });
+  await packageResources(page, { syntax: analysis });
+  page.on("request", request => { if (request.url().includes("/syntax/")) calls++; });
   await openPlayer(page, 3, "10000000-0000-4000-8000-000000000001");
   const trigger = page.getByRole("button", { name: "문장 분석", exact: true });
   await expect(trigger).toBeDisabled();
@@ -103,11 +101,7 @@ test("hint levels require revealing subtitles before showing full analysis", asy
 
 test("changing the practice phrase requests its own analysis, including when there is no section heading", async ({ page }) => {
   const phrases: number[] = [];
-  await page.route("**/syntax/*?**", route => {
-    const phraseNumber = Number(new URL(route.request().url()).pathname.split("/").at(-1));
-    phrases.push(phraseNumber);
-    return route.fulfill({ json: { phraseNumber, sentences: [] } });
-  });
+  page.on("request", request => { if (request.url().includes("/syntax/")) phrases.push(Number(new URL(request.url()).pathname.split("/").at(-1))); });
   await openPlayer(page, 1, "10000000-0000-4000-8000-000000000001");
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
@@ -117,12 +111,12 @@ test("changing the practice phrase requests its own analysis, including when the
   const popup = page.getByRole("dialog", { name: "문장 분석", exact: true });
   await expect(popup).toContainText("2번 프레이즈");
   await expect(popup.getByRole("status")).toContainText("저장된 분석이 없어요");
-  expect(phrases.length).toBeGreaterThan(0); expect(phrases.every(number => number === 2)).toBe(true);
+  expect(phrases).toEqual([]);
 });
 
 test("rapid playback freezes while analysis is open", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
-  await page.route("**/syntax/*?**", route => route.fulfill({ json: analysis }));
+  await packageResources(page, { syntax: analysis });
   await openPlayer(page, 6, "10000000-0000-4000-8000-000000000001");
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const canvas = page.getByRole("region", { name: "속사포 학습", exact: true });

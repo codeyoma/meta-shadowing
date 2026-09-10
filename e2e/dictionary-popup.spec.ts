@@ -1,6 +1,7 @@
 import { pauseCloudClock, advanceCloudClock, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import type { DictionaryResponse } from "../src/lib/dictionary";
+import { packageResources } from "./fixtures/package-resources";
 
 // Explicit mocked API response. Browser tests verify rendering/interaction,
 // not live Kaikki availability or the installed dictionary's word coverage.
@@ -22,6 +23,7 @@ function recording() {
 }
 
 async function openPlayer(page: Page, level = 1, lesson = "10000000-0000-4000-8000-000000000001") {
+  await packageResources(page, { audio: { bytes: recording(), mimeType: "audio/wav" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: recording() }));
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await openLearnerPage(page, `/player?lesson=${lesson}&level=${level}`);
@@ -29,13 +31,7 @@ async function openPlayer(page: Page, level = 1, lesson = "10000000-0000-4000-80
 }
 
 test("a word pauses media, displays the source fixture, blocks shortcuts, and restores focus", async ({ page }) => {
-  let respond!: () => void;
-  const responseReady = new Promise<void>(resolve => { respond = resolve; });
-  await page.route("**/api/dictionary?**", async route => {
-    expect(new URL(route.request().url()).searchParams.get("word")).toBe("wake");
-    await responseReady;
-    await route.fulfill({ json: sourceFixture });
-  });
+  await packageResources(page, { dictionary: sourceFixture });
   await openPlayer(page);
   const subtitles = page.locator("#practice-subtitles");
   const target = subtitles.locator('[lang="en"]');
@@ -51,9 +47,7 @@ test("a word pauses media, displays the source fixture, blocks shortcuts, and re
   await word.click();
   const popup = page.getByRole("dialog", { name: "wake 뜻", exact: true });
   await expect(popup).toBeVisible();
-  await expect(popup.getByRole("status")).toHaveText("뜻을 찾고 있어요…");
   await expect.poll(() => page.locator("audio").evaluate(element => (element as HTMLAudioElement).paused)).toBe(true);
-  respond();
   await expect(popup).toContainText("잠에서 깨다.");
   await expect(popup.getByRole("link", { name: "위키낱말사전 원문", exact: true })).toHaveAttribute("href", sourceFixture.entries[0].sourceUrl);
   await expect(popup.getByRole("link", { name: "wake 원문 보기 (새 탭)", exact: true })).toHaveAttribute("href", "https://ko.wiktionary.org/wiki/wake");
@@ -93,10 +87,10 @@ test("headword icons open each entry's own source in a new tab without leaving p
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (["error", "warning"].includes(message.type())) errors.push(message.text()); });
   const entries = [sourceFixture.entries[0],
-    { ...sourceFixture.entries[0], headword: "waken", matchType: "lemma", sourceUrl: "https://ko.wiktionary.org/w/index.php?title=waken&oldid=12345" },
+    { ...sourceFixture.entries[0], headword: "waken", matchType: "lemma" as const, sourceUrl: "https://ko.wiktionary.org/w/index.php?title=waken&oldid=12345" },
     { ...sourceFixture.entries[0], pos: "noun", senses: [{ glosses: ["배가 지나간 자국."] }] },
   ];
-  await page.route("**/api/dictionary?**", route => route.fulfill({ json: { word: "wake", entries } }));
+  await packageResources(page, { dictionary: { word: "wake", entries } });
   // Verify native new-tab navigation without depending on the external site's uptime.
   await context.route("https://ko.wiktionary.org/**", route => route.fulfill({
     contentType: "text/html", body: "<!doctype html><title>Dictionary source fixture</title><p>Source destination test</p>"
@@ -115,16 +109,19 @@ test("headword icons open each entry's own source in a new tab without leaving p
   for (const width of [320, 430, 1280]) {
     await page.setViewportSize({ width, height: 932 });
     for (let index = 0; index < 3; index++) {
-      // A resize can recenter the dialog between separate browser calls.
-      // Compare the word and icon from the same layout frame.
-      const { headword, icon } = await headings.nth(index).evaluate(heading => ({
-        headword: heading.querySelector('[lang="en"]')!.getBoundingClientRect().toJSON(),
-        icon: heading.querySelector("a")!.getBoundingClientRect().toJSON(),
-      }));
-      expect(icon.x).toBeGreaterThanOrEqual(headword.x + headword.width);
-      expect(Math.abs(icon.y + icon.height / 2 - headword.y - headword.height / 2)).toBeLessThan(2);
-      expect(icon.width).toBeGreaterThanOrEqual(44);
-      expect(icon.height).toBeGreaterThanOrEqual(44);
+      // Drawer motion/resize can yield fractional translated rects (even a
+      // 44px target can measure 43.999996px). Wait for valid rendered geometry,
+      // keeping the touch-target minimum strict and both rects in one frame.
+      await expect(async () => {
+        const { headword, icon } = await headings.nth(index).evaluate(heading => ({
+          headword: heading.querySelector('[lang="en"]')!.getBoundingClientRect().toJSON(),
+          icon: heading.querySelector("a")!.getBoundingClientRect().toJSON(),
+        }));
+        expect(icon.x).toBeGreaterThanOrEqual(headword.x + headword.width);
+        expect(Math.abs(icon.y + icon.height / 2 - headword.y - headword.height / 2)).toBeLessThan(2);
+        expect(icon.width).toBeGreaterThanOrEqual(44);
+        expect(icon.height).toBeGreaterThanOrEqual(44);
+      }).toPass({ timeout: 5_000 });
       await expect(links.nth(index)).toBeInViewport();
     }
     expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -157,7 +154,7 @@ test("headword icons open each entry's own source in a new tab without leaving p
 });
 
 test("hint-only subtitles stay hidden while the dictionary reports missing entries", async ({ page }) => {
-  await page.route("**/api/dictionary?**", route => route.fulfill({ json: { word: "I", entries: [] } }));
+  await packageResources(page, { dictionary: { word: "I", entries: [] } });
   await openPlayer(page, 3);
   const target = page.locator('#practice-subtitles [lang="en"]');
   await expect(target).toHaveText("I");
@@ -174,32 +171,22 @@ test("hint-only subtitles stay hidden while the dictionary reports missing entri
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행", exact: true })).toHaveAttribute("aria-valuenow", "0");
 });
 
-test("a failed Japanese lookup can retry, with only segmented foreign words interactive", async ({ page }) => {
+test("Japanese package lookup stays local, with only segmented foreign words interactive", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("pageerror", error => browserErrors.push(error.message));
   let requests = 0;
-  let unavailable = true;
-  await page.route("**/api/dictionary?**", route => {
-    const query = new URL(route.request().url()).searchParams;
-    expect(query.get("language")).toBe("japanese");
-    expect(query.get("word")).toBe("私");
-    requests++;
-    return route.fulfill(unavailable ? { status: 503, json: { error: "dictionary-unavailable" } } : { json: { word: "私", entries: [] } });
-  });
+  await packageResources(page, { dictionary: { word: "私", entries: [] } });
+  page.on("request", request => { if (request.url().includes("/api/dictionary?")) requests++; });
   await openPlayer(page, 1, "10000000-0000-4000-8000-000000000003");
   const target = page.locator('#practice-subtitles [lang="ja"]');
   const visibleText = await target.textContent();
   await expect(page.locator('#practice-subtitles [lang="ko"] button')).toHaveCount(0);
   await page.getByRole("button", { name: "私 뜻 보기", exact: true }).click();
   const popup = page.getByRole("dialog", { name: "私 뜻", exact: true });
-  await expect(popup.getByRole("alert")).toContainText("뜻을 불러오지 못했어요.");
-  unavailable = false;
-  await popup.getByRole("button", { name: "다시 시도", exact: true }).click();
   await expect(popup.getByRole("status")).toContainText("등록된 한국어 뜻이 없어요.");
   await popup.getByRole("button", { name: "사전 닫기", exact: true }).click();
   await expect(target).toHaveText(visibleText!);
-  // React development Strict Mode may start and abort an initial request twice.
-  expect(requests).toBeGreaterThanOrEqual(2);
+  expect(requests).toBe(0);
   expect(browserErrors).toEqual([]);
 });
 
@@ -207,13 +194,14 @@ test("long source entries scroll inside a bounded dialog with contained keyboard
   const fixture = { ...sourceFixture, entries: sourceFixture.entries.map(entry => ({ ...entry,
     senses: Array.from({ length: 32 }, (_, index) => ({ glosses: [`${index + 1}. ${"길이가 긴 사전 정의입니다. ".repeat(8)}`] }))
   })) };
-  await page.route("**/api/dictionary?**", route => route.fulfill({ json: fixture }));
+  await packageResources(page, { dictionary: fixture });
   await openPlayer(page);
   await page.getByRole("button", { name: "wake 뜻 보기", exact: true }).click();
   const popup = page.getByRole("dialog", { name: "wake 뜻", exact: true });
   await expect(popup.locator("li")).toHaveCount(32);
   // A bottom drawer translates during entry; measure only after it settles.
   await popup.click({ trial: true });
+  await expect(popup).toBeInViewport({ ratio: 0.99 });
   const bounds = await popup.boundingBox();
   expect(bounds!.y).toBeGreaterThanOrEqual(0);
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
@@ -230,7 +218,7 @@ test("long source entries scroll inside a bounded dialog with contained keyboard
 
 test("rapid foreign words open the dictionary and freeze token timing; Korean stays ordinary text", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
-  await page.route("**/api/dictionary?**", route => route.fulfill({ json: sourceFixture }));
+  await packageResources(page, { dictionary: sourceFixture });
   await openPlayer(page, 6);
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const canvas = page.getByRole("region", { name: "속사포 학습", exact: true });

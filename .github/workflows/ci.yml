@@ -124,15 +124,15 @@ jobs:
         run: npm run test:integration -- --reporter=line --global-timeout=600000
         env:
           PLAYWRIGHT_PRODUCTION: "1"
-      - name: Test cloud account preferences on desktop and mobile
+      - name: Test retained account preference API boundaries on desktop and mobile
         run: npm run test:learner-preferences -- --project=mobile --reporter=line --global-timeout=600000
         env:
           PLAYWRIGHT_PRODUCTION: "1"
-      - name: Test confirmed cloud practice on desktop and mobile
+      - name: Test legacy server-player boundaries on desktop and mobile
         run: npm run test:cloud-practice -- --project=mobile --reporter=line --global-timeout=1200000
         env:
           PLAYWRIGHT_PRODUCTION: "1"
-      - name: Test account-scoped MP3 caching on desktop and mobile
+      - name: Test downloaded media packages and account isolation on desktop and mobile
         run: npm run test:mp3-cache -- --project=mobile --reporter=line --global-timeout=600000
         env:
           PLAYWRIGHT_PRODUCTION: "1"

@@ -1,4 +1,4 @@
-import { enterAccountPractice, openLearnerPage } from "./fixtures/cloud-navigation";
+import { enterAccountPractice, openLearnerPage, installStagePackage } from "./fixtures/cloud-navigation";
 import { expect, test } from "./fixtures/cloud-ui";
 
 test.beforeEach(async ({ page }) => {
@@ -13,6 +13,7 @@ test("stored section and phrase totals reach lesson cards, stages, and the playe
   await lesson.click();
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000002\/stages$/);
   await expect(page.locator('[aria-labelledby="setup-title"]').getByText("2개 섹션 · 10개 프레이즈", { exact: true })).toBeVisible();
+  await installStagePackage(page);
   await page.getByRole("button", { name: "현재 스테이지 1 시작" }).click();
   await enterAccountPractice(page);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();

@@ -15,8 +15,9 @@ async function openPlayer(page: Page, level: number, lesson = "10000000-0000-400
 
 test("level 6 plays target then Korean words and stops at each manual line without requesting audio", async ({ page }) => {
   const audioRequests: string[] = [];
-  page.on("request", request => { if (request.url().includes("/audio/")) audioRequests.push(request.url()); });
   await openPlayer(page, 6);
+  // Complete package installation includes audio; rapid playback itself is local.
+  page.on("request", request => { if (request.url().includes("/audio/")) audioRequests.push(request.url()); });
   const canvas = page.getByRole("region", { name: "속사포 학습" });
   await expect(page.locator("audio")).toHaveCount(0);
   await page.keyboard.press("Space");
@@ -39,7 +40,7 @@ test("level 6 plays target then Korean words and stops at each manual line witho
   expect(audioRequests).toEqual([]);
 });
 
-test("setup offers four WPM speeds, display modes, and separate speaking and boundary timings", async ({ page }) => {
+test("device setup offers rapid options while legacy playback retains its server settings", async ({ page }) => {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
   await page.waitForLoadState("networkidle");
@@ -58,14 +59,14 @@ test("setup offers four WPM speeds, display modes, and separate speaking and bou
   await page.getByLabel("구간 간격 (초)").fill("3");
   await page.keyboard.press("Escape");
   await startSelectedStage(page);
-  await expect(page).toHaveURL(/wpm=5/);
-  await expect(page).toHaveURL(/display=cumulative/);
+  await expect(page).toHaveURL(/wpm=3/);
+  await expect(page).toHaveURL(/display=current/);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-  await expect(page.getByText("자동 · 333 WPM", { exact: true })).toBeVisible();
+  await expect(page.getByText("수동 · 200 WPM", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
-  await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("1.5");
-  await expect(page.getByLabel("문장 간격 (초)")).toHaveValue("0.5");
-  await expect(page.getByLabel("구간 간격 (초)")).toHaveValue("3");
+  await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("0.5");
+  await expect(page.getByLabel("문장 간격 (초)")).toHaveCount(0);
+  await expect(page.getByLabel("구간 간격 (초)")).toHaveCount(0);
 });
 
 for (const level of [7, 8]) test(`level ${level} times speaking from the target line and ${level === 7 ? "reveals" : "never reveals"} the target answer`, async ({ page }) => {

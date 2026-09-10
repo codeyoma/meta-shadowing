@@ -14,6 +14,8 @@ import { languageCode } from "@/lib/languages";
 import { CloseIcon } from "../ui";
 import type { DictionaryWordSelect } from "./dictionary-words";
 import styles from "./dictionary-popup.module.css";
+import { usePackageContent } from "./package-content";
+import { packageLookupKey } from "@/lib/lesson-package";
 
 type Selection = { word: string; trigger: HTMLButtonElement };
 type LookupState = { status: "loading" } | { status: "error" } | { status: "loaded"; entries: DictionaryEntry[] };
@@ -51,12 +53,18 @@ export function useDictionaryPopup() {
 export function DictionaryPopup({ selection, language, onClose }: {
   selection: Selection; language: Language; onClose: () => void;
 }) {
+  const packageContent = usePackageContent();
   const [lookup, setLookup] = useState<LookupState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const closeRef = useRef<HTMLButtonElement>(null);
   const targetLanguage = languageCode(language);
 
   useEffect(() => {
+    if (packageContent) {
+      const stored = packageContent.manifest.dictionary[packageLookupKey(selection.word)];
+      setLookup(stored ? { status: "loaded", entries: stored.entries } : { status: "error" });
+      return;
+    }
     const controller = new AbortController();
     let active = true;
     setLookup({ status: "loading" });
@@ -75,7 +83,7 @@ export function DictionaryPopup({ selection, language, onClose }: {
       .catch(() => { if (active && !controller.signal.aborted) setLookup({ status: "error" }); })
       .finally(() => window.clearTimeout(timeout));
     return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
-  }, [language, selection.word, attempt]);
+  }, [language, selection.word, attempt, packageContent]);
 
   return <Drawer open onOpenChange={open => { if (!open) onClose(); }}>
     <DrawerViewportContent panelClassName={styles.popup}

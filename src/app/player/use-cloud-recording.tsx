@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { isPracticeVerificationCurrent, PRACTICE_CHECK_INTERVAL_MS, PRACTICE_MAX_VERIFICATION_AGE_MS, PracticeError, sendPractice, type PracticeCommand, type PracticeLease, type PracticeErrorCode } from "@/lib/cloud-practice";
 import type { CompletionRecord } from "@/lib/learning-records";
 import type { CloudRecording, RecordUpdate } from "./recording-types";
@@ -13,6 +14,17 @@ export function PracticeFailure({ error, retry, navigate = href => window.locati
   const auth = ["unauthorized", "account-changed"].includes(error);
   const ownership = ["ownership-lost", "session-busy"].includes(error);
   const lessonChanged = ["lesson-version-changed", "not-found"].includes(error);
+  if (ownership) return <Dialog open>
+    <DialogContent showCloseButton={false} overlayClassName="backdrop-blur-sm"
+      onEscapeKeyDown={event => event.preventDefault()}
+      onInteractOutside={event => event.preventDefault()}>
+      <div role="alert" aria-label="학습 저장 알림" className="grid gap-4">
+        <DialogTitle>다른 기기에서 학습 중이거나 학습 권한이 만료되었습니다.</DialogTitle>
+        <DialogDescription>다른 기기로 인계되었거나 연결이 만료되어 이 기기의 학습을 중지했습니다. 마지막 서버 확인 지점과 완료 기록은 보존됩니다.</DialogDescription>
+        <Button variant="outline" onClick={() => navigate("/lessons")}>레슨으로 돌아가기</Button>
+      </div>
+    </DialogContent>
+  </Dialog>;
   if (error === "learning-disabled") return <Alert aria-label="학습 저장 알림">
     <AlertTitle>계정 학습이 잠시 중지되었습니다.</AlertTitle>
     <AlertDescription>학습을 중지했습니다. 마지막 서버 확인 지점과 완료 기록은 보존되며 브라우저 기록으로 대신 저장하지 않습니다.</AlertDescription>

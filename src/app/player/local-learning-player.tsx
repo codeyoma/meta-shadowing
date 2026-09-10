@@ -1,0 +1,124 @@
+"use client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { assertDeviceAccess } from "@/lib/device-access";
+import { startDeviceRun, saveDeviceRun, type DeviceRun } from "@/lib/device-learning-store";
+import type { PublishedLesson } from "@/lib/lessons";
+import { resolveSessionSettings } from "@/lib/session-settings";
+import { useDeviceAccess } from "../device-access-provider";
+import { AudioPhrasePlayer } from "./audio-phrase-player";
+import type { CloudRecording, RecordUpdate } from "./recording-types";
+
+export function LocalSaveFailure({ retry }: { retry: () => void }) {
+  return <Alert aria-label="기기 저장 알림"><AlertTitle>기기에 학습을 저장하지 못했습니다.</AlertTitle>
+    <AlertDescription>다음 프레이즈로 이동하지 않았습니다. 브라우저 저장 공간을 확인한 뒤 같은 저장을 다시 시도해 주세요. 다른 탭에서 기록이 바뀌었다면 새로고침해 주세요.</AlertDescription>
+    <Button variant="outline" onClick={retry}>기기 저장 재시도</Button>
+  </Alert>;
+}
+
+const packageAllowed = () => true;
+export function LocalLearningPlayer({ lesson, stage, requestedRun, packageBlocked = false, canUsePackage = packageAllowed }: { lesson: PublishedLesson; stage: number; requestedRun?: string; packageBlocked?: boolean; canUsePackage?: () => boolean }) {
+  const access = useDeviceAccess()!;
+  const [run, setRun] = useState<DeviceRun | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void startDeviceRun(access, lesson, stage, requestedRun).then(value => {
+      if (!alive) return;
+      const url = new URL(location.href); url.searchParams.set("run", value.runId);
+      window.history.replaceState(null, "", url);
+      setRun(value);
+    }).catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, [access, lesson, stage, requestedRun, attempt]);
+  if (!run) return <main className="page mx-auto flex w-full max-w-md flex-col gap-4 p-5"><h1>{lesson.name}</h1>
+    {failed ? <LocalSaveFailure retry={() => { setFailed(false); setAttempt(value => value + 1); }} /> : <p role="status">기기 학습 기록을 읽고 있어요…</p>}
+  </main>;
+  return <ActiveLocalPlayer key={run.runId} initial={run} lesson={lesson} packageBlocked={packageBlocked} canUsePackage={canUsePackage} restart={value => {
+    const url = new URL(location.href); url.searchParams.set("run", value.runId);
+    window.history.replaceState(null, "", url); setRun(value);
+  }} />;
+}
+
+function ActiveLocalPlayer({ initial, lesson, restart, packageBlocked, canUsePackage }: { initial: DeviceRun; lesson: PublishedLesson; restart: (run: DeviceRun) => void; packageBlocked: boolean; canUsePackage: () => boolean }) {
+  const access = useDeviceAccess()!;
+  const current = useRef(initial);
+  const [record, setRecord] = useState(initial);
+  const [status, setStatus] = useState<"ready" | "saving" | "error">("ready");
+  const state = useRef(status);
+  const alive = useRef(true);
+  const clock = useRef({ active: false, anchor: 0, total: initial.activeMs });
+  const pending = useRef<{ run: DeviceRun; resolve: () => void; reject: (reason: Error) => void; restart?: boolean } | null>(null);
+  const inFlight = useRef(false);
+  const track = useCallback((active: boolean, elapsedMs = 0) => {
+    const now = performance.now(), value = clock.current;
+    if (value.active) value.total += Math.max(0, now - value.anchor);
+    value.total += elapsedMs; value.anchor = now; value.active = active;
+  }, []);
+  const change = useCallback((value: typeof status) => { state.current = value; if (alive.current) setStatus(value); }, []);
+  const submit = useCallback(async () => {
+    if (!pending.current || inFlight.current) return;
+    const operation = pending.current;
+    inFlight.current = true; change("saving");
+    try {
+      assertDeviceAccess(access);
+      if (!canUsePackage()) throw new Error("Package access ended");
+      const base = operation.restart ? await startDeviceRun(access, lesson, operation.run.stage!) : current.current;
+      const value = await saveDeviceRun(access, operation.restart ? { ...base, nextPhrase: operation.run.nextPhrase, nextUnit: operation.run.nextUnit } : operation.run, base.revision);
+      assertDeviceAccess(access);
+      if (!alive.current) return;
+      current.current = value; setRecord(value); pending.current = null;
+      state.current = "ready";
+      if (operation.restart) restart(value);
+      operation.resolve();
+      setStatus("ready");
+    } catch { change("error"); }
+    finally { inFlight.current = false; }
+  }, [access, change, lesson, restart, canUsePackage]);
+  const canAct = useCallback(() => {
+    try { assertDeviceAccess(access); return canUsePackage() && alive.current && state.current === "ready" && !document.hidden; }
+    catch { return false; }
+  }, [access, canUsePackage]);
+  const updateRecord = useCallback((update: RecordUpdate): void | Promise<void> => {
+    track(Boolean(update.active) && canAct(), update.elapsedMs);
+    if (!update.checkpoint && !update.settings) return;
+    if (!canAct() || pending.current) return;
+    track(false);
+    if (current.current.completedAt) {
+      if (update.kind !== "jump" || !update.checkpoint) return;
+      const next = { ...current.current, nextPhrase: update.checkpoint.phrase, nextUnit: update.checkpoint.unit };
+      return new Promise<void>((resolve, reject) => { pending.current = { run: next, resolve, reject, restart: true }; void submit(); });
+    }
+    const previous = current.current;
+    const next: DeviceRun = { ...previous, activeMs: Math.floor(clock.current.total),
+      settings: update.settings ? resolveSessionSettings(update.settings, previous.settings) : previous.settings,
+      ...(update.checkpoint ? { nextUnit: update.checkpoint.unit, nextPhrase: update.checkpoint.phrase,
+        confirmedCycles: update.kind === "studied" ? update.confirmedCycles ?? previous.confirmedCycles : 0 } : {}),
+      ...(update.finished ? { completedAt: new Date().toISOString() } : {}) };
+    return new Promise<void>((resolve, reject) => { pending.current = { run: next, resolve, reject }; void submit(); });
+  }, [access, canAct, lesson, restart, submit, track]);
+  useEffect(() => {
+    alive.current = true;
+    const visibility = () => { if (document.hidden) track(false); };
+    const before = (event: BeforeUnloadEvent) => { if (pending.current) { event.preventDefault(); event.returnValue = ""; } };
+    document.addEventListener("visibilitychange", visibility); window.addEventListener("beforeunload", before);
+    return () => {
+      alive.current = false; track(false);
+      pending.current?.reject(new Error("Local learning was closed")); pending.current = null;
+      document.removeEventListener("visibilitychange", visibility); window.removeEventListener("beforeunload", before);
+    };
+  }, [track]);
+  const recording: CloudRecording = { local: true, completion: record.completedAt ? record as DeviceRun & { completedAt: string } : null,
+    blocked: packageBlocked || status !== "ready", canAct, verifyResume: async () => canAct(), updateRecord,
+    exit: href => {
+      if (pending.current && !window.confirm("저장하지 못한 변경이 있습니다. 마지막 기기 저장 지점으로 돌아갑니다. 나가시겠어요?")) return;
+      window.location.assign(navigator.onLine ? href : "/offline");
+    } };
+  const start = useMemo(() => ({ selection: { ...initial.settings, language: lesson.language, lessonId: lesson.id, level: 1, stage: initial.stage!, runId: initial.runId },
+    progress: initial, completion: null, confirmedCycles: initial.confirmedCycles }), [initial, lesson]);
+  return <AudioPhrasePlayer lesson={lesson} level={1} hints={[]} groups={[]} start={start} cloud={recording}
+    notice={status === "error" ? <LocalSaveFailure retry={() => void submit()} /> : null}
+    settings={{ mode: initial.settings.mode, playbackRate: initial.settings.speed, advanceDelayMs: initial.settings.advanceDelayMs }} />;
+}

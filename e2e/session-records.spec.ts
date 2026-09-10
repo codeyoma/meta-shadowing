@@ -8,7 +8,7 @@ async function signIn(page: Page) {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 }
 
-test("learner overrides become the next account session defaults across lessons and levels", async ({ page }) => {
+test("device settings persist across lessons and level selections", async ({ page }) => {
   await signIn(page);
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
   await page.getByRole("radio", { name: /7 다문장 암기/ }).click();
@@ -42,7 +42,7 @@ test("learner overrides become the next account session defaults across lessons 
   await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("2");
 });
 
-test("audio progress saves only after phrase advancement and manual speaking excludes settings and background pauses", async ({ page }) => {
+test("local audio confirmations survive navigation and manual speaking excludes settings and background pauses", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await signIn(page);
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
@@ -55,10 +55,10 @@ test("audio progress saves only after phrase advancement and manual speaking exc
   await page.getByRole("link", { name: /Morning Routine/ }).click();
   await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
   await enterAccountPractice(page);
-  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
+  await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   for (let phrase = 0; phrase < 3; phrase++) {
-    await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
-    for (let cycle = 1; cycle <= 3; cycle++) {
+    await page.getByRole("button", { name: phrase === 0 ? "CONTINUE · 다음 원음 듣기" : "CONTINUE · 첫 원음 듣기", exact: true }).click();
+    for (let cycle = phrase === 0 ? 2 : 1; cycle <= 3; cycle++) {
       await confirmManualListen(page);
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
       if (phrase === 1 && cycle === 1) {
@@ -240,6 +240,13 @@ test("rapid resume commits complete lines, excludes pauses and background time, 
   await page.getByLabel("문장 간격 (초)").fill("0");
   await page.keyboard.press("Escape");
   await startSelectedStage(page);
+  // The global drawer now persists device preferences. Configure this legacy
+  // rapid run through its own player controls, which still use server recording.
+  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+  await page.getByRole("button", { name: "학습 설정", exact: true }).click();
+  await page.getByRole("radio", { name: "자동", exact: true }).click();
+  await page.getByLabel("문장 간격 (초)").fill("0");
+  await page.keyboard.press("Escape");
   await pauseCloudClock(page, await page.evaluate(() => Date.now() + 1000));
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect(page.getByRole("region", { name: "속사포 학습" })).toHaveText("I");

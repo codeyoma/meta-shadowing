@@ -21,8 +21,12 @@ import { DEFAULT_SESSION_SETTINGS, resolveSessionSettings, type SessionSettings 
 import { useCloudPreferences } from "../cloud-preferences-provider";
 import { CloseIcon, PlayIcon } from "../ui";
 import { useBrowseScroll } from "../browse-shell";
+import { useLessonPackages } from "../lesson-packages-provider";
+import { useDeviceSettings } from "../device-settings-provider";
 import { LessonHistoryDialog } from "./lesson-history-dialog";
 import styles from "./setup.module.css";
+import { useDeviceJournal } from "../use-device-journal";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 
 const pathOffsets = [0, 1, 2, 1];
 const methodIcons = [Headphones, Brain, TextCursorInput, Layers, WholeWord, Languages, Languages, Mic];
@@ -37,7 +41,11 @@ const stageRing = <span className={styles.stageRing} data-stage-ring="" aria-hid
 export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, initialStage }: { lesson: Lesson; defaults?: SessionSettings; initialStage?: number }) {
   const router = useRouter();
   const cloud = useCloudPreferences()!;
-  const cloudJournal = cloud.journal, overrides = cloud.profile.overrides;
+  const packages = useLessonPackages();
+  const { openSettings } = useDeviceSettings();
+  const packageReady = packages?.inventory.some(row => row.lessonId === lesson.id && row.version === lesson.version && row.state === "ready") ?? false;
+  const device = useDeviceJournal(cloud.journal);
+  const cloudJournal = device.journal, overrides = cloud.profile.overrides;
   const language = lesson.language;
   const settings = resolveSessionSettings(overrides, defaults);
   const [ready, setReady] = useState(false);
@@ -45,7 +53,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   const stageScrollRef = useBrowseScroll(`stages:${lesson.id}`);
   const shellScrollRef = useBrowseScroll(`stage-shell:${lesson.id}`);
   const completedStages = completedStagesForLesson(cloudJournal.history, lesson);
-  const currentPractice = nextPracticeForLesson(cloudJournal, lesson);
+  const currentPractice = nextPracticeForLesson(cloudJournal, lesson, initialStage);
   // Account refreshes update recommendations, not the user's open preview.
   // The displayed selection and Start destination must share one source.
   const stage = previewStage ?? initialStage ?? currentPractice.stage;
@@ -55,14 +63,17 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   }, []);
 
   function start(): void {
+    if (!packageReady) return;
     playStageSound("start");
-    const selection = { ...settings, language, lessonId: lesson.id, level, stage, runId: createRunId() };
+    const saved = nextPracticeForLesson(cloudJournal, lesson, stage).progress;
+    const selection = { ...(saved?.settings ?? settings), language, lessonId: lesson.id, level, stage, runId: saved?.runId ?? createRunId() };
     router.push(getPlayerHref(selection));
   }
 
   function startCurrent(): void {
+    if (!packageReady) return;
     playStageSound("start");
-    const current = nextPracticeForLesson(cloudJournal, lesson);
+    const current = nextPracticeForLesson(cloudJournal, lesson, initialStage);
     const saved = current.progress;
     const selection = { ...(saved?.settings ?? settings), language, lessonId: lesson.id,
       level: learningStages[current.stage - 1].level, stage: current.stage, runId: saved?.runId ?? createRunId() };
@@ -90,7 +101,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
             <Progress value={completedStages.length} max={learningStages.length} aria-label="완료한 스테이지" />
             <div className={styles.bookActions}>
             <LessonHistoryDialog lesson={lesson} disabled={!ready} />
-            <Button className={styles.selectedStage} size="lg" disabled={!ready} aria-label={`현재 스테이지 ${currentPractice.stage} 시작`} onClick={startCurrent}>
+            <Button className={styles.selectedStage} size="lg" disabled={!ready || !packageReady || device.loading || device.error} aria-label={`현재 스테이지 ${currentPractice.stage} 시작`} onClick={startCurrent}>
               <PlayIcon data-icon="inline-start" />
               <span className={styles.selectedStageCopy}>
                 <span className={styles.selectedStageMeta}>{currentPractice.review ? "복습" : currentPractice.progress ? "이어서 학습" : "스테이지"} {currentPractice.stage} · Lv {learningStages[currentPractice.stage - 1].level}</span>
@@ -98,6 +109,8 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
               </span>
             </Button>
             </div>
+            {!packageReady ? <Button variant="outline" className="mt-3 w-full" onClick={() => openSettings()}>레슨 다운로드 관리</Button> : null}
+            {device.error ? <Alert><AlertTitle>기기 학습 기록을 읽지 못했습니다. 저장 공간을 확인하고 새로고침해 주세요.</AlertTitle></Alert> : null}
           </CardContent>
         </Card>
         <section className={styles.stageSection} aria-labelledby="level-title">
@@ -113,6 +126,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
               const completed = completedStages.includes(number);
               const current = ready && !currentPractice.review && number === currentPractice.stage;
               const MethodIcon = completed ? Check : methodIcons[methodLevel - 1];
+              const saved = nextPracticeForLesson(cloudJournal, lesson, number).progress;
               return (
                 <li className={styles.levelItem} key={number} style={{ "--path-offset": offset } as CSSProperties}>
                   {index < learningStages.length - 1 ? <svg className={styles.connector} aria-hidden="true" viewBox="0 0 2 100" preserveAspectRatio="none">
@@ -143,10 +157,11 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
                       </div>
                     </PopoverHeader>
                     <PopoverDescription tone="display" size="sm" id={`stage-${number}-description`}>{learningInstructions[methodLevel - 1]}</PopoverDescription>
+                    {saved ? <p className="text-sm">저장된 학습 · 프레이즈 {saved.nextPhrase + 1}</p> : null}
                     </div>
                     </ScrollArea>
                     <div className={styles.previewActions}>
-                      <Button variant="inverse" size="lg" className="min-w-0 flex-1" disabled={!ready} onClick={start}><PlayIcon />학습 시작</Button>
+                      <Button variant="inverse" size="lg" className="min-w-0 flex-1" disabled={!ready || !packageReady || (methodLevel === 1 && (device.loading || device.error))} onClick={start}><PlayIcon />학습 시작</Button>
                     </div>
                   </PopoverContent>
                   </Popover>

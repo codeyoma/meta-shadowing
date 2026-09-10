@@ -89,11 +89,15 @@ test("Space pauses and resumes live audio while r and R leave the unfinished lis
 
 test("touch controls recover a failed recording and complete every phrase without keyboard input", async ({ page, isMobile }) => {
   await openPlayer(page);
-  let failPlayback = true;
-  await page.route("**/api/lessons/*/audio/*", (route) => failPlayback
-    ? route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"audio-unavailable"}' })
-    : route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  // Fail before the new player's current/next preload starts.
+  await page.addInitScript(() => {
+    let failPlayback = true;
+    window.addEventListener("fixture-audio-recovered", () => { failPlayback = false; });
+    const original = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      return failPlayback ? Promise.reject(new DOMException("Fixture decoder failure", "NotSupportedError")) : original.call(this);
+    };
+  });
+  // Installed audio no longer streams. Inject a real media-boundary failure.
   await reloadLearnerPage(page);
   await page.waitForLoadState("networkidle");
   const activate = async (locator: ReturnType<Page["getByRole"]>) => isMobile ? locator.tap() : locator.click();
@@ -102,7 +106,7 @@ test("touch controls recover a failed recording and complete every phrase withou
   await expect(retry).toBeInViewport();
   await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
-  failPlayback = false;
+  await page.evaluate(() => window.dispatchEvent(new Event("fixture-audio-recovered")));
   await activate(retry);
   await confirmManualListen(page, isMobile ? "touch" : "click");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");

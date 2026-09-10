@@ -5,7 +5,12 @@ import { confirmManualListen, waitForManualListen } from "./fixtures/manual-prac
 
 async function openPlayer(page: Page, level: number) {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  // This idempotent beta-cookie setup may hit a reset keep-alive connection.
+  // Playwright retries only ECONNRESET, not HTTP failures or learner writes.
+  const entry = await page.request.post("/api/auth", {
+    data: { password: "integration-beta-password" }, maxRetries: 2,
+  });
+  expect(entry.status()).toBe(200);
   await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
 }
@@ -166,8 +171,11 @@ test("section headings wrap long script titles without clipping or displacing th
 
 test("an audio error keeps the method available with recovery only in the bottom action", async ({ page }) => {
   await openPlayer(page, 1);
-  await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ status: 503, body: "Unavailable" }));
-  await reloadLearnerPage(page);
+  // The verified package is already local. Simulate a device media failure,
+  // not an unrelated network endpoint that playback must no longer request.
+  await page.evaluate(() => {
+    HTMLMediaElement.prototype.play = () => Promise.reject(new DOMException("Fixture media decoder failure", "NotSupportedError"));
+  });
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   await expect(page.getByRole("button", { name: "RETRY · 다시 시도", exact: true })).toBeInViewport();
   await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);

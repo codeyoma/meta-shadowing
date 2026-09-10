@@ -10,6 +10,6 @@ export default async function LearnerLayout({ children }: { children: ReactNode 
   if (!cloudLearningEnabled()) return <CloudLearningUnavailable />;
   const catalog = await listPublishedLessons();
   return <Suspense fallback={<main className="page" aria-busy="true"><p role="status">불러오는 중…</p></main>}>
-    <BrowseShell catalog={catalog} accountId={identity.id}>{children}</BrowseShell>
+    <BrowseShell catalog={catalog} accountId={identity.id} profile={identity.profile}>{children}</BrowseShell>
   </Suspense>;
 }

@@ -11,7 +11,7 @@ async function openGroupedPlayer(page: Page, level: 4 | 5, size = 2) {
   await page.waitForLoadState("networkidle");
 }
 
-test("setup selects a group size and level 4 plays each highlighted phrase before counting one cycle", async ({ page }) => {
+test("device group settings stay local and level 4 plays each highlighted phrase before counting one cycle", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await page.route("**/api/lessons/*/audio/*", route => {
     return route.fulfill({ contentType: "audio/webm", body: testRecording });
@@ -27,10 +27,12 @@ test("setup selects a group size and level 4 plays each highlighted phrase befor
   }
   await page.keyboard.press("Escape");
   await startSelectedStage(page);
-  await expect(page).toHaveURL(/group=3/);
+  // Until local session snapshots land, legacy playback retains server defaults.
+  await expect(page).toHaveURL(/group=2/);
   await page.waitForLoadState("networkidle");
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");
+  // Three phrases are balanced into one group instead of leaving an orphan.
   await expect(phrases).toHaveCount(3);
   await expect(phrases.nth(0)).toContainText("I wake up at seven.");
   await expect(phrases.nth(1)).toContainText("나는 세수를 한다.");
@@ -153,11 +155,13 @@ test("a long level 5 group keeps the first hint and touch actions accessible in 
 
 test("a failed second recording retries the whole group without counting a partial cycle or hiding subtitles", async ({ page }) => {
   await openGroupedPlayer(page, 5);
-  let failSecond = true;
-  await page.route("**/api/lessons/*/audio/*", route => {
-    const number = Number(new URL(route.request().url()).pathname.split("/").at(-1));
-    if (number === 2 && failSecond) return route.fulfill({ status: 503, body: "Audio unavailable" });
-    return route.fulfill({ contentType: "audio/webm", body: testRecording });
+  await page.addInitScript(() => {
+    let failSecond = true, plays = 0;
+    window.addEventListener("fixture-audio-recovered", () => { failSecond = false; });
+    const original = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      return ++plays === 2 && failSecond ? Promise.reject(new DOMException("Fixture decoder failure", "NotSupportedError")) : original.call(this);
+    };
   });
   await reloadLearnerPage(page);
   await page.waitForLoadState("networkidle");
@@ -168,7 +172,7 @@ test("a failed second recording retries the whole group without counting a parti
   await expect(page.getByRole("alert", { name: "원음 재생 오류" })).toHaveCount(0);
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await expect(page.getByRole("button", { name: "자막 보기", exact: true })).toHaveAttribute("aria-expanded", "true");
-  failSecond = false;
+  await page.evaluate(() => window.dispatchEvent(new Event("fixture-audio-recovered")));
   await page.getByRole("button", { name: "RETRY · 다시 시도", exact: true }).click();
   await expect(page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem").first()).toHaveAttribute("aria-current", "true");
   await waitForManualListen(page);

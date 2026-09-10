@@ -1,10 +1,12 @@
 import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { timedRecording } from "./fixtures/timed-audio";
+import { packageResources } from "./fixtures/package-resources";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, level = 1) {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await packageResources(page, { audio: { bytes: timedRecording, mimeType: "audio/wav" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: timedRecording }));
   await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}&stage=${level * 2}&speed=2`);
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
@@ -160,7 +162,7 @@ test("five language choices show country flags and new languages retain truthful
     await expect(page.getByRole("heading", { name: `${label} 레슨`, exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "레슨 목록", exact: true }).getByRole("status")).toContainText("아직 게시된 레슨이 없습니다.");
     const navigation = page.getByRole("navigation", { name: "하단 탐색", exact: true });
-    await navigation.getByRole("link", { name: "설정", exact: true }).click();
+    await navigation.getByRole("button", { name: "설정", exact: true }).click();
     await reloadLearnerPage(page);
     await navigation.getByRole("link", { name: "레슨", exact: true }).click();
     await expect(page).toHaveURL(`/lessons?language=${id}`);

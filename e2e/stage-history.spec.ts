@@ -1,5 +1,5 @@
-import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
-import { seedServerJournal, fixtureVersion } from "./fixtures/cloud-journal";
+import { readDeviceJournal, readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedLearningJournal, fixtureVersion } from "./fixtures/cloud-journal";
 import { expect, test, type Locator, type Page } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 import type { CompletionRecord, ProgressRecord } from "../src/lib/learning-records";
@@ -16,7 +16,7 @@ const complete = (stage: number, overrides: Partial<CompletionRecord> = {}): Com
 });
 async function seed(page: Page, history: CompletionRecord[], progress: ProgressRecord | null = null) {
   await openLearnerPage(page, "/languages");
-  await seedServerJournal(page, { history, progress, studyDays: [] });
+  await seedLearningJournal(page, { history, progress, studyDays: [] });
   await openLearnerPage(page, stages);
   await expect(page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true })).toBeEnabled();
 }
@@ -29,7 +29,7 @@ test("history moves off lessons into a lesson-only dialog, preserving old versio
   const records = [complete(1), complete(8, { runId: "old", lessonVersion: "old-v1", completedAt: "2026-09-07T01:00:00Z" }),
     complete(4, { lessonId: "10000000-0000-4000-8000-000000000002" }), complete(2)];
   await seed(page, records);
-  const original = await readServerJournal(page);
+  const original = { server: await readServerJournal(page), device: await readDeviceJournal(page) };
   await openLearnerPage(page, "/lessons?language=english");
   await expect(page.getByRole("region", { name: "완료 기록", exact: true })).toHaveCount(0);
   await openLearnerPage(page, stages);
@@ -71,7 +71,7 @@ test("history moves off lessons into a lesson-only dialog, preserving old versio
   await trigger.click();
   await dialog.getByRole("button", { name: "완료 기록 닫기", exact: true }).click();
   await expect(trigger).toBeFocused();
-  expect(await readServerJournal(page)).toEqual(original);
+  expect({ server: await readServerJournal(page), device: await readDeviceJournal(page) }).toEqual(original);
   await expect(page).toHaveURL(new RegExp(`${stages}$`));
 });
 
@@ -81,7 +81,8 @@ test("empty history is meaningful and each opening reads freshly saved records",
   await trigger.click();
   await expect(page.getByRole("dialog")).toContainText("아직 완료한 학습이 없습니다.");
   await page.keyboard.press("Escape");
-  await seedServerJournal(page, { history: [...(await readServerJournal(page)).history, complete(1, { runId: "new-completion" })] });
+  await seedLearningJournal(page, { history: [...(await readServerJournal(page)).history,
+    ...((await readDeviceJournal(page))?.history ?? []), complete(1, { runId: "new-completion" })] });
   await trigger.click();
   await expect(recordsIn(page.getByRole("dialog"))).toHaveCount(1);
 });

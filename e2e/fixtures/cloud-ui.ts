@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { test as base, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./local-supabase-google";
 import { parseLessonDraft } from "../../src/lib/lesson-draft-parser";
-import { testAudioManifest } from "./audio";
+import { testRecording } from "./audio";
 import { fixtureVersion } from "./cloud-journal";
 import { lessons as fixtureLessons } from "../../src/lib/lessons";
 
@@ -49,6 +49,7 @@ export const test = base.extend<{ profileMetadata: Record<string, string> }>({
     const created = await service.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: profileMetadata });
     if (created.error || !created.data.user) throw created.error ?? new Error("Fixture user missing");
     const id = created.data.user.id;
+    const retainedAudio: string[] = [];
     try {
       const client = createClient(url, key, options);
       const signedIn = await client.auth.signInWithPassword({ email, password });
@@ -66,18 +67,30 @@ export const test = base.extend<{ profileMetadata: Record<string, string> }>({
       const rows = scripts.map(([title, language, target, korean], index) => {
         const { entries } = parseLessonDraft(target, korean);
         const count = entries.filter(entry => entry.kind === "phrase").length;
+        const digest = createHash("sha256").update(testRecording).digest("hex");
+        const path = `${id}/${lessonIds[index]}/verified/${digest}.webm`;
+        retainedAudio.push(path);
+        const audioManifest = entries.filter(entry => entry.kind === "phrase").map((phrase, audioIndex) => ({
+          phraseNumber: phrase.phraseNumber, sourceLine: phrase.sourceLine, originalName: `${audioIndex + 1}.webm`,
+          canonicalName: `${String(audioIndex + 1).padStart(3, "0")}.webm`, path, contentType: "audio/webm", size: testRecording.length, sha256: digest,
+        }));
         return { id: lessonIds[index], created_by: id, title, language, target_filename: "en.txt", korean_filename: "ko.txt", target_source: target, korean_source: korean, parsed_entries: entries,
           validation_status: "validated", publication_status: "published", published_at: fixtureVersion,
-          phrase_count: count, chapter_count: entries.filter(entry => entry.kind === "chapter").length, section_count: 0, audio_manifest: testAudioManifest(count) };
+          phrase_count: count, chapter_count: entries.filter(entry => entry.kind === "chapter").length, section_count: 0, audio_manifest: audioManifest };
       });
       const seeded = await service.from("lesson_drafts").insert(rows);
       if (seeded.error) throw seeded.error;
+      for (const path of retainedAudio) {
+        const uploaded = await service.storage.from("lesson-audio").upload(path, testRecording, { contentType: "audio/webm" });
+        if (uploaded.error) throw uploaded.error;
+      }
       // Presentation regressions start from an account with its first book
       // selected. Fresh-account/null-selection behavior has dedicated UI tests.
       const preferences = await service.from("learner_preferences").insert({ user_id: id, study_timezone: "Asia/Seoul", selection: { language: "english", lessonId: lessonIds[0] } });
       if (preferences.error) throw preferences.error;
       await use(context);
     } finally {
+      if (retainedAudio.length) await service.storage.from("lesson-audio").remove(retainedAudio);
       // Delete only rows owned by this disposable user, even if fixture setup failed.
       await service.from("lesson_drafts").delete().eq("created_by", id);
       await service.auth.admin.deleteUser(id);
