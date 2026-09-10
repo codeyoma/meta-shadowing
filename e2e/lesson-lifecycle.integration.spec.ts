@@ -1,4 +1,4 @@
-import { openLearnerPage, enterAccountPractice, advanceCloudClock, pauseCloudClock } from "./fixtures/cloud-navigation";
+import { openLearnerPage, enterAccountPractice, advanceCloudClock, pauseCloudClock, installStagePackage, readDeviceJournal } from "./fixtures/cloud-navigation";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -58,6 +58,9 @@ async function lifecycleFixture(page: Page) {
     return response.json();
   }
   async function cleanup() {
+    const versions = await service.from("lesson_drafts").select("audio_manifest").eq("created_by", owner);
+    expect(versions.error).toBeNull();
+    paths.push(...(versions.data ?? []).flatMap(row => row.audio_manifest.flatMap((audio: { path?: string }) => audio.path?.startsWith(`${owner}/`) ? [audio.path] : [])));
     if (paths.length) expect((await service.storage.from("lesson-audio").remove(paths)).error).toBeNull();
     expect((await service.from("lesson_drafts").delete().eq("created_by", owner)).error).toBeNull();
     expect((await service.auth.admin.deleteUser(owner)).error).toBeNull();
@@ -133,13 +136,17 @@ for (const entry of ["home", "player"] as const) {
       await page.keyboard.press("Space");
       await expect(page.getByText("문장 2 / 2", { exact: true })).toBeVisible();
       const oldRun = page.url();
-      const replacement = await fixture.draft("Updated practice", original);
+      const updatedTitle = `Updated practice ${original}`;
+      const replacement = await fixture.draft(updatedTitle, original);
       await fixture.upload(replacement);
       await fixture.publish(replacement);
       await page.goto(entry === "home" ? "/lessons?language=english" : oldRun);
       if (entry === "home") {
-        await page.getByRole("link", { name: /Updated practice/ }).click();
+        await page.getByRole("link", { name: /Updated practice/ }).and(page.locator(`[href="/lessons/${original}/stages"]`)).click();
         await expectPreservedCompletion(page, originalVersion);
+        await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toBeDisabled();
+        await installStagePackage(page);
+        await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toBeEnabled();
         await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).click();
       }
       // Version replacement automatically acquires a fresh run. Its preparation
@@ -153,18 +160,24 @@ for (const entry of ["home", "player"] as const) {
       const journalResponse = await page.request.get("/api/learner/practice");
       expect(journalResponse.status()).toBe(200);
       const journal = await journalResponse.json();
-      expect(journal.progress).toMatchObject({
-        lessonId: original, lessonName: "Updated practice", nextUnit: 0,
+      // Home starts device-local level one; the direct legacy level-six URL
+      // continues to use its server journal until that level is migrated.
+      const progress = entry === "home"
+        ? (await readDeviceJournal(page))?.runs.find(run => run.runId === new URL(page.url()).searchParams.get("run"))
+        : journal.progress;
+      expect(progress).toMatchObject({
+        lessonId: original, lessonName: updatedTitle, nextUnit: 0,
         runId: new URL(page.url()).searchParams.get("run"),
       });
-      expect(Date.parse(journal.progress.lessonVersion)).toBeGreaterThan(Date.parse(originalVersion));
+      expect(Date.parse(progress!.lessonVersion)).toBeGreaterThan(Date.parse(originalVersion));
+      if (entry === "home") expect(journal.progress?.runId).toBe(new URL(oldRun).searchParams.get("run"));
       expect(journal.history).toHaveLength(1);
       expect(journal.history[0]).toMatchObject({ lessonId: original, lessonVersion: originalVersion, level: 6 });
       await page.reload();
       await enterAccountPractice(page);
       await expect(firstUnit).toBeVisible();
       await page.goto("/lessons?language=english");
-      await page.getByRole("link", { name: /Updated practice/ }).click();
+      await page.getByRole("link", { name: /Updated practice/ }).and(page.locator(`[href="/lessons/${original}/stages"]`)).click();
       await expectPreservedCompletion(page, originalVersion);
     } finally { await fixture.cleanup(); }
   });

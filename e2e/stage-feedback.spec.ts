@@ -81,7 +81,7 @@ test("preview uses compact display-ink instructions and a full-width Start witho
     expect(footer.left).toBeCloseTo(0, 0);
     expect(footer.right).toBeCloseTo(0, 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await expect(page.locator("nextjs-portal")).not.toContainText(/Runtime Error|Build Error/);
+    await expect(page.locator("nextjs-portal").getByText(/Runtime Error|Build Error/)).toHaveCount(0);
     await page.screenshot({ path: info.outputPath(`stage-preview-${viewport.width}.png`), animations: "disabled", scale: "css" });
   }
   expect(errors).toEqual([]);

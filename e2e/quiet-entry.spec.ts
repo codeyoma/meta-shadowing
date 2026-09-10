@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures/cloud-ui";
+import { openLearnerPage } from "./fixtures/cloud-navigation";
 
 test.beforeEach(async ({ page }) => {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
@@ -48,10 +49,10 @@ test("account reads stay quiet while pending and still show real errors", async 
   await expect(page.getByRole("button", { name: "다시 불러오기", exact: true })).toBeVisible();
 });
 
-test("practice opens directly without account-storage instructions", async ({ page }, testInfo) => {
+test("downloaded practice opens without account-storage instructions", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  await page.goto("/player?lesson=10000000-0000-4000-8000-000000000001&level=1&stage=1");
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&stage=1");
   await expect(page.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
   await expect(page.getByText("계정 학습 시작", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/마지막 서버 확인 지점에서 이어 학습합니다/)).toHaveCount(0);

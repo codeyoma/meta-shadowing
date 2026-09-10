@@ -69,11 +69,12 @@ test("legacy preference API and selection remain account-isolated for the server
     pageA.on("pageerror", error => errors.push(error.message));
     pageA.on("console", message => { if (message.text().startsWith("cloud-storage-access:")) storageAccesses.push(message.text()); });
     await pageA.addInitScript(() => {
+      const legacyKeys = new Set(["meta-shadowing:preferences:v1", "meta-shadowing:learning:v1"]);
       localStorage.setItem("meta-shadowing:preferences:v1", JSON.stringify({ speed: 3 }));
       localStorage.setItem("meta-shadowing:learning:v1", "existing-record-do-not-import-or-delete");
       const original = Storage.prototype.getItem;
       Storage.prototype.getItem = function(key) {
-        if (key.startsWith("meta-shadowing:")) {
+        if (legacyKeys.has(key)) {
           console.warn(`cloud-storage-access:read:${key}`);
           throw new Error(`Cloud path read local learning data: ${key}`);
         }
@@ -82,7 +83,7 @@ test("legacy preference API and selection remain account-isolated for the server
       for (const method of ["setItem", "removeItem"] as const) {
         const originalMutation = Storage.prototype[method];
         Storage.prototype[method] = function(key: string, value?: string) {
-          if (key.startsWith("meta-shadowing:")) console.warn(`cloud-storage-access:${method}:${key}`);
+          if (legacyKeys.has(key)) console.warn(`cloud-storage-access:${method}:${key}`);
           return originalMutation.call(this, key, value!);
         };
       }
@@ -134,7 +135,7 @@ test("legacy preference API and selection remain account-isolated for the server
       expect((await savedSelection).status()).toBe(200);
       await expect(pageA.getByLabel("계정 설정 알림")).toHaveCount(0);
       savedSelection = pageA.waitForResponse(response => response.url().endsWith("/api/learner/preferences") && response.request().method() === "PATCH");
-      await pageA.getByRole("link", { name: /Account lesson 1/ }).click();
+      await pageA.getByRole("link", { name: /Account lesson 1/ }).and(pageA.locator(`[href="/lessons/${lessonIds[1]}/stages"]`)).click();
       expect((await (await savedSelection).json()).profile.selection.lessonId).toBe(lessonIds[1]);
       await pageB.goto("/lessons");
       await expect(pageB.getByRole("heading", { name: "일본어 레슨" })).toBeVisible();
@@ -147,7 +148,10 @@ test("legacy preference API and selection remain account-isolated for the server
       const value = await service.from("learner_preferences").select("selection").eq("user_id", a.id).single();
       expect(value.data?.selection).toEqual({ language: "english", lessonId: lessonIds[0] });
       await pageA.goto(`/player?lesson=${lessonIds[0]}`);
-      await expect(pageA.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
+      // This catalog-only fixture has no installable audio. Entry must stop at
+      // the package gate, not bypass acquisition to test account selection.
+      await expect(pageA.getByText("이 레슨 전체를 다운로드해 주세요.", { exact: true })).toBeVisible();
+      await expect(pageA.getByRole("button", { name: /CONTINUE/ })).toHaveCount(0);
       await pageA.goto("/languages");
     });
 
@@ -176,11 +180,15 @@ test("legacy preference API and selection remain account-isolated for the server
       await b.addCookies(await c.context.cookies());
       await pageB.evaluate(() => window.dispatchEvent(new Event("focus")));
       await expect(pageB.getByLabel("재생속도")).toHaveCount(0);
-      await expect(pageB.getByRole("alert", { name: "계정 설정 알림" })).toContainText("계정이 변경");
-      await pageB.getByRole("button", { name: "새 계정 불러오기" }).click();
+      await expect(pageB.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+      expect(await pageB.evaluate(() => localStorage.getItem("meta-shadowing:device-access:v1"))).toBeNull();
+      // The outer device-access gate now invalidates the old account before
+      // the legacy preference alert can render. Re-enter without A's URL.
+      await pageB.goto("/languages");
       // An old account's route parameters must not become the new account's selection.
       await pageB.waitForLoadState("networkidle");
       expect((await (await c.context.request.get("/api/learner/preferences")).json()).profile.selection).toBeNull();
+      await pageB.getByRole("button", { name: "설정", exact: true }).click();
       await expect(pageB.getByLabel("재생속도")).toHaveValue("1");
     });
     expect(await pageA.evaluate(() => ({ ...localStorage }))).toMatchObject({

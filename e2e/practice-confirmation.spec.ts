@@ -1,4 +1,4 @@
-import { pauseCloudClock, advanceCloudClock, readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { pauseCloudClock, advanceCloudClock, readDeviceJournal, readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
@@ -67,9 +67,10 @@ test("automatic checks wait for the full timer and the third check chimes withou
     const remainingMs = Number((await page.getByRole("timer").innerText()).replace("초", "")) * 1000;
     await advanceCloudClock(page, remainingMs + 100);
     await expect(progress).toHaveText(`필수 ${count} / 3`);
-    const journal = await readServerJournal(page);
-    expect(journal.studyDays).toHaveLength(1);
-    expect(journal.progress.nextPhrase).toBe(0);
+    const device = await readDeviceJournal(page);
+    expect(device?.runs).toHaveLength(1);
+    expect(device?.runs[0]).toMatchObject({ nextPhrase: 0, confirmedCycles: count });
+    expect((await readServerJournal(page)).progress).toBeNull();
   }
   await expect.poll(() => tones(page)).toHaveLength(3);
   await expect(page.getByRole("button", { name: /^REPEAT/ })).toBeVisible();

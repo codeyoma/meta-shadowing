@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, lessonIds } from "./fixtures/cloud-ui";
-import { openLearnerPage, readServerJournal } from "./fixtures/cloud-navigation";
+import { openLearnerPage, readServerJournal, installPlayerPackage } from "./fixtures/cloud-navigation";
 import { assertLocalSupabaseUrl } from "./fixtures/local-supabase-google";
 
 test("another lesson offers a route to the active practice before takeover", async ({ page, context }) => {
@@ -15,6 +15,7 @@ test("another lesson offers a route to the active practice before takeover", asy
   await openLearnerPage(page, `/player?lesson=${lessonIds[0]}&level=6&stage=11`);
   const other = await context.newPage();
   await other.goto(`/player?lesson=${lessonIds[1]}&level=6&stage=11`);
+  await installPlayerPackage(other);
   await other.getByRole("link", { name: "진행 중인 학습으로 이동", exact: true }).click();
   await expect(other).toHaveURL(new RegExp(`lesson=${lessonIds[0]}`));
   await other.getByRole("button", { name: "이 기기에서 이어 학습", exact: true }).click();

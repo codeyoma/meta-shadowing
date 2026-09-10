@@ -137,7 +137,8 @@ test("a saved 560-file draft recovers from a text timeout without reuploading an
   }
 });
 
-test("only a complete private audio package can be published and played by a beta learner", async ({
+for (const playbackGroup of [1, 2, 3, 4, 5, "rapid"] as const) {
+test(`only a complete private audio package can be published and played by a beta learner (${playbackGroup})`, async ({
   page,
   request
 }) => {
@@ -147,7 +148,7 @@ test("only a complete private audio package can be published and played by a bet
   const secretKey = process.env.SUPABASE_INTEGRATION_SECRET_KEY!;
   const adminEmail = `audio-admin-${randomUUID()}@example.com`;
   const learnerEmail = `audio-learner-${randomUUID()}@example.com`;
-  const title = "게시 통합 테스트 레슨";
+  const title = `게시 통합 테스트 레슨 ${randomUUID()}`;
   const targetDialogue = "Good morning.\nWelcome home.";
   const koreanDialogue = "좋은 아침입니다.\n어서 오세요.";
   const scriptSource = `## First chapter\n\n${targetDialogue}\n${koreanDialogue}\n\n## Second chapter\nI wash my face.\n세수합니다.\n`;
@@ -352,6 +353,7 @@ test("only a complete private audio package can be published and played by a bet
     expect(Buffer.from(await storedAudio.body())).toEqual(audioBytes);
 
     await openLearnerPage(page, `/player?lesson=${draftId}&level=1`);
+    if (playbackGroup === 1) {
     await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
     const menu = page.getByRole("dialog", { name: "학습 메뉴", exact: true });
     await expect(menu).toHaveAccessibleDescription(new RegExp(title));
@@ -383,7 +385,8 @@ test("only a complete private audio package can be published and played by a bet
     }
     await page.keyboard.press("Space");
     await expect(page.getByRole("heading", { name: "레벨 1 학습 완료" })).toBeVisible();
-    for (const level of [2, 3, 4, 5]) {
+    } else if (playbackGroup !== "rapid") {
+      const level = playbackGroup;
       await openLearnerPage(page, `/player?lesson=${draftId}&level=${level}`);
       await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
       const subtitles = page.getByRole("region", { name: "학습 자막" });
@@ -422,15 +425,17 @@ test("only a complete private audio package can be published and played by a bet
       await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
       await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
       await expect(page).toHaveURL(/\/lessons\/[^/]+\/stages/);
-    }
-
+    } else {
     const rapidAudioRequests: string[] = [];
     page.on("request", request => { if (request.url().includes("/audio/")) rapidAudioRequests.push(request.url()); });
     await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
-    await page.clock.pauseAt(new Date("2026-09-06T00:01:00Z"));
     for (const level of [6, 7, 8]) {
+      // Let navigation and real lease acquisition settle before advancing the
+      // virtual playback clock; a frozen entry can invalidate verification.
+      await page.clock.resume();
       await openLearnerPage(page, `/player?lesson=${draftId}&level=${level}&wpm=6&mode=automatic&sectionGap=0.5`);
       await page.waitForLoadState("networkidle");
+      await pauseCloudClock(page, new Date(`2026-09-06T00:0${level - 5}:00Z`));
       await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}` })).toBeVisible();
       await expect(page.getByLabel("현재 챕터")).toHaveText("First chapter");
       await expect(page.getByRole("separator", { name: "구간 경계" })).toHaveCount(0);
@@ -457,8 +462,12 @@ test("only a complete private audio package can be published and played by a bet
       await expect(page.getByRole("separator", { name: "구간 경계" })).toHaveCount(0);
       await advanceCloudClock(page, 5000);
       await expect(page.getByRole("heading", { name: `레벨 ${level} 학습 완료` })).toBeVisible();
+      // End this run through its normal exit before acquiring another stage.
+      await page.getByRole("button", { name: "레슨 목록으로", exact: true }).click();
+      await expect(page).toHaveURL(/\/lessons(?:\?|$)/);
     }
     expect(rapidAudioRequests).toEqual([]);
+    }
   } finally {
     const versions = await serviceClient.from("lesson_drafts").select("audio_manifest").eq("created_by", createdAdmin.user.id);
     uploadedPaths.push(...(versions.data ?? []).flatMap(row => row.audio_manifest.flatMap((item: { path?: string }) => item.path?.startsWith(`${createdAdmin.user!.id}/`) ? [item.path] : [])));
@@ -467,3 +476,4 @@ test("only a complete private audio package can be published and played by a bet
     await serviceClient.auth.admin.deleteUser(createdLearner.user.id);
   }
 });
+}

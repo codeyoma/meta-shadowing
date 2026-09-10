@@ -11,7 +11,10 @@ import { auditLearningStorage } from "./fixtures/storage-audit";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
 
-for (const level of [1,2,3,4,5,6,7,8]) test(`level ${level} uses acknowledged units, run settings and cross-device resume`, async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
+// Level one's routed player no longer uses server acknowledgments or automatic
+// cross-device resume. device-learning.spec.ts verifies its local durability,
+// independent devices, offline recovery, and failed-write boundary instead.
+for (const level of [2,3,4,5,6,7,8]) test(`legacy level ${level} uses acknowledged units, run settings and cross-device resume`, async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
   test.setTimeout(120000);
   const url = process.env.SUPABASE_INTEGRATION_URL!; assertLocalSupabaseUrl(url);
   const key = process.env.SUPABASE_INTEGRATION_PUBLISHABLE_KEY!;

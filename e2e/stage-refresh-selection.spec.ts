@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures/cloud-ui";
-import { readServerJournal } from "./fixtures/cloud-navigation";
+import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
 
 for (const [stage, groupSize] of [[7, 3], [8, 4]]) {
   test(`stage ${stage} remains selected when an account refresh finishes before Start`, async ({ page }) => {
@@ -8,7 +8,7 @@ for (const [stage, groupSize] of [[7, 3], [8, 4]]) {
     expect((await page.request.patch("/api/learner/preferences", { data: {
       accountId: profile.accountId, revision: profile.revision, changes: { groupSize },
     } })).status()).toBe(200);
-    await page.goto("/lessons/10000000-0000-4000-8000-000000000001/stages");
+    await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages");
     const selected = page.getByRole("radio", { name: new RegExp(`^${stage} 다문장 암기`) });
     await expect(selected).toBeEnabled();
     await page.waitForLoadState("networkidle");

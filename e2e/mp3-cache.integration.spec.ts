@@ -63,10 +63,15 @@ test("installed media preserves the fresh-gesture recovery path without requesti
   try {
     await page.goto("/player?lesson=" + fixture.lessonId + "&level=1&stage=1"); await enterAccountPractice(page);
     await page.evaluate(() => {
-      let inClick = false;
+      let inClick = false, firstAttempt = true;
       document.addEventListener("click", () => { inClick = true; setTimeout(() => { inClick = false; }, 0); }, true);
       const original = HTMLMediaElement.prototype.play;
-      HTMLMediaElement.prototype.play = function () { return inClick ? original.call(this) : Promise.reject(new DOMException("Fresh tap required", "NotAllowedError")); };
+      HTMLMediaElement.prototype.play = function () {
+        // Local playback starts in the initial click now. Explicitly model the
+        // browser rejecting that first attempt, then require a fresh tap.
+        if (firstAttempt) { firstAttempt = false; return Promise.reject(new DOMException("Fixture autoplay rejection", "NotAllowedError")); }
+        return inClick ? original.call(this) : Promise.reject(new DOMException("Fresh tap required", "NotAllowedError"));
+      };
     });
     let requests = 0;
     page.on("request", request => { if (request.url().includes("/audio/")) requests++; });

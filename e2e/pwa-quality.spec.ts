@@ -28,7 +28,7 @@ test("empty form fields have a clearly distinguishable boundary on the white can
   await expectFieldBoundary(page.getByRole("combobox", { name: "재생속도", exact: true }));
 });
 
-test("the online-only install manifest and all home-screen icons work without learner access", async ({ page, request }) => {
+test("the install manifest, icons, and neutral offline worker work without learner access", async ({ page, request }) => {
   const manifestResponse = await request.get("/manifest.webmanifest");
   expect(manifestResponse.ok()).toBe(true);
   const manifest = await manifestResponse.json();
@@ -51,7 +51,9 @@ test("the online-only install manifest and all home-screen icons work without le
   await page.getByText("설치 및 온라인 이용 안내", { exact: true }).click();
   await expect(page.getByText("학습에는 인터넷 연결이 필요합니다. 진행상황과 설정은 계정에 저장하며, MP3 음성만 이 기기에 임시 보관합니다. 음성을 들을 때마다 20일 보관 기간이 갱신됩니다.", { exact: true })).toBeVisible();
   await expect(page.getByText(/iPhone.*Safari/)).toBeVisible();
-  expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
+  await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations())
+    .filter(registration => new URL(registration.scope).pathname === "/" &&
+      new URL(registration.active?.scriptURL ?? registration.installing?.scriptURL ?? location.href).pathname === "/sw.js").length)).toBe(1);
 });
 
 test("setup exposes large touch targets, visible keyboard focus and a legible selected level", async ({ page }) => {
@@ -62,6 +64,7 @@ test("setup exposes large touch targets, visible keyboard focus and a legible se
     const box = await button.boundingBox();
     if (box) expect(Math.min(box.width, box.height), await button.innerText()).toBeGreaterThanOrEqual(44);
   }
+  await page.keyboard.press("Tab");
   await page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true }).focus();
   await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toHaveCSS("box-shadow", /rgb\(4, 44, 96\)/);
   await expect(page.getByRole("radio", { name: /1 자막 쉐도잉/ })).toHaveAttribute("aria-checked", "false");

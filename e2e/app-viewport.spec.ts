@@ -43,7 +43,8 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 430, height: 932 }
     const currentStart = page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true });
     await expect(currentStart).toBeEnabled();
     await page.evaluate(() => document.fonts.ready);
-    await expectFullyInViewport(heading);
+    // Acquiring the package can scroll its management trigger into view.
+    await revealControl(heading);
     const topNavigation = page.getByRole("navigation", { name: "상단 탐색", exact: true });
     const bottomNavigation = page.getByRole("navigation", { name: "하단 탐색", exact: true });
     const topBefore = await topNavigation.boundingBox();

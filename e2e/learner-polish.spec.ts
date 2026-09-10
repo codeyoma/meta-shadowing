@@ -1,10 +1,12 @@
 import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { timedRecording } from "./fixtures/timed-audio";
+import { packageResources } from "./fixtures/package-resources";
 import { confirmManualListen } from "./fixtures/manual-practice";
 
 async function openPlayer(page: Page, level = 1) {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await packageResources(page, { audio: { bytes: timedRecording, mimeType: "audio/wav" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: timedRecording }));
   await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}&stage=${level * 2}&speed=2`);
   await expect(page.getByRole("heading", { name: `메타쉐도잉 레벨 ${level}`, exact: true })).toBeVisible();
