@@ -132,7 +132,7 @@ export function DeviceSettingsProvider({ accountId, profile, children }: {
                 }} />}
             </FieldGroup>
           </FieldSet>
-          <p className="mt-4 text-sm text-muted-foreground">레벨 1은 기기 설정을 사용합니다. 나머지 레벨은 전환 작업이 끝날 때까지 기존 계정 설정을 사용합니다.</p>
+          <p className="mt-4 text-sm text-muted-foreground">모든 레벨이 이 기기에 저장된 설정을 사용합니다.</p>
           <PackageDownloads />
           <div className="mt-6"><LearnerSignOut settingsRow /></div>
         </div>

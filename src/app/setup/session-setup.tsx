@@ -45,9 +45,9 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
   const { openSettings } = useDeviceSettings();
   const packageReady = packages?.inventory.some(row => row.lessonId === lesson.id && row.version === lesson.version && row.state === "ready") ?? false;
   const device = useDeviceJournal(cloud.journal);
-  const cloudJournal = device.journal, overrides = cloud.profile.overrides;
+  const cloudJournal = device.journal;
   const language = lesson.language;
-  const settings = resolveSessionSettings(overrides, defaults);
+  const settings = resolveSessionSettings(device.settings, defaults);
   const [ready, setReady] = useState(false);
   const [previewStage, setPreviewStage] = useState<number | null>(null);
   const stageScrollRef = useBrowseScroll(`stages:${lesson.id}`);

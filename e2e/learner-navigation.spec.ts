@@ -1,4 +1,4 @@
-import { enterAccountPractice, readServerJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { enterAccountPractice, readDeviceJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
 import { seedLearningJournal, fixtureRunId } from "./fixtures/cloud-journal";
 import { expect, test } from "./fixtures/cloud-ui";
 import { lessons } from "./fixtures/cloud-ui";
@@ -61,19 +61,19 @@ test("home keeps its brand and real streak together in a fixed top navigation", 
     .toEqual({ top: 0, fits: true });
 });
 
-test("legacy level two only earns a cloud study day on confirmed listening, not a jump or playback", async ({ page }) => {
+test("level two only earns a local study day on confirmed listening, not a jump or playback", async ({ page }) => {
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=2&stage=3&mode=manual");
   await page.locator("#player-menu-trigger").click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await page.getByRole("button", { name: /^2번 문장/ }).click();
-  expect((await readServerJournal(page)).studyDays).toEqual([]);
+  expect((await readDeviceJournal(page))!.studyDays).toEqual([]);
   await page.getByRole("button", { name: /^CONTINUE/ }).click();
   const confirm = page.getByRole("button", { name: "CONTINUE · 듣기 완료 확인", exact: true });
   await expect(confirm).toBeVisible();
-  expect((await readServerJournal(page)).studyDays).toEqual([]);
+  expect((await readDeviceJournal(page))!.studyDays).toEqual([]);
   await confirm.click();
   await expect(page.getByLabel("완료한 듣기", { exact: true })).toHaveText("필수 1 / 3");
-  expect((await readServerJournal(page)).studyDays).toHaveLength(1);
+  expect((await readDeviceJournal(page))!.studyDays).toHaveLength(1);
   await openLearnerPage(page, "/home");
   await expect(page.getByLabel("1일 연속 학습", { exact: true })).toBeVisible();
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");

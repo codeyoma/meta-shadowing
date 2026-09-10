@@ -160,19 +160,17 @@ for (const entry of ["home", "player"] as const) {
       const journalResponse = await page.request.get("/api/learner/practice");
       expect(journalResponse.status()).toBe(200);
       const journal = await journalResponse.json();
-      // Home starts device-local level one; the direct legacy level-six URL
-      // continues to use its server journal until that level is migrated.
-      const progress = entry === "home"
-        ? (await readDeviceJournal(page))?.runs.find(run => run.runId === new URL(page.url()).searchParams.get("run"))
-        : journal.progress;
+      const local = (await readDeviceJournal(page))!;
+      const progress = local.runs.find(run => run.runId === new URL(page.url()).searchParams.get("run"));
       expect(progress).toMatchObject({
         lessonId: original, lessonName: updatedTitle, nextUnit: 0,
         runId: new URL(page.url()).searchParams.get("run"),
       });
       expect(Date.parse(progress!.lessonVersion)).toBeGreaterThan(Date.parse(originalVersion));
-      if (entry === "home") expect(journal.progress?.runId).toBe(new URL(oldRun).searchParams.get("run"));
-      expect(journal.history).toHaveLength(1);
-      expect(journal.history[0]).toMatchObject({ lessonId: original, lessonVersion: originalVersion, level: 6 });
+      expect(journal.progress).toBeNull();
+      expect(journal.history).toEqual([]);
+      expect(local.history).toHaveLength(1);
+      expect(local.history[0]).toMatchObject({ lessonId: original, lessonVersion: originalVersion, level: 6 });
       await page.reload();
       await enterAccountPractice(page);
       await expect(firstUnit).toBeVisible();

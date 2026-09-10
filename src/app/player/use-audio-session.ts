@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createAudioSession, isAudioRepeatAvailable, transitionAudioSession, type AudioPracticeLevel, type AudioSessionEvent, type AudioSessionSettings } from "@/lib/audio-session";
 import type { PublishedLesson } from "@/lib/lessons";
 import type { PhraseGroup } from "@/lib/phrase-groups";
-import type { LearningStart, CloudRecording } from "./recording-types";
+import type { LearningStart, LearningRecording } from "./recording-types";
 import { createAudioPreloader } from "@/lib/audio-preloader";
 import { createSuccessChime } from "@/lib/success-chime";
 import { useAudioCacheAccount } from "../audio-cache-scope";
@@ -15,7 +15,7 @@ function detachAudioListeners(audio: HTMLAudioElement) {
   audio.onplaying = audio.onended = audio.onerror = audio.onpause = null;
 }
 
-export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart, cloud: CloudRecording) {
+export function useAudioSession(lesson: PublishedLesson, level: AudioPracticeLevel, settings: AudioSessionSettings, groups: PhraseGroup[], shortcutsEnabled: boolean, start: LearningStart, cloud: LearningRecording) {
   const audioAccount = useAudioCacheAccount();
   const packageContent = usePackageContent();
   const { completion, updateRecord } = cloud;

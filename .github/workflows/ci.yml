@@ -128,7 +128,7 @@ jobs:
         run: npm run test:learner-preferences -- --project=mobile --reporter=line --global-timeout=600000
         env:
           PLAYWRIGHT_PRODUCTION: "1"
-      - name: Test legacy server-player boundaries on desktop and mobile
+      - name: Test retained practice APIs and independent device runs on desktop and mobile
         run: npm run test:cloud-practice -- --project=mobile --reporter=line --global-timeout=1200000
         env:
           PLAYWRIGHT_PRODUCTION: "1"

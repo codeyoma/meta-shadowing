@@ -72,8 +72,7 @@ test("path selection preserves device-local grouped and rapid preferences withou
   await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("1.5");
   await returnToStages(page);
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
-  // The global drawer owns device settings; legacy level-seven run settings
-  // remain a separate contract until that player's migration.
+  // Saving device settings does not start practice from the stage screen.
   await expect(page.getByRole("button", { name: /^CONTINUE/ })).toHaveCount(0);
 });
 

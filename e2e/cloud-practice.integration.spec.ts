@@ -3,12 +3,10 @@ import { expect, test, type BrowserContext } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
-import { testRecording } from "./fixtures/audio";
 import { createVerifiedTestAudio } from "./fixtures/verified-audio";
-import { enterAccountPractice, installPlayerPackage } from "./fixtures/cloud-navigation";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
-test("manual practice ownership and acknowledged progress survive independent browsers", async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
+test("retained practice API enforces authorization, idempotency, serialization and expired-owner fencing", async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }) => {
   test.setTimeout(180000);
   const url = process.env.SUPABASE_INTEGRATION_URL!;
   assertLocalSupabaseUrl(url);
@@ -59,6 +57,7 @@ test("manual practice ownership and acknowledged progress survive independent br
     const first = await a.context.request.post("/api/learner/practice", { data: start });
     expect(first.status()).toBe(200);
     const acquired = await first.json();
+    expect((await other.context.request.post("/api/learner/practice", { data: { action: "renew", accountId: a.id, instance: start.instance, runId: acquired.record.runId, generation: acquired.generation } })).status()).toBe(409);
     expect(acquired.record).toMatchObject({ nextUnit: 0, activeMs: 0, settings: { mode: "manual" } });
     expect((await b.request.post("/api/learner/practice", { data: { ...start, instance: randomUUID(), operation: randomUUID() } })).status()).toBe(409);
     expect((await other.context.request.post("/api/learner/practice", { data: start })).status()).toBe(409);
@@ -97,170 +96,22 @@ test("manual practice ownership and acknowledged progress survive independent br
     expect((await journal.json()).progress).toMatchObject({ nextUnit: 0, activeMs: 1300 });
     expect((await (await other.context.request.get("/api/learner/practice")).json()).progress).toBeNull();
     expect((await a.context.request.post("/api/learner/practice", { data: { action: "release", accountId: a.id, instance: start.instance, generation: acquired.generation, runId: acquired.record.runId } })).status()).toBe(200);
-    let page = await b.newPage();
-    const errors: string[] = [];
-    page.on("pageerror",error => errors.push(error.message));
-    await b.addInitScript(() => {
-      for (const name of ["getItem","setItem","removeItem"] as const) {
-        const original = Storage.prototype[name] as (this: Storage, key: string, value?: string) => string | null | void;
-        Object.defineProperty(Storage.prototype,name,{ configurable:true,value:function(this: Storage,key: string, value?: string) {
-          if (key.startsWith("meta-shadowing:") && !["meta-shadowing:device-access:v1", "meta-shadowing:device-access-fence:v1"].includes(key)) throw new Error(`Cloud practice touched browser learning storage: ${name}`);
-          return original.call(this,key,value!);
-        } });
-      }
-    });
-    await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
-    await page.goto(`/player?lesson=${lessonId}&level=2&stage=3`);
-    await installPlayerPackage(page);
-    await expect(page.getByRole("button", { name: /첫 원음 듣기/ })).toBeVisible();
-    await page.getByRole("button", { name: /첫 원음 듣기/ }).click();
-    await expect(page.getByRole("button", { name: /듣기 완료 확인/ })).toBeVisible();
-    await page.route("**/api/learner/practice", async route => {
-      if (route.request().postDataJSON()?.action !== "checkpoint") return route.continue();
-      expect((await route.fetch()).status()).toBe(200);
-      await route.fulfill({ status: 503, json: { error: "temporary-error" } });
-    });
-    await page.getByRole("button", { name: /듣기 완료 확인/ }).click();
-    await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toContainText("저장을 확인하지 못했습니다");
-    await expect(page.getByRole("button", { name: /CONTINUE/ })).toBeDisabled();
-    await page.unroute("**/api/learner/practice");
-    let acknowledge!: () => void;
-    const held = new Promise<void>(resolve => { acknowledge = resolve; });
-    await page.route("**/api/learner/practice", async route => {
-      if (route.request().postDataJSON()?.action !== "checkpoint") return route.continue();
-      const response = await route.fetch();
-      await held;
-      await route.fulfill({ response });
-    });
-    await page.getByRole("button", { name: "저장 재시도", exact: true }).click();
-    await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-    acknowledge();
-    await expect(page.getByLabel("학습 동기화")).toHaveCount(0);
-    await page.getByRole("button", { name: "확인", exact: true }).click();
-    await page.unroute("**/api/learner/practice");
-    const checkedResume = page.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "renew");
-    await page.getByRole("button", { name: /계속 재생/ }).click();
-    expect((await checkedResume).status()).toBe(200);
-    await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toHaveCount(0);
-    await expect(page.getByRole("group", { name: "완료한 듣기", exact: true })).toContainText("필수 1 / 3");
-    for (let cycle = 2; cycle <= 3; cycle++) {
-      await expect(page.getByRole("button", { name: /듣기 완료 확인/ })).toBeVisible();
-      await page.getByRole("button", { name: /듣기 완료 확인/ }).click();
-      await expect(page.getByRole("group", { name: "완료한 듣기", exact: true })).toContainText(`필수 ${cycle} / 3`);
-    }
-    await test.step("paused REPEAT waits for ownership before the optional two listens", async () => {
-      await page.getByRole("button", {name:"학습 메뉴",exact:true}).click();
-      await page.getByRole("button", {name:"확인",exact:true}).click();
-      let releaseRenewal!: () => void;
-      const heldRenewal = new Promise<void>(resolve => { releaseRenewal = resolve; });
-      await page.route("**/api/learner/practice",async route => {
-        if (route.request().postDataJSON()?.action !== "renew") return route.continue();
-        const response = await route.fetch();
-        await heldRenewal;
-        await route.fulfill({response});
-      });
-      await page.getByRole("button", {name:/REPEAT/}).click();
-      await expect(page.getByLabel("학습 동기화")).toHaveAttribute("aria-busy", "true");
-      expect(await page.locator("audio").evaluate((audio:HTMLAudioElement) => audio.paused)).toBe(true);
-      releaseRenewal();
-      await page.unroute("**/api/learner/practice");
-      for (let extra=1;extra<=2;extra++) {
-        await page.getByRole("button", {name:/듣기 완료 확인/}).click();
-        await expect(page.getByRole("group", {name:"완료한 듣기",exact:true})).toContainText(`추가 ${extra} / 2`);
-      }
-    });
-    await page.getByRole("button", { name: /NEXT/ }).click();
-    await expect(page.getByText("Hello 2.", { exact: true })).toBeVisible();
-    const confirmedProgress = (await (await b.request.get("/api/learner/practice")).json()).progress;
-    await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-    await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-    await expect(page.getByText("완료 0 / 16", { exact: true })).toBeVisible();
-    await page.close();
-    page = await a.context.newPage();
-    page.on("pageerror",error => errors.push(error.message));
-    await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType:"audio/webm",body:testRecording }));
-    const resumed = page.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
-    await page.goto(`/player?lesson=${lessonId}&level=2&stage=3`);
-    await installPlayerPackage(page);
-    expect((await (await resumed).json()).record).toMatchObject({nextUnit:1,settings:confirmedProgress.settings,activeMs:confirmedProgress.activeMs});
-    await expect(page.getByText("Hello 2.", { exact: true })).toBeVisible();
-    await test.step("an uncommitted operation stays in RAM and warns before exit", async () => {
-      await page.getByRole("button", { name: /첫 원음 듣기/ }).click();
-      await expect(page.getByRole("button", { name: /듣기 완료 확인/ })).toBeVisible();
-      await page.route("**/api/learner/practice", route => route.request().postDataJSON()?.action === "checkpoint"
-        ? route.fulfill({status:503,json:{error:"temporary-error"}}) : route.continue());
-      await page.getByRole("button", { name: /듣기 완료 확인/ }).click();
-      await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toBeVisible();
-      expect((await (await a.context.request.get("/api/learner/practice")).json()).progress).toMatchObject(confirmedProgress);
-      await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-      const warning = page.waitForEvent("dialog");
-      const exitClick = page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-      const dialog = await warning;
-      expect(dialog.message()).toContain("확인되지 않은 저장");
-      await dialog.dismiss(); await exitClick;
-      await page.unroute("**/api/learner/practice");
-      page.once("dialog",dialog => dialog.accept());
-      await page.reload();
-      // Reload resumes automatically, or explicitly takes over a lost release.
-      await enterAccountPractice(page);
-      await expect(page.getByText("Hello 2.", { exact: true })).toBeVisible();
-      await expect(page.getByRole("group", { name: "완료한 듣기", exact: true })).toContainText("필수 0 / 3");
-    });
-    await page.getByRole("button", { name: /첫 원음 듣기/ }).click();
-    for (let cycle = 1; cycle <= 3; cycle++) {
-      await expect(page.getByRole("button", { name: /듣기 완료 확인/ })).toBeVisible();
-      await page.getByRole("button", { name: /듣기 완료 확인/ }).click();
-      await expect(page.getByRole("group", { name: "완료한 듣기", exact: true })).toContainText(`필수 ${cycle} / 3`);
-    }
-    await page.route("**/api/learner/practice", async route => {
-      if (route.request().postDataJSON()?.kind !== "advance") return route.continue();
-      expect((await route.fetch()).status()).toBe(200);
-      await route.fulfill({ status: 503, json: { error: "temporary-error" } });
-    });
-    await page.getByRole("button", { name: /NEXT/ }).click();
-    await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /NEXT/ })).toBeDisabled();
-    await page.unroute("**/api/learner/practice");
-    await page.getByRole("button", { name: "저장 재시도", exact: true }).click();
-    const finishedJournal = await (await b.request.get("/api/learner/practice")).json();
-    expect(finishedJournal.progress).toBeNull();
-    expect(finishedJournal.history).toHaveLength(1);
-    expect(finishedJournal.studyDays).toHaveLength(1);
-    await page.getByRole("button",{name:"레슨 목록으로",exact:true}).click();
-    await expect(page).toHaveURL(/\/lessons\?/);
-    const map = await b.newPage();
-    await map.goto(`/lessons/${lessonId}/stages`);
-    await expect(map.getByText("완료 1 / 16", { exact: true })).toBeVisible();
-    await expect(map.getByLabel("1일 연속 학습")).toBeVisible();
-    await map.getByRole("button", { name: "이 레슨의 완료 기록" }).click();
-    await expect(map.getByRole("table", { name: "이 레슨의 완료 기록" })).toContainText("스테이지 3");
-    await map.screenshot({ path: testInfo.outputPath("cloud-completion-history.png"), fullPage: true });
-    expect(errors).toEqual([]);
-
-    await test.step("expired offline owner cannot overwrite the next device", async () => {
-      const starting = page.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
-      await page.goto(`/player?lesson=${lessonId}&level=2&stage=4`);
-
-      const oldStart = await starting, oldBody = oldStart.request().postDataJSON(), oldLease = await oldStart.json();
-      expect(oldStart.status()).toBe(200);
-      await page.context().setOffline(true);
-      await map.goto(`/player?lesson=${lessonId}&level=2&stage=4`);
-      await installPlayerPackage(map);
-      await expect(map.getByRole("button", { name: "이 기기에서 이어 학습", exact: true })).toBeVisible();
-      await waitForLeaseExpiry(a.id);
-      const takeover = map.waitForResponse(response => response.url().endsWith("/api/learner/practice") && response.request().method() === "POST" && response.request().postDataJSON()?.action === "start");
-      await map.reload();
-
-      expect((await takeover).status()).toBe(200);
-      await expect(map.getByText("Hello 1.", { exact: true })).toBeVisible();
-      await page.context().setOffline(false);
-      expect((await a.context.request.post("/api/learner/practice", { data: { action: "checkpoint",accountId: a.id,instance:oldBody.instance,runId:oldLease.record.runId,generation:oldLease.generation,
-        operation:randomUUID(),revision:0,kind:"studied",nextUnit:0,activeMs:2000 } })).status()).toBe(409);
-      await map.context().clearCookies();
-      await map.evaluate(() => window.dispatchEvent(new Event("focus")));
-      await expect(map.getByRole("button", {name:"로그인",exact:true})).toBeVisible();
-      await expect(map.getByText("Hello 1.",{exact:true})).toHaveCount(0);
-    });
+    // Retained server API contract is exercised directly. Learner UI durability
+    // and optional repetitions are covered by device-all-levels/manual-practice.
+    const resumedCommand = { ...start, instance: randomUUID(), operation: randomUUID() };
+    const resumed = await b.request.post("/api/learner/practice", { data: resumedCommand });
+    expect(resumed.status()).toBe(200);
+    const resumedLease = await resumed.json();
+    expect(resumedLease.record).toMatchObject({ nextUnit: 0, activeMs: 1300 });
+    await waitForLeaseExpiry(a.id);
+    const nextCommand = { ...start, instance: randomUUID(), operation: randomUUID() };
+    const next = await a.context.request.post("/api/learner/practice", { data: nextCommand });
+    expect(next.status()).toBe(200);
+    expect((await next.json()).generation).toBeGreaterThan(resumedLease.generation);
+    expect((await b.request.post("/api/learner/practice", { data: {
+      ...checkpoint, instance: resumedCommand.instance, runId: resumedLease.record.runId,
+      generation: resumedLease.generation, operation: randomUUID(), revision: resumedLease.revision,
+    } })).status()).toBe(409);
   } finally {
     await Promise.all(contexts.map(context => context.close()));
     for (const id of users) await service.auth.admin.deleteUser(id);

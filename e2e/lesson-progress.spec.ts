@@ -25,7 +25,7 @@ test("lesson totals and each card reflect unique completed stages of the current
   const history = [
     ...Array.from({ length: 16 }, (_, index) => complete(0, index + 1)),
     ...Array.from({ length: 15 }, (_, index) => complete(1, index + 1)),
-    { ...complete(1, 1), runId: "replay" }, complete(1, 16, "old"),
+    { ...complete(1, 1), runId: "replay" }, complete(1, 16, "2026-08-01T00:00:00Z"),
     ...Array.from({ length: 16 }, (_, index) => complete(2, index + 1)),
   ];
   await seedLearningJournal(page, { progress: null, history });

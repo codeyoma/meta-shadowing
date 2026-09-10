@@ -12,7 +12,7 @@ import { isRapidRunning, rapidDisplay, RAPID_WPM, type RapidLevel, type RapidLin
 import { Page, PauseIcon, PlayIcon } from "../ui";
 import { RapidSessionControls } from "../rapid-session-controls";
 import { useRapidSession } from "./use-rapid-session";
-import type { LearningStart, CloudRecording } from "./recording-types";
+import type { LearningStart, LearningRecording } from "./recording-types";
 import { CompletionSummary } from "../completion-summary";
 import { ScreenWake } from "./screen-wake";
 import { PracticeContext, PracticeFooter, PracticeHeader, PracticeProgress, PracticeSection } from "./practice-layout";
@@ -22,7 +22,7 @@ import { DictionaryWords, type DictionaryWordSelect } from "./dictionary-words";
 import { SentenceAnalysisButton, SentenceAnalysisPopup, useSentenceAnalysis } from "./sentence-analysis-popup";
 import styles from "./practice.module.css";
 
-export function RapidPlayer({ lesson, lines, level, settings, start, notice, cloud }: { lesson: PublishedLesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings; start: LearningStart; notice?: ReactNode; cloud: CloudRecording }) {
+export function RapidPlayer({ lesson, lines, level, settings, start, notice, cloud }: { lesson: PublishedLesson; lines: RapidLine[]; level: RapidLevel; settings: RapidSettings; start: LearningStart; notice?: ReactNode; cloud: LearningRecording }) {
   const [surface, setSurface] = useState<"menu" | "settings" | "help" | null>(null);
   const [drawerView, setDrawerView] = useState<DrawerView>("menu");
   const menuOpen = surface === "menu" || surface === "settings";

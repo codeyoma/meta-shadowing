@@ -46,7 +46,7 @@ self.addEventListener("activate", event => { event.waitUntil(self.clients.claim(
 self.addEventListener("fetch", event => {
   const request = event.request, url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
-  if (request.mode === "navigate" && (url.pathname === SHELL || (url.pathname === "/player" && (!url.searchParams.has("level") || url.searchParams.get("level") === "1")))) {
+  if (request.mode === "navigate" && (url.pathname === SHELL || url.pathname === "/player")) {
     event.respondWith((async () => {
       try { return await fetch(request); }
       catch {

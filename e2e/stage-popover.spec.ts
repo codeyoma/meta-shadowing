@@ -25,7 +25,7 @@ test("a stage opens a contextual preview and starts only on its explicit Start a
   await expect(page).toHaveURL(/stage=5(?:&|$)/);
 });
 
-test("local drawer settings persist but do not misconfigure the legacy player", async ({ page }) => {
+test("local drawer settings persist and configure the selected player", async ({ page }) => {
   await expect(page.getByRole("main").getByRole("button", { name: "세션 설정", exact: true })).toHaveCount(0);
   const first = page.getByRole("radio", { name: /1 자막 쉐도잉/ });
   await first.click();
@@ -51,7 +51,7 @@ test("local drawer settings persist but do not misconfigure the legacy player", 
   await page.getByRole("dialog", { name: "다문장 암기", exact: true }).getByRole("button", { name: "학습 시작", exact: true }).click();
   await expect(page).toHaveURL(/level=4(?:&|$)/);
   await expect(page).toHaveURL(/stage=8(?:&|$)/);
-  await expect(page).toHaveURL(/group=2(?:&|$)/);
+  await expect(page).toHaveURL(/group=4(?:&|$)/);
 });
 
 test("a short landscape popup keeps its description from covering Start", async ({ page }) => {

@@ -1,14 +1,16 @@
 import { expect, test } from "./fixtures/cloud-ui";
-import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { readDeviceJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { loadPackageModules } from "./fixtures/package-store";
 
-for (const [stage, groupSize] of [[7, 3], [8, 4]]) {
+for (const [stage, groupSize] of [[7, 3], [8, 4]] as const) {
   test(`stage ${stage} remains selected when an account refresh finishes before Start`, async ({ page }) => {
     await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
-    const profile = (await (await page.request.get("/api/learner/preferences")).json()).profile;
-    expect((await page.request.patch("/api/learner/preferences", { data: {
-      accountId: profile.accountId, revision: profile.revision, changes: { groupSize },
-    } })).status()).toBe(200);
     await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000001/stages");
+    await loadPackageModules(page);
+    await page.evaluate(async ({ groupSize }) => {
+      const access = window.deviceAccess.readDeviceAccess()!;
+      await window.deviceStore.writeDeviceLearningSettings(access.accountId, 4, { groupSize }, access);
+    }, { groupSize });
     const selected = page.getByRole("radio", { name: new RegExp(`^${stage} 다문장 암기`) });
     await expect(selected).toBeEnabled();
     await page.waitForLoadState("networkidle");
@@ -35,7 +37,7 @@ for (const [stage, groupSize] of [[7, 3], [8, 4]]) {
     await expect(page).toHaveURL(new RegExp(`stage=${stage}(?:&|$)`));
     await expect(page).toHaveURL(new RegExp(`group=${groupSize}(?:&|$)`));
     await expect(page.getByRole("button", { name: /^CONTINUE/ })).toBeVisible();
-    expect((await readServerJournal(page)).progress).toMatchObject({
+    expect((await readDeviceJournal(page))!.runs[0]).toMatchObject({
       level: 4, stage, settings: { groupSize }, nextPhrase: 0,
     });
   });

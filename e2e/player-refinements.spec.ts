@@ -1,4 +1,4 @@
-import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { reloadLearnerPage, openLearnerPage, readDeviceJournal } from "./fixtures/cloud-navigation";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { openSelectedStageSettings, returnToStages, startSelectedStage } from "./fixtures/stage-preview";
 import { testRecording } from "./fixtures/audio";
@@ -174,7 +174,9 @@ test("device settings drawer preserves grouped and rapid options without overwri
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await startSelectedStage(page);
   await expect(page).toHaveURL(/level=7/);
-  await expect(page).toHaveURL(/wpm=3/);
+  await expect(page).toHaveURL(/wpm=6/);
+  const run = (await readDeviceJournal(page))!.runs.find(run => run.runId === new URL(page.url()).searchParams.get("run"));
+  expect(run).toMatchObject({ level: 7, stage: 13, settings: { wpmLevel: 6, speakingExtraMs: 1500, mode: "automatic" } });
 });
 
 test("drawer views have no Close actions and return to stage selection through the menu", async ({ page }) => {

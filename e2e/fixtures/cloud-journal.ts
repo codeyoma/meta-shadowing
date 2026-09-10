@@ -31,18 +31,16 @@ export async function seedServerJournal(page: Page, journal: Partial<Journal>) {
   if (journal.studyDays?.length) expect((await service.from("learner_study_days").upsert(journal.studyDays.map(day => ({ user_id: userId, day })), { ignoreDuplicates: true })).error).toBeNull();
 }
 
-/** Presentation fixture: device-authoritative level one, legacy server levels 2–8.
+/** Presentation fixture: device-authoritative runs for every level.
  * Explicit seeding is test setup, never a production migration/read fallback. */
 export async function seedLearningJournal(page: Page, journal: Partial<Journal>) {
-  await seedServerJournal(page, { ...journal, progress: journal.progress?.level === 1 ? null : journal.progress,
-    history: journal.history?.filter(record => record.level !== 1) });
   const { profile } = await (await page.request.get("/api/learner/preferences")).json();
   const normalize = <T extends NonNullable<Journal["progress"]>>(record: T) => ({ ...record,
     runId: fixtureRunId(record.runId), lessonVersion: record.lessonVersion === "fixture-v1" ? fixtureVersion : record.lessonVersion,
-    revision: 0, confirmedCycles: 0,
+    stage: record.stage ?? record.level * 2 - 1, revision: 0, confirmedCycles: 0,
   });
   if (!/^https?:/.test(page.url())) await page.goto("/offline");
-  await page.evaluate(async ({ accountId, progress, history }) => {
+  await page.evaluate(async ({ accountId, progress, history, studyDays }) => {
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open("meta-shadowing-device-learning-v1", 1);
       request.onupgradeneeded = () => request.result.createObjectStore("accounts", { keyPath: "accountId" });
@@ -51,11 +49,11 @@ export async function seedLearningJournal(page: Page, journal: Partial<Journal>)
         const tx = request.result.transaction("accounts", "readwrite"), store = tx.objectStore("accounts");
         const read = store.get(accountId);
         read.onsuccess = () => store.put({ accountId, preferredLevel: 1, settings: {}, ...read.result, schemaVersion: 2,
-          runs: progress ? [progress] : [], ...(history ? { history } : {}) });
+          runs: progress ? [progress] : [], ...(history ? { history } : {}), ...(studyDays ? { studyDays } : {}) });
         tx.oncomplete = () => { request.result.close(); window.dispatchEvent(new Event("device-learning-changed")); resolve(); };
         tx.onerror = tx.onabort = () => reject(tx.error);
       };
     });
-  }, { accountId: profile.accountId, progress: journal.progress?.level === 1 ? normalize(journal.progress) : null,
-    history: journal.history?.filter(record => record.level === 1).map(normalize) });
+  }, { accountId: profile.accountId, progress: journal.progress ? { ...normalize(journal.progress), completedAt: undefined } : null,
+    history: journal.history?.map(normalize), studyDays: journal.studyDays });
 }
