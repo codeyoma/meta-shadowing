@@ -79,6 +79,19 @@ function playerTimings(result) {
     return [{ phase: match[1], durationMs: step.duration, failed: Boolean(step.error) }];
   }).slice(0, 64);
 }
+function historyTimings(result) {
+  if (!Array.isArray(result.steps)) return [];
+  // Fixed phases and startup variants only, not titles, URLs or account data.
+  return result.steps.slice(0, 128).flatMap(step => {
+    const match = typeof step?.title === "string"
+      ? /^offline-history:(setup|catalog|first-player|return-catalog|second-startup|back-catalog|back-first|forward-catalog|forward-second|screenshot):(ready|delayed|revalidated)$/.exec(step.title) : null;
+    if (!match) return [];
+    if (step.duration === -1 && ["timedOut", "interrupted"].includes(result.status))
+      return [{ phase: match[1], startup: match[2], durationMs: null, unfinished: true }];
+    if (!Number.isSafeInteger(step.duration) || step.duration < 0 || step.duration > 120000) return [];
+    return [{ phase: match[1], startup: match[2], durationMs: step.duration, failed: Boolean(step.error) }];
+  }).slice(0, 64);
+}
 function category(error) {
   const message = typeof error?.message === "string" ? error.message : "";
   if (/socket hang up|ECONNRESET/.test(message)) return "network-reset";
@@ -139,7 +152,9 @@ try {
             const records = recordTimings(result);
             const player = playerTimings(result);
             const preview = stagePreviewTimings(result);
+            const history = historyTimings(result);
             return { status: status(result.status), durationMs: numeric(result.duration),
+            ...(history.length ? { historyTimings: history } : {}),
             ...(preview.length ? { stagePreviewTimings: preview } : {}),
             ...(player.length ? { playerTimings: player } : {}),
             ...(records.length ? { recordTimings: records } : {}),

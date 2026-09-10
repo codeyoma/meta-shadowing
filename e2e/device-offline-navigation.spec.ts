@@ -151,96 +151,168 @@ test("cold offline reload restores a non-level-one installed stage and checkpoin
 });
 
 for (const startup of ["ready", "delayed", "revalidated"] as const) test(`offline catalog and browser history switch lessons while preserving distinct checkpoints (${startup} startup)`, async ({ page, context }) => {
+  const step = <T>(phase: string, action: () => Promise<T>) => test.step(`offline-history:${phase}:${startup}`, action);
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => {
     if (["error", "warning"].includes(message.type()) && !message.text().includes("net::ERR_INTERNET_DISCONNECTED")) errors.push(message.text());
   });
-  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
-  for (const lesson of ["10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002"]) {
-    await openLearnerPage(page, `/player?lesson=${lesson}&level=1&stage=1`);
-  }
-  await loadPackageModules(page);
-  await page.evaluate(async () => {
-    const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
-    const firstPackage = (await window.packageStore.listLessonPackages(access.accountId)).find(row => row.lessonId.endsWith("1"))!;
-    const secondPackage = (await window.packageStore.listLessonPackages(access.accountId)).find(row => row.lessonId.endsWith("2"))!;
-    const firstLesson = (await window.packageStore.readLessonPackage(access.accountId, firstPackage.lessonId, firstPackage.version))!.manifest.lesson;
-    const secondLesson = (await window.packageStore.readLessonPackage(access.accountId, secondPackage.lessonId, secondPackage.version))!.manifest.lesson;
-    const first = await window.deviceStore.startDeviceRun(access, firstLesson, 3);
-    const completed = await window.deviceStore.startDeviceRun(access, firstLesson, 4);
-    const second = await window.deviceStore.startDeviceRun(access, secondLesson, 7);
-    await window.deviceStore.saveDeviceRun(access, { ...first, nextUnit: 1, nextPhrase: 1 }, first.revision);
-    await window.deviceStore.saveDeviceRun(access, { ...completed, nextUnit: 3, nextPhrase: 3, completedAt: "2026-09-10T01:00:00.000Z" }, completed.revision);
-    await window.deviceStore.saveDeviceRun(access, { ...second, nextUnit: 1, nextPhrase: 2 }, second.revision);
-  });
-  await page.goto("/offline");
   const first = page.getByRole("region", { name: /^Morning Routine .* 스테이지$/ });
   const second = page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ });
-  await expect(first.getByRole("link")).toHaveCount(16);
-  await expect(second.getByRole("link")).toHaveCount(16);
-  await expect(page.getByRole("link", { name: "스테이지 16 · Lv 8", exact: true })).toHaveCount(2);
-  await expect(first.getByRole("link", { name: /스테이지 3 · Lv 2.*이어서 · 프레이즈 2/ })).toBeVisible();
-  await expect(first.getByRole("link", { name: /스테이지 4 · Lv 2.*완료 1회/ })).toBeVisible();
-  await expect(second.getByRole("link", { name: /스테이지 7 · Lv 4.*이어서 · 묶음 2/ })).toBeVisible();
-  await setDeviceOffline(context, true);
-  await first.getByRole("link", { name: /스테이지 3 · Lv 2/ }).click();
+  await step("setup", async () => {
+    await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+    for (const lesson of ["10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002"]) {
+      await openLearnerPage(page, `/player?lesson=${lesson}&level=1&stage=1`);
+    }
+    await loadPackageModules(page);
+    await page.evaluate(async () => {
+      const { writer: access } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
+      const firstPackage = (await window.packageStore.listLessonPackages(access.accountId)).find(row => row.lessonId.endsWith("1"))!;
+      const secondPackage = (await window.packageStore.listLessonPackages(access.accountId)).find(row => row.lessonId.endsWith("2"))!;
+      const firstLesson = (await window.packageStore.readLessonPackage(access.accountId, firstPackage.lessonId, firstPackage.version))!.manifest.lesson;
+      const secondLesson = (await window.packageStore.readLessonPackage(access.accountId, secondPackage.lessonId, secondPackage.version))!.manifest.lesson;
+      const first = await window.deviceStore.startDeviceRun(access, firstLesson, 3);
+      const completed = await window.deviceStore.startDeviceRun(access, firstLesson, 4);
+      const second = await window.deviceStore.startDeviceRun(access, secondLesson, 7);
+      await window.deviceStore.saveDeviceRun(access, { ...first, nextUnit: 1, nextPhrase: 1 }, first.revision);
+      await window.deviceStore.saveDeviceRun(access, { ...completed, nextUnit: 3, nextPhrase: 3, completedAt: "2026-09-10T01:00:00.000Z" }, completed.revision);
+      await window.deviceStore.saveDeviceRun(access, { ...second, nextUnit: 1, nextPhrase: 2 }, second.revision);
+    });
+  });
+  await step("catalog", async () => {
+    await page.goto("/offline");
+    await expect(first.getByRole("link")).toHaveCount(16);
+    await expect(second.getByRole("link")).toHaveCount(16);
+    await expect(page.getByRole("link", { name: "스테이지 16 · Lv 8", exact: true })).toHaveCount(2);
+    await expect(first.getByRole("link", { name: /스테이지 3 · Lv 2.*이어서 · 프레이즈 2/ })).toBeVisible();
+    await expect(first.getByRole("link", { name: /스테이지 4 · Lv 2.*완료 1회/ })).toBeVisible();
+    await expect(second.getByRole("link", { name: /스테이지 7 · Lv 4.*이어서 · 묶음 2/ })).toBeVisible();
+  });
+  await step("first-player", async () => {
+    await setDeviceOffline(context, true);
+    await first.getByRole("link", { name: /스테이지 3 · Lv 2/ }).click();
+    await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 2", exact: true })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
+  });
+  await step("return-catalog", async () => {
+    await page.getByRole("button", { name: "다른 다운로드 레슨", exact: true }).click();
+    await expect(page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ })).toBeVisible();
+  });
+  await step("second-startup", async () => {
+    if (startup !== "ready") await page.evaluate(() => {
+      const original = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function(...args: Parameters<IDBObjectStore["put"]>) {
+        const request = original.apply(this, args);
+        if (this.name === "accounts") {
+          IDBObjectStore.prototype.put = original;
+          // Delay the real startup transaction, not the player or History API.
+          // A Back traversal must win even before React unmounts the old player.
+          const store = this;
+          let released = false;
+          const keepAlive = () => { if (!released) store.get("fixture-keepalive").onsuccess = keepAlive; };
+          keepAlive();
+          Object.assign(window, { fixtureStartupHeld: true });
+          window.addEventListener("release-held-startup", () => { released = true; IDBObjectStore.prototype.put = original; }, { once: true });
+        }
+        return request;
+      };
+    });
+    await page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ }).getByRole("link", { name: /스테이지 7 · Lv 4/ }).click();
+    if (startup !== "ready") await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { fixtureStartupHeld?: boolean }).fixtureStartupHeld))).toBe(true);
+    if (startup === "revalidated") await page.evaluate(() => {
+      // A same-package change notification temporarily fences playback, but it
+      // must not abandon startup when the URL and installed bytes stay current.
+      window.dispatchEvent(new CustomEvent("lesson-packages-changed", { detail: { lessonId: "10000000-0000-4000-8000-000000000002" } }));
+      window.dispatchEvent(new Event("release-held-startup"));
+    });
+    if (startup !== "delayed") {
+      await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
+      await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
+      await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
+    }
+  });
+  await step("back-catalog", async () => {
+    await page.goBack();
+    if (startup === "delayed") await page.evaluate(() => window.dispatchEvent(new Event("release-held-startup")));
+    await expect(page).toHaveURL(/\/offline$/);
+    await expect(first).toBeVisible();
+    await expect(second).toBeVisible();
+    await expect(page).toHaveURL(/\/offline$/);
+  });
+  await step("back-first", async () => {
+    await page.goBack();
+    await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 2", exact: true })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
+    expect(new URL(page.url()).searchParams.get("stage")).toBe("3");
+  });
+  await step("forward-catalog", async () => {
+    await page.goForward();
+    await expect(page).toHaveURL(/\/offline$/);
+    await expect(first).toBeVisible();
+  });
+  await step("forward-second", async () => {
+    await page.goForward();
+    await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
+    expect(new URL(page.url()).searchParams.get("stage")).toBe("7");
+    await expect(page).toHaveTitle(/Meta Shadowing/i);
+    await expect(page.locator("nextjs-portal").getByText(/Runtime Error|Build Error/)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+  await step("screenshot", () => page.screenshot({ path: test.info().outputPath("offline-history-restored.png"), animations: "disabled" }));
+});
+
+for (const refreshPhase of ["inventory", "selection"] as const) test(`a late ${refreshPhase} refresh keeps the offline catalog and its latest checkpoint`, async ({ page, context }) => {
+  await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=2&stage=3");
+  await page.goto("/offline");
+  await page.getByRole("link", { name: /스테이지 3 · Lv 2/ }).click();
   await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 2", exact: true })).toBeVisible();
-  await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
-  await page.getByRole("button", { name: "다른 다운로드 레슨", exact: true }).click();
-  await expect(page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ })).toBeVisible();
-  if (startup !== "ready") await page.evaluate(() => {
-    const original = IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put = function(...args: Parameters<IDBObjectStore["put"]>) {
+  const run = new URL(page.url()).searchParams.get("run");
+  await setDeviceOffline(context, true);
+  await loadPackageModules(page);
+  await page.evaluate(async refreshPhase => {
+    const { record, writer } = await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!);
+    const run = record!.runs.find(value => value.runId === new URL(location.href).searchParams.get("run"))!;
+    const original = IDBObjectStore.prototype.get;
+    let grants = 0;
+    IDBObjectStore.prototype.get = function(...args: Parameters<IDBObjectStore["get"]>) {
       const request = original.apply(this, args);
-      if (this.name === "accounts") {
-        IDBObjectStore.prototype.put = original;
-        // Delay the real startup transaction, not the player or History API.
-        // A Back traversal must win even before React unmounts the old player.
-        const store = this;
-        let released = false;
-        const keepAlive = () => { if (!released) store.get("fixture-keepalive").onsuccess = keepAlive; };
-        keepAlive();
-        Object.assign(window, { fixtureStartupHeld: true });
-        window.addEventListener("release-held-startup", () => { released = true; IDBObjectStore.prototype.put = original; }, { once: true });
+      // With one package, inventory reads its initial/final grant and then
+      // its display grant (#3). Selected-package validation ends at grant #5.
+      // Hold the real final transaction completion, not its data or checks.
+      if (this.name === "grants" && ++grants === (refreshPhase === "inventory" ? 3 : 5)) {
+        IDBObjectStore.prototype.get = original;
+        const transaction = this.transaction;
+        const complete = transaction.oncomplete!;
+        transaction.oncomplete = event => {
+          window.addEventListener("release-held-refresh", () => {
+            complete.call(transaction, event);
+            // Drain the released refresh's promise continuations and render,
+            // not an unrelated package read that could race the old result.
+            requestAnimationFrame(() => requestAnimationFrame(() => Object.assign(window, { fixtureRefreshSettled: true })));
+          }, { once: true });
+          Object.assign(window, { fixtureRefreshHeld: true });
+        };
       }
       return request;
     };
-  });
-  await page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ }).getByRole("link", { name: /스테이지 7 · Lv 4/ }).click();
-  if (startup !== "ready") await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { fixtureStartupHeld?: boolean }).fixtureStartupHeld))).toBe(true);
-  if (startup === "revalidated") await page.evaluate(() => {
-    // A same-package change notification temporarily fences playback, but it
-    // must not abandon startup when the URL and installed bytes stay current.
-    window.dispatchEvent(new CustomEvent("lesson-packages-changed", { detail: { lessonId: "10000000-0000-4000-8000-000000000002" } }));
-    window.dispatchEvent(new Event("release-held-startup"));
-  });
-  if (startup !== "delayed") {
-    await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
-    await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
-    await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
-  }
-  await page.goBack();
-  if (startup === "delayed") await page.evaluate(() => window.dispatchEvent(new Event("release-held-startup")));
+    await window.deviceStore.saveDeviceRun(writer, { ...run, nextUnit: 1, nextPhrase: 1 }, run.revision);
+  }, refreshPhase);
+  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { fixtureRefreshHeld?: boolean }).fixtureRefreshHeld))).toBe(true);
+  await page.getByRole("button", { name: "다른 다운로드 레슨", exact: true }).click();
+  const catalog = page.getByRole("heading", { name: "기기 학습", exact: true });
+  await expect(catalog).toBeVisible();
   await expect(page).toHaveURL(/\/offline$/);
-  await expect(first).toBeVisible();
-  await expect(second).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event("release-held-refresh")));
+  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { fixtureRefreshSettled?: boolean }).fixtureRefreshSettled))).toBe(true);
+  await expect(catalog).toBeVisible();
   await expect(page).toHaveURL(/\/offline$/);
-  await page.goBack();
+  await expect(page.getByRole("link", { name: /스테이지 3 · Lv 2.*이어서 · 프레이즈 2/ })).toBeVisible();
+  await page.getByRole("link", { name: /스테이지 3 · Lv 2/ }).click();
   await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 2", exact: true })).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
-  expect(new URL(page.url()).searchParams.get("stage")).toBe("3");
-  await page.goForward();
-  await expect(page).toHaveURL(/\/offline$/);
-  await expect(first).toBeVisible();
-  await page.goForward();
-  await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
-  await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
-  expect(new URL(page.url()).searchParams.get("stage")).toBe("7");
-  await expect(page).toHaveTitle(/Meta Shadowing/i);
-  await expect(page.locator("nextjs-portal").getByText(/Runtime Error|Build Error/)).toHaveCount(0);
-  expect(errors).toEqual([]);
-  await page.screenshot({ path: test.info().outputPath("offline-history-restored.png"), animations: "disabled" });
+  expect(new URL(page.url()).searchParams.get("run")).toBe(run);
 });
 
 test("requested run selects its exact retained version and cold reload keeps that pin", async ({ page, context }) => {

@@ -22,18 +22,19 @@ function OfflinePackages() {
   const [loaded, setLoaded] = useState(false);
   const [checking, setChecking] = useState(false);
   const [record, setRecord] = useState<DeviceLearningRecord | null>(null);
+  const loadRevision = useRef(0);
+  const refreshCurrent = useRef<() => void>(() => {});
   const permitted = useRef(false);
   const canUsePackage = useCallback(() => permitted.current, []);
   const [selection, setSelection] = useState<{ stage: number; requestedRun?: string }>({ stage: 1 });
   useEffect(() => {
     let alive = true;
-    let revision = 0;
     const load = async () => {
-      const request = ++revision;
+      const request = ++loadRevision.current;
       assertDeviceAccess(access);
       const [rows, journal] = await Promise.all([listLessonPackages(access.accountId), readDeviceLearningRecord(access.accountId)]);
       assertDeviceAccess(access);
-      if (!alive || request !== revision) return;
+      if (!alive || request !== loadRevision.current) return;
       setInventory(rows); setRecord(journal);
       const params = new URL(location.href).searchParams;
       const lessonId = params.get("lesson"), requestedRun = params.get("run") ?? undefined;
@@ -43,7 +44,7 @@ function OfflinePackages() {
       const row = version ? rows.find(value => value.lessonId === lessonId && value.version === version && value.state === "ready") : undefined;
       const value = row ? await readLessonPackage(access.accountId, row.lessonId, row.version) : null;
       assertDeviceAccess(access);
-      if (!alive || request !== revision) return;
+      if (!alive || request !== loadRevision.current) return;
       permitted.current = Boolean(value);
       setInstalled(previous => previous?.sha256 === value?.sha256 ? previous : value);
       setSelection(previous => {
@@ -55,8 +56,8 @@ function OfflinePackages() {
       setLoaded(true);
     };
     const refresh = () => {
-      const request = revision + 1;
-      void load().catch(() => { if (alive && request === revision) { permitted.current = false; setInstalled(null); setChecking(false); setFailed(true); setLoaded(true); } });
+      const request = loadRevision.current + 1;
+      void load().catch(() => { if (alive && request === loadRevision.current) { permitted.current = false; setInstalled(null); setChecking(false); setFailed(true); setLoaded(true); } });
     };
     const unsubscribe = subscribePackageChanges(change => {
       const selectedLesson = new URL(location.href).searchParams.get("lesson");
@@ -72,8 +73,9 @@ function OfflinePackages() {
       permitted.current = false; setChecking(true);
       refresh();
     };
+    refreshCurrent.current = refresh;
     refresh(); window.addEventListener("focus", refresh); window.addEventListener("device-learning-changed", refresh); window.addEventListener("popstate", restoreHistory);
-    return () => { alive = false; revision++; permitted.current = false; unsubscribe(); window.removeEventListener("focus", refresh); window.removeEventListener("device-learning-changed", refresh); window.removeEventListener("popstate", restoreHistory); };
+    return () => { alive = false; loadRevision.current++; refreshCurrent.current = () => {}; permitted.current = false; unsubscribe(); window.removeEventListener("focus", refresh); window.removeEventListener("device-learning-changed", refresh); window.removeEventListener("popstate", restoreHistory); };
   }, [access]);
   const choose = useCallback(async (row: PackageInventory, stage: number) => {
     permitted.current = false; setChecking(true);
@@ -84,6 +86,9 @@ function OfflinePackages() {
       if (!value) throw new Error("Installed package is unavailable");
       const url = new URL(location.href);
       url.searchParams.set("lesson", row.lessonId); url.searchParams.set("version", row.version); url.searchParams.set("stage", String(stage)); url.searchParams.delete("run");
+      // In-flight refreshes belong to the previous selection, even if their
+      // package validation finishes after this same-document navigation.
+      loadRevision.current++;
       window.history.pushState(null, "", url);
       permitted.current = true; setInstalled(value); setSelection({ stage }); setFailed(false);
     } catch { setInstalled(null); setFailed(true); }
@@ -92,7 +97,10 @@ function OfflinePackages() {
   if (installed) return <PackageContent.Provider value={installed}>
     <LocalLearningPlayer lesson={installed.manifest.lesson} hints={installed.manifest.hints} lines={installed.manifest.lines}
       {...selection} packageBlocked={checking} canUsePackage={canUsePackage} onCatalog={() => {
-        permitted.current = false; window.history.pushState(null, "", "/offline"); setInstalled(null); setSelection({ stage: 1 });
+        permitted.current = false; window.history.pushState(null, "", "/offline"); setInstalled(null); setSelection({ stage: 1 }); setChecking(false);
+        // Cancel the old selection read and reload the latest resume/history
+        // labels against the catalog URL; pushState does not emit popstate.
+        refreshCurrent.current();
       }} />
   </PackageContent.Provider>;
   return <main className="page mx-auto flex w-full max-w-md flex-col gap-4 overflow-y-auto p-5">

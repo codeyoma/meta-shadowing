@@ -44,6 +44,7 @@ for (const diagnostic of [
   { step: "player:pause", field: "playerTimings", prefix: "CI player timings:", expected: { phase: "pause", durationMs: null, unfinished: true } },
   { step: "resume:fonts:320", field: "resumeTimings", prefix: "CI resume timings:", expected: { phase: "fonts", width: 320, durationMs: null, unfinished: true } },
   { step: "records:player-ready", field: "recordTimings", prefix: "CI record timings:", expected: { phase: "player-ready", durationMs: null, unfinished: true } },
+  { step: "offline-history:back-catalog:delayed", field: "historyTimings", prefix: "CI history timings:", expected: { phase: "back-catalog", startup: "delayed", durationMs: null, unfinished: true } },
 ]) test(`a real timed-out Playwright step retains safe ${diagnostic.field} in artifacts and job output`, () => {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "safe-resume-timeout-")));
   const secret = "fixture-timeout-cookie-never-export";
@@ -70,6 +71,37 @@ for (const diagnostic of [
     expect(result.stdout).toContain(diagnostic.prefix);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 20000);
+
+test("offline history diagnostics retain fixed phases and startup variants without exporting arbitrary fields", () => {
+  const directory = mkdtempSync(join(tmpdir(), "safe-history-timing-"));
+  const secret = "fixture-private-history-token";
+  try {
+    const input = join(directory, "raw.json"), output = join(directory, "safe.json");
+    writeFileSync(input, JSON.stringify({ suites: [{ specs: [{ file: "device-offline-navigation.spec.ts", tests: [{
+      projectName: "desktop", results: [{ status: "timedOut", steps: [
+        { title: "offline-history:first-player:ready", duration: 12, steps: [{ title: secret, duration: 1 }] },
+        { title: "offline-history:second-startup:revalidated", duration: 40, error: { message: secret }, url: secret },
+        { title: "offline-history:back-catalog:delayed", duration: -1 },
+        { title: `offline-history:${secret}:ready`, duration: 2 },
+        { title: `offline-history:back-catalog:${secret}`, duration: 2 },
+        { title: `offline-history:back-catalog:delayed?token=${secret}`, duration: 2 },
+        ...[-2, 120001, 1.5, "12"].map(duration => ({ title: "offline-history:back-catalog:delayed", duration })),
+        null,
+      ] }, { status: "passed", steps: [{ title: "offline-history:back-catalog:delayed", duration: -1 }] }],
+    }] }] }] }));
+    const result = spawnSync(process.execPath, ["scripts/collect-ci-artifacts.mjs", input, output], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    const artifact = readFileSync(output, "utf8");
+    expect(artifact + result.stdout + result.stderr).not.toContain(secret);
+    const attempts = JSON.parse(artifact).tests[0].attempts;
+    expect(attempts[0].historyTimings).toEqual([
+      { phase: "first-player", startup: "ready", durationMs: 12, failed: false },
+      { phase: "second-startup", startup: "revalidated", durationMs: 40, failed: true },
+      { phase: "back-catalog", startup: "delayed", durationMs: null, unfinished: true },
+    ]);
+    expect(attempts[1]).not.toHaveProperty("historyTimings");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 for (const variant of [
   { prefix: "records", field: "recordTimings", first: "sign-in", second: "change-speed", active: "player-ready" },
