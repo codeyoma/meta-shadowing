@@ -38,7 +38,7 @@ test("separate destinations retain the shell and local settings overlay", async 
   await installStagePackage(page);
   await page.getByRole("button", { name: "현재 스테이지 1 시작" }).click();
   await enterAccountPractice(page);
-  await expect(page).toHaveURL(/\/player\?.*speed=1(?:&|$)/);
+  await expect(page).toHaveURL(/\/player\?.*speed=1\.5(?:&|$)/);
   await expect(nav).toHaveCount(0);
 });
 
@@ -57,7 +57,7 @@ test("legacy links redirect and Settings-tab preferences apply to the chosen sta
   await page.getByRole("radio", { name: /^7 다문장 암기/ }).click();
   await page.getByRole("button", { name: "학습 시작", exact: true }).click();
   await enterAccountPractice(page);
-  await expect(page).toHaveURL(/level=4.*stage=7.*group=2/);
+  await expect(page).toHaveURL(/level=4.*stage=7.*group=3/);
 });
 
 test("navigation and stage scroll positions survive tab changes without document scrolling", async ({ page }) => {

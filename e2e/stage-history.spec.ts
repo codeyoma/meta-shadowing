@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("history moves off lessons into a lesson-only dialog, preserving old versions and saved data", async ({ page }) => {
-  const records = [complete(1), complete(8, { runId: "old", lessonVersion: "old-v1", completedAt: "2026-09-07T01:00:00Z" }),
+  const records = [complete(1), complete(8, { runId: "old", lessonVersion: "2026-08-01T00:00:00Z", completedAt: "2026-09-07T01:00:00Z" }),
     complete(4, { lessonId: "10000000-0000-4000-8000-000000000002" }), complete(2)];
   await seed(page, records);
   const original = { server: await readServerJournal(page), device: await readDeviceJournal(page) };
@@ -57,7 +57,7 @@ test("history moves off lessons into a lesson-only dialog, preserving old versio
   const settings = items.last().getByRole("button", { name: "설정 보기", exact: true });
   await settings.click();
   await expect(settings).toHaveAttribute("aria-expanded", "true");
-  await expect(await settingsFor(settings)).toContainText("버전 old-v1");
+  await expect(await settingsFor(settings)).toContainText("버전 2026-08-01T00:00:00Z");
   await expect(await settingsFor(settings)).toContainText("수동");
   await settings.click();
   await expect(settings).toHaveAttribute("aria-expanded", "false");

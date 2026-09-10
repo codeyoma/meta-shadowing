@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { isPracticeVerificationCurrent, PRACTICE_CHECK_INTERVAL_MS, PRACTICE_MAX_VERIFICATION_AGE_MS, PracticeError, sendPractice, type PracticeCommand, type PracticeLease, type PracticeErrorCode } from "@/lib/cloud-practice";
 import type { CompletionRecord } from "@/lib/learning-records";
-import type { CloudRecording, RecordUpdate } from "./recording-types";
+import type { LearningRecording, RecordUpdate } from "./recording-types";
 
 export function PracticeFailure({ error, retry, navigate = href => window.location.assign(href) }: { error: string; retry?: () => void; navigate?: (href: string) => void }) {
   const temporary = error === "temporary-error";
@@ -175,7 +175,7 @@ export function useCloudRecording(initial: PracticeLease, instance: string, inva
       window.removeEventListener("offline",offline); window.removeEventListener("focus",visibility); document.removeEventListener("visibilitychange",visibility);
     };
   }, [changeStatus,ownership,renew,track]);
-  const recording: CloudRecording = { completion: record.completedAt ? record as CompletionRecord : null, blocked: status !== "ready", updateRecord, exit, verifyResume: () => renew(true),
+  const recording: LearningRecording = { completion: record.completedAt ? record as CompletionRecord : null, blocked: status !== "ready", updateRecord, exit, verifyResume: () => renew(true),
     canAct: () => {
       if (statusRef.current !== "ready" || document.hidden || !navigator.onLine) return false;
       // Completion is read-only and must not keep a device lease alive. An

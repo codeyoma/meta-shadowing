@@ -12,7 +12,7 @@ import { browseHref, stageHref } from "@/lib/browse-navigation";
 import { AudioSessionControls } from "../audio-session-controls";
 import { Page, PauseIcon, PlayIcon, RepeatIcon, SubtitleIcon } from "../ui";
 import { useAudioSession } from "./use-audio-session";
-import type { LearningStart, CloudRecording } from "./recording-types";
+import type { LearningStart, LearningRecording } from "./recording-types";
 import { CompletionSummary } from "../completion-summary";
 import { ScreenWake } from "./screen-wake";
 import { CycleProgress, PracticeContext, PracticeFooter, PracticeHeader, PracticeProgress, PracticeSection } from "./practice-layout";
@@ -23,7 +23,7 @@ import { SentenceAnalysisButton, SentenceAnalysisPopup, useSentenceAnalysis } fr
 import { PlayerDrawer, type DrawerView } from "./player-drawer";
 import styles from "./practice.module.css";
 
-export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, start, notice, cloud }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[]; start: LearningStart; notice?: ReactNode; cloud: CloudRecording }) {
+export function AudioPhrasePlayer({ lesson, level, settings, hints, groups, start, notice, cloud }: { lesson: PublishedLesson; level: AudioPracticeLevel; settings: AudioSessionSettings; hints: SubtitleHint[]; groups: PhraseGroup[]; start: LearningStart; notice?: ReactNode; cloud: LearningRecording }) {
   const [surface, setSurface] = useState<"menu" | "settings" | "help" | null>(null);
   const [drawerView, setDrawerView] = useState<DrawerView>("menu");
   const menuOpen = surface === "menu" || surface === "settings";

@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRapidSession, isRapidRunning, transitionRapidSession, type RapidEvent, type RapidLevel, type RapidLine, type RapidSettings } from "@/lib/rapid-session";
 import type { Lesson } from "@/lib/lessons";
-import type { LearningStart, CloudRecording } from "./recording-types";
+import type { LearningStart, LearningRecording } from "./recording-types";
 
 type ControlEvent = Exclude<RapidEvent, { type: "tick" }>;
 
-export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: RapidLevel, settings: RapidSettings, shortcutsEnabled: boolean, start: LearningStart, cloud: CloudRecording) {
+export function useRapidSession(lesson: Lesson, lines: RapidLine[], level: RapidLevel, settings: RapidSettings, shortcutsEnabled: boolean, start: LearningStart, cloud: LearningRecording) {
   const { completion, updateRecord } = cloud;
   const cloudRef = useRef(cloud); cloudRef.current = cloud;
   const shortcutsRef = useRef(shortcutsEnabled); shortcutsRef.current = shortcutsEnabled;

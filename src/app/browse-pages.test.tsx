@@ -14,6 +14,9 @@ vi.mock("./browse-shell", () => ({
 // through real Supabase browser integration, not emulated by this unit test.
 let journal: Journal;
 vi.mock("./cloud-preferences-provider", () => ({ useCloudPreferences: () => ({ journal }) }));
+vi.mock("./use-device-journal", () => ({ useDeviceJournal: () => ({ journal: {
+  progress: null, localProgress: journal.progress ? [journal.progress] : [], history: journal.history, studyDays: journal.studyDays,
+}, loading: false, error: false, settings: {}, preferredLevel: 1 }) }));
 
 let container: HTMLDivElement;
 let root: Root;

@@ -27,8 +27,7 @@ test("device group settings stay local and level 4 plays each highlighted phrase
   }
   await page.keyboard.press("Escape");
   await startSelectedStage(page);
-  // Until local session snapshots land, legacy playback retains server defaults.
-  await expect(page).toHaveURL(/group=2/);
+  await expect(page).toHaveURL(/group=3/);
   await page.waitForLoadState("networkidle");
   await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
   const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");

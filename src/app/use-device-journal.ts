@@ -6,27 +6,28 @@ import { assertDeviceAccess } from "@/lib/device-access";
 import type { Journal } from "@/lib/learning-records";
 import { useDeviceAccess } from "./device-access-provider";
 
-/** Only level one has moved. Never import its legacy cloud records into the device. */
-export function useDeviceJournal(cloud: Journal) {
+const emptyJournal = (): Journal & { localProgress: DeviceLearningRecord["runs"] } => ({ progress: null, localProgress: [], history: [], studyDays: [] });
+
+/** Learning records are device authoritative. Cloud records are intentionally ignored. */
+export function useDeviceJournal(_cloud: Journal) {
   const access = useDeviceAccess(), pathname = usePathname();
-  const [record, setRecord] = useState<DeviceLearningRecord | null>(null);
+  const [snapshot, setSnapshot] = useState<{ accountId: string; record: DeviceLearningRecord | null } | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState(false);
   useEffect(() => {
-    if (!access) return;
+    if (!access) { setLoading(false); setError(false); return; }
     let alive = true;
+    setLoading(true); setError(false);
     const read = () => {
       void readDeviceLearningRecord(access.accountId).then(value => {
         assertDeviceAccess(access);
-        if (alive) { setRecord(value); setLoading(false); setError(false); }
+        if (alive) { setSnapshot({ accountId: access.accountId, record: value }); setLoading(false); setError(false); }
       }).catch(() => { if (alive) { setError(true); setLoading(false); } });
     };
     read(); window.addEventListener("focus", read); window.addEventListener("device-learning-changed", read);
     return () => { alive = false; window.removeEventListener("focus", read); window.removeEventListener("device-learning-changed", read); };
   }, [access, pathname]);
-  if (!access) return { journal: cloud, loading: false, error: false };
-  return { loading, error, journal: { ...cloud,
-    progress: cloud.progress?.level === 1 ? null : cloud.progress,
-    localProgress: record?.runs ?? [],
-    history: [...cloud.history.filter(run => run.level !== 1), ...(record?.history ?? [])],
-  } };
+  const record = access && snapshot?.accountId === access.accountId ? snapshot.record : null;
+  return { loading: access ? loading || snapshot?.accountId !== access.accountId : false, error,
+    settings: record?.settings ?? {}, preferredLevel: record?.preferredLevel ?? 1,
+    journal: record ? { progress: null, localProgress: record.runs, history: record.history, studyDays: record.studyDays } : emptyJournal() };
 }

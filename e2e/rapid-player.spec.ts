@@ -1,4 +1,4 @@
-import { pauseCloudClock, advanceCloudClock, readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { pauseCloudClock, advanceCloudClock, readDeviceJournal, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { openSelectedStageSettings, startSelectedStage } from "./fixtures/stage-preview";
 
@@ -28,9 +28,9 @@ test("level 6 plays target then Korean words and stops at each manual line witho
   await expect(canvas).toHaveText("나는");
   await advanceCloudClock(page, 1200);
   await expect(page.getByRole("button", { name: "CONTINUE · 다음 문장", exact: true })).toBeVisible();
-  const journal = await readServerJournal(page);
+  const journal = (await readDeviceJournal(page))!;
   expect(journal.studyDays).toHaveLength(1);
-  expect(journal.progress.nextPhrase).toBe(1);
+  expect(journal.runs[0].nextPhrase).toBe(1);
   await advanceCloudClock(page, 10000);
   await expect(page.getByRole("progressbar", { name: "문장 진행" })).toHaveAttribute("aria-valuenow", "1");
   await page.keyboard.press("Space");
@@ -40,7 +40,7 @@ test("level 6 plays target then Korean words and stops at each manual line witho
   expect(audioRequests).toEqual([]);
 });
 
-test("device setup offers rapid options while legacy playback retains its server settings", async ({ page }) => {
+test("device setup rapid options drive the next run", async ({ page }) => {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
   await page.waitForLoadState("networkidle");
@@ -59,14 +59,14 @@ test("device setup offers rapid options while legacy playback retains its server
   await page.getByLabel("구간 간격 (초)").fill("3");
   await page.keyboard.press("Escape");
   await startSelectedStage(page);
-  await expect(page).toHaveURL(/wpm=3/);
-  await expect(page).toHaveURL(/display=current/);
+  await expect(page).toHaveURL(/wpm=5/);
+  await expect(page).toHaveURL(/display=cumulative/);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-  await expect(page.getByText("수동 · 200 WPM", { exact: true })).toBeVisible();
+  await expect(page.getByText("자동 · 333 WPM", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "학습 설정", exact: true }).click();
-  await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("0.5");
-  await expect(page.getByLabel("문장 간격 (초)")).toHaveCount(0);
-  await expect(page.getByLabel("구간 간격 (초)")).toHaveCount(0);
+  await expect(page.getByLabel("말하기 추가 시간 (초)")).toHaveValue("1.5");
+  await expect(page.getByLabel("문장 간격 (초)")).toHaveValue("0.5");
+  await expect(page.getByLabel("구간 간격 (초)")).toHaveValue("3");
 });
 
 for (const level of [7, 8]) test(`level ${level} times speaking from the target line and ${level === 7 ? "reveals" : "never reveals"} the target answer`, async ({ page }) => {
@@ -115,6 +115,12 @@ test("pause and Right Arrow work while r, R and Left Arrow preserve word progres
   await page.keyboard.press("R");
   await expect(canvas).toHaveText("I wake");
   await page.keyboard.press("ArrowRight");
+  // A local jump is durable before its new sentence starts. Settle that public
+  // boundary before advancing the virtual word clock, rather than racing IDB.
+  await expect.poll(async () => (await readDeviceJournal(page))!.runs[0].nextPhrase).toBe(1);
+  await expect(page.getByRole("navigation", { name: "학습 탐색", exact: true })).toContainText("문장 2");
+  await expect(canvas).toHaveText("I");
+  await expect(page.getByRole("button", { name: "PAUSE · 일시정지", exact: true })).toBeVisible();
   await advanceCloudClock(page, 300);
   await expect(canvas).toHaveText("I wash");
   await page.keyboard.press("Space");

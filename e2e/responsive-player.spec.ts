@@ -1,4 +1,4 @@
-import { enterAccountPractice, installPlayerPackage, openLearnerPage, readDeviceJournal, readServerJournal } from "./fixtures/cloud-navigation";
+import { enterAccountPractice, installPlayerPackage, openLearnerPage, readDeviceJournal } from "./fixtures/cloud-navigation";
 import { seedLearningJournal, fixtureVersion, fixtureRunId } from "./fixtures/cloud-journal";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
@@ -157,10 +157,11 @@ for (const level of [1, 8]) test(`level ${level} automatically starts a new less
     ...previous, runId: "completed-previous-version", nextUnit: 3, nextPhrase: 3, completedAt: "2026-08-02T00:00:00Z",
   }] });
   const read = async () => {
-    if (level !== 1) return readServerJournal(page);
     const local = await readDeviceJournal(page);
     const runId = new URL(page.url()).searchParams.get("run") ?? fixtureRunId("previous-version-run");
-    return { progress: local?.runs.find(run => run.runId === runId), history: local?.history };
+    const progress = local?.runs.find(run => run.runId === runId);
+    if (!progress || !local) throw new Error("Expected the installed device run");
+    return { progress, history: local.history };
   };
   const before = await read();
   await page.goto(`/player?lesson=10000000-0000-4000-8000-000000000001&level=${level}`);

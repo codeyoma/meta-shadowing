@@ -128,19 +128,16 @@ test("grouped progress resumes the whole next group, not a recording inside an u
   await expect(phrases.nth(0)).toHaveAttribute("aria-current", "true");
 });
 
-test("blocked browser storage still confirms completion in the account", async ({ page }) => {
+test("blocked identity storage shows the device gate and never pretends completion was saved", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(window, "localStorage", { get() { throw new DOMException("Storage blocked", "SecurityError"); } }));
-  await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
   await signIn(page);
-  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000003&level=8&mode=automatic&lineGap=0");
-  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
-  await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
-  await advanceCloudClock(page, 20000);
-  await expect(page.getByRole("heading", { name: "레벨 8 학습 완료" })).toBeVisible();
-  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+  await page.goto("/player?lesson=10000000-0000-4000-8000-000000000003&level=8&mode=automatic&lineGap=0");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("기기 계정 저장 공간을 확인해 주세요.");
+  await expect(page.getByRole("button", { name: /^CONTINUE/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "레벨 8 학습 완료" })).toHaveCount(0);
 });
 
-test("malformed legacy records cannot replace saved account settings", async ({ page }) => {
+test("malformed legacy records cannot replace saved device settings", async ({ page }) => {
   await signIn(page);
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
   await openSelectedStageSettings(page);
@@ -240,13 +237,6 @@ test("rapid resume commits complete lines, excludes pauses and background time, 
   await page.getByLabel("문장 간격 (초)").fill("0");
   await page.keyboard.press("Escape");
   await startSelectedStage(page);
-  // The global drawer now persists device preferences. Configure this legacy
-  // rapid run through its own player controls, which still use server recording.
-  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-  await page.getByRole("button", { name: "학습 설정", exact: true }).click();
-  await page.getByRole("radio", { name: "자동", exact: true }).click();
-  await page.getByLabel("문장 간격 (초)").fill("0");
-  await page.keyboard.press("Escape");
   await pauseCloudClock(page, await page.evaluate(() => Date.now() + 1000));
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await expect(page.getByRole("region", { name: "속사포 학습" })).toHaveText("I");

@@ -1,7 +1,7 @@
 import type { ProgressRecord, CompletionRecord, RunSelection } from "@/lib/learning-records";
 import type { SessionSettings } from "@/lib/session-settings";
 
-/** Server-confirmed inputs and commands shared by the audio and rapid players. */
+/** Persisted inputs and commands shared by the audio and rapid players. */
 export type LearningStart = { selection: RunSelection; progress: ProgressRecord | null; completion: CompletionRecord | null; confirmedCycles?: number };
 export type RecordUpdate = {
   active?: boolean;
@@ -13,7 +13,7 @@ export type RecordUpdate = {
   kind?: "studied" | "advance" | "jump" | "line" | "settings";
   confirmedCycles?: number;
 };
-export type CloudRecording = {
+export type LearningRecording = {
   local?: boolean;
   completion: CompletionRecord | null;
   blocked: boolean;

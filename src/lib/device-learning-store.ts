@@ -2,8 +2,13 @@ import { isSessionSettings, resolveSessionSettings, validSettingOverrides, type 
 import type { ProgressRecord, CompletionRecord } from "./learning-records";
 import type { PublishedLesson } from "./lessons";
 import { assertDeviceAccess, type DeviceAccess } from "./device-access";
+import { isStageForLevel } from "./learning-stages";
+import { validStudyDay } from "./study-streak";
 
 export const DEVICE_LEARNING_DATABASE = "meta-shadowing-device-learning-v1";
+// Schema 2 already stores level, stage, independent unit/phrase indexes, and
+// confirmations. Widening their validation needs no data migration and keeps
+// existing schema-1 settings and schema-2 level-1 records readable.
 export const DEVICE_LEARNING_SCHEMA_VERSION = 2;
 const ACCOUNT_STORE = "accounts";
 
@@ -14,9 +19,10 @@ export type DeviceLearningRecord = {
   settings: Partial<SessionSettings>;
   runs: DeviceRun[];
   history: (DeviceRun & CompletionRecord)[];
+  studyDays: string[];
 };
 
-export type DeviceRun = ProgressRecord & { level: 1; confirmedCycles: number; revision: number; completedAt?: string };
+export type DeviceRun = ProgressRecord & { level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; confirmedCycles: number; revision: number; completedAt?: string };
 
 export class DeviceLearningStoreError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -67,17 +73,23 @@ function parseRecord(value: unknown, accountId: string): DeviceLearningRecord | 
     throw new DeviceLearningStoreError("Local learning settings are malformed");
   }
   const runs = candidate.runs ?? [], history = candidate.history ?? [];
+  const studyDays = candidate.studyDays ?? [];
   if (!Array.isArray(runs) || !Array.isArray(history)) throw new DeviceLearningStoreError("Local learning records are malformed");
+  if (!Array.isArray(studyDays) || studyDays.some(day => !validStudyDay(day))) throw new DeviceLearningStoreError("Local study days are malformed");
   for (const run of [...runs, ...history]) {
+    const stage = run?.stage === undefined && run?.level === 1 ? 1 : run?.stage;
     if (!run || typeof run.runId !== "string" || !run.runId || typeof run.lessonId !== "string" || !run.lessonId
-      || typeof run.lessonVersion !== "string" || !Number.isFinite(Date.parse(run.lessonVersion)) || run.level !== 1
-      || ![1, 2].includes(run.stage ?? 1) || !isSessionSettings(run.settings)
+      || typeof run.lessonVersion !== "string" || !Number.isFinite(Date.parse(run.lessonVersion))
+      || !Number.isSafeInteger(run.level) || run.level < 1 || run.level > 8 || !isStageForLevel(stage, run.level)
+      || !isSessionSettings(run.settings)
       || ![run.nextUnit, run.nextPhrase, run.activeMs, run.confirmedCycles, run.revision].every(value => Number.isSafeInteger(value) && value >= 0)
-      || run.confirmedCycles > 5 || run.nextUnit !== run.nextPhrase
+      || run.confirmedCycles > 5 || (run.level >= 6 && run.confirmedCycles !== 0)
       || (run.completedAt !== undefined && !Number.isFinite(Date.parse(run.completedAt)))) throw new DeviceLearningStoreError("Local learning run is malformed");
+    run.stage = stage;
   }
   if (history.some(run => !run.completedAt) || new Set(history.map(run => run.runId)).size !== history.length) throw new DeviceLearningStoreError("Local completion history is malformed");
-  return { schemaVersion: DEVICE_LEARNING_SCHEMA_VERSION, accountId, preferredLevel, settings, runs, history };
+  return { schemaVersion: DEVICE_LEARNING_SCHEMA_VERSION, accountId, preferredLevel, settings, runs, history,
+    studyDays: [...new Set(studyDays)].sort() };
 }
 
 export async function readDeviceLearningRecord(accountId: string): Promise<DeviceLearningRecord | null> {
@@ -104,7 +116,7 @@ async function mutateRecord<T>(accountId: string, change: (record: DeviceLearnin
     void complete.catch(() => {});
     const store = transaction.objectStore(ACCOUNT_STORE);
     const record = parseRecord(await requestResult(store.get(accountId)), accountId)
-      ?? { schemaVersion: DEVICE_LEARNING_SCHEMA_VERSION, accountId, preferredLevel: 1, settings: {}, runs: [], history: [] };
+      ?? { schemaVersion: DEVICE_LEARNING_SCHEMA_VERSION, accountId, preferredLevel: 1, settings: {}, runs: [], history: [], studyDays: [] };
     if (access) assertDeviceAccess(access);
     const value = change(record);
     store.put(parseRecord(record, accountId)!);
@@ -129,6 +141,8 @@ export async function writeDeviceLearningSettings(accountId: string, preferredLe
 /** Opening an unfinished stage resumes its local identity; completion links are immutable. */
 export async function startDeviceRun(access: DeviceAccess, lesson: PublishedLesson, stage: number, requestedRun?: string): Promise<DeviceRun> {
   return mutateRecord(access.accountId, record => {
+    const level = Math.ceil(stage / 2);
+    if (!isStageForLevel(stage, level)) throw new DeviceLearningStoreError("Learning stage is malformed");
     const matches = (run: DeviceRun) => run.lessonId === lesson.id && run.lessonVersion === lesson.version && run.stage === stage;
     const completed = record.history.find(run => run.runId === requestedRun && matches(run));
     if (completed) return completed;
@@ -136,7 +150,7 @@ export async function startDeviceRun(access: DeviceAccess, lesson: PublishedLess
     const previous = candidates.find(run => run.runId === requestedRun) ?? candidates[0];
     if (previous) return previous;
     const run: DeviceRun = { runId: crypto.randomUUID(), lessonId: lesson.id, lessonVersion: lesson.version,
-      lessonName: lesson.name, language: lesson.language, level: 1, stage, nextUnit: 0, nextPhrase: 0, activeMs: 0,
+      lessonName: lesson.name, language: lesson.language, level: level as DeviceRun["level"], stage, nextUnit: 0, nextPhrase: 0, activeMs: 0,
       settings: resolveSessionSettings(record.settings), confirmedCycles: 0, revision: 0 };
     record.runs.push(run);
     return run;
@@ -144,8 +158,9 @@ export async function startDeviceRun(access: DeviceAccess, lesson: PublishedLess
 }
 
 /** Revision compare-and-swap prevents a stale tab from rolling back a newer checkpoint. */
-export async function saveDeviceRun(access: DeviceAccess, run: DeviceRun, revision: number): Promise<DeviceRun> {
+export async function saveDeviceRun(access: DeviceAccess, run: DeviceRun, revision: number, studyDay?: string): Promise<DeviceRun> {
   return mutateRecord(access.accountId, record => {
+    if (studyDay !== undefined && !validStudyDay(studyDay)) throw new DeviceLearningStoreError("Local study day is malformed");
     const completed = record.history.find(value => value.runId === run.runId);
     if (completed) return completed;
     const index = record.runs.findIndex(value => value.runId === run.runId);
@@ -155,6 +170,7 @@ export async function saveDeviceRun(access: DeviceAccess, run: DeviceRun, revisi
       record.runs.splice(index, 1);
       record.history.push(next as DeviceRun & CompletionRecord);
     } else record.runs[index] = next;
+    if (studyDay !== undefined && !record.studyDays.includes(studyDay)) record.studyDays.push(studyDay);
     return next;
   }, access);
 }

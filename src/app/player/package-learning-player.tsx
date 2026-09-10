@@ -3,15 +3,16 @@ import { useEffect, useState, type ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import { readLessonPackage, type InstalledLessonPackage } from "@/lib/lesson-package-store";
 import { LessonPackagesProvider, PackageDownloads, useLessonPackages } from "../lesson-packages-provider";
-import { CloudLearningPlayer } from "./cloud-learning-player";
 import { PackageContent } from "./package-content";
 import { DeviceAccessProvider } from "../device-access-provider";
 import { LocalLearningPlayer } from "./local-learning-player";
 
+import type { CloudLearningPlayer } from "./cloud-learning-player";
+
 type Props = ComponentProps<typeof CloudLearningPlayer>;
 export function PackageLearningPlayer(props: Props) {
   const player = <LessonPackagesProvider accountId={props.accountId} catalog={[props.lesson]}><PackageGate {...props} /></LessonPackagesProvider>;
-  return props.level === 1 ? <DeviceAccessProvider accountId={props.accountId}>{player}</DeviceAccessProvider> : player;
+  return <DeviceAccessProvider accountId={props.accountId}>{player}</DeviceAccessProvider>;
 }
 function PackageGate(props: Props) {
   const packages = useLessonPackages()!;
@@ -32,8 +33,7 @@ function PackageGate(props: Props) {
     return () => { active = false; };
   }, [props.accountId, props.lesson.id, props.lesson.version, packages.revision, packages.invalid]);
   if (installed && !packages.invalid) return <PackageContent.Provider value={installed}>
-    {props.level === 1 ? <LocalLearningPlayer lesson={installed.manifest.lesson} stage={props.stage} requestedRun={props.requestedRun} />
-      : <CloudLearningPlayer {...props} lesson={installed.manifest.lesson} hints={installed.manifest.hints} lines={installed.manifest.lines} />}
+    <LocalLearningPlayer lesson={installed.manifest.lesson} stage={props.stage} hints={installed.manifest.hints} lines={installed.manifest.lines} requestedRun={props.requestedRun} />
   </PackageContent.Provider>;
   return <main className="page mx-auto flex w-full max-w-md flex-col gap-4 overflow-y-auto p-5">
     <h1>{props.lesson.name}</h1>

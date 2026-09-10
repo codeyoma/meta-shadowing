@@ -1,4 +1,4 @@
-import { enterAccountPractice, readServerJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { enterAccountPractice, readDeviceJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
 import { expect, test } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
@@ -17,12 +17,12 @@ test("the second grouped stage survives settings, a sentence jump, refresh and h
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await page.getByRole("button", { name: /^5번 문장/ }).click();
   await expect(page.getByRole("progressbar", { name: "묶음 진행", exact: true })).toHaveAttribute("aria-valuenow", "1");
-  const before = (await readServerJournal(page)).progress;
+  const before = (await readDeviceJournal(page))!.runs[0];
   expect(before).toMatchObject({ level: 4, stage: 8 });
   await reloadLearnerPage(page);
   await expect(page.locator("#player-title")).toBeVisible();
   await expect(page).toHaveURL(/stage=8(?:&|$)/);
-  expect((await readServerJournal(page)).progress).toMatchObject({ stage: 8, nextPhrase: before.nextPhrase, runId: before.runId });
+  expect((await readDeviceJournal(page))!.runs[0]).toMatchObject({ stage: 8, nextPhrase: before.nextPhrase, runId: before.runId });
   await openLearnerPage(page, "/lessons?language=english");
   await page.getByRole("link", { name: /Daily Conversation/ }).click();
   const resume = page.getByRole("button", { name: "현재 스테이지 8 시작", exact: true });

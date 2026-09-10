@@ -7,11 +7,11 @@ import { loadPackageModules } from "./package-store";
 const pendingRequests = new WeakMap<Page, Set<Request>>();
 export async function pauseCloudClock(page: Page, time: Date | number) {
   await page.clock.pauseAt(time);
-  // Virtual time may have invalidated the real ownership lease check.
+  // Entry must be ready before advancing a timed session.
   await expect(page.getByRole("button", { name: /CONTINUE|PAUSE/ }).first()).toBeEnabled();
 }
-/** Let real acknowledgments settle between virtual-clock intervals. A single
- * large jump would deliberately stop the new player at its first unsaved unit. */
+/** Yield between virtual-clock intervals so durable writes can settle before
+ * the player's next timed transition. */
 function trackCloudRequests(page: Page) {
   let pending = pendingRequests.get(page);
   if (!pending) {
@@ -38,24 +38,19 @@ export async function advanceCloudClock(page: Page, milliseconds: number) {
   }
 }
 
-/** Presentation tests await automatic entry; takeover behavior itself is
- * covered by the A/B/C integration tests, not bypassed by this helper. */
+/** Install the package visibly and await the device player or completion view. */
 export async function enterAccountPractice(page: Page) {
   trackCloudRequests(page);
   const start = page.getByRole("button", { name: /CONTINUE/ });
   const completed = page.getByRole("button", { name: "레슨 목록으로", exact: true });
-  const takeover = page.getByRole("button", { name: "이 기기에서 이어 학습", exact: true });
   const packageGate = page.getByText("이 레슨 전체를 다운로드해 주세요.", { exact: true });
-  await expect(start.or(completed).or(takeover).or(packageGate)).toBeVisible();
+  // Rapid completion retains its paused control row below the completion card.
+  await expect(start.or(completed).or(packageGate).first()).toBeVisible();
   if (await packageGate.isVisible()) {
     await page.getByRole("group", { name: / 다운로드$/ }).getByRole("button", { name: / 다운로드$/ }).click();
-    await expect(start.or(completed).or(takeover)).toBeVisible();
+    await expect(start.or(completed).first()).toBeVisible();
   }
   if (await completed.count()) return;
-  if (await takeover.count()) {
-    await takeover.click();
-    await page.getByRole("button", { name: "이어 학습 확인", exact: true }).click();
-  }
   await expect(page.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
 }
 
@@ -104,8 +99,8 @@ export async function openLearnerPage(page: Page, href: string) {
     href = url.pathname + url.search;
   }
   if (url.pathname === "/player") {
-    // Old presentation URLs encode the test's settings. Prepare the real account
-    // through its HTTP API; production intentionally ignores these query values.
+    // Presentation URLs encode test settings. Seed the real device store;
+    // production intentionally ignores untrusted settings query values.
     const q = url.searchParams;
     const numeric = (key: string, scale = 1) => q.has(key) ? Number(q.get(key)) * scale : undefined;
     const changes = validSettingOverrides({ mode: q.get("mode"), display: q.get("display"), speed: numeric("speed"), groupSize: numeric("group"),
@@ -115,14 +110,12 @@ export async function openLearnerPage(page: Page, href: string) {
       const response = await page.request.get("/api/learner/preferences");
       expect(response.status()).toBe(200);
       const { profile } = await response.json();
-      if (!q.has("level") || q.get("level") === "1") {
-        await page.goto("/languages");
-        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-        await loadPackageModules(page);
-        await page.evaluate(async ({ accountId, changes }) => {
-          await window.deviceStore.writeDeviceLearningSettings(accountId, 1, changes);
-        }, { accountId: profile.accountId, changes });
-      } else expect((await page.request.patch("/api/learner/preferences", { data: { accountId: profile.accountId, revision: profile.revision, changes } })).status()).toBe(200);
+      await page.goto("/languages");
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await loadPackageModules(page);
+      await page.evaluate(async ({ accountId, changes, level }) => {
+        await window.deviceStore.writeDeviceLearningSettings(accountId, level, changes);
+      }, { accountId: profile.accountId, changes, level: Number(q.get("level") ?? 1) });
     }
   }
   const response = await page.goto(href);
@@ -143,7 +136,7 @@ export async function readServerJournal(page: Page) {
   return response.json();
 }
 
-/** Public local record read for migrated level-one presentation assertions. */
+/** Public account-scoped local record read for learner presentation assertions. */
 export async function readDeviceJournal(page: Page) {
   await loadPackageModules(page);
   await expect.poll(() => page.evaluate(() => Boolean(window.deviceAccess.readDeviceAccess()))).toBe(true);

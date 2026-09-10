@@ -322,7 +322,8 @@ test("cross-tab verified account switching tears down A's active offline shell b
   await openLearnerPage(page, player);
   await page.getByRole("button", { name: /CONTINUE/ }).click(); await confirmManualListen(page);
   const accountA = await page.evaluate(() => JSON.parse(localStorage.getItem("meta-shadowing:device-access:v1")!).accountId as string);
-  await page.goto(player.replace("/player", "/offline"));
+  const pinned = new URL(page.url()); pinned.pathname = "/offline";
+  await page.goto(pinned.pathname + pinned.search);
   await expect(page.locator('meta[name="device-offline-shell"]')).toHaveAttribute("content", "1");
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
   const tab = await context.newPage();
@@ -393,7 +394,7 @@ test("cold-shell ordinary focus refresh preserves the installed media identity a
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });
 
-test("stage resume retains old and current local runs, both local stages, and eligible legacy progress", async ({ page }, info) => {
+test("stage resume retains old and current local runs and ignores legacy cloud progress", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.name));
   page.on("console", message => { if (["error", "warning"].includes(message.type())) errors.push(message.type()); });
@@ -421,7 +422,8 @@ test("stage resume retains old and current local runs, both local stages, and el
     lessonVersion: fixtureVersion, lessonName: "Morning Routine", language: "english", level: 3, stage: 5,
     nextPhrase: 1, nextUnit: 1, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS } });
   await page.goto(stages);
-  await expect(page.getByRole("button", { name: "현재 스테이지 5 시작", exact: true })).toContainText("이어서 학습");
+  await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toContainText("이어서 학습");
+  await expect(page.getByRole("button", { name: "현재 스테이지 5 시작", exact: true })).toHaveCount(0);
   for (const stage of [1, 2]) {
     await page.getByRole("radio", { name: `${stage} 자막 쉐도잉 Lv 1`, exact: true }).click();
     await expect(page.getByRole("dialog").filter({ hasText: `저장된 학습 · 프레이즈 ${stage + 1}` })).toBeVisible();
