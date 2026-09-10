@@ -7,6 +7,60 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
 
+test("resume timing diagnostics retain only fixed phases and bounded numeric fields", () => {
+  const directory = mkdtempSync(join(tmpdir(), "safe-resume-timing-"));
+  const secret = "fixture-private-token-never-export";
+  try {
+    const input = join(directory, "raw.json"), output = join(directory, "safe.json");
+    writeFileSync(input, JSON.stringify({ suites: [{ specs: [{ file: "mobile-first-browse.spec.ts", tests: [{
+      projectName: "desktop", results: [{ status: "timedOut", steps: [
+        { title: "resume:open-stages:0", duration: 12, steps: [{ title: secret, duration: 1 }] },
+        { title: "resume:fonts:320", duration: 28000, error: { message: secret }, url: secret },
+        { title: `resume:${secret}:320`, duration: 2 },
+        { title: "resume:fonts:321", duration: 2 },
+        { title: "resume:fonts:320", duration: -2 },
+        { title: "resume:fonts:320", duration: 120001 },
+      ] }]
+    }] }] }] }));
+    const result = spawnSync(process.execPath, ["scripts/collect-ci-artifacts.mjs", input, output], { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    const artifact = readFileSync(output, "utf8");
+    expect(artifact + result.stdout + result.stderr).not.toContain(secret);
+    expect(JSON.parse(artifact).tests[0].attempts[0].resumeTimings).toEqual([
+      { phase: "open-stages", width: 0, durationMs: 12, failed: false },
+      { phase: "fonts", width: 320, durationMs: 28000, failed: true },
+    ]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("a real timed-out Playwright step retains safe resume diagnostics in artifacts and job output", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "safe-resume-timeout-")));
+  const secret = "fixture-timeout-cookie-never-export";
+  try {
+    const playwright = pathToFileURL(resolve("node_modules/@playwright/test/index.mjs")).href;
+    writeFileSync(join(directory, "package.json"), JSON.stringify({ type: "module" }));
+    writeFileSync(join(directory, "resume-timeout-fixture.spec.ts"), `import { test } from ${JSON.stringify(playwright)};
+      test(${JSON.stringify(secret)}, async () => {
+        console.log(${JSON.stringify(secret)});
+        await test.step('resume:fonts:320', () => new Promise(() => {}));
+      });`);
+    const config = join(directory, "playwright.config.mjs");
+    writeFileSync(config, `export default { testDir: ${JSON.stringify(directory)}, timeout: 1000, retries: 0, workers: 1, projects: [{ name: 'desktop' }] };`);
+    const artifacts = join(directory, "safe");
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+      `import { runPlaywright } from './scripts/run-playwright.mjs'; process.exit(runPlaywright(${JSON.stringify(["--config", config, "--output", join(directory, "private-output")])}));`,
+    ], { encoding: "utf8", env: { ...process.env, SAFE_CI_ARTIFACT_DIR: artifacts } });
+    expect(result.status).toBe(1);
+    const output = readFileSync(join(artifacts, readdirSync(artifacts)[0]), "utf8");
+    expect(output + result.stdout + result.stderr).not.toContain(secret);
+    const attempt = JSON.parse(output).tests[0].attempts[0];
+    expect(attempt.status).toBe("timedOut");
+    expect(attempt.resumeTimings).toHaveLength(1);
+    expect(attempt.resumeTimings[0]).toEqual({ phase: "fonts", width: 320, durationMs: null, unfinished: true });
+    expect(result.stdout).toContain("CI resume timings:");
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+}, 20000);
+
 test("CI collector exports only failure metadata, never arbitrary report content", () => {
   const directory = mkdtempSync(join(tmpdir(), "safe-ci-test-"));
   const secret = "fixture-credential-do-not-export";

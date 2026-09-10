@@ -12,6 +12,21 @@ function sourceFiles(directory, specsOnly = true) {
 const statuses = new Set(["passed", "failed", "timedOut", "skipped", "interrupted"]);
 const numeric = value => Number.isFinite(value) && value >= 0 ? value : 0;
 const status = value => statuses.has(value) ? value : "unknown";
+function resumeTimings(result) {
+  // Only explicit top-level diagnostic steps, never arbitrary nested API calls.
+  if (!Array.isArray(result.steps)) return [];
+  return result.steps.slice(0, 128).flatMap(step => {
+    const match = typeof step?.title === "string"
+      ? /^resume:(open-stages|server-journal|device-journal|seed|viewport|navigate|ready|fonts|measure|assert|screenshot):(0|320|360|375|390|430)$/.exec(step.title) : null;
+    if (!match) return [];
+    // Playwright reports the active step as -1 with no error on test timeout.
+    // Preserve that boundary without inventing a duration or an assertion failure.
+    if (step.duration === -1 && ["timedOut", "interrupted"].includes(result.status))
+      return [{ phase: match[1], width: Number(match[2]), durationMs: null, unfinished: true }];
+    if (!Number.isSafeInteger(step.duration) || step.duration < 0 || step.duration > 120000) return [];
+    return [{ phase: match[1], width: Number(match[2]), durationMs: step.duration, failed: Boolean(step.error) }];
+  }).slice(0, 64);
+}
 function mp3Expiry(result) {
   const attachment = result.attachments?.find(item => item.name === "mp3-expiry-diagnostic-v1"
     && item.contentType === "application/json" && typeof item.body === "string" && item.body.length <= 32768);
@@ -83,8 +98,9 @@ try {
           expectedStatus: status(test.expectedStatus),
           attempts: (test.results ?? []).map(result => {
             const expiry = mp3Expiry(result);
+            const timings = resumeTimings(result);
             return { status: status(result.status), durationMs: numeric(result.duration),
-            retry: numeric(result.retry), ...(expiry ? { mp3Expiry: expiry } : {}), ...(result.error ? { failure: category(result.error),
+            retry: numeric(result.retry), ...(timings.length ? { resumeTimings: timings } : {}), ...(expiry ? { mp3Expiry: expiry } : {}), ...(result.error ? { failure: category(result.error),
               ...(operation(result.error) ? { operation: operation(result.error) } : {}),
               ...(failureLocation(result, locations) ? { failureLocation: failureLocation(result, locations) } : {}),
             } : {}) };

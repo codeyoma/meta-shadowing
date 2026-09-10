@@ -154,30 +154,33 @@ test("scrolling upward over the short-screen path returns to the summary actions
 });
 
 test("long resume metadata and a wrapping method remain separated and centered", async ({ page }) => {
-  await openStages(page);
-  const journal = await readServerJournal(page);
-  const local = await readDeviceJournal(page);
+  // Fixed step names let CI retain timings without publishing selectors or data.
+  await test.step("resume:open-stages:0", () => openStages(page));
+  const journal = await test.step("resume:server-journal:0", () => readServerJournal(page));
+  const local = await test.step("resume:device-journal:0", () => readDeviceJournal(page));
   if (!local?.history[0]) throw new Error("Expected the seeded local completion");
-  await seedLearningJournal(page, { ...journal, history: [...journal.history, ...local.history],
-    progress: { ...local.history[0], runId: "resume-ten", stage: 10, level: 5, nextPhrase: 1, nextUnit: 1 } });
+  await test.step("resume:seed:0", () => seedLearningJournal(page, { ...journal, history: [...journal.history, ...local.history],
+    progress: { ...local.history[0], runId: "resume-ten", stage: 10, level: 5, nextPhrase: 1, nextUnit: 1 } }));
   for (const width of [320, 360, 375, 390, 430]) {
-    await page.setViewportSize({ width, height: 740 });
-    await openLearnerPage(page, stages);
+    await test.step(`resume:viewport:${width}`, () => page.setViewportSize({ width, height: 740 }));
+    await test.step(`resume:navigate:${width}`, () => openLearnerPage(page, stages));
     const start = page.getByRole("button", { name: "현재 스테이지 10 시작", exact: true });
-    await expect(start).toBeEnabled();
-    await page.evaluate(() => document.fonts.ready);
-    const [button, title, icon, caption] = await Promise.all([
+    await test.step(`resume:ready:${width}`, () => expect(start).toBeEnabled());
+    await test.step(`resume:fonts:${width}`, () => page.evaluate(() => document.fonts.ready));
+    const [button, title, icon, caption] = await test.step(`resume:measure:${width}`, () => Promise.all([
       start.boundingBox(), start.getByText("다문장 첫 단어", { exact: true }).boundingBox(), start.locator("svg").boundingBox(),
       start.getByText("이어서 학습 10 · Lv 5", { exact: true }).boundingBox(),
-    ]);
-    expect(caption!.y + caption!.height).toBeLessThanOrEqual(title!.y);
-    expect(caption!.x).toBeCloseTo(title!.x, 0);
-    expect(caption!.y).toBeGreaterThanOrEqual(button!.y);
-    expect(title!.y + title!.height / 2).toBeCloseTo(icon!.y + icon!.height / 2, 0);
-    expect(icon!.x + icon!.width).toBeLessThan(title!.x);
-    expect((icon!.x + title!.x + title!.width) / 2).toBeCloseTo(button!.x + button!.width / 2, 0);
-    expect(title!.y + title!.height / 2).toBeCloseTo(button!.y + button!.height / 2, 0);
-    expect(await start.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    await start.screenshot({ path: test.info().outputPath(`resume-${width}.png`), animations: "disabled", scale: "css" });
+    ]));
+    await test.step(`resume:assert:${width}`, async () => {
+      expect(caption!.y + caption!.height).toBeLessThanOrEqual(title!.y);
+      expect(caption!.x).toBeCloseTo(title!.x, 0);
+      expect(caption!.y).toBeGreaterThanOrEqual(button!.y);
+      expect(title!.y + title!.height / 2).toBeCloseTo(icon!.y + icon!.height / 2, 0);
+      expect(icon!.x + icon!.width).toBeLessThan(title!.x);
+      expect((icon!.x + title!.x + title!.width) / 2).toBeCloseTo(button!.x + button!.width / 2, 0);
+      expect(title!.y + title!.height / 2).toBeCloseTo(button!.y + button!.height / 2, 0);
+      expect(await start.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    });
+    await test.step(`resume:screenshot:${width}`, () => start.screenshot({ path: test.info().outputPath(`resume-${width}.png`), animations: "disabled", scale: "css" }));
   }
 });
