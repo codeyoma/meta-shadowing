@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AudioCacheLifecycle } from "./audio-cache-scope";
+import { OfflineShellRegistration } from "./offline-shell-registration";
 import "./globals.css";
 import "@fontsource-variable/nunito";
 import "@fontsource-variable/quicksand";
@@ -8,7 +9,7 @@ import "@fontsource-variable/noto-sans-jp";
 
 export const metadata: Metadata = {
   title: "Meta Shadowing",
-  description: "개인 문장으로 여덟 단계 학습 · 인터넷 연결이 필요한 온라인 전용 앱",
+  description: "개인 문장으로 여덟 단계 학습 · 다운로드한 레슨의 레벨 1은 오프라인 학습 가능",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "Meta Shadowing" },
   icons: {
@@ -26,7 +27,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body><AudioCacheLifecycle />{children}</body>
+      <body><AudioCacheLifecycle /><OfflineShellRegistration />{children}</body>
     </html>
   );
 }

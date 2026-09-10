@@ -5,8 +5,7 @@ import { firstPracticeToken } from "@/lib/practice-tokens";
 import { prepareRapidLines } from "@/lib/rapid-lines";
 import { stageForLevel } from "@/lib/learning-stages";
 import { cloudLearningEnabled } from "@/lib/cloud-learning";
-import { CloudLearningPlayer } from "./cloud-learning-player";
-import { AudioCacheScope } from "../audio-cache-scope";
+import { PackageLearningPlayer } from "./package-learning-player";
 
 import { CloudLearningUnavailable } from "../cloud-learning-unavailable";
 
@@ -25,6 +24,6 @@ export default async function PlayerPage({ searchParams }: PlayerPageProps) {
   const hints = level === 3 || level === 5 ? lesson.phrases.map(phrase => ({
     target: firstPracticeToken(phrase.target, lesson.language), korean: firstPracticeToken(phrase.korean, "korean")
   })) : [];
-  return <AudioCacheScope accountId={identity.id}><CloudLearningPlayer key={`${identity.id}:${lesson.id}:${lesson.version}:${stage}`} accountId={identity.id} lesson={lesson} level={level as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8} stage={stage} hints={hints}
-      lines={level >= 6 ? prepareRapidLines(lesson.entries,lesson.language) : []} requestedRun={params.run} /></AudioCacheScope>;
+  return <PackageLearningPlayer key={`${identity.id}:${lesson.id}:${lesson.version}:${stage}`} accountId={identity.id} lesson={lesson} level={level as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8} stage={stage} hints={hints}
+      lines={level >= 6 ? prepareRapidLines(lesson.entries,lesson.language) : []} requestedRun={params.run} />;
 }

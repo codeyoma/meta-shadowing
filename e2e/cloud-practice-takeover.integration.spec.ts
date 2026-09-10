@@ -3,7 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
-import { testRecording, testAudioManifest } from "./fixtures/audio";
+import { testRecording } from "./fixtures/audio";
+import { createVerifiedTestAudio } from "./fixtures/verified-audio";
+import { installPlayerPackage } from "./fixtures/cloud-navigation";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires local cloud practice integration");
 test.use({actionTimeout:15000});
@@ -30,24 +32,27 @@ test("explicit takeover cancels safely and fences the previous browser", async (
   const lessonId = randomUUID(), version = new Date().toISOString();
   const errors: string[] = [];
   const journal = async () => (await (await b.request.get("/api/learner/practice")).json());
-  const playerUrl = `/player?lesson=${lessonId}&level=1&stage=1`;
+  const playerUrl = `/player?lesson=${lessonId}&level=2&stage=3`;
+  const audio = createVerifiedTestAudio(service, id, lessonId, 2);
   async function open(page: Page) {
     page.on("pageerror",error=>errors.push(error.message));
     await page.addInitScript(() => {
       for (const method of ["getItem","setItem","removeItem"] as const) {
         const original = Storage.prototype[method] as (this:Storage,key:string,value?:string)=>string | null | void;
         Object.defineProperty(Storage.prototype,method,{value:function(this:Storage,key:string,value?:string) {
-          if(key.startsWith("meta-shadowing:")) throw new Error(`Learning storage used: ${method}`);
+          if(key.startsWith("meta-shadowing:") && !["meta-shadowing:device-access:v1", "meta-shadowing:device-access-fence:v1"].includes(key)) throw new Error(`Learning storage used: ${method}`);
           return original.call(this,key,value!);
         }});
       }
     });
     await page.route("**/api/lessons/*/audio/*",route=>route.fulfill({contentType:"audio/webm",body:testRecording}));
     await page.goto(playerUrl);
+    await installPlayerPackage(page);
   }
   try {
     expect((await service.from("lesson_drafts").insert({id:lessonId,created_by:id,title:"Takeover fixture",language:"english",target_filename:"en.txt",korean_filename:"ko.txt",target_source:"Hello",korean_source:"안녕",
-      parsed_entries:[1,2].map(phraseNumber=>({kind:"phrase",sourceLine:phraseNumber,phraseNumber,target:`Hello ${phraseNumber}.`,korean:`안녕 ${phraseNumber}.`})),validation_status:"validated",phrase_count:2,chapter_count:0,section_count:0,publication_status:"published",published_at:version,audio_manifest:testAudioManifest(2)})).error).toBeNull();
+      parsed_entries:[1,2].map(phraseNumber=>({kind:"phrase",sourceLine:phraseNumber,phraseNumber,target:`Hello ${phraseNumber}.`,korean:`안녕 ${phraseNumber}.`})),validation_status:"validated",phrase_count:2,chapter_count:0,section_count:0,publication_status:"published",published_at:version,audio_manifest:audio.manifest})).error).toBeNull();
+    await audio.upload();
     const first = await a.newPage(), second = await b.newPage();
     const starting = first.waitForResponse(response=>response.request().method()==="POST" && response.url().endsWith("/api/learner/practice") && response.request().postDataJSON()?.action==="start");
     await open(first);
@@ -238,5 +243,6 @@ test("explicit takeover cancels safely and fences the previous browser", async (
   } finally {
     await Promise.all([a.close(),b.close()]);
     await service.auth.admin.deleteUser(id);
+    await audio.cleanup();
   }
 });

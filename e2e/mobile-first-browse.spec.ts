@@ -1,5 +1,5 @@
-import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
-import { seedServerJournal } from "./fixtures/cloud-journal";
+import { readDeviceJournal, readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedLearningJournal } from "./fixtures/cloud-journal";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 
@@ -8,7 +8,7 @@ const stages = "/lessons/10000000-0000-4000-8000-000000000001/stages";
 async function openStages(page: Page) {
   await page.clock.setFixedTime(new Date("2026-09-08T12:00:00+09:00"));
   await openLearnerPage(page, "/languages");
-  await seedServerJournal(page, {
+  await seedLearningJournal(page, {
     progress: null, studyDays: ["2026-09-07", "2026-09-08"],
     history: [1, 2].map(stage => ({
       runId: `complete-${stage}`, lessonId: "10000000-0000-4000-8000-000000000001", lessonVersion: "fixture-v1", lessonName: "Morning Routine",
@@ -31,11 +31,11 @@ test("desktop browse destinations retain a centered phone-width shell", async ({
   for (const route of ["/languages", "/lessons?language=english", stages, "/settings?language=english&lesson=10000000-0000-4000-8000-000000000001", "/settings/session?language=english&lesson=10000000-0000-4000-8000-000000000001&stage=3&level=2"]) {
     await openLearnerPage(page, route);
     await expect(page).toHaveTitle(/Meta Shadowing/);
-    const box = (await page.getByRole("main").boundingBox())!;
+    const box = (await page.locator("main").boundingBox())!;
     expect(box.width).toBeCloseTo(430, 0);
     expect(box.x + box.width / 2).toBeCloseTo(640, 0);
     for (const name of ["상단 탐색", "하단 탐색"]) {
-      const nav = (await page.getByRole("navigation", { name, exact: true }).boundingBox())!;
+      const nav = (await page.locator(`nav[aria-label="${name}"]`).boundingBox())!;
       expect(nav.x).toBeGreaterThanOrEqual(box.x);
       expect(nav.x + nav.width).toBeLessThanOrEqual(box.x + box.width);
     }
@@ -125,8 +125,9 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 900 
     await page.screenshot({ path: test.info().outputPath(`preview-${viewport.width}.png`), animations: "disabled", scale: "css" });
     await preview.getByRole("button", { name: "스테이지 안내 닫기", exact: true }).click();
     await expect(lastStage).toBeFocused();
-    await page.getByRole("navigation", { name: "하단 탐색", exact: true }).getByRole("link", { name: "설정", exact: true }).click();
+    await page.getByRole("navigation", { name: "하단 탐색", exact: true }).getByRole("button", { name: "설정", exact: true }).click();
     await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
+    await page.getByRole("dialog", { name: "설정", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
     await page.getByRole("navigation", { name: "하단 탐색", exact: true }).getByRole("link", { name: "스테이지", exact: true }).click();
     await expect(lastStage).toBeInViewport();
     expect(await page.evaluate(() => ({ top: scrollY, width: document.documentElement.scrollWidth <= innerWidth, height: document.documentElement.scrollHeight <= innerHeight }))).toEqual({ top: 0, width: true, height: true });
@@ -155,7 +156,10 @@ test("scrolling upward over the short-screen path returns to the summary actions
 test("long resume metadata and a wrapping method remain separated and centered", async ({ page }) => {
   await openStages(page);
   const journal = await readServerJournal(page);
-  await seedServerJournal(page, { ...journal, progress: { ...journal.history[0], runId: "resume-ten", stage: 10, level: 5, nextPhrase: 1, nextUnit: 1 } });
+  const local = await readDeviceJournal(page);
+  if (!local?.history[0]) throw new Error("Expected the seeded local completion");
+  await seedLearningJournal(page, { ...journal, history: [...journal.history, ...local.history],
+    progress: { ...local.history[0], runId: "resume-ten", stage: 10, level: 5, nextPhrase: 1, nextUnit: 1 } });
   for (const width of [320, 360, 375, 390, 430]) {
     await page.setViewportSize({ width, height: 740 });
     await openLearnerPage(page, stages);

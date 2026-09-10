@@ -1,5 +1,5 @@
-import { enterAccountPractice, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
-import { seedServerJournal } from "./fixtures/cloud-journal";
+import { enterAccountPractice, installStagePackage, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedLearningJournal } from "./fixtures/cloud-journal";
 import { expect, test } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 import { openSelectedStageSettings, returnToStages } from "./fixtures/stage-preview";
@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
 });
 
-test("separate destinations retain the shell and show only their own content", async ({ page }) => {
+test("separate destinations retain the shell and local settings overlay", async ({ page }) => {
   await openLearnerPage(page, "/languages");
   await expect(page.getByRole("heading", { name: "언어 선택", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /영어 English/ })).toBeVisible();
@@ -23,22 +23,22 @@ test("separate destinations retain the shell and show only their own content", a
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000003\/stages/);
   await expect(page.getByRole("radio", { name: /^1 자막/ })).toBeVisible();
   const nav = page.getByRole("navigation", { name: "하단 탐색" });
-  await nav.getByRole("link", { name: "설정", exact: true }).click();
-  await expect(page).toHaveURL(/\/settings\?/);
-  await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "설정 목록" }).getByRole("link")).toHaveText(["세션 설정"]);
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("link", { name: "세션 설정", exact: true }).click();
-  await expect(page).toHaveURL(/\/settings\/session\?/);
+  const stageUrl = page.url();
+  await nav.getByRole("button", { name: "설정", exact: true }).click();
+  await expect(page).toHaveURL(stageUrl);
+  await expect(page.getByRole("dialog", { name: "설정", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "재생속도", exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "재생속도", exact: true }).selectOption("1.5");
   await reloadLearnerPage(page);
+  await nav.getByRole("button", { name: "설정", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "재생속도", exact: true })).toHaveValue("1.5");
+  await page.getByRole("dialog", { name: "설정", exact: true }).getByRole("button", { name: "닫기" }).click();
   await nav.getByRole("link", { name: "스테이지", exact: true }).click();
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000003\/stages/);
+  await installStagePackage(page);
   await page.getByRole("button", { name: "현재 스테이지 1 시작" }).click();
   await enterAccountPractice(page);
-  await expect(page).toHaveURL(/\/player\?.*speed=1.5/);
+  await expect(page).toHaveURL(/\/player\?.*speed=1(?:&|$)/);
   await expect(nav).toHaveCount(0);
 });
 
@@ -49,7 +49,7 @@ test("legacy links redirect and Settings-tab preferences apply to the chosen sta
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await page.getByRole("radio", { name: /^7 다문장 암기/ }).click();
   await openSelectedStageSettings(page);
-  await expect(page.getByRole("heading", { name: "세션 설정", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
   await expect(page.getByLabel("묶음 크기")).toBeVisible();
   await page.getByLabel("묶음 크기").selectOption("3");
   await returnToStages(page);
@@ -57,7 +57,7 @@ test("legacy links redirect and Settings-tab preferences apply to the chosen sta
   await page.getByRole("radio", { name: /^7 다문장 암기/ }).click();
   await page.getByRole("button", { name: "학습 시작", exact: true }).click();
   await enterAccountPractice(page);
-  await expect(page).toHaveURL(/level=4.*stage=7.*group=3/);
+  await expect(page).toHaveURL(/level=4.*stage=7.*group=2/);
 });
 
 test("navigation and stage scroll positions survive tab changes without document scrolling", async ({ page }) => {
@@ -115,8 +115,11 @@ test("choosing another lesson does not reset that language's lesson-list scroll"
   await expect(nextLesson).toBeInViewport();
   await expect.poll(() => list.evaluate(el => el.scrollTop)).toBeGreaterThan(50);
   const scrollBefore = await list.evaluate(el => el.scrollTop);
+  const savedSelection = page.waitForResponse(response => new URL(response.url()).pathname === "/api/learner/preferences" && response.request().method() === "PATCH");
   await nextLesson.click();
+  expect((await savedSelection).status()).toBe(200);
   await expect(page).toHaveURL(/\/10000000-0000-4000-8000-000000000002\/stages/);
+  await installStagePackage(page);
   await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toBeEnabled();
   await nav.getByRole("link", { name: "레슨", exact: true }).click();
   await expect(page).toHaveURL(/\/lessons\?language=english&lesson=10000000-0000-4000-8000-000000000002$/);
@@ -129,7 +132,7 @@ test("choosing another lesson does not reset that language's lesson-list scroll"
 
 test("lesson history distinguishes both stages belonging to the same level", async ({ page }) => {
   await openLearnerPage(page, "/languages");
-  await seedServerJournal(page, { progress: null, studyDays: [], history: [1, 2].map(stage => ({
+  await seedLearningJournal(page, { progress: null, studyDays: [], history: [1, 2].map(stage => ({
       runId: `history-${stage}`, lessonId: "10000000-0000-4000-8000-000000000001", lessonVersion: "fixture-v1", lessonName: "Morning Routine",
       language: "english", level: 1, stage, nextUnit: 3, nextPhrase: 3, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS,
       completedAt: `2026-09-07T01:0${stage}:00Z`,
@@ -145,7 +148,7 @@ test("lesson history distinguishes both stages belonging to the same level", asy
 
 test("a completed run returns to its language's lesson list and recorded stage", async ({ page }) => {
   await openLearnerPage(page, "/languages");
-  await seedServerJournal(page, { progress: null, studyDays: [], history: [{
+  await seedLearningJournal(page, { progress: null, studyDays: [], history: [{
       runId: "finished-browse-run", lessonId: "10000000-0000-4000-8000-000000000003", lessonVersion: "fixture-v1", lessonName: "東京の散歩",
       language: "japanese", level: 1, stage: 2, nextUnit: 3, nextPhrase: 3, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS,
       completedAt: "2026-09-07T01:00:00Z",

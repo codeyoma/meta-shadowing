@@ -4,6 +4,20 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { setAudioCacheAccount } from "@/lib/mp3-cache";
+import { clearDeviceAccess } from "@/lib/device-access";
+import { readSupabasePublicEnvironment } from "@/lib/supabase/config";
+
+function expireLocalAuthCookies() {
+  const environment = readSupabasePublicEnvironment();
+  if (!environment) return;
+  const prefix = `sb-${new URL(environment.url).hostname.split(".")[0]}-auth-token`;
+  for (const item of document.cookie.split(";")) {
+    const name = item.trim().split("=")[0];
+    if (name === prefix || (name.startsWith(`${prefix}.`) && /^\d+$/.test(name.slice(prefix.length + 1)))) {
+      document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+    }
+  }
+}
 
 export function LearnerSignOut({ settingsRow = false }: { settingsRow?: boolean }) {
   const [busy, setBusy] = useState(false);
@@ -12,10 +26,19 @@ export function LearnerSignOut({ settingsRow = false }: { settingsRow?: boolean 
     if (busy) return;
     setBusy(true); setFailed(false);
     try {
-      const client = getBrowserSupabaseClient();
-      if (!client) throw new Error("auth-unavailable");
-      const { error } = await client.auth.signOut({ scope: "local" });
-      if (error) throw error;
+      // Capture the existing online SDK session before expiring its cookies.
+      // Local invalidation must also succeed when its remote revocation fails.
+      let client: ReturnType<typeof getBrowserSupabaseClient> = null;
+      try { if (navigator.onLine) client = getBrowserSupabaseClient(); } catch { /* Local logout still proceeds. */ }
+      try { clearDeviceAccess(); }
+      finally { expireLocalAuthCookies(); setAudioCacheAccount(null); }
+      if (!navigator.onLine) {
+        window.location.replace("/offline");
+        return;
+      }
+      try { await client?.auth.signOut({ scope: "local" }); }
+      catch { /* Remote revocation is best effort; no credentials remain locally. */ }
+      finally { expireLocalAuthCookies(); }
       // Revoke in-memory audio handles even before a navigation completes.
       // The auth subscription clears the old account's visible learning state.
       setAudioCacheAccount(null);

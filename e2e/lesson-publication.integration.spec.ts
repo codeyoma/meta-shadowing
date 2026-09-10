@@ -61,7 +61,7 @@ test("a saved 560-file draft recovers from a text timeout without reuploading an
         expect((await admin.storage.from("lesson-audio").upload(path, bytes, { contentType: "audio/webm" })).error).toBeNull();
       }));
     }
-    // Characterize the exact authenticated Range request used by publication.
+    // Preserve coverage of authenticated Range reads used by existing audio clients.
     const rangeRequest = { headers: { Range: "bytes=0-11" }, cache: "no-store" as const };
     const signature = await admin.storage.from("lesson-audio").download(paths[0], {}, rangeRequest);
     expect(signature.error).toBeNull();
@@ -90,7 +90,8 @@ test("a saved 560-file draft recovers from a text timeout without reuploading an
     await expect(row.getByRole("button", { name: "업로드된 음성으로 게시" })).toHaveCount(0);
     expect(browserStorageWrites).toBe(0);
     const after = await service.storage.from("lesson-audio").list(folder, { limit: 1000, sortBy: { column: "name", order: "asc" } });
-    const immutableMetadata = (files: NonNullable<typeof before.data>) => files.map(file => [file.id, file.name, file.updated_at, file.metadata?.size]);
+    // Publication adds a verified subfolder; the original uploads are unchanged.
+    const immutableMetadata = (files: NonNullable<typeof before.data>) => files.filter(file => file.id).map(file => [file.id, file.name, file.updated_at, file.metadata?.size]);
     expect(after.error).toBeNull();
     expect(immutableMetadata(after.data!)).toEqual(immutableMetadata(before.data!));
     const result = await service.from("lesson_drafts").select("publication_status, audio_manifest").eq("id", draftId).single();
@@ -128,6 +129,8 @@ test("a saved 560-file draft recovers from a text timeout without reuploading an
     await page.screenshot({ path: test.info().outputPath("publication-recovery-mobile.png") });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   } finally {
+    const versions = await service.from("lesson_drafts").select("audio_manifest").eq("created_by", owner);
+    paths.push(...(versions.data ?? []).flatMap(row => row.audio_manifest.flatMap((item: { path?: string }) => item.path?.startsWith(`${owner}/`) ? [item.path] : [])));
     if (paths.length) expect((await service.storage.from("lesson-audio").remove(paths)).error).toBeNull();
     expect((await service.from("lesson_drafts").delete().eq("created_by", owner)).error).toBeNull();
     expect((await service.auth.admin.deleteUser(owner)).error).toBeNull();
@@ -457,6 +460,8 @@ test("only a complete private audio package can be published and played by a bet
     }
     expect(rapidAudioRequests).toEqual([]);
   } finally {
+    const versions = await serviceClient.from("lesson_drafts").select("audio_manifest").eq("created_by", createdAdmin.user.id);
+    uploadedPaths.push(...(versions.data ?? []).flatMap(row => row.audio_manifest.flatMap((item: { path?: string }) => item.path?.startsWith(`${createdAdmin.user!.id}/`) ? [item.path] : [])));
     if (uploadedPaths.length) await serviceClient.storage.from("lesson-audio").remove(uploadedPaths);
     await serviceClient.auth.admin.deleteUser(createdAdmin.user.id);
     await serviceClient.auth.admin.deleteUser(createdLearner.user.id);

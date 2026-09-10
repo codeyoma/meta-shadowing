@@ -59,12 +59,15 @@ export default defineConfig({
     baseURL,
     ignoreHTTPSErrors: productionBuild,
     trace: process.env.SAFE_CI_ARTIFACT_DIR ? "off" : "on-first-retry",
-    launchOptions: chromeExecutable ? {
-      executablePath: chromeExecutable,
+    launchOptions: {
+      ...(chromeExecutable ? { executablePath: chromeExecutable } : {}),
       // Chrome's macOS updater can inherit stdio and keep worker teardown waiting.
       // Match newer Playwright's test-only switch; leave system update settings alone.
-      args: process.platform === "darwin" ? ["--disable-updater-scheduler"] : []
-    } : undefined
+      // Chromium's service-worker installer does not inherit context-level
+      // ignoreHTTPSErrors. Trust only this disposable browser process's test TLS.
+      args: [...(process.platform === "darwin" ? ["--disable-updater-scheduler"] : []),
+        ...(productionBuild ? ["--ignore-certificate-errors"] : [])]
+    }
   },
   projects: [
     {

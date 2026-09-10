@@ -13,6 +13,8 @@ import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import type { PreferenceChanges, PreferencePatch, PreferenceSnapshot } from "@/lib/learner-preferences";
 import type { CloudJournal } from "@/lib/cloud-practice";
+import { useDeviceSettings } from "./device-settings-provider";
+import { clearDeviceAccess } from "@/lib/device-access";
 
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
 type CloudPreferences = PreferenceSnapshot & {
@@ -30,6 +32,7 @@ const Context = createContext<CloudPreferences | null>(null);
 export function useCloudPreferences() { return useContext(Context); }
 
 export function CloudPreferencesProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
+  const { invalidateAccount } = useDeviceSettings();
   const pathname = usePathname();
   const params = useSearchParams();
   const route = `${pathname}?${params.toString()}`;
@@ -54,6 +57,8 @@ export function CloudPreferencesProvider({ accountId, children }: { accountId: s
   }, []);
   const accept = useCallback((value: PreferenceSnapshot) => { current.current = value; setSnapshot(value); }, []);
   const clearAccount = useCallback(() => {
+    clearDeviceAccess();
+    invalidateAccount();
     generation.current += 1;
     inFlight.current = null;
     current.current = null;
@@ -63,7 +68,7 @@ export function CloudPreferencesProvider({ accountId, children }: { accountId: s
     setJournal(null);
     setSaveState("idle");
     setLoad("account-changed");
-  }, []);
+  }, [invalidateAccount]);
 
   const refresh = useCallback((): Promise<void> => {
     if (inFlight.current) return inFlight.current;
@@ -175,7 +180,7 @@ export function CloudPreferencesProvider({ accountId, children }: { accountId: s
         <Skeleton className="h-24 w-full" />
       </div> : gate}
     </div>
-    <div inert><BottomNavigation active={pathname.startsWith("/settings") ? "settings" : pathname.endsWith("/stages") ? "stages" : pathname === "/lessons" ? "lessons" : "languages"} /></div>
+    <BottomNavigation active={pathname.startsWith("/settings") ? "settings" : pathname.endsWith("/stages") ? "stages" : pathname === "/lessons" ? "lessons" : "languages"} />
   </Page>;
   return <Context.Provider value={{ ...snapshot, journal, refresh, save, visitRoute, loading, refreshing: load === "loading", refreshError: load === "error", gate, saving: load !== "ready" || readyRoute !== route || saveState === "saving" || saveState === "error" }}>
     {children}

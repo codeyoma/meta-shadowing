@@ -1,5 +1,5 @@
 import { enterAccountPractice, readServerJournal, reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation";
-import { seedServerJournal } from "./fixtures/cloud-journal";
+import { seedLearningJournal, fixtureRunId } from "./fixtures/cloud-journal";
 import { expect, test } from "./fixtures/cloud-ui";
 import { lessons } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
@@ -23,7 +23,7 @@ test("the current-stage shortcut starts immediately and does not follow unrelate
 
 test("the shortcut restores the current run and its saved playback settings", async ({ page }) => {
   const lesson = lessons.find(item => item.id === "10000000-0000-4000-8000-000000000001")!;
-  await seedServerJournal(page, { progress: {
+  await seedLearningJournal(page, { progress: {
     runId: "existing-stage-2", lessonId: lesson.id, lessonVersion: lesson.version, lessonName: lesson.name,
     language: lesson.language, level: 1, stage: 2, nextUnit: 1, nextPhrase: 1, activeMs: 2000,
     settings: { ...DEFAULT_SESSION_SETTINGS, speed: 1.5 }
@@ -31,7 +31,7 @@ test("the shortcut restores the current run and its saved playback settings", as
   await reloadLearnerPage(page);
   await page.getByRole("button", { name: "현재 스테이지 2 시작", exact: true }).click();
   await enterAccountPractice(page);
-  await expect(page).toHaveURL(new RegExp(`run=${(await readServerJournal(page)).progress.runId}(?:&|$)`));
+  await expect(page).toHaveURL(new RegExp(`run=${fixtureRunId("existing-stage-2")}(?:&|$)`));
   await expect(page).toHaveURL(/stage=2(?:&|$)/);
   await expect(page).toHaveURL(/speed=1.5(?:&|$)/);
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
@@ -61,8 +61,8 @@ test("home keeps its brand and real streak together in a fixed top navigation", 
     .toEqual({ top: 0, fits: true });
 });
 
-test("only a confirmed listen earns a study day, not a sentence jump or unconfirmed playback", async ({ page }) => {
-  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1&mode=manual");
+test("legacy level two only earns a cloud study day on confirmed listening, not a jump or playback", async ({ page }) => {
+  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=2&stage=3&mode=manual");
   await page.locator("#player-menu-trigger").click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await page.getByRole("button", { name: /^2번 문장/ }).click();

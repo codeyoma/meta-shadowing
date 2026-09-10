@@ -26,10 +26,10 @@ function decodeRows(rows: { entry: unknown }[] | null, language: DictionaryLangu
   });
 }
 
-export async function lookupDictionaryEntries(language: DictionaryLanguage, word: string): Promise<DictionaryEntry[]> {
+export async function lookupDictionaryEntries(language: DictionaryLanguage, word: string, options: { strict?: boolean; signal?: AbortSignal } = {}): Promise<DictionaryEntry[]> {
   const supabase = createSecretSupabaseClient();
   if (!supabase) throw new Error("Dictionary storage is unavailable.");
-  const deadline = AbortSignal.timeout(5000);
+  const deadline = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(5000)]) : AbortSignal.timeout(5000);
   async function readEntries(keys: string[], exactKey = false) {
     const entries: DictionaryEntry[] = [];
     const pageSize = 50;
@@ -74,7 +74,7 @@ export async function lookupDictionaryEntries(language: DictionaryLanguage, word
     return complete;
   } catch (reason) {
     // A failed optional expansion must not hide a valid direct dictionary entry.
-    if (exact.length && !(reason instanceof DictionaryBudgetError)) return exact;
+    if (!options.strict && exact.length && !(reason instanceof DictionaryBudgetError)) return exact;
     throw reason;
   }
 }

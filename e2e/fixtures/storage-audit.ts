@@ -13,14 +13,18 @@ export async function auditLearningStorage(context: BrowserContext) {
         // or learning payload is stored. Its debug flag is a read-only SDK switch.
         const authProbe = ["setItem", "removeItem"].includes(method) && /^lswt-[\d.]+$/.test(String(args[0]));
         const authDebug = method === "getItem" && args[0] === "supabase.gotrue-js.locks.debug";
-        if (!authProbe && !authDebug) report(`Storage.${method}:${String(args[0] ?? "")}`);
+        const localIdentity = ["getItem", "setItem", "removeItem"].includes(method)
+          && ["meta-shadowing:device-access:v1", "meta-shadowing:device-access-fence:v1"].includes(String(args[0]));
+        if (!authProbe && !authDebug && !localIdentity) report(`Storage.${method}:${String(args[0] ?? "")}`);
         return Reflect.apply(original, this, args);
       } });
     }
     for (const method of ["open", "deleteDatabase", "databases"] as const) {
       const original = IDBFactory.prototype[method];
       Object.defineProperty(IDBFactory.prototype, method, { value: function(this: IDBFactory, ...args: unknown[]) {
-        if (args[0] !== "meta-shadowing-mp3-v1" && !(development && args[0] === "__next_debug_channel")) report(`IndexedDB.${method}:${String(args[0] ?? "")}`);
+        const deviceSettingsOpen = method === "open" && args[0] === "meta-shadowing-device-learning-v1";
+        const packageOpen = method === "open" && args[0] === "meta-shadowing-lesson-packages-v1";
+        if (!deviceSettingsOpen && !packageOpen && args[0] !== "meta-shadowing-mp3-v1" && !(development && args[0] === "__next_debug_channel")) report(`IndexedDB.${method}:${String(args[0] ?? "")}`);
         return Reflect.apply(original, this, args);
       } });
     }

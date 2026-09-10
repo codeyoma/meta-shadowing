@@ -1,7 +1,5 @@
-import { SettingsPage } from "../../browse-pages";
-import { requireLearner } from "@/lib/server-auth";
+import { SettingsRouteOpener } from "../../settings-route-opener";
 
-export default async function Settings() {
-  const { profile } = await requireLearner();
-  return <SettingsPage profile={profile} />;
+export default function Settings() {
+  return <SettingsRouteOpener />;
 }

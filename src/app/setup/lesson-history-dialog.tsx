@@ -14,6 +14,7 @@ import type { Lesson } from "@/lib/lessons";
 import { RecordSettings } from "../completion-summary";
 import styles from "./lesson-history-dialog.module.css";
 import { useCloudPreferences } from "../cloud-preferences-provider";
+import { useDeviceJournal } from "../use-device-journal";
 
 function HistoryRow({ record }: { record: CompletionRecord }) {
   const [expanded, setExpanded] = useState(false);
@@ -51,7 +52,8 @@ function HistoryRow({ record }: { record: CompletionRecord }) {
 export function LessonHistoryDialog({ lesson, disabled }: { lesson: Lesson; disabled?: boolean }) {
   const cloud = useCloudPreferences()!;
   const [open, setOpen] = useState(false);
-  const history = completionHistoryForLesson(cloud.journal.history, lesson.id);
+  const device = useDeviceJournal(cloud.journal);
+  const history = completionHistoryForLesson(device.journal.history, lesson.id);
 
   function changeOpen(next: boolean) {
     if (next) void cloud.refresh();
@@ -76,6 +78,7 @@ export function LessonHistoryDialog({ lesson, disabled }: { lesson: Lesson; disa
         <DrawerDescription>{lesson.name} · 총 {history.length}회 완료</DrawerDescription>
       </DrawerHeader>
       <div className={styles.body} data-slot="dialog-scroll-body">
+        {device.error ? <Alert><AlertTitle>기기 완료 기록을 읽지 못했습니다. 저장 공간을 확인해 주세요.</AlertTitle></Alert> : null}
         {cloud.refreshing ? <div aria-busy="true" aria-label="완료 기록 새로고침"><Skeleton className="h-1 w-full" /></div> : null}
         {cloud.refreshError ? <Alert aria-label="완료 기록 알림">
           <AlertTitle>최신 완료 기록을 불러오지 못했습니다.</AlertTitle>

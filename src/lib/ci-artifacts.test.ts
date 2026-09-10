@@ -126,7 +126,7 @@ test("CI collector retains validated failure locations and fixed operation names
   const location = { file: `/private/${secret}/repo/e2e/stage-popover.spec.ts`, line: 54, column: 3 };
   const attempts = [
     { errorLocation: location, error: { message: `locator.selectOption: Timeout exceeded URL=https://example.com/?token=${secret}` } },
-    { error: { message: `apiRequestContext.get: socket hang up Cookie: ${secret}`, stack: `Error: ${secret}\n    at openLearnerPage (/private/${secret}/repo/e2e/fixtures/cloud-navigation.ts:83:27)` } },
+    { error: { message: `apiRequestContext.get: socket hang up Cookie: ${secret}`, stack: `Error: ${secret}\n    at openLearnerPage (/private/${secret}/repo/e2e/fixtures/cloud-navigation.ts:1:1)` } },
     { errorLocation: { ...location, file: `/private/${secret}/outside.ts` }, error: { message: secret } },
     { errorLocation: { ...location, line: 999999 }, error: { message: `expect(locator).toBeVisible() failed ${secret}` } },
     { errorLocation: { ...location, file: `https://example.com/e2e/stage-popover.spec.ts?token=${secret}` }, error: { message: secret } },
@@ -142,7 +142,7 @@ test("CI collector retains validated failure locations and fixed operation names
     expect(contents).not.toContain("/private/");
     const results = JSON.parse(contents).tests[0].attempts;
     expect(results[0]).toMatchObject({ failureLocation: { file: "e2e/stage-popover.spec.ts", line: 54, column: 3 }, operation: "locator.selectOption" });
-    expect(results[1]).toMatchObject({ failureLocation: { file: "e2e/fixtures/cloud-navigation.ts", line: 83, column: 27 }, operation: "apiRequestContext.get" });
+    expect(results[1]).toMatchObject({ failureLocation: { file: "e2e/fixtures/cloud-navigation.ts", line: 1, column: 1 }, operation: "apiRequestContext.get" });
     for (const index of [2, 3, 4]) expect(results[index]).not.toHaveProperty("failureLocation");
     expect(results[2]).not.toHaveProperty("operation");
     expect(results[3].operation).toBe("assertion");

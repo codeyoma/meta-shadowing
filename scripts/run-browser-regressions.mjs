@@ -12,6 +12,8 @@ for (const command of [
   ["node", ["scripts/run-admin-persistence-integration.mjs", "--learner-ui", "--project=mobile", "--pass-with-no-tests", ...args]],
 ]) {
   const status = command[0] === "npx" ? runPlaywright(command[1].slice(2))
-    : spawnSync(command[0], command[1], { stdio: "inherit", env: process.env }).status ?? 1;
+    // Offline recovery needs the production shell's complete static dependency
+    // graph; development/HMR chunks are not an installable offline application.
+    : spawnSync(command[0], command[1], { stdio: "inherit", env: { ...process.env, PLAYWRIGHT_PRODUCTION: "1" } }).status ?? 1;
   if (status !== 0) process.exit(status);
 }

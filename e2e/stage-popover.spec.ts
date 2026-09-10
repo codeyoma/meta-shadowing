@@ -25,7 +25,7 @@ test("a stage opens a contextual preview and starts only on its explicit Start a
   await expect(page).toHaveURL(/stage=5(?:&|$)/);
 });
 
-test("Settings-tab preferences apply when returning to a stage and explicitly starting", async ({ page }) => {
+test("local drawer settings persist but do not misconfigure the legacy player", async ({ page }) => {
   await expect(page.getByRole("main").getByRole("button", { name: "세션 설정", exact: true })).toHaveCount(0);
   const first = page.getByRole("radio", { name: /1 자막 쉐도잉/ });
   await first.click();
@@ -34,41 +34,24 @@ test("Settings-tab preferences apply when returning to a stage and explicitly st
   await page.getByRole("radio", { name: /8 다문장 암기/ }).click();
   const popup = page.getByRole("dialog", { name: "다문장 암기", exact: true });
   await expect(popup).not.toContainText("스테이지 8 · Lv 4");
-  const start = popup.getByRole("button", { name: "학습 시작", exact: true });
   await expect(popup.getByRole("button", { name: "세션 설정", exact: true })).toHaveCount(0);
   await popup.getByRole("button", { name: "스테이지 안내 닫기", exact: true }).click();
   await expect(popup).toHaveCount(0);
   const nav = page.getByRole("navigation", { name: "하단 탐색" });
-  await nav.getByRole("link", { name: "설정", exact: true }).click();
-  await page.getByRole("link", { name: "세션 설정", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "세션 설정", exact: true })).toBeVisible();
+  await nav.getByRole("button", { name: "설정", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "설정", exact: true });
+  await expect(settings).toBeVisible();
   await page.getByRole("combobox", { name: "학습 레벨", exact: true }).selectOption("4");
-  // Keep the real SQL write, but make a slow save receipt reproducible.
-  await page.route("**/api/learner/preferences", async route => {
-    if (route.request().method() !== "PATCH") return route.continue();
-    const response = await route.fetch();
-    expect(response.status()).toBe(200);
-    await new Promise(resolve => setTimeout(resolve, 750));
-    await route.fulfill({ response });
-  });
-  const saved = page.waitForResponse(response => response.url().includes("/api/learner/preferences") && response.request().method() === "PATCH" && response.status() === 200);
   await page.getByLabel("묶음 크기").selectOption("4");
-  await expect(page.getByText("저장 중…", { exact: true })).toHaveCount(0);
-  await saved;
   await expect(page.getByLabel("묶음 크기")).toBeEnabled();
-  await expect(page.getByText("계정에 저장했습니다. 다음 학습부터 적용됩니다.", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("묶음 크기")).toHaveValue("4");
-  await page.getByRole("link", { name: "설정 목록으로 돌아가기" }).click();
-  await page.getByRole("link", { name: "세션 설정", exact: true }).click();
-  await page.getByRole("combobox", { name: "학습 레벨", exact: true }).selectOption("4");
-  await expect(page.getByLabel("묶음 크기")).toHaveValue("4");
+  await settings.getByRole("button", { name: "닫기", exact: true }).click();
   expect((await readServerJournal(page)).progress).toBeNull();
-  await nav.getByRole("link", { name: "스테이지", exact: true }).click();
   await page.getByRole("radio", { name: /8 다문장 암기/, checked: false }).click();
-  await start.click();
+  await page.getByRole("dialog", { name: "다문장 암기", exact: true }).getByRole("button", { name: "학습 시작", exact: true }).click();
   await expect(page).toHaveURL(/level=4(?:&|$)/);
   await expect(page).toHaveURL(/stage=8(?:&|$)/);
-  await expect(page).toHaveURL(/group=4(?:&|$)/);
+  await expect(page).toHaveURL(/group=2(?:&|$)/);
 });
 
 test("a short landscape popup keeps its description from covering Start", async ({ page }) => {

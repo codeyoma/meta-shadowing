@@ -9,6 +9,9 @@ import { LearnerTopNavigation } from "./learner-top-navigation";
 import { Page } from "./ui";
 import styles from "./browse.module.css";
 import { CloudPreferencesProvider, useCloudPreferences } from "./cloud-preferences-provider";
+import { DeviceSettingsProvider } from "./device-settings-provider";
+import { LessonPackagesProvider } from "./lesson-packages-provider";
+import { DeviceAccessProvider } from "./device-access-provider";
 
 const BrowseContext = createContext<{ catalog: Lesson[]; selection: BrowseSelection; scrollPositions: Map<string, number> } | null>(null);
 
@@ -41,10 +44,12 @@ export function useBrowseScroll(key: string) {
 }
 
 type ShellProps = { catalog: Lesson[]; children: ReactNode };
-export function BrowseShell({ catalog, children, accountId }: ShellProps & { accountId: string }) {
-  return <CloudPreferencesProvider key={accountId} accountId={accountId}>
-    <CloudBrowseShell catalog={catalog}>{children}</CloudBrowseShell>
-  </CloudPreferencesProvider>;
+export function BrowseShell({ catalog, children, accountId, profile }: ShellProps & { accountId: string; profile: { name: string; image: string | null } }) {
+  return <DeviceAccessProvider key={accountId} accountId={accountId}><LessonPackagesProvider accountId={accountId} catalog={catalog}><DeviceSettingsProvider accountId={accountId} profile={profile}>
+    <CloudPreferencesProvider accountId={accountId}>
+      <CloudBrowseShell catalog={catalog}>{children}</CloudBrowseShell>
+    </CloudPreferencesProvider>
+  </DeviceSettingsProvider></LessonPackagesProvider></DeviceAccessProvider>;
 }
 
 function CloudBrowseShell({ catalog, children }: ShellProps) {
@@ -94,7 +99,7 @@ function BrowseFrame({ catalog, selection, scrollPositions, children }: ShellPro
           {preferences.gate}
         </> : children}
       </div>
-      <div className="contents" inert={preferences?.loading}>
+      <div className="contents">
       <BottomNavigation active={active} hrefs={{
         languages: browseHref("languages", selection), lessons: browseHref("lessons", selection),
         stages: browseHref("stages", selection), settings: browseHref("settings", selection),

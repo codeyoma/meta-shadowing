@@ -160,7 +160,7 @@ test("five language choices show country flags and new languages retain truthful
     await expect(page.getByRole("heading", { name: `${label} 레슨`, exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "레슨 목록", exact: true }).getByRole("status")).toContainText("아직 게시된 레슨이 없습니다.");
     const navigation = page.getByRole("navigation", { name: "하단 탐색", exact: true });
-    await navigation.getByRole("link", { name: "설정", exact: true }).click();
+    await navigation.getByRole("button", { name: "설정", exact: true }).click();
     await reloadLearnerPage(page);
     await navigation.getByRole("link", { name: "레슨", exact: true }).click();
     await expect(page).toHaveURL(`/lessons?language=${id}`);

@@ -75,9 +75,10 @@ test("navigation and overlapping refreshes keep confirmed content visible", asyn
     await route.continue();
   });
   try {
-    await page.getByRole("link", { name: "설정", exact: true }).click();
-    await expect.poll(() => requests).toBe(1);
+    await page.getByRole("button", { name: "설정", exact: true }).click();
+    expect(requests).toBe(0);
     await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
+    await page.getByRole("dialog", { name: "설정", exact: true }).getByRole("button", { name: "닫기", exact: true }).click();
     await page.evaluate(() => {
       window.dispatchEvent(new Event("focus"));
       document.dispatchEvent(new Event("visibilitychange"));
@@ -115,38 +116,16 @@ test("settings logout matches the settings row with cardinal text", async ({ pag
   await page.screenshot({ path: `/tmp/quiet-entry-${testInfo.project.name}-settings.png` });
 });
 
-test("settings save quietly while pending and survive a reload after acknowledgment", async ({ page }) => {
+test("settings save locally without an automatic server request and survive reload", async ({ page }) => {
   await page.goto("/settings/session");
   const speed = page.getByRole("combobox", { name: "재생속도", exact: true });
   await expect(speed).toBeEnabled();
-  let release!: () => void;
-  const held = new Promise<void>(resolve => { release = resolve; });
-  let requested!: () => void;
-  const started = new Promise<void>(resolve => { requested = resolve; });
-  await page.route("**/api/learner/preferences", async route => {
-    if (route.request().method() !== "PATCH") return route.continue();
-    requested();
-    await held;
-    await route.continue();
-  });
-  const receipt = page.waitForResponse(response =>
-    new URL(response.url()).pathname === "/api/learner/preferences" && response.request().method() === "PATCH");
-  const routineNotice = page.getByText(/^(저장 중…|계정에 저장했습니다\. 다음 학습부터 적용됩니다\.)$/);
-  try {
-    await speed.selectOption("2");
-    await started;
-    await expect(speed).toBeVisible();
-    await expect(routineNotice).toHaveCount(0);
-  } finally { release(); }
-  const response = await receipt;
-  expect(response.status()).toBe(200);
-  await response.finished();
+  const patches: string[] = [];
+  page.on("request", request => { if (request.method() === "PATCH" && new URL(request.url()).pathname === "/api/learner/preferences") patches.push(request.url()); });
+  await speed.selectOption("2");
   await expect(speed).toBeEnabled();
-  await expect(routineNotice).toHaveCount(0);
-  const persisted = await page.request.get("/api/learner/preferences");
-  expect(persisted.status()).toBe(200);
-  expect((await persisted.json()).profile.overrides.speed).toBe(2);
   await page.reload();
   await expect(speed).toHaveValue("2");
   await expect(page.getByRole("alert", { name: "계정 설정 알림" })).toHaveCount(0);
+  expect(patches).toEqual([]);
 });

@@ -1,5 +1,5 @@
-import { readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
-import { seedServerJournal } from "./fixtures/cloud-journal";
+import { readDeviceJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { seedLearningJournal } from "./fixtures/cloud-journal";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { testRecording } from "./fixtures/audio";
 
@@ -82,7 +82,7 @@ for (const viewport of [{ width: 430, height: 932 }, { width: 1280, height: 800 
         expect(await drawer.evaluate(element => element.scrollTop)).toBe(0);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      await expect(page.locator("nextjs-portal")).not.toContainText(/Runtime Error|Build Error/);
+      await expect(page.locator("nextjs-portal").filter({ hasText: /Runtime Error|Build Error/ })).toHaveCount(0);
       await page.screenshot({ path: info.outputPath(`${view}-${viewport.width}.png`), animations: "disabled", scale: "css" });
       await confirm.press("Enter");
       await expect(drawer).toHaveCount(0);
@@ -135,9 +135,10 @@ test("only filled player progress shimmers and reduced motion disables the refle
   // Seed one completion in this isolated browser fixture so neither zero progress
   // nor reduced-motion preferences can mask an accidentally global shimmer.
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  const journal = await readServerJournal(page);
-  if (!journal.progress) throw new Error("Expected the selected phrase to be saved");
-  await seedServerJournal(page, { history: [{ ...journal.progress, completedAt: "2026-09-08T00:00:00Z" }] });
+  const journal = await readDeviceJournal(page);
+  const saved = journal?.runs.find(run => run.runId === new URL(page.url()).searchParams.get("run"));
+  if (!saved) throw new Error("Expected the selected phrase to be saved locally");
+  await seedLearningJournal(page, { history: [{ ...saved, completedAt: "2026-09-08T00:00:00Z" }] });
   await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000002/stages?stage=1");
   const stageProgress = page.getByRole("progressbar");
   await expect(stageProgress).toHaveAttribute("aria-valuenow", "1");

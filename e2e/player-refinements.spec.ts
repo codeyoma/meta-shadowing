@@ -2,6 +2,7 @@ import { reloadLearnerPage, openLearnerPage } from "./fixtures/cloud-navigation"
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { openSelectedStageSettings, returnToStages, startSelectedStage } from "./fixtures/stage-preview";
 import { testRecording } from "./fixtures/audio";
+import { packageResources } from "./fixtures/package-resources";
 import { confirmManualListen, waitForManualListen } from "./fixtures/manual-practice";
 
 // Real PCM audio with known duration, so progress assertions exercise browser media.
@@ -35,6 +36,7 @@ for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) test(`level ${level} keeps top-bar
 });
 
 test("the current cycle follows real audio progress through pause, completion, repeat and the next phrase", async ({ page }) => {
+  await packageResources(page, { audio: { bytes: wav, mimeType: "audio/wav" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: wav }));
   await login(page);
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
@@ -116,6 +118,7 @@ test("unknown-duration audio never invents a percentage and still reaches comple
 });
 
 test("grouped listening keeps completed progress in each gap and resets it for the next recording", async ({ page }) => {
+  await packageResources(page, { audio: { bytes: wav, mimeType: "audio/wav" } });
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/wav", body: wav }));
   await login(page);
   await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000001&level=4&group=3&groupGap=0.5");
@@ -132,7 +135,7 @@ test("grouped listening keeps completed progress in each gap and resets it for t
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 1 / 3");
 });
 
-test("session preferences page preserves grouped and rapid options before starting through the stage preview", async ({ page }) => {
+test("device settings drawer preserves grouped and rapid options without overwriting legacy session preferences", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await login(page);
   await openLearnerPage(page, "/setup?lesson=10000000-0000-4000-8000-000000000001");
@@ -145,8 +148,8 @@ test("session preferences page preserves grouped and rapid options before starti
   expect(metadata.y).toBeGreaterThanOrEqual(title.y + title.height);
   await page.getByRole("radio", { name: /7 다문장 암기/ }).click();
   await openSelectedStageSettings(page);
-  await expect(page.getByRole("heading", { name: "세션 설정", exact: true })).toBeVisible();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "설정", exact: true })).toHaveCount(1);
   await page.getByLabel("묶음 크기").selectOption("4");
   await page.getByRole("combobox", { name: "재생속도", exact: true }).selectOption("1.5");
   await returnToStages(page);
@@ -171,7 +174,7 @@ test("session preferences page preserves grouped and rapid options before starti
   await expect(page).toHaveURL(/\/lessons\/10000000-0000-4000-8000-000000000001\/stages/);
   await startSelectedStage(page);
   await expect(page).toHaveURL(/level=7/);
-  await expect(page).toHaveURL(/wpm=6/);
+  await expect(page).toHaveURL(/wpm=3/);
 });
 
 test("drawer views have no Close actions and return to stage selection through the menu", async ({ page }) => {

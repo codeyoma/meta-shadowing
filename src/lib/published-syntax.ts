@@ -28,7 +28,7 @@ function readTokens(value: unknown, text: string): SyntaxToken[] {
   });
 }
 
-export async function getPublishedPhraseSyntax(lessonId: string, phraseNumber: number, version: string): Promise<PhraseSyntax> {
+export async function getPublishedPhraseSyntax(lessonId: string, phraseNumber: number, version: string, signal?: AbortSignal): Promise<PhraseSyntax> {
   const supabase = createSecretSupabaseClient();
   if (!supabase) throw new Error("Sentence analysis unavailable.");
   // Filter the joined view in the same query: a learner can never retrieve a
@@ -37,7 +37,7 @@ export async function getPublishedPhraseSyntax(lessonId: string, phraseNumber: n
     .select("sentence_number, begin_offset, text_content, language_code, status, response")
     .eq("lesson_id", lessonId).eq("publication_status", "published").eq("published_at", version)
     .eq("phrase_number", phraseNumber).order("sentence_number")
-    .abortSignal(AbortSignal.timeout(10_000));
+    .abortSignal(signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000));
   if (error || !data) throw new Error("Sentence analysis read failed.");
   return { phraseNumber, sentences: (data as AnalysisRow[]).map(row => ({
     sentenceNumber: row.sentence_number, beginOffset: row.begin_offset, text: row.text_content,

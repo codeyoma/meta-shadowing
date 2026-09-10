@@ -2,6 +2,7 @@ import { Fragment, useMemo, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/lessons";
 import { languageCode } from "@/lib/languages";
+import { usePackageContent } from "./package-content";
 import styles from "./dictionary-popup.module.css";
 
 export type DictionaryWordSelect = (word: string, trigger: HTMLButtonElement) => void;
@@ -30,13 +31,15 @@ function visibleWordSegments(text: string, language: Language) {
 export function DictionaryWords({ text, language, onWordSelect }: {
   text: string; language: Language; onWordSelect?: DictionaryWordSelect;
 }) {
+  const packageContent = usePackageContent();
   // Browser and server ICU versions can segment Japanese differently. Keep the
   // original text for SSR/hydration, then create word controls in the browser.
   const hydrated = useSyncExternalStore(subscribe, clientSnapshot, serverSnapshot);
   const interactive = hydrated && Boolean(onWordSelect);
   const segments = useMemo(() => interactive
-    ? visibleWordSegments(text, language)
-    : [], [text, language, interactive]);
+    ? packageContent ? packageContent.manifest.words[text] ?? [{ segment: text, index: 0, isWordLike: false }]
+      : visibleWordSegments(text, language)
+    : [], [text, language, interactive, packageContent]);
   if (!interactive || !onWordSelect) return text;
   return segments.map(({ segment, index, isWordLike }) => isWordLike && /\p{L}/u.test(segment)
     ? <Button key={index} type="button" variant="ghost" className={styles.word} data-dictionary-word

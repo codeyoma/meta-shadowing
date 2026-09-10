@@ -13,6 +13,7 @@ export const useAudioCacheAccount = () => useContext(Account);
 
 export function AudioCacheLifecycle() {
   useEffect(() => {
+    if (document.querySelector('meta[name="device-offline-shell"]')) return;
     const subscription = getBrowserSupabaseClient()?.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setAudioCacheAccount(session?.user.id ?? null);
     }).data.subscription;

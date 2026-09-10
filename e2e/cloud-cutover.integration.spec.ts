@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, lessonIds } from "./fixtures/cloud-ui";
-import { openLearnerPage, readServerJournal } from "./fixtures/cloud-navigation";
+import { openLearnerPage, readServerJournal, installPlayerPackage } from "./fixtures/cloud-navigation";
 import { auditLearningStorage } from "./fixtures/storage-audit";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
@@ -10,19 +10,34 @@ import { seedServerJournal, fixtureVersion } from "./fixtures/cloud-journal";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1", "requires disposable local Supabase");
+test("storage audit permits device settings reads but still reports unrelated IndexedDB access", async ({ context, page }) => {
+  await context.request.post("/api/auth", { data: { password: "integration-beta-password" } });
+  const access = await auditLearningStorage(context);
+  await page.goto("/settings");
+  await expect(page.getByRole("dialog", { name: "설정", exact: true })).toBeVisible();
+  await expect(page.getByLabel("학습 레벨")).toBeEnabled();
+  expect(access).toEqual([]);
+  await page.evaluate(() => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("unrelated-learning-database");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => { request.result.close(); resolve(); };
+  }));
+  await expect.poll(() => access).toEqual(["IndexedDB.open:unrelated-learning-database"]);
+});
 for (const endpoint of ["practice", "preferences"]) {
   test(`cutover read failure: ${endpoint} is not an empty completion history`, async ({ context, page }) => {
     await context.request.post("/api/auth", { data: { password: "integration-beta-password" } });
     const runId = randomUUID();
     await seedServerJournal(page, { history: [{
       runId, lessonId: lessonIds[0], lessonVersion: fixtureVersion, lessonName: "Morning Routine", language: "english",
-      level: 1, stage: 1, nextPhrase: 3, nextUnit: 3, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS,
+      level: 2, stage: 3, nextPhrase: 3, nextUnit: 3, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS,
       completedAt: new Date().toISOString(),
     }] });
     const access = await auditLearningStorage(context);
     const route = `**/api/learner/${endpoint}*`;
     await page.route(route, request => request.fulfill({ status: 503, json: { error: "temporary-error" } }));
-    await page.goto(`/player?lesson=${lessonIds[0]}&level=1&stage=1&run=${runId}`);
+    await page.goto(`/player?lesson=${lessonIds[0]}&level=2&stage=3&run=${runId}`);
+    await installPlayerPackage(page);
     await expect(page.getByRole("alert", { name: "학습 저장 알림" })).toContainText("학습 기록을 불러오지 못했습니다.");
     await expect(page.getByRole("button", { name: /CONTINUE/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "레슨 목록으로", exact: true })).toHaveCount(0);
@@ -34,7 +49,8 @@ for (const endpoint of ["practice", "preferences"]) {
     expect(access).toEqual([]);
   });
 }
-for (const level of [1,2,3,4,5,6,7,8]) for (const committed of [false, true]) {
+// Level one durability/independent devices are exercised in device-learning.spec.ts.
+for (const level of [2,3,4,5,6,7,8]) for (const committed of [false, true]) {
   test(`cutover level ${level}: failed jump, takeover, background return and isolated account (committed=${committed})`, async ({ context: a, page, browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }) => {
     test.setTimeout(60000);
     await a.request.post("/api/auth", { data: { password: "integration-beta-password" } });
@@ -84,6 +100,7 @@ for (const level of [1,2,3,4,5,6,7,8]) for (const committed of [false, true]) {
       const confirmed = await readServerJournal(page);
       await expect(page.getByRole("progressbar").first()).toHaveAttribute("aria-valuenow", "0");
       const second = await b.newPage(); await second.goto(href);
+      await installPlayerPackage(second);
       await second.getByRole("button", { name: "이 기기에서 이어 학습", exact: true }).click();
       await second.getByRole("button", { name: "이어 학습 확인", exact: true }).click();
       await expect(second.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
