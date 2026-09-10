@@ -150,7 +150,7 @@ test("cold offline reload restores a non-level-one installed stage and checkpoin
   expect(new URL(page.url()).searchParams.get("stage")).toBe("7");
 });
 
-test("offline catalog switches between complete lessons and preserves their distinct checkpoints", async ({ page, context }) => {
+test("offline catalog and browser history switch lessons while preserving distinct checkpoints", async ({ page, context }) => {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   for (const lesson of ["10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002"]) {
     await openLearnerPage(page, `/player?lesson=${lesson}&level=1&stage=1`);
@@ -187,6 +187,21 @@ test("offline catalog switches between complete lessons and preserves their dist
   await page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ }).getByRole("link", { name: /스테이지 7 · Lv 4/ }).click();
   await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
+  await page.goBack();
+  await expect(page).toHaveURL(/\/offline$/);
+  await expect(first).toBeVisible();
+  await expect(second).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
+  expect(new URL(page.url()).searchParams.get("stage")).toBe("3");
+  await page.goForward();
+  await expect(page).toHaveURL(/\/offline$/);
+  await expect(first).toBeVisible();
+  await page.goForward();
+  await expect(page.getByRole("button", { name: "메타쉐도잉 레벨 4", exact: true })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
+  expect(new URL(page.url()).searchParams.get("stage")).toBe("7");
 });
 
 test("requested run selects its exact retained version and cold reload keeps that pin", async ({ page, context }) => {

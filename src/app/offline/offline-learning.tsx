@@ -66,8 +66,14 @@ function OfflinePackages() {
       }
       refresh();
     });
-    refresh(); window.addEventListener("focus", refresh); window.addEventListener("device-learning-changed", refresh);
-    return () => { alive = false; revision++; permitted.current = false; unsubscribe(); window.removeEventListener("focus", refresh); window.removeEventListener("device-learning-changed", refresh); };
+    const restoreHistory = () => {
+      // The URL already points at another entry; fence the old player until
+      // its package and durable checkpoint have been resolved from that URL.
+      permitted.current = false; setChecking(true);
+      refresh();
+    };
+    refresh(); window.addEventListener("focus", refresh); window.addEventListener("device-learning-changed", refresh); window.addEventListener("popstate", restoreHistory);
+    return () => { alive = false; revision++; permitted.current = false; unsubscribe(); window.removeEventListener("focus", refresh); window.removeEventListener("device-learning-changed", refresh); window.removeEventListener("popstate", restoreHistory); };
   }, [access]);
   const choose = useCallback(async (row: PackageInventory, stage: number) => {
     permitted.current = false; setChecking(true);
