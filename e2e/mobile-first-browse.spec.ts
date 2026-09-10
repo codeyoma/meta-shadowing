@@ -1,4 +1,4 @@
-import { readDeviceJournal, readServerJournal, openLearnerPage } from "./fixtures/cloud-navigation";
+import { readDeviceJournal, readServerJournal, openLearnerPage, reloadLearnerPage } from "./fixtures/cloud-navigation";
 import { seedLearningJournal } from "./fixtures/cloud-journal";
 import { expect, test, type Page } from "./fixtures/cloud-ui";
 import { DEFAULT_SESSION_SETTINGS } from "../src/lib/session-settings";
@@ -41,6 +41,40 @@ test("desktop browse destinations retain a centered phone-width shell", async ({
     }
   }
 });
+
+for (const action of ["open", "reload"] as const) {
+  test(`learner ${action} waits for usable content, not an unrelated pending image`, async ({ page }) => {
+    if (action === "reload") await openLearnerPage(page, "/languages");
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let requested!: () => void;
+    const imageRequested = new Promise<void>(resolve => { requested = resolve; });
+    await page.route("**/__e2e_pending_image", async route => {
+      requested();
+      await held;
+      await route.abort();
+    });
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const image = document.createElement("img");
+        image.hidden = true;
+        image.src = "/__e2e_pending_image";
+        document.body.append(image);
+      }, { once: true });
+    });
+    let ready = false;
+    const navigation = (action === "open" ? openLearnerPage(page, "/languages") : reloadLearnerPage(page))
+      .then(() => { ready = true; });
+    try {
+      await imageRequested;
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect.poll(() => ready, { timeout: 3000 }).toBe(true);
+    } finally {
+      release();
+      await navigation;
+    }
+  });
+}
 
 test("streak uses overlapping orange and yellow flames without a badge background", async ({ page }) => {
   await openStages(page);
@@ -161,9 +195,11 @@ test("long resume metadata and a wrapping method remain separated and centered",
   if (!local?.history[0]) throw new Error("Expected the seeded local completion");
   await test.step("resume:seed:0", () => seedLearningJournal(page, { ...journal, history: [...journal.history, ...local.history],
     progress: { ...local.history[0], runId: "resume-ten", stage: 10, level: 5, nextPhrase: 1, nextUnit: 1 } }));
+  // This is responsive-layout coverage, not five independent reload scenarios.
+  // Load the seeded resume once, then exercise real resizing of the same UI.
+  await test.step("resume:navigate:0", () => openLearnerPage(page, stages));
   for (const width of [320, 360, 375, 390, 430]) {
     await test.step(`resume:viewport:${width}`, () => page.setViewportSize({ width, height: 740 }));
-    await test.step(`resume:navigate:${width}`, () => openLearnerPage(page, stages));
     const start = page.getByRole("button", { name: "현재 스테이지 10 시작", exact: true });
     await test.step(`resume:ready:${width}`, () => expect(start).toBeEnabled());
     await test.step(`resume:fonts:${width}`, () => page.evaluate(() => document.fonts.ready));

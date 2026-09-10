@@ -110,7 +110,7 @@ export async function openLearnerPage(page: Page, href: string) {
       const response = await page.request.get("/api/learner/preferences");
       expect(response.status()).toBe(200);
       const { profile } = await response.json();
-      await page.goto("/languages");
+      await page.goto("/languages", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await loadPackageModules(page);
       await page.evaluate(async ({ accountId, changes, level }) => {
@@ -118,14 +118,16 @@ export async function openLearnerPage(page: Page, href: string) {
       }, { accountId: profile.accountId, changes, level: Number(q.get("level") ?? 1) });
     }
   }
-  const response = await page.goto(href);
+  // Full `load` waits for every image/subresource, even when the app is usable.
+  // Readiness is defined by the real entry UI (and explicit package gate) below.
+  const response = await page.goto(href, { waitUntil: "domcontentloaded" });
   await waitForLearnerEntry(page);
   if (new URL(page.url()).pathname.endsWith("/stages")) await installStagePackage(page);
   return response;
 }
 
 export async function reloadLearnerPage(page: Page) {
-  const response = await page.reload();
+  const response = await page.reload({ waitUntil: "domcontentloaded" });
   await waitForLearnerEntry(page);
   return response;
 }
