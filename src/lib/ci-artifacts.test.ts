@@ -7,33 +7,40 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
 
-test("resume timing diagnostics retain only fixed phases and bounded numeric fields", () => {
+for (const diagnostic of [
+  { prefix: "resume", field: "resumeTimings", first: "open-stages", firstWidth: 0, last: "fonts", lastWidth: 320 },
+  { prefix: "stage-preview", field: "stagePreviewTimings", first: "open", firstWidth: 430, last: "screenshot", lastWidth: 1280 },
+]) test(`${diagnostic.prefix} timing diagnostics retain only fixed phases and bounded numeric fields`, () => {
   const directory = mkdtempSync(join(tmpdir(), "safe-resume-timing-"));
   const secret = "fixture-private-token-never-export";
   try {
     const input = join(directory, "raw.json"), output = join(directory, "safe.json");
     writeFileSync(input, JSON.stringify({ suites: [{ specs: [{ file: "mobile-first-browse.spec.ts", tests: [{
       projectName: "desktop", results: [{ status: "timedOut", steps: [
-        { title: "resume:open-stages:0", duration: 12, steps: [{ title: secret, duration: 1 }] },
-        { title: "resume:fonts:320", duration: 28000, error: { message: secret }, url: secret },
-        { title: `resume:${secret}:320`, duration: 2 },
-        { title: "resume:fonts:321", duration: 2 },
-        { title: "resume:fonts:320", duration: -2 },
-        { title: "resume:fonts:320", duration: 120001 },
+        { title: `${diagnostic.prefix}:${diagnostic.first}:${diagnostic.firstWidth}`, duration: 12, steps: [{ title: secret, duration: 1 }] },
+        { title: `${diagnostic.prefix}:${diagnostic.last}:${diagnostic.lastWidth}`, duration: 28000, error: { message: secret }, url: secret },
+        { title: `${diagnostic.prefix}:${secret}:320`, duration: 2 },
+        { title: `${diagnostic.prefix}:${diagnostic.last}:321`, duration: 2 },
+        { title: `${diagnostic.prefix}:${diagnostic.last}:320`, duration: -2 },
+        { title: `${diagnostic.prefix}:${diagnostic.last}:320`, duration: 120001 },
+        { title: `${diagnostic.prefix}:${diagnostic.last}:320`, duration: 1.5 },
+        { title: `${diagnostic.prefix}:${diagnostic.last}:320`, duration: "12" },
+        null,
       ] }]
     }] }] }] }));
     const result = spawnSync(process.execPath, ["scripts/collect-ci-artifacts.mjs", input, output], { encoding: "utf8" });
     expect(result.status).toBe(0);
     const artifact = readFileSync(output, "utf8");
     expect(artifact + result.stdout + result.stderr).not.toContain(secret);
-    expect(JSON.parse(artifact).tests[0].attempts[0].resumeTimings).toEqual([
-      { phase: "open-stages", width: 0, durationMs: 12, failed: false },
-      { phase: "fonts", width: 320, durationMs: 28000, failed: true },
+    expect(JSON.parse(artifact).tests[0].attempts[0][diagnostic.field]).toEqual([
+      { phase: diagnostic.first, width: diagnostic.firstWidth, durationMs: 12, failed: false },
+      { phase: diagnostic.last, width: diagnostic.lastWidth, durationMs: 28000, failed: true },
     ]);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 for (const diagnostic of [
+  { step: "stage-preview:screenshot:430", field: "stagePreviewTimings", prefix: "CI stage preview timings:", expected: { phase: "screenshot", width: 430, durationMs: null, unfinished: true } },
   { step: "player:pause", field: "playerTimings", prefix: "CI player timings:", expected: { phase: "pause", durationMs: null, unfinished: true } },
   { step: "resume:fonts:320", field: "resumeTimings", prefix: "CI resume timings:", expected: { phase: "fonts", width: 320, durationMs: null, unfinished: true } },
   { step: "records:player-ready", field: "recordTimings", prefix: "CI record timings:", expected: { phase: "player-ready", durationMs: null, unfinished: true } },
