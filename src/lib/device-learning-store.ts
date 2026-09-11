@@ -1,15 +1,20 @@
 import { isSessionSettings, resolveSessionSettings, validSettingOverrides, type SessionSettings } from "./session-settings";
 import type { ProgressRecord, CompletionRecord } from "./learning-records";
 import type { PublishedLesson } from "./lessons";
-import { assertDeviceAccess, type DeviceAccess } from "./device-access";
+import { assertDeviceAccess, subscribeDeviceAccess, type DeviceAccess } from "./device-access";
 import { isStageForLevel } from "./learning-stages";
 import { validStudyDay } from "./study-streak";
 import { parseAccountSnapshot, snapshotHasContent, type AccountSnapshot } from "./account-snapshot";
+import type { LearningMerge } from "./learning-merge";
+import { LEARNING_OUTBOX_STORE, outboxRequest, queueLearningChanges, readLearningOutbox, type LearningOutbox } from "./device-learning-outbox";
+
+export type LearningSyncBatch = { access: DeviceAccess; generation: string; request: LearningMerge; sequences: Record<string, number> };
 
 export const DEVICE_LEARNING_DATABASE = "meta-shadowing-device-learning-v1";
 // Schema 2 already stores level, stage, independent unit/phrase indexes, and
 // confirmations. Widening their validation needs no data migration and keeps
 // existing schema-1 settings and schema-2 level-1 records readable.
+// IndexedDB version 3 adds the outbox; the learning record format remains 2.
 export const DEVICE_LEARNING_SCHEMA_VERSION = 2;
 const ACCOUNT_STORE = "accounts";
 const SNAPSHOT_STORE = "snapshots";
@@ -69,12 +74,13 @@ function transactionComplete(transaction: IDBTransaction): Promise<void> {
 
 async function openDatabase(): Promise<IDBDatabase> {
   try {
-    const request = indexedDB.open(DEVICE_LEARNING_DATABASE, 2);
+    const request = indexedDB.open(DEVICE_LEARNING_DATABASE, 3);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(ACCOUNT_STORE)) {
         request.result.createObjectStore(ACCOUNT_STORE, { keyPath: "accountId" });
       }
       if (!request.result.objectStoreNames.contains(SNAPSHOT_STORE)) request.result.createObjectStore(SNAPSHOT_STORE, { keyPath: "accountId" });
+      if (!request.result.objectStoreNames.contains(LEARNING_OUTBOX_STORE)) request.result.createObjectStore(LEARNING_OUTBOX_STORE, { keyPath: "accountId" });
     };
     const database = await requestResult(request);
     database.onversionchange = () => database.close();
@@ -149,7 +155,7 @@ async function mutateRecord<T>(accountId: string, change: (record: DeviceLearnin
   const database = await openDatabase();
   let transaction: IDBTransaction | undefined;
   try {
-    transaction = database.transaction([ACCOUNT_STORE, SNAPSHOT_STORE], "readwrite", { durability: "strict" });
+    transaction = database.transaction([ACCOUNT_STORE, SNAPSHOT_STORE, LEARNING_OUTBOX_STORE], "readwrite", { durability: "strict" });
     const complete = transactionComplete(transaction);
     void complete.catch(() => {});
     const store = transaction.objectStore(ACCOUNT_STORE);
@@ -157,11 +163,18 @@ async function mutateRecord<T>(accountId: string, change: (record: DeviceLearnin
     if (!access || access.generation !== (metadata?.generation ?? "legacy")) throw new DeviceLearningStoreError("Local learning changed. Reload to continue.");
     const record = parseRecord(await requestResult(store.get(accountId)), accountId)
       ?? { schemaVersion: DEVICE_LEARNING_SCHEMA_VERSION, accountId, preferredLevel: 1, settings: {}, runs: [], history: [], studyDays: [] };
+    const outboxStore = transaction.objectStore(LEARNING_OUTBOX_STORE);
+    const rawOutbox = await requestResult<LearningOutbox | undefined>(outboxStore.get(accountId));
+    const outbox = readLearningOutbox(rawOutbox, accountId, record);
+    const before = structuredClone(record);
     if (access) assertDeviceAccess(access);
     const value = change(record);
     store.put(parseRecord(record, accountId)!);
+    const queued = queueLearningChanges(outbox, before, record);
+    if (queued || rawOutbox === undefined) outboxStore.put(outbox);
     await complete;
     window.dispatchEvent(new Event("device-learning-changed"));
+    if (queued || rawOutbox === undefined) window.dispatchEvent(new Event("device-learning-queued"));
     return value;
   } catch (cause) {
     try { transaction?.abort(); } catch { /* Already committed or aborted. */ }
@@ -234,7 +247,7 @@ async function swapSnapshot(access: DeviceAccess, replacement?: DeviceLearningRe
   const abort = () => { try { tx?.abort(); } catch { /* Already settled. */ } };
   try {
     signal?.throwIfAborted();
-    tx = database.transaction([ACCOUNT_STORE, SNAPSHOT_STORE], "readwrite", { durability: "strict" });
+    tx = database.transaction([ACCOUNT_STORE, SNAPSHOT_STORE, LEARNING_OUTBOX_STORE], "readwrite", { durability: "strict" });
     signal?.addEventListener("abort", abort, { once: true });
     const complete = transactionComplete(tx);
     void complete.catch(() => {});
@@ -243,16 +256,81 @@ async function swapSnapshot(access: DeviceAccess, replacement?: DeviceLearningRe
     const previous = parseRecord(raw, access.accountId);
     if (replacement === undefined && (!metadata || !Object.hasOwn(metadata, "backup"))) throw new DeviceLearningStoreError("No local recovery point exists");
     const next = replacement ?? (metadata!.backup === null ? null : parseRecord(metadata!.backup, access.accountId));
+    const outboxStore = tx.objectStore(LEARNING_OUTBOX_STORE);
+    const outbox = readLearningOutbox(await requestResult<LearningOutbox | undefined>(outboxStore.get(access.accountId)), access.accountId, previous);
+    queueLearningChanges(outbox, previous, next);
     assertDeviceAccess(access);
     signal?.throwIfAborted();
     snapshots.put({ accountId: access.accountId, generation: crypto.randomUUID(), backup: previous } satisfies SnapshotState);
     if (next) accounts.put(next); else accounts.delete(access.accountId);
+    outboxStore.put(outbox);
     await complete;
   } catch (cause) {
     try { tx?.abort(); } catch { /* Already aborted. */ }
     throw new DeviceLearningStoreError("Could not replace local learning data", { cause });
   } finally { signal?.removeEventListener("abort", abort); database.close(); }
   notifySnapshot();
+  window.dispatchEvent(new Event("device-learning-queued"));
+}
+
+/** Capture and migration serialize with local saves and snapshot replacement. */
+export async function captureLearningSyncBatch(access: DeviceAccess): Promise<LearningSyncBatch | null> {
+  assertDeviceAccess(access);
+  const database = await openDatabase();
+  let tx: IDBTransaction | undefined;
+  try {
+    tx = database.transaction([ACCOUNT_STORE, SNAPSHOT_STORE, LEARNING_OUTBOX_STORE], "readwrite", { durability: "strict" });
+    const complete = transactionComplete(tx); void complete.catch(() => {});
+    const outboxes = tx.objectStore(LEARNING_OUTBOX_STORE);
+    const [raw, metadata, pending] = await Promise.all([
+      requestResult(tx.objectStore(ACCOUNT_STORE).get(access.accountId)),
+      requestResult<SnapshotState | undefined>(tx.objectStore(SNAPSHOT_STORE).get(access.accountId)),
+      requestResult<LearningOutbox | undefined>(outboxes.get(access.accountId)),
+    ]);
+    const outbox = readLearningOutbox(pending, access.accountId, parseRecord(raw, access.accountId));
+    assertDeviceAccess(access);
+    const captured = outboxRequest(outbox);
+    if (pending === undefined) outboxes.put(outbox);
+    await complete;
+    assertDeviceAccess(access);
+    return captured ? { access: { accountId: access.accountId, epoch: access.epoch }, generation: metadata?.generation ?? "legacy", ...captured } : null;
+  } catch (cause) {
+    try { tx?.abort(); } catch { /* Already settled. */ }
+    throw cause;
+  } finally { database.close(); }
+}
+
+/** Bookkeeping only: no snapshot event and no writes to active learning. */
+export async function acknowledgeLearningSyncBatch(batch: LearningSyncBatch): Promise<void> {
+  assertDeviceAccess(batch.access);
+  const database = await openDatabase();
+  let tx: IDBTransaction | undefined;
+  const unsubscribe = subscribeDeviceAccess(() => {
+    try { assertDeviceAccess(batch.access); } catch {
+      try { tx?.abort(); } catch { /* Already settled; a committed original-account write cannot be undone. */ }
+    }
+  });
+  try {
+    tx = database.transaction([SNAPSHOT_STORE, LEARNING_OUTBOX_STORE], "readwrite", { durability: "strict" });
+    const complete = transactionComplete(tx); void complete.catch(() => {});
+    const store = tx.objectStore(LEARNING_OUTBOX_STORE);
+    const [metadata, pending] = await Promise.all([
+      requestResult<SnapshotState | undefined>(tx.objectStore(SNAPSHOT_STORE).get(batch.access.accountId)),
+      requestResult<LearningOutbox | undefined>(store.get(batch.access.accountId)),
+    ]);
+    assertDeviceAccess(batch.access);
+    if (pending && batch.generation === (metadata?.generation ?? "legacy")) {
+      const outbox = readLearningOutbox(pending, batch.access.accountId, null);
+      for (const [key, sequence] of Object.entries(batch.sequences)) {
+        if (outbox.entries[key]?.sequence === sequence) delete outbox.entries[key];
+      }
+      store.put(outbox);
+    }
+    await complete;
+  } catch (cause) {
+    try { tx?.abort(); } catch { /* Already settled. */ }
+    throw cause;
+  } finally { unsubscribe(); database.close(); }
 }
 
 export async function replaceDeviceSnapshot(access: DeviceAccess, value: AccountSnapshot, signal?: AbortSignal): Promise<void> {

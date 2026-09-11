@@ -7,16 +7,17 @@ const { authorize, readSnapshot, writeSnapshot } = vi.hoisted(() => ({
 vi.mock("@/lib/cloud-learner-request", () => ({ authorizeCloudLearner: authorize }));
 vi.mock("@/lib/account-snapshot-repository", () => ({
   readAccountSnapshot: readSnapshot, writeAccountSnapshot: writeSnapshot,
+  SnapshotAuthorizationError: class extends Error { constructor() { super("unauthorized"); } },
 }));
 import { GET, PUT } from "./route";
+import { LearningMergeError } from "@/lib/learning-merge";
 
 const accountId = "11111111-1111-4111-8111-111111111111";
 const otherAccountId = "22222222-2222-4222-8222-222222222222";
 const snapshot = (preferredLevel = 1, owner = accountId) => ({
-  schemaVersion: 1,
+  protocolVersion: 1,
   accountId: owner,
-  preferredLevel,
-  settings: {},
+  options: { expectedRevision: 0, preferredLevel, settings: {} },
   runs: [],
   history: [],
   studyDays: [],
@@ -27,8 +28,8 @@ const request = (body: BodyInit | null = null, headers: HeadersInit = { "Content
 beforeEach(() => {
   vi.resetAllMocks();
   authorize.mockResolvedValue({ id: accountId });
-  readSnapshot.mockResolvedValue(null);
-  writeSnapshot.mockResolvedValue(undefined);
+  readSnapshot.mockResolvedValue({ snapshot: null, optionsRevision: 0 });
+  writeSnapshot.mockResolvedValue({ optionsRevision: 1 });
 });
 
 describe("account snapshot API", () => {
@@ -44,11 +45,11 @@ describe("account snapshot API", () => {
 
   it("returns an absent or valid snapshot privately without shared caching", async () => {
     const absent = await GET(request());
-    expect(await absent.json()).toEqual({ snapshot: null });
+    expect(await absent.json()).toEqual({ snapshot: null, optionsRevision: 0 });
     expect(absent.headers.get("Cache-Control")).toBe("private, no-store");
     expect(absent.headers.get("Vary")).toBe("Cookie");
-    readSnapshot.mockResolvedValueOnce(snapshot(3));
-    expect(await (await GET(request())).json()).toEqual({ snapshot: snapshot(3) });
+    readSnapshot.mockResolvedValueOnce({ snapshot: snapshot(3), optionsRevision: 4 });
+    expect(await (await GET(request())).json()).toEqual({ snapshot: snapshot(3), optionsRevision: 4 });
     expect(readSnapshot).toHaveBeenLastCalledWith(accountId);
   });
 
@@ -68,12 +69,12 @@ describe("account snapshot API", () => {
 
   it.each([
     ["malformed JSON", "{"],
-    ["unknown schema", JSON.stringify({ ...snapshot(), schemaVersion: 2 })],
+    ["missing required field", JSON.stringify({ protocolVersion: 1, accountId })],
     ["unknown field", JSON.stringify({ ...snapshot(), secret: "no" })],
   ])("rejects %s without changing cloud state", async (_label, body) => {
     const response = await PUT(request(body));
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "invalid-snapshot" });
+    expect(await response.json()).toEqual({ error: "invalid-merge" });
     expect(writeSnapshot).not.toHaveBeenCalled();
   });
 
@@ -98,7 +99,7 @@ describe("account snapshot API", () => {
     expect(oversized.headers.has("content-length")).toBe(false);
     const response = await PUT(oversized);
     expect(response.status).toBe(413);
-    expect(await response.json()).toEqual({ error: "snapshot-too-large" });
+    expect(await response.json()).toEqual({ error: "merge-limit" });
     expect(writeSnapshot).not.toHaveBeenCalled();
   });
 
@@ -118,13 +119,13 @@ describe("account snapshot API", () => {
     expect(writeSnapshot).not.toHaveBeenCalled();
   });
 
-  it("unconditionally replaces a prior snapshot on duplicate PUT", async () => {
+  it("acknowledges versioned merges with the committed options revision", async () => {
     const first = snapshot(2);
     const replacement = snapshot(7);
     expect((await PUT(request(JSON.stringify(first)))).status).toBe(200);
     const response = await PUT(request(JSON.stringify(replacement)));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ updated: true });
+    expect(await response.json()).toEqual({ updated: true, optionsRevision: 1 });
     expect(writeSnapshot).toHaveBeenNthCalledWith(1, accountId, first);
     expect(writeSnapshot).toHaveBeenNthCalledWith(2, accountId, replacement);
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
@@ -135,5 +136,18 @@ describe("account snapshot API", () => {
     const response = await PUT(request(JSON.stringify(snapshot())));
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "snapshot-save-failed" });
+  });
+
+  it.each([{}, { schemaVersion: 1 }, { protocolVersion: 2 }])("rejects legacy and unsupported clients with an actionable code", async body => {
+    const response = await PUT(request(JSON.stringify(body)));
+    expect(response.status).toBe(426);
+    expect(await response.json()).toEqual({ error: "client-update-required" });
+    expect(writeSnapshot).not.toHaveBeenCalled();
+  });
+  it.each([["invalid-merge", 400], ["options-conflict", 409], ["merge-limit", 413], ["account-changed", 409], ["client-update-required", 426]] as const)("maps %s to its stable status", async (code, status) => {
+    writeSnapshot.mockRejectedValue(new LearningMergeError(code));
+    const response = await PUT(request(JSON.stringify(snapshot())));
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: code });
   });
 });

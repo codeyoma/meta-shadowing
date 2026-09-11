@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useActionableProblem } from "./actionable-dialog";
 import { Button } from "@/components/ui/button";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { setAudioCacheAccount } from "@/lib/mp3-cache";
@@ -45,8 +46,8 @@ export function LearnerSignOut({ settingsRow = false }: { settingsRow?: boolean 
       window.location.replace("/login");
     } catch { setFailed(true); setBusy(false); }
   }
+  useActionableProblem(failed, { scope: "sign-out", key: "failure", title: "로그아웃하지 못했습니다.", description: "기기 저장 공간을 확인한 뒤 다시 시도해 주세요.", action: { label: "로그아웃 재시도", run: () => void signOut() } });
   return <>
     <Button variant={settingsRow ? "choice" : "outline"} size={settingsRow ? "row" : "default"} className={settingsRow ? "w-full text-[var(--accent-cardinal)]" : undefined} disabled={busy} onClick={() => void signOut()}>{busy ? "로그아웃 중…" : "로그아웃"}</Button>
-    {failed ? <p role="alert">로그아웃하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.</p> : null}
   </>;
 }

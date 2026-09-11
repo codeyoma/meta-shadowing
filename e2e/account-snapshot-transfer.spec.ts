@@ -7,8 +7,9 @@ for (const failure of [false, true]) test(`returns focus after delayed confirmat
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.getByLabel("학습 레벨").selectOption("4");
   await expect(page.getByLabel("학습 레벨")).toBeEnabled();
-  await page.getByRole("button", { name: "계정에 업로드", exact: true }).click();
-  await expect(page.getByText("계정에 학습 기록을 업로드했습니다.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "지금 동기화", exact: true }).click();
+  await expect(page.getByRole("button", { name: "지금 동기화", exact: true })).toBeEnabled();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
   const trigger = page.getByRole("button", { name: "계정에서 다운로드", exact: true });
   await trigger.click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
@@ -36,6 +37,10 @@ for (const failure of [false, true]) test(`returns focus after delayed confirmat
   await expect(page.getByRole("alertdialog")).toBeHidden();
   await expect(trigger).toBeDisabled();
   await page.evaluate(() => (window as unknown as { releaseSnapshotOpen: () => void }).releaseSnapshotOpen());
+  if (failure) {
+    await expect(page.getByRole("alertdialog")).toContainText("교체하지 않았습니다");
+    await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
+  }
   await expect(trigger).toBeEnabled();
   await expect(trigger).toBeFocused();
 });
@@ -62,11 +67,13 @@ test("explicit upload, cancel, replace and local recovery preserve device author
   await context.setOffline(true); await context.setOffline(false);
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await expect(page.getByLabel("학습 레벨")).toHaveValue("4");
-  expect(requests).toEqual([]);
-  const uploadResponse = page.waitForResponse(response => new URL(response.url()).pathname === "/api/learner/snapshot");
-  await page.getByRole("button", { name: "계정에 업로드", exact: true }).click();
+  // Reconnection may have already flushed learning; explicit options remain local.
+  expect((await (await page.request.get("/api/learner/snapshot")).json()).optionsRevision).toBe(0);
+  const uploadResponse = page.waitForResponse(response => new URL(response.url()).pathname === "/api/learner/snapshot" && response.request().method() === "PUT");
+  await page.getByRole("button", { name: "지금 동기화", exact: true }).click();
   expect((await uploadResponse).status()).toBe(200);
-  await expect(page.getByText("계정에 학습 기록을 업로드했습니다.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "지금 동기화", exact: true })).toBeEnabled();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await page.getByLabel("학습 레벨").selectOption("7");
   await expect(page.getByLabel("학습 레벨")).toBeEnabled();
   const download = page.getByRole("button", { name: "계정에서 다운로드", exact: true });
@@ -83,7 +90,8 @@ test("explicit upload, cancel, replace and local recovery preserve device author
   await page.getByRole("button", { name: "이전 기기 기록 복구", exact: true }).click();
   await confirmation.getByRole("button", { name: "기록 복구", exact: true }).click();
   await expect(page.getByLabel("학습 레벨")).toHaveValue("7");
-  expect(requests).toEqual(["PUT", "GET", "GET"]);
+  expect(requests.filter(method => method === "PUT").length).toBeGreaterThanOrEqual(2);
+  expect((await (await page.request.get("/api/learner/snapshot")).json()).optionsRevision).toBe(1);
   await loadPackageModules(page);
   expect(await page.evaluate(async () => window.packageStore.listLessonPackages(window.deviceAccess.readDeviceAccess()!.accountId))).toEqual([]);
   expect(await page.evaluate(async () => (await window.deviceStore.readDeviceLearningState(window.deviceAccess.readDeviceAccess()!)).record?.runs[0].nextPhrase)).toBe(1);
@@ -102,10 +110,11 @@ test("uncertain upload is not retried and account changes discard a held downloa
   await expect(page.getByLabel("학습 레벨")).toBeEnabled();
   let uploads = 0;
   await page.route("**/api/learner/snapshot", async route => { uploads++; await route.abort("failed"); });
-  await page.getByRole("button", { name: "계정에 업로드", exact: true }).click();
+  await page.getByRole("button", { name: "지금 동기화", exact: true }).click();
   await expect(page.getByText(/서버에 저장되었을 수 있습니다/)).toBeVisible();
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expect(page.getByRole("button", { name: "계정에 업로드", exact: true })).toBeEnabled();
+  await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(page.getByRole("button", { name: "지금 동기화", exact: true })).toBeEnabled();
   expect(uploads).toBe(1);
   await page.unroute("**/api/learner/snapshot");
   let release!: () => void;
@@ -121,7 +130,7 @@ test("uncertain upload is not retried and account changes discard a held downloa
   });
   release();
   await expect(page.getByRole("dialog", { name: "설정", exact: true })).toBeHidden();
-  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page.getByRole("alertdialog")).not.toContainText("계정에 저장된 학습 기록이 없습니다");
   await expect(page.getByText("계정에 저장된 학습 기록이 없습니다.", { exact: true })).toHaveCount(0);
 });
 
@@ -142,8 +151,10 @@ test("invalid cloud data and failed local commit preserve active and backup; dis
   for (const value of [null, { ...snapshot, preferredLevel: 1 }, { ...snapshot, preferredLevel: 99 }, { ...snapshot, accountId: "foreign" }]) {
     await page.route("**/api/learner/snapshot", route => route.fulfill({ json: { snapshot: value } }));
     await download.click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await expect(page.getByRole("button", { name: "기록 교체", exact: true })).toHaveCount(0);
+    await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
     await expect(download).toBeEnabled();
-    await expect(page.getByRole("alertdialog")).toHaveCount(0);
     await expect(page.getByLabel("학습 레벨")).toHaveValue("7");
     await page.unroute("**/api/learner/snapshot");
   }
@@ -159,7 +170,8 @@ test("invalid cloud data and failed local commit preserve active and backup; dis
     };
   });
   await page.getByRole("button", { name: "기록 교체", exact: true }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "교체하지 않았습니다" })).toBeVisible();
+  await expect(page.getByRole("alertdialog").filter({ hasText: "교체하지 않았습니다" })).toBeVisible();
+  await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
   await expect(page.getByLabel("학습 레벨")).toHaveValue("7");
   await page.getByRole("button", { name: "이전 기기 기록 복구", exact: true }).click();
   await page.getByRole("button", { name: "기록 복구", exact: true }).click();

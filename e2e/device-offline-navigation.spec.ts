@@ -39,10 +39,10 @@ test("canceling offline catalog exit retains the failed audio boundary for retry
   });
   await page.getByRole("button", { name: "NEXT · 다음 프레이즈", exact: true }).click();
   await expect(page.getByRole("button", { name: "기기 저장 재시도" })).toBeVisible();
-  const dialogs: string[] = [];
-  page.on("dialog", async dialog => { dialogs.push(dialog.message()); await dialog.dismiss(); });
+  await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
   await page.getByRole("button", { name: "다른 다운로드 레슨", exact: true }).click();
-  expect(dialogs).toEqual(["저장하지 못한 변경이 있습니다. 마지막 기기 저장 지점으로 돌아갑니다. 나가시겠어요?"]);
+  await expect(page.getByRole("alertdialog")).toContainText("저장하지 못한 변경이 있습니다");
+  await page.getByRole("alertdialog").getByRole("button", { name: "계속 학습", exact: true }).click();
   await expect(page.getByRole("button", { name: "기기 저장 재시도" })).toBeVisible();
   expect(new URL(page.url()).searchParams.get("run")).toBe(runId);
   expect((await readDeviceJournal(page))!.runs.find(run => run.runId === runId)).toEqual(before);
@@ -51,7 +51,7 @@ test("canceling offline catalog exit retains the failed audio boundary for retry
   await expect(page.getByRole("progressbar", { name: "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
   expect((await readDeviceJournal(page))!.runs.find(run => run.runId === runId)).toMatchObject({ nextUnit: 1, nextPhrase: 1, confirmedCycles: 0, revision: before.revision + 1 });
   await page.getByRole("button", { name: "다른 다운로드 레슨", exact: true }).click();
-  expect(dialogs).toHaveLength(1);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await page.getByRole("region", { name: /^Daily Conversation .* 스테이지$/ }).getByRole("link", { name: /스테이지 1 · Lv 1/ }).click();
   await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeVisible();
   expect(new URL(page.url()).searchParams.get("lesson")).toBe("10000000-0000-4000-8000-000000000002");
@@ -100,23 +100,24 @@ for (const failure of ["rejected", "held"] as const) test(`offline catalog and m
     await expect(page.getByRole("button", { name: /^PAUSE/ })).toBeDisabled();
     await expect(page.getByRole("button", { name: "기기 저장 재시도" })).toHaveCount(0);
   }
-  const dialogs: string[] = [];
-  let discard = false;
-  page.on("dialog", async dialog => { dialogs.push(dialog.message()); if (discard) await dialog.accept(); else await dialog.dismiss(); });
+  if (failure === "rejected") await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
   await page.getByRole("button", { name: "다른 다운로드 레슨", exact: true }).click();
-  expect(dialogs).toHaveLength(1);
+  await expect(page.getByRole("alertdialog")).toContainText("저장하지 못한 변경이 있습니다");
+  await page.getByRole("alertdialog").getByRole("button", { name: "계속 학습", exact: true }).click();
   expect(new URL(page.url()).searchParams.get("run")).toBe(saved.runId);
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "스테이지 화면으로", exact: true }).click();
-  expect(dialogs).toHaveLength(2);
+  await expect(page.getByRole("alertdialog")).toContainText("저장하지 못한 변경이 있습니다");
+  await page.getByRole("alertdialog").getByRole("button", { name: "계속 학습", exact: true }).click();
   expect(new URL(page.url()).searchParams.get("run")).toBe(saved.runId);
   if (failure === "held") {
     await page.evaluate(() => window.dispatchEvent(new Event("abort-held-storage")));
     await expect(page.getByRole("button", { name: "기기 저장 재시도" })).toBeVisible();
+    await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
   }
-  discard = true;
   await page.getByRole("button", { name: "다른 다운로드 레슨", exact: true }).click();
-  expect(dialogs).toEqual(Array(3).fill("저장하지 못한 변경이 있습니다. 마지막 기기 저장 지점으로 돌아갑니다. 나가시겠어요?"));
+  await expect(page.getByRole("alertdialog")).toContainText("저장하지 못한 변경이 있습니다");
+  await page.getByRole("alertdialog").getByRole("button", { name: "나가기", exact: true }).click();
   await expect(page.getByRole("heading", { name: "기기 학습", exact: true })).toBeVisible();
   await page.evaluate(() => window.dispatchEvent(new Event("restore-storage")));
   const journal = (await readDeviceJournal(page))!;

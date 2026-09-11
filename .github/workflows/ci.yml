@@ -72,6 +72,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Test durable learning outbox and coordinator in real Chromium
+        if: matrix.shard == 1
+        run: npm test -- src/lib/device-learning-store.browser.test.ts src/lib/device-learning-sync.test.ts
+        env:
+          LEARNING_SYNC_BROWSER_TEST: "1"
       - name: Configure this runner's disposable cloud database
         run: cp supabase/config.test.toml supabase/config.toml
       - run: npx --yes supabase@2.116.0 start

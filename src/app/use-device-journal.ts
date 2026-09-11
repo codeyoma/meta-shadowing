@@ -9,7 +9,7 @@ import { useDeviceAccess } from "./device-access-provider";
 const emptyJournal = (): Journal & { localProgress: DeviceLearningRecord["runs"] } => ({ progress: null, localProgress: [], history: [], studyDays: [] });
 
 /** Learning records are device authoritative. Cloud records are intentionally ignored. */
-export function useDeviceJournal(_cloud: Journal) {
+export function useDeviceJournal(_cloud?: Journal) {
   const access = useDeviceAccess(), pathname = usePathname();
   const [snapshot, setSnapshot] = useState<{ accountId: string; record: DeviceLearningRecord | null } | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState(false);

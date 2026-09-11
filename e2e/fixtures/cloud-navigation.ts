@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { validSettingOverrides } from "../../src/lib/session-settings";
-import { fixtureRunId } from "./cloud-journal";
+import { fixtureRunId, fixtureVersion } from "./cloud-journal";
 import type { Request } from "@playwright/test";
 import { loadPackageModules } from "./package-store";
 
@@ -21,7 +21,7 @@ function trackCloudRequests(page: Page) {
     // (including renew/release) acknowledge a timed player's next transition;
     // canceled reads from a departed route must not deadlock virtual time.
     page.on("request", request => {
-      if (request.method() !== "GET" && request.url().includes("/api/learner/")) requests.add(request);
+      if (request.method() !== "GET" && request.url().includes("/api/learner/") && new URL(request.url()).pathname !== "/api/learner/snapshot") requests.add(request);
     });
     page.on("requestfinished", request => requests.delete(request));
     page.on("requestfailed", request => requests.delete(request));
@@ -49,6 +49,9 @@ export async function enterAccountPractice(page: Page) {
   if (await packageGate.isVisible()) {
     await page.getByRole("group", { name: / 다운로드$/ }).getByRole("button", { name: / 다운로드$/ }).click();
     await expect(start.or(completed).first()).toBeVisible();
+    // Package bytes and the offline shell are independent. Complete real worker
+    // installation before tests advance virtual learning time or disconnect.
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null), { timeout: 15000 }).toBe(true);
   }
   if (await completed.count()) return;
   await expect(page.getByRole("button", { name: /CONTINUE/ })).toBeVisible();
@@ -67,9 +70,19 @@ export async function installPlayerPackage(page: Page) {
 /** Visible explicit package installation is a prerequisite of stage/player tests. */
 export async function installStagePackage(page: Page) {
   const manage = page.getByRole("button", { name: "레슨 다운로드 관리", exact: true });
+  // An installed package can hydrate after the initial manage button renders.
+  // Confirm its real inventory state before attempting a redundant download.
+  await loadPackageModules(page);
+  const installed = await page.evaluate(async version => {
+    const access = window.deviceAccess.readDeviceAccess();
+    if (!access) return false;
+    const lessonId = location.pathname.split("/")[2];
+    return (await window.packageStore.listLessonPackages(access.accountId)).some(row => row.lessonId === lessonId && row.version === version && row.state === "ready");
+  }, fixtureVersion);
+  if (installed) { await expect(manage).toHaveCount(0); return; }
   if (!(await manage.count())) return;
   const title = await page.getByRole("heading", { level: 1 }).innerText();
-  await manage.click();
+  await manage.click({ timeout: 5000 });
   const row = page.getByRole("group", { name: `${title} 다운로드`, exact: true });
   const download = row.getByRole("button", { name: `${title} 다운로드`, exact: true });
   if (await download.count()) await download.click();

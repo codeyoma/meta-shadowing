@@ -8,7 +8,9 @@ async function openGroupedPlayer(page: Page, level: 4 | 5, size = 2) {
   await page.route("**/api/lessons/*/audio/*", route => route.fulfill({ contentType: "audio/webm", body: testRecording }));
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000002&level=${level}&group=${size}`);
-  await page.waitForLoadState("networkidle");
+  // Package installation and the enabled player action define readiness;
+  // background requests need not stop before a learner can start playback.
+  await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
 }
 
 test("device group settings stay local and level 4 plays each highlighted phrase before counting one cycle", async ({ page }) => {
@@ -89,54 +91,94 @@ test("level 5 reveals every bilingual phrase with S or touch and resets for the 
   await expect(phrases.nth(0).getByText("I", { exact: true })).toBeVisible();
 });
 
-test("group navigation follows the chapter and marks an unnamed section without grouping across it", async ({ page }) => {
-  await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
-  await openGroupedPlayer(page, 4, 4);
-  await pauseCloudClock(page, new Date("2026-09-06T00:01:00Z"));
+// Exercise both boundaries independently so real playback does not spend the
+// settings scenario's timeout replaying the already-covered first group.
+for (const boundary of ["section", "chapter"] as const) test(boundary === "section"
+  ? "group navigation marks an unnamed section without grouping across it"
+  : "group navigation advances to the next chapter and retains it through settings", async ({ page }) => {
+  await test.step("grouped:open", async () => {
+    await page.clock.install({ time: new Date("2026-09-06T00:00:00Z") });
+    await openGroupedPlayer(page, 4, 4);
+  });
+  await test.step("grouped:clock-ready", () => pauseCloudClock(page, new Date("2026-09-06T00:01:00Z")));
   const chapter = page.getByLabel("현재 챕터");
   const phrases = page.getByRole("list", { name: "묶음 프레이즈" }).getByRole("listitem");
+  if (boundary === "chapter") await test.step("grouped:select-group", async () => {
+    // Use the learner's sentence menu, not a mocked player or seeded result.
+    await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+    await page.getByRole("button", { name: "문장 목록", exact: true }).click();
+    await page.getByRole("dialog", { name: "문장 목록", exact: true }).getByRole("button", { name: /^6번 문장/ }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // Flush deferred drawer focus restoration under the paused test clock.
+    // Start via the playback button below: Space would reopen the focused menu.
+    await advanceCloudClock(page, 1);
+    await expect(page.getByRole("button", { name: "학습 메뉴", exact: true })).toBeFocused();
+    await expect(page.getByRole("progressbar", { name: "묶음 진행" })).toHaveAttribute("aria-valuenow", "1");
+    await expect(chapter.getByRole("separator", { name: "구간 경계" })).toBeVisible();
+    await expect(phrases.nth(0)).toContainText("He takes the bus.");
+  });
   await expect(chapter).toContainText("At home");
   await expect(chapter).toContainText("집에서");
-  for (const phraseCount of [5, 2]) {
-    await expect(phrases).toHaveCount(phraseCount);
-    await page.keyboard.press("Space");
-    for (let cycle = 1; cycle <= 3; cycle++) {
+  const phraseCount = boundary === "section" ? 5 : 2;
+  await expect(phrases).toHaveCount(phraseCount);
+  if (boundary === "chapter") await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
+  else await page.keyboard.press("Space");
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    await test.step(`grouped:${phraseCount === 5 ? "first" : "second"}-group-cycle-${cycle}`, async () => {
       for (let index = 1; index < phraseCount; index++) {
         await expect(phrases.nth(index - 1)).toHaveAttribute("aria-current", "true");
-        await expect.poll(() => page.locator("audio").evaluate(element => (element as HTMLAudioElement).ended)).toBe(true);
+        // Each short recording must really end. Avoid the default polling
+        // backoff adding up to a second of idle time at every phrase boundary.
+        await expect.poll(() => page.locator("audio").evaluate(element => (element as HTMLAudioElement).ended),
+          { intervals: [25, 50, 100] }).toBe(true);
         await advanceCloudClock(page, 500);
       }
       await confirmManualListen(page, "keyboard");
       await expect(page.getByLabel("완료한 듣기")).toHaveText(`필수 ${cycle} / 3`);
-    }
-    await page.keyboard.press("Space");
-    if (phraseCount === 5) {
+    });
+  }
+  await page.keyboard.press("Space");
+  if (phraseCount === 5) {
+    await test.step("grouped:section-boundary", async () => {
       await expect(chapter).toContainText("At home");
       await expect(chapter.getByRole("separator", { name: "구간 경계" })).toBeVisible();
       await expect(phrases.nth(0)).toContainText("He takes the bus.");
-    }
+      await expect(phrases).toHaveCount(2);
+      await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
+      await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
+    });
+    return;
   }
-  await expect(chapter).toContainText("At work");
-  await expect(chapter).toContainText("직장에서");
-  await expect(chapter.getByRole("separator")).toHaveCount(0);
-  await expect(phrases).toHaveCount(3);
-  await expect(phrases.nth(0)).toContainText("I read my messages.");
-  await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
-  await page.getByRole("button", { name: "학습 설정", exact: true }).click();
-  await expect(page.getByLabel("재생속도")).toBeVisible();
+  await test.step("grouped:next-chapter", async () => {
+    await expect(chapter).toContainText("At work");
+    await expect(chapter).toContainText("직장에서");
+    await expect(chapter.getByRole("separator")).toHaveCount(0);
+    await expect(phrases).toHaveCount(3);
+    await expect(phrases.nth(0)).toContainText("I read my messages.");
+  });
+  await test.step("grouped:settings", async () => {
+    await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
+    await page.getByRole("button", { name: "학습 설정", exact: true }).click();
+    await expect(page.getByLabel("재생속도")).toBeVisible();
+  });
   // Settings overlays the retained lesson and keeps its back action accessible on short screens.
-  await page.setViewportSize({ width: page.viewportSize()!.width, height: 480 });
   const settings = page.getByRole("dialog", { name: "세션 설정", exact: true });
-  await expect(settings).toBeInViewport();
-  await expect(settings.getByRole("button", { name: "메뉴로 돌아가기", exact: true })).toBeInViewport();
-  await expect(page.locator('[aria-label="현재 챕터"]')).toContainText("At work");
-  await page.keyboard.press("Escape");
-  await expect(chapter).toContainText("At work");
+  await test.step("grouped:short-viewport", async () => {
+    await page.setViewportSize({ width: page.viewportSize()!.width, height: 480 });
+    await expect(settings).toBeInViewport();
+    await expect(settings.getByRole("button", { name: "메뉴로 돌아가기", exact: true })).toBeInViewport();
+    await expect(page.locator('[aria-label="현재 챕터"]')).toContainText("At work");
+  });
+  await test.step("grouped:return-player", async () => {
+    await page.keyboard.press("Escape");
+    await expect(chapter).toContainText("At work");
+  });
 });
 
 test("a long level 5 group keeps the first hint and touch actions accessible in the initial mobile viewport", async ({ page, isMobile }) => {
   test.skip(!isMobile, "Mobile layout check.");
   await openGroupedPlayer(page, 5, 4);
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
   const canvas = page.getByRole("region", { name: "학습 자막" });
   await expect(canvas.getByRole("listitem")).toHaveCount(5);
   const actions = await canvas.boundingBox();

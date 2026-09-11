@@ -3,8 +3,8 @@
 import { useId, useState } from "react";
 import { ChartColumn, Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertTitle } from "@/components/ui/alert";
+import { useActionableProblem } from "../actionable-dialog";
+import { useDeviceAccess } from "../device-access-provider";
 import { Drawer, DrawerClose, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger, DrawerViewportContent } from "@/components/ui/drawer";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,7 +13,6 @@ import { stageForLevel } from "@/lib/learning-stages";
 import type { Lesson } from "@/lib/lessons";
 import { RecordSettings } from "../completion-summary";
 import styles from "./lesson-history-dialog.module.css";
-import { useCloudPreferences } from "../cloud-preferences-provider";
 import { useDeviceJournal } from "../use-device-journal";
 
 function HistoryRow({ record }: { record: CompletionRecord }) {
@@ -50,13 +49,14 @@ function HistoryRow({ record }: { record: CompletionRecord }) {
 }
 
 export function LessonHistoryDialog({ lesson, disabled }: { lesson: Lesson; disabled?: boolean }) {
-  const cloud = useCloudPreferences()!;
   const [open, setOpen] = useState(false);
-  const device = useDeviceJournal(cloud.journal);
+  const device = useDeviceJournal();
+  const access = useDeviceAccess();
+  useActionableProblem(open && device.error, { scope: access?.accountId ?? "local", key: "journal-read", title: "기기 완료 기록을 읽지 못했습니다.",
+    description: "저장 공간을 확인하고 다시 열어 주세요.", action: { label: "새로고침", run: () => window.location.reload() } });
   const history = completionHistoryForLesson(device.journal.history, lesson.id);
 
   function changeOpen(next: boolean) {
-    if (next) void cloud.refresh();
     setOpen(next);
   }
 
@@ -78,12 +78,6 @@ export function LessonHistoryDialog({ lesson, disabled }: { lesson: Lesson; disa
         <DrawerDescription>{lesson.name} · 총 {history.length}회 완료</DrawerDescription>
       </DrawerHeader>
       <div className={styles.body} data-slot="dialog-scroll-body">
-        {device.error ? <Alert><AlertTitle>기기 완료 기록을 읽지 못했습니다. 저장 공간을 확인해 주세요.</AlertTitle></Alert> : null}
-        {cloud.refreshing ? <div aria-busy="true" aria-label="완료 기록 새로고침"><Skeleton className="h-1 w-full" /></div> : null}
-        {cloud.refreshError ? <Alert aria-label="완료 기록 알림">
-          <AlertTitle>최신 완료 기록을 불러오지 못했습니다.</AlertTitle>
-          <Button variant="outline" onClick={() => void cloud.refresh()}>다시 불러오기</Button>
-        </Alert> : null}
         {history.length ? <Table density="compact" className="table-fixed" aria-label="이 레슨의 완료 기록">
           <TableHeader>
             <TableRow>

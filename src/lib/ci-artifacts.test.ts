@@ -45,6 +45,7 @@ for (const diagnostic of [
   { step: "resume:fonts:320", field: "resumeTimings", prefix: "CI resume timings:", expected: { phase: "fonts", width: 320, durationMs: null, unfinished: true } },
   { step: "records:player-ready", field: "recordTimings", prefix: "CI record timings:", expected: { phase: "player-ready", durationMs: null, unfinished: true } },
   { step: "offline-history:back-catalog:delayed", field: "historyTimings", prefix: "CI history timings:", expected: { phase: "back-catalog", startup: "delayed", durationMs: null, unfinished: true } },
+  { step: "grouped:second-group-cycle-3", field: "groupedTimings", prefix: "CI grouped timings:", expected: { phase: "second-group-cycle-3", durationMs: null, unfinished: true } },
 ]) test(`a real timed-out Playwright step retains safe ${diagnostic.field} in artifacts and job output`, () => {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "safe-resume-timeout-")));
   const secret = "fixture-timeout-cookie-never-export";
@@ -106,6 +107,7 @@ test("offline history diagnostics retain fixed phases and startup variants witho
 for (const variant of [
   { prefix: "records", field: "recordTimings", first: "sign-in", second: "change-speed", active: "player-ready" },
   { prefix: "player", field: "playerTimings", first: "sign-in", second: "start", active: "pause" },
+  { prefix: "grouped", field: "groupedTimings", first: "open", second: "first-group-cycle-1", active: "settings" },
 ]) test(`${variant.prefix} timings export only allowlisted phases and bounded durations`, () => {
   const directory = mkdtempSync(join(tmpdir(), "safe-record-timing-"));
   const secret = "fixture-private-record-token";
@@ -122,11 +124,14 @@ for (const variant of [
         { title: "records:sign-in", duration: 120001 },
         { title: "records:sign-in", duration: 1.5 },
         { title: "records:sign-in", duration: "12" },
+        // A diagnostic-looking label is still untrusted report content.
+        ...["first-group-cycle-0", "first-group-cycle-4", "second-group-cycle-4", "select-group?token=" + secret]
+          .map(phase => ({ title: `grouped:${phase}`, duration: 12 })),
         null,
       ] }, { status: "passed", steps: [{ title: "records:player-ready", duration: -1 }] }],
     }] }] }] });
-    writeFileSync(input, variant.prefix === "records" ? raw : raw
-      .replaceAll("records:", "player:").replaceAll("change-speed", "start").replaceAll("player-ready", "pause"));
+    writeFileSync(input, raw.replaceAll("records:", `${variant.prefix}:`)
+      .replaceAll("sign-in", variant.first).replaceAll("change-speed", variant.second).replaceAll("player-ready", variant.active));
     const result = spawnSync(process.execPath, ["scripts/collect-ci-artifacts.mjs", input, output], { encoding: "utf8" });
     expect(result.status).toBe(0);
     const contents = readFileSync(output, "utf8");

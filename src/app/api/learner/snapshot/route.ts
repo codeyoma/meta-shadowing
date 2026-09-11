@@ -1,9 +1,18 @@
-import { parseAccountSnapshot, SNAPSHOT_MAX_BYTES, SnapshotError } from "@/lib/account-snapshot";
-import { readAccountSnapshot, writeAccountSnapshot } from "@/lib/account-snapshot-repository";
+import { SNAPSHOT_MAX_BYTES } from "@/lib/account-snapshot";
+import { LearningMergeError, parseLearningMerge } from "@/lib/learning-merge";
+import { readAccountSnapshot, writeAccountSnapshot, SnapshotAuthorizationError } from "@/lib/account-snapshot-repository";
 import { authorizeCloudLearner } from "@/lib/cloud-learner-request";
 
 const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
 const failure = (error: string, status: number) => Response.json({ error }, { status, headers });
+function mergeFailure(error: unknown) {
+  if (error instanceof LearningMergeError) {
+    const status = { "invalid-merge": 400, "client-update-required": 426, "options-conflict": 409, "account-changed": 409, "merge-limit": 413 }[error.code];
+    return failure(error.code, status);
+  }
+  if (error instanceof SnapshotAuthorizationError) return failure("unauthorized", 401);
+  return failure("snapshot-save-failed", 503);
+}
 
 async function readBoundedBody(request: Request): Promise<Uint8Array | null> {
   const declared = request.headers.get("content-length");
@@ -39,7 +48,7 @@ export async function GET(request: Request) {
   const identity = await authorizeCloudLearner(request);
   if (identity instanceof Response) return identity;
   try {
-    return Response.json({ snapshot: await readAccountSnapshot(identity.id) }, { headers });
+    return Response.json(await readAccountSnapshot(identity.id), { headers });
   } catch {
     return failure("snapshot-unavailable", 503);
   }
@@ -57,12 +66,12 @@ export async function PUT(request: Request) {
   } catch {
     return failure("snapshot-save-failed", 503);
   }
-  if (!bytes) return failure("snapshot-too-large", 413);
+  if (!bytes) return failure("merge-limit", 413);
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
-    return failure("invalid-snapshot", 400);
+    return failure("invalid-merge", 400);
   }
   if (value && typeof value === "object" && !Array.isArray(value)
     && typeof (value as { accountId?: unknown }).accountId === "string"
@@ -71,15 +80,14 @@ export async function PUT(request: Request) {
   }
   let snapshot;
   try {
-    snapshot = parseAccountSnapshot(value, identity.id);
+    snapshot = parseLearningMerge(value, identity.id);
   } catch (error) {
-    if (error instanceof SnapshotError) return failure("invalid-snapshot", 400);
-    return failure("snapshot-save-failed", 503);
+    return mergeFailure(error);
   }
   try {
-    await writeAccountSnapshot(identity.id, snapshot);
-    return Response.json({ updated: true }, { headers });
-  } catch {
-    return failure("snapshot-save-failed", 503);
+    const result = await writeAccountSnapshot(identity.id, snapshot);
+    return Response.json({ updated: true, optionsRevision: result.optionsRevision }, { headers });
+  } catch (error) {
+    return mergeFailure(error);
   }
 }

@@ -6,7 +6,7 @@ select has_table('public', 'learner_snapshots', 'snapshot table exists');
 select col_is_pk('public', 'learner_snapshots', 'account_id', 'account identity is the primary key');
 select ok(not has_table_privilege('public', 'public.learner_snapshots', 'select,insert,update,delete'), 'PUBLIC has no table grants');
 select ok(not has_table_privilege('anon', 'public.learner_snapshots', 'select,insert,update,delete'), 'anonymous users have no table grants');
-select ok(has_table_privilege('authenticated', 'public.learner_snapshots', 'select,insert,update'), 'authenticated users have required grants');
+select ok(has_table_privilege('authenticated', 'public.learner_snapshots', 'select') and not has_table_privilege('authenticated', 'public.learner_snapshots', 'insert,update'), 'authenticated users can only read directly');
 select ok(not has_table_privilege('authenticated', 'public.learner_snapshots', 'delete'), 'authenticated users cannot delete snapshots');
 
 insert into auth.users (id) values
@@ -16,11 +16,9 @@ insert into auth.users (id) values
 set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 set local request.jwt.claim.role = 'authenticated';
-select lives_ok($$insert into public.learner_snapshots(account_id, schema_version, snapshot, updated_at)
-  values ('11111111-1111-4111-8111-111111111111', 1,
-    '{"schemaVersion":1,"accountId":"11111111-1111-4111-8111-111111111111","preferredLevel":1,"settings":{},"runs":[],"history":[],"studyDays":[]}'::jsonb,
-    '2000-01-01T00:00:00Z')$$,
-  'A inserts its own snapshot');
+set local request.jwt.claims = '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","is_anonymous":false}';
+select lives_ok($$select public.merge_learning_snapshot('{"protocolVersion":1,"accountId":"11111111-1111-4111-8111-111111111111","runs":[],"history":[],"studyDays":[]}')$$,
+  'A establishes its own snapshot through merge');
 select cmp_ok((select updated_at from public.learner_snapshots), '>', '2000-01-01T00:00:00Z'::timestamptz,
   'database replaces a supplied insert timestamp');
 select results_eq($$select account_id::text from public.learner_snapshots$$,
@@ -38,18 +36,18 @@ set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 set local request.jwt.claim.role = 'authenticated';
 select is((select count(*)::integer from public.learner_snapshots), 1, 'A cannot read B');
-select results_eq($$update public.learner_snapshots set schema_version = 1
+select throws_ok($$update public.learner_snapshots set schema_version = 1
   where account_id = '22222222-2222-4222-8222-222222222222' returning 1$$,
-  array[]::integer[], 'A cannot update B');
+  '42501', null, 'A cannot update B');
 select throws_ok($$update public.learner_snapshots set account_id = '22222222-2222-4222-8222-222222222222'
   where account_id = '11111111-1111-4111-8111-111111111111'$$, '42501', null, 'A cannot reassign ownership');
-select lives_ok($$insert into public.learner_snapshots(account_id, schema_version, snapshot, updated_at)
+select throws_ok($$insert into public.learner_snapshots(account_id, schema_version, snapshot, updated_at)
   values ('11111111-1111-4111-8111-111111111111', 1,
     '{"schemaVersion":1,"accountId":"11111111-1111-4111-8111-111111111111","preferredLevel":8,"settings":{},"runs":[],"history":[],"studyDays":[]}'::jsonb,
     '2000-01-01T00:00:00Z')
   on conflict (account_id) do update set schema_version = excluded.schema_version,
-    snapshot = excluded.snapshot, updated_at = excluded.updated_at$$, 'own replacement ignores snapshot age');
-select is((select snapshot->>'preferredLevel' from public.learner_snapshots), '8', 'own replacement stores the complete second snapshot');
+    snapshot = excluded.snapshot, updated_at = excluded.updated_at$$, '42501', null, 'legacy own replacement is denied');
+select is((select snapshot->>'preferredLevel' from public.learner_snapshots), '1', 'denied replacement preserves existing options');
 select cmp_ok((select updated_at from public.learner_snapshots), '>', '2000-01-01T00:00:00Z'::timestamptz,
   'database assigns the replacement timestamp');
 

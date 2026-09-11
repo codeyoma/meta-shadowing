@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useActionableDialog, useActionableProblem } from "../actionable-dialog";
 import { Button } from "@/components/ui/button";
 import { assertDeviceAccess } from "@/lib/device-access";
 import { readDeviceLearningState, subscribeDeviceSnapshot, startDeviceRun, saveDeviceRun, type DeviceRun, type DeviceWriter } from "@/lib/device-learning-store";
@@ -16,10 +16,12 @@ import { RapidPlayer } from "./rapid-player";
 import type { LearningRecording, RecordUpdate } from "./recording-types";
 
 export function LocalSaveFailure({ retry }: { retry: () => void }) {
-  return <Alert aria-label="기기 저장 알림"><AlertTitle>기기에 학습을 저장하지 못했습니다.</AlertTitle>
-    <AlertDescription>다음 프레이즈로 이동하지 않았습니다. 브라우저 저장 공간을 확인한 뒤 같은 저장을 다시 시도해 주세요. 다른 탭에서 기록이 바뀌었다면 새로고침해 주세요.</AlertDescription>
-    <Button variant="outline" onClick={retry}>기기 저장 재시도</Button>
-  </Alert>;
+  const access = useDeviceAccess();
+  const retryButton = useRef<HTMLButtonElement>(null);
+  useActionableProblem(true, { scope: access?.accountId ?? "local", key: "local-save", title: "기기에 학습을 저장하지 못했습니다.",
+    description: "다음 프레이즈로 이동하지 않았습니다. 브라우저 저장 공간을 확인한 뒤 같은 저장을 다시 시도해 주세요. 다른 탭에서 기록이 바뀌었다면 새로고침해 주세요.",
+    returnFocus: () => retryButton.current, action: { label: "기기 저장 재시도", run: retry } });
+  return <Button ref={retryButton} variant="outline" onClick={retry}>기기 저장 재시도</Button>;
 }
 
 const packageAllowed = () => true;
@@ -69,6 +71,7 @@ export function LocalLearningPlayer({ lesson, stage, hints = [], lines = [], req
 }
 
 function ActiveLocalPlayer({ initial, writer: access, lesson, hints, lines, restart, packageBlocked, canUsePackage, onCatalog }: { initial: DeviceRun; writer: DeviceWriter; lesson: PublishedLesson; hints: SubtitleHint[]; lines: RapidLine[]; restart: (run: DeviceRun) => void; packageBlocked: boolean; canUsePackage: () => boolean; onCatalog?: () => void }) {
+  const dialogs = useActionableDialog();
   const current = useRef(initial);
   const [record, setRecord] = useState(initial);
   const [status, setStatus] = useState<"ready" | "saving" | "error">("ready");
@@ -149,7 +152,11 @@ function ActiveLocalPlayer({ initial, writer: access, lesson, hints, lines, rest
   const exit = (navigate: () => void) => {
     // Both same-document catalog navigation and player-menu exits consult the
     // live operation, including the interval before saving state renders.
-    if (pending.current && !window.confirm("저장하지 못한 변경이 있습니다. 마지막 기기 저장 지점으로 돌아갑니다. 나가시겠어요?")) return;
+    if (pending.current) {
+      dialogs.show({ scope: access.accountId, key: "unsaved-exit", explicit: true, title: "저장하지 못한 변경이 있습니다.",
+        description: "나가면 마지막 기기 저장 지점으로 돌아갑니다. 나가시겠어요?", dismissLabel: "계속 학습", action: { label: "나가기", run: navigate } });
+      return;
+    }
     navigate();
   };
   const recording: LearningRecording = { local: true, completion: record.completedAt ? record as DeviceRun & { completedAt: string } : null,

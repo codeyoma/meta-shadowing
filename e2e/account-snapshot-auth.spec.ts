@@ -4,21 +4,25 @@ import { createServerClient } from "@supabase/ssr";
 import { expect, test } from "./fixtures/cloud-ui";
 import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/local-supabase-google";
 
-test("real snapshot HTTP rejects foreign identities and isolates unconditional replacements", async ({ page, browser, baseURL }) => {
+test("real snapshot HTTP rejects foreign identities and isolates atomic learning merges", async ({ page, browser, baseURL }) => {
   const endpoint = "/api/learner/snapshot";
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   const profile = await page.request.get("/api/learner/preferences");
   expect(profile.status()).toBe(200);
   const accountA = (await profile.json()).profile.accountId as string;
-  const first = { schemaVersion: 1, accountId: accountA, preferredLevel: 3, settings: { speed: 2 }, runs: [], history: [], studyDays: ["2026-09-09"] };
+  const first = { protocolVersion: 1, accountId: accountA, options: { expectedRevision: 0, preferredLevel: 3, settings: { speed: 2 } }, runs: [], history: [], studyDays: ["2026-09-09"] };
   expect((await page.request.get(endpoint)).status()).toBe(200);
-  expect(await (await page.request.get(endpoint)).json()).toEqual({ snapshot: null });
+  expect(await (await page.request.get(endpoint)).json()).toEqual({ snapshot: null, optionsRevision: 0 });
   expect((await page.request.put(endpoint, { data: first })).status()).toBe(200);
-  const replacement = { ...first, preferredLevel: 7, settings: {}, studyDays: [] };
-  expect((await page.request.put(endpoint, { data: replacement })).status()).toBe(200);
+  const second = { ...first, options: { expectedRevision: 1, preferredLevel: 7, settings: {} }, studyDays: [] };
+  expect((await page.request.put(endpoint, { data: second })).status()).toBe(200);
+  const replacement = { schemaVersion: 1, accountId: accountA, preferredLevel: 7, settings: {}, runs: [], history: [], studyDays: ["2026-09-09"] };
   const readA = await page.request.get(endpoint);
   expect(readA.headers()["cache-control"]).toBe("private, no-store");
-  expect(await readA.json()).toEqual({ snapshot: replacement });
+  expect(await readA.json()).toEqual({ snapshot: replacement, optionsRevision: 2 });
+  expect((await page.request.put(endpoint, { data: first })).status()).toBe(409);
+  expect((await page.request.put(endpoint, { data: { ...first, options: undefined, studyDays: ["2026-09-10"] } })).status()).toBe(200);
+  replacement.studyDays.push("2026-09-10");
   expect((await page.request.put(endpoint, { data: first, headers: { Origin: "https://foreign.example" } })).status()).toBe(403);
 
   const url = process.env.SUPABASE_INTEGRATION_URL!;
@@ -49,14 +53,15 @@ test("real snapshot HTTP rejects foreign identities and isolates unconditional r
     expect((await cookies.auth.setSession(session)).error).toBeNull();
     const readB = await other.request.get(endpoint);
     expect(readB.status()).toBe(200);
-    expect(await readB.json()).toEqual({ snapshot: null });
+    expect(await readB.json()).toEqual({ snapshot: null, optionsRevision: 0 });
     expect((await other.request.put(endpoint, { data: first })).status()).toBe(409);
-    const ownB = { ...first, accountId: created.data.user.id, preferredLevel: 8 };
+    const ownB = { ...first, accountId: created.data.user.id, options: { expectedRevision: 0, preferredLevel: 8, settings: { speed: 2 } } };
+    const savedB = { schemaVersion: 1, accountId: ownB.accountId, preferredLevel: 8, settings: { speed: 2 }, runs: [], history: [], studyDays: ["2026-09-09"] };
     expect((await other.request.put(endpoint, { data: ownB })).status()).toBe(200);
-    expect(await (await other.request.get(endpoint)).json()).toEqual({ snapshot: ownB });
+    expect(await (await other.request.get(endpoint)).json()).toEqual({ snapshot: savedB, optionsRevision: 1 });
     expect((await page.request.put(endpoint, { data: ownB })).status()).toBe(409);
-    expect(await (await page.request.get(endpoint)).json()).toEqual({ snapshot: replacement });
-    expect(await (await other.request.get(endpoint)).json()).toEqual({ snapshot: ownB });
+    expect(await (await page.request.get(endpoint)).json()).toEqual({ snapshot: replacement, optionsRevision: 2 });
+    expect(await (await other.request.get(endpoint)).json()).toEqual({ snapshot: savedB, optionsRevision: 1 });
   } finally {
     try { await other?.close(); }
     finally {

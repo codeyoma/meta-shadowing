@@ -37,6 +37,7 @@ export function runPlaywright(args, env = process.env) {
       if (attempt.playerTimings) console.log(`CI player timings: ${JSON.stringify(attempt.playerTimings)}`);
       if (attempt.stagePreviewTimings) console.log(`CI stage preview timings: ${JSON.stringify(attempt.stagePreviewTimings)}`);
       if (attempt.historyTimings) console.log(`CI history timings: ${JSON.stringify(attempt.historyTimings)}`);
+      if (attempt.groupedTimings) console.log(`CI grouped timings: ${JSON.stringify(attempt.groupedTimings)}`);
       if (attempt.mp3Expiry) console.log(`CI MP3 expiry: ${JSON.stringify(attempt.mp3Expiry)}`);
       if (location || attempt.operation) console.log(`CI detail: operation=${attempt.operation ?? "unknown"} location=${location ? `${location.file}:${location.line}:${location.column}` : "unknown"}`);
     }

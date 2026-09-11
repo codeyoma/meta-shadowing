@@ -18,7 +18,7 @@ import { getPlayerHref } from "@/lib/resume";
 import { createRunId } from "@/lib/run-id";
 import { playStageSound } from "@/lib/stage-sound";
 import { DEFAULT_SESSION_SETTINGS, resolveSessionSettings, type SessionSettings } from "@/lib/session-settings";
-import { useCloudPreferences } from "../cloud-preferences-provider";
+import { requestOfflineReadiness } from "../offline-shell-registration";
 import { CloseIcon, PlayIcon } from "../ui";
 import { useBrowseScroll } from "../browse-shell";
 import { useLessonPackages } from "../lesson-packages-provider";
@@ -26,7 +26,8 @@ import { useDeviceSettings } from "../device-settings-provider";
 import { LessonHistoryDialog } from "./lesson-history-dialog";
 import styles from "./setup.module.css";
 import { useDeviceJournal } from "../use-device-journal";
-import { Alert, AlertTitle } from "@/components/ui/alert";
+import { useActionableProblem } from "../actionable-dialog";
+import { useDeviceAccess } from "../device-access-provider";
 
 const pathOffsets = [0, 1, 2, 1];
 const methodIcons = [Headphones, Brain, TextCursorInput, Layers, WholeWord, Languages, Languages, Mic];
@@ -40,11 +41,13 @@ const stageRing = <span className={styles.stageRing} data-stage-ring="" aria-hid
 
 export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, initialStage }: { lesson: Lesson; defaults?: SessionSettings; initialStage?: number }) {
   const router = useRouter();
-  const cloud = useCloudPreferences()!;
   const packages = useLessonPackages();
   const { openSettings } = useDeviceSettings();
   const packageReady = packages?.inventory.some(row => row.lessonId === lesson.id && row.version === lesson.version && row.state === "ready") ?? false;
-  const device = useDeviceJournal(cloud.journal);
+  const device = useDeviceJournal();
+  const access = useDeviceAccess();
+  useActionableProblem(device.error, { scope: access?.accountId ?? "local", key: "journal-read", title: "기기 학습 기록을 읽지 못했습니다.",
+    description: "저장 공간을 확인하고 다시 열어 주세요.", action: { label: "새로고침", run: () => window.location.reload() } });
   const cloudJournal = device.journal;
   const language = lesson.language;
   const settings = resolveSessionSettings(device.settings, defaults);
@@ -64,6 +67,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
 
   function start(): void {
     if (!packageReady) return;
+    requestOfflineReadiness();
     playStageSound("start");
     const saved = nextPracticeForLesson(cloudJournal, lesson, stage).progress;
     const selection = { ...(saved?.settings ?? settings), language, lessonId: lesson.id, level, stage, runId: saved?.runId ?? createRunId() };
@@ -72,6 +76,7 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
 
   function startCurrent(): void {
     if (!packageReady) return;
+    requestOfflineReadiness();
     playStageSound("start");
     const current = nextPracticeForLesson(cloudJournal, lesson, initialStage);
     const saved = current.progress;
@@ -110,7 +115,6 @@ export function SessionSetup({ lesson, defaults = DEFAULT_SESSION_SETTINGS, init
             </Button>
             </div>
             {!packageReady ? <Button variant="outline" className="mt-3 w-full" onClick={() => openSettings()}>레슨 다운로드 관리</Button> : null}
-            {device.error ? <Alert><AlertTitle>기기 학습 기록을 읽지 못했습니다. 저장 공간을 확인하고 새로고침해 주세요.</AlertTitle></Alert> : null}
           </CardContent>
         </Card>
         <section className={styles.stageSection} aria-labelledby="level-title">

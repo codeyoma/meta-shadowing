@@ -115,9 +115,9 @@ test("choosing another lesson does not reset that language's lesson-list scroll"
   await expect(nextLesson).toBeInViewport();
   await expect.poll(() => list.evaluate(el => el.scrollTop)).toBeGreaterThan(50);
   const scrollBefore = await list.evaluate(el => el.scrollTop);
-  const savedSelection = page.waitForResponse(response => new URL(response.url()).pathname === "/api/learner/preferences" && response.request().method() === "PATCH");
+  const selectionWrites: string[] = [];
+  page.on("request", request => { if (new URL(request.url()).pathname === "/api/learner/preferences" && request.method() === "PATCH") selectionWrites.push(request.method()); });
   await nextLesson.click();
-  expect((await savedSelection).status()).toBe(200);
   await expect(page).toHaveURL(/\/10000000-0000-4000-8000-000000000002\/stages/);
   await installStagePackage(page);
   await expect(page.getByRole("button", { name: "현재 스테이지 1 시작", exact: true })).toBeEnabled();
@@ -128,6 +128,7 @@ test("choosing another lesson does not reset that language's lesson-list scroll"
   await expect(nextLesson).toBeInViewport();
   await expect(nav.getByRole("link", { name: "스테이지", exact: true })).toHaveAttribute("href", "/lessons/10000000-0000-4000-8000-000000000002/stages");
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(selectionWrites).toEqual([]);
 });
 
 test("lesson history distinguishes both stages belonging to the same level", async ({ page }) => {
@@ -153,11 +154,11 @@ test("a completed run returns to its language's lesson list and recorded stage",
       language: "japanese", level: 1, stage: 2, nextUnit: 3, nextPhrase: 3, activeMs: 1000, settings: DEFAULT_SESSION_SETTINGS,
       completedAt: "2026-09-07T01:00:00Z",
     }] });
-  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000003&level=1&stage=2&run=finished-browse-run");
+  await test.step("records:player-ready", () => openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000003&level=1&stage=2&run=finished-browse-run"));
   await page.getByRole("button", { name: "레슨 목록으로", exact: true }).click();
   await expect(page).toHaveURL(/\/lessons\?language=japanese/);
   await expect(page.getByRole("region", { name: "완료 기록" })).toHaveCount(0);
-  await openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000003/stages");
-  await page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true }).click();
+  await test.step("records:reopen-setup", () => openLearnerPage(page, "/lessons/10000000-0000-4000-8000-000000000003/stages"));
+  await test.step("records:assert-stages", () => page.getByRole("button", { name: "이 레슨의 완료 기록", exact: true }).click());
   await expect(page.getByRole("dialog", { name: "완료 기록", exact: true }).getByText("스테이지 2", { exact: true })).toBeVisible();
 });

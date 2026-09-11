@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useActionableProblem } from "../actionable-dialog";
+import { requestOfflineReadiness } from "../offline-shell-registration";
 import { Button } from "@/components/ui/button";
 import { assertDeviceAccess } from "@/lib/device-access";
 import { listLessonPackages, readLessonPackage, subscribePackageChanges, type InstalledLessonPackage, type PackageInventory } from "@/lib/lesson-package-store";
@@ -78,6 +79,7 @@ function OfflinePackages() {
     return () => { alive = false; loadRevision.current++; refreshCurrent.current = () => {}; permitted.current = false; unsubscribe(); window.removeEventListener("focus", refresh); window.removeEventListener("device-learning-changed", refresh); window.removeEventListener("popstate", restoreHistory); };
   }, [access]);
   const choose = useCallback(async (row: PackageInventory, stage: number) => {
+    requestOfflineReadiness();
     permitted.current = false; setChecking(true);
     try {
       assertDeviceAccess(access);
@@ -94,6 +96,9 @@ function OfflinePackages() {
     } catch { setInstalled(null); setFailed(true); }
     finally { setChecking(false); }
   }, [access]);
+  useActionableProblem(failed, { scope: access.accountId, key: "offline-package", title: "기기 자료를 읽지 못했습니다.",
+    description: "브라우저 저장 공간을 확인하거나 온라인에서 레슨을 다시 다운로드해 주세요.", action: { label: "다시 확인", run: () => refreshCurrent.current() },
+    exit: { label: "레슨 다운로드", run: () => window.location.assign("/lessons") } });
   if (installed) return <PackageContent.Provider value={installed}>
     <LocalLearningPlayer lesson={installed.manifest.lesson} hints={installed.manifest.hints} lines={installed.manifest.lines}
       {...selection} packageBlocked={checking} canUsePackage={canUsePackage} onCatalog={() => {
@@ -105,8 +110,6 @@ function OfflinePackages() {
   </PackageContent.Provider>;
   return <main className="page mx-auto flex w-full max-w-md flex-col gap-4 overflow-y-auto p-5">
     <h1>기기 학습</h1>
-    <p>다운로드한 전체 레슨의 16개 스테이지를 오프라인으로 학습합니다.</p>
-    {failed ? <Alert><AlertTitle>기기 자료를 읽지 못했습니다.</AlertTitle><AlertDescription>브라우저 저장 공간을 확인하거나 온라인에서 레슨을 다시 다운로드해 주세요.</AlertDescription></Alert> : null}
     {!loaded ? <p role="status">기기 자료를 확인하고 있어요…</p> : inventory.filter(row => row.state === "ready").length === 0 ? <p role="status">학습 가능한 전체 레슨이 없습니다. 온라인에서 다운로드해 주세요.</p> : null}
     {inventory.filter(row => row.state === "ready").map(row => <section key={`${row.lessonId}:${row.version}`} className="flex flex-col gap-2" aria-label={`${row.name} ${row.version} 스테이지`}>
       <h2>{row.name}</h2>

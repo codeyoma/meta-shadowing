@@ -1,5 +1,10 @@
 # Device-first learning: confirmed design
 
+The manual-only upload and no-merge rules below are superseded by the approved
+[quiet merge sync design](2026-09-11-quiet-merge-sync-design.md). Its learning merge,
+explicit options CAS, and quiet notification policy now apply. Package completeness,
+device authority, durable local commits, and account boundaries remain in force.
+
 ## Authority and scope
 
 The device is authoritative for learning progress, completion history, and learning

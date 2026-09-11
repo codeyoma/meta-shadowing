@@ -1,5 +1,10 @@
 # Explicit account snapshots — ticket #31
 
+The manual-only upload and whole-cloud replacement rules below are superseded by
+the approved [quiet merge sync design](2026-09-11-quiet-merge-sync-design.md).
+Automatic uploads merge learning only; Sync now explicitly transfers options with
+revision CAS. Confirmed local replacement and atomic recovery guarantees remain.
+
 Implements #31 under the approved device-first contract in
 `2026-09-09-device-first-learning.md`. The device remains authoritative.
 

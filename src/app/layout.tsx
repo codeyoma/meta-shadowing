@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { AudioCacheLifecycle } from "./audio-cache-scope";
 import { OfflineShellRegistration } from "./offline-shell-registration";
+import { ActionableDialogProvider } from "./actionable-dialog";
 import "./globals.css";
 import "@fontsource-variable/nunito";
 import "@fontsource-variable/quicksand";
@@ -27,7 +28,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body><AudioCacheLifecycle /><OfflineShellRegistration />{children}</body>
+      <body><ActionableDialogProvider><AudioCacheLifecycle /><OfflineShellRegistration />{children}</ActionableDialogProvider></body>
     </html>
   );
 }

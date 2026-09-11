@@ -159,8 +159,8 @@ test("rapid local-write failure holds the line until retry commits the same boun
   });
   await page.getByRole("button", { name: "CONTINUE · 문장 시작", exact: true }).click();
   await advanceCloudClock(page, 4000);
-  await expect(page.getByRole("alert", { name: "기기 저장 알림" })).toBeVisible();
-  await expect(page.getByRole("progressbar", { name: "문장 진행" })).toHaveAttribute("aria-valuenow", "0");
+  await expect(page.getByRole("alertdialog", { name: "기기에 학습을 저장하지 못했습니다." })).toBeVisible();
+  await expect(page.getByRole("progressbar", { name: "문장 진행", includeHidden: true })).toHaveAttribute("aria-valuenow", "0");
   expect((await readDeviceJournal(page))!.studyDays).toEqual([]);
   await page.evaluate(() => window.dispatchEvent(new Event("restore-storage")));
   await page.getByRole("button", { name: "기기 저장 재시도" }).click();

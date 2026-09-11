@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useActionableProblem } from "./actionable-dialog";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Drawer, DrawerClose, DrawerDescription, DrawerHeader, DrawerTitle, DrawerViewportContent } from "@/components/ui/drawer";
@@ -46,10 +46,12 @@ export function DeviceSettingsProvider({ accountId, profile, children }: {
   const generation = useRef(0);
   const writeQueue = useRef(Promise.resolve());
   const writer = useRef<DeviceWriter | null>(null);
+  const pendingSettings = useRef<{ settings: SessionSettings; level: number } | null>(null);
 
   const load = useCallback(() => {
     if (identityInvalidRef.current || !access || access.accountId !== accountId) return Promise.resolve();
     const token = ++generation.current;
+    pendingSettings.current = null;
     setStatus("loading");
     writer.current = null;
     return readDeviceLearningState(access).then(({ record, writer: loadedWriter }) => {
@@ -69,18 +71,20 @@ export function DeviceSettingsProvider({ accountId, profile, children }: {
     return () => { generation.current += 1; writer.current = null; unsubscribe(); };
   }, [load]);
 
-  const persist = useCallback((nextSettings: SessionSettings, nextLevel: number) => {
-    if (identityInvalidRef.current || status === "loading" || status === "error") return;
+  const persist = useCallback((nextSettings: SessionSettings, nextLevel: number, retry = false) => {
+    if (identityInvalidRef.current || status === "loading" || (status === "error" && !retry)) return;
     setStatus("saving");
     const token = generation.current;
     const capturedWriter = writer.current;
-    if (!capturedWriter) return;
+    if (!capturedWriter) { setStatus("error"); return; }
+    pendingSettings.current = { settings: nextSettings, level: nextLevel };
     writeQueue.current = writeQueue.current.then(async () => {
       if (token !== generation.current || identityInvalidRef.current) return;
       await writeDeviceLearningSettings(accountId, nextLevel, nextSettings, capturedWriter);
       if (token === generation.current) {
         setSettings(nextSettings);
         setLevel(nextLevel);
+        pendingSettings.current = null;
         setStatus("saved");
       }
     }).catch(() => {
@@ -104,6 +108,13 @@ export function DeviceSettingsProvider({ accountId, profile, children }: {
     setIdentityInvalid(true);
     setOpen(false);
   }, [invalidatePackages]);
+  useActionableProblem(status === "error" && !identityInvalid && open, { scope: accountId, key: "settings-save", title: "기기 설정을 읽거나 저장하지 못했습니다.",
+    description: "브라우저 저장 공간을 확인해 주세요. 변경 사항을 저장했다고 처리하지 않았습니다.",
+    action: { label: "다시 시도", run: () => {
+      const pending = pendingSettings.current;
+      if (pending) persist(pending.settings, pending.level, true);
+      else void load();
+    } }, exit: { label: "설정 닫기", run: () => setOpen(false) } });
   return <Context.Provider value={{ openSettings, invalidateAccount }}>
     <Drawer open={!identityInvalid && open} onOpenChange={nextOpen => setOpen(identityInvalidRef.current ? false : nextOpen)} direction="right" autoFocus>
       {children}
@@ -117,7 +128,6 @@ export function DeviceSettingsProvider({ accountId, profile, children }: {
           </div>
         </DrawerHeader>
         <div className="min-h-0 overflow-y-auto">
-          {status === "error" ? <Alert role="alert"><AlertTitle>기기 설정을 읽거나 저장하지 못했습니다.</AlertTitle><AlertDescription>브라우저 저장 공간을 확인해 주세요. 변경 사항을 저장했다고 처리하지 않았습니다.</AlertDescription><Button variant="outline" onClick={() => void load()}>다시 시도</Button></Alert> : null}
           <FieldSet disabled={status === "loading" || status === "saving" || status === "error"} aria-busy={status === "loading" || status === "saving"}>
             <FieldGroup>
               <Field><FieldLabel htmlFor="device-preferences-level">학습 레벨</FieldLabel>

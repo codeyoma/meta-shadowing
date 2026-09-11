@@ -110,7 +110,7 @@ test("switching authenticated accounts never displays the previous account setti
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(page.getByRole("dialog", { name: "설정", exact: true })).toBeHidden();
     await expect(page.getByLabel("재생속도")).toHaveCount(0);
-    await expect(page.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("alertdialog", { name: "온라인 로그인이 필요합니다." })).toBeVisible();
     await expect(page.getByText(accountAName, { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "다시 시도" })).toHaveCount(0);
     await page.reload();
@@ -149,7 +149,7 @@ test("malformed and unsupported account records fail explicitly", async ({ page 
     }), { record });
     await page.reload();
     await page.getByRole("button", { name: "설정", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("기기 설정을 읽거나 저장하지 못했습니다");
+    await expect(page.getByRole("alertdialog", { name: "기기 설정을 읽거나 저장하지 못했습니다." })).toBeVisible();
   }
 });
 
@@ -167,7 +167,7 @@ test("reports a failed IndexedDB write and never sends a settings PATCH", async 
   await page.goto("/languages");
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.getByLabel("재생속도").selectOption("2");
-  await expect(page.getByRole("alert")).toContainText("기기 설정을 읽거나 저장하지 못했습니다");
+  await expect(page.getByRole("alertdialog", { name: "기기 설정을 읽거나 저장하지 못했습니다." })).toBeVisible();
   expect(patches).toEqual([]);
 });
 
@@ -190,6 +190,9 @@ test("reports denied local storage instead of claiming a memory-only save", asyn
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
   await page.goto("/languages");
   await page.getByRole("button", { name: "설정", exact: true }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "기기 설정을 읽거나 저장하지 못했습니다" })).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: "기기 설정을 읽거나 저장하지 못했습니다." })).toBeVisible();
+  await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
+  // A second storage problem may be queued, but never stacked.
+  if (await page.getByRole("alertdialog").isVisible()) await page.getByRole("alertdialog").getByRole("button", { name: "닫기", exact: true }).click();
   await expect(page.getByLabel("재생속도")).toBeDisabled();
 });

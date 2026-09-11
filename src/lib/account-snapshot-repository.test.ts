@@ -1,73 +1,74 @@
 // @vitest-environment node
 import { beforeEach, expect, it, vi } from "vitest";
-
-const { createClient, query, result } = vi.hoisted(() => {
+const { createClient, query, result, rpc } = vi.hoisted(() => {
   const result = { data: null as unknown, error: null as unknown };
-  const query = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(), upsert: vi.fn() };
-  return { createClient: vi.fn(), query, result };
+  const query = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn() };
+  return { createClient: vi.fn(), query, result, rpc: vi.fn() };
 });
 vi.mock("server-only", () => ({}));
 vi.mock("./supabase/server", () => ({ createServerSupabaseClient: createClient }));
 import { readAccountSnapshot, writeAccountSnapshot } from "./account-snapshot-repository";
-import { SNAPSHOT_MAX_BYTES, type AccountSnapshot } from "./account-snapshot";
-import { DEFAULT_SESSION_SETTINGS } from "./session-settings";
-
+import { type LearningMerge } from "./learning-merge";
 const accountId = "11111111-1111-4111-8111-111111111111";
 const snapshot = { schemaVersion: 1 as const, accountId, preferredLevel: 1, settings: {}, runs: [], history: [], studyDays: [] };
+const merge: LearningMerge = { protocolVersion: 1, accountId, runs: [], history: [], studyDays: [] };
 
 beforeEach(() => {
-  vi.resetAllMocks();
-  result.data = null;
-  result.error = null;
-  query.select.mockReturnValue(query);
-  query.eq.mockReturnValue(query);
+  vi.resetAllMocks(); result.data = null; result.error = null;
+  query.select.mockReturnValue(query); query.eq.mockReturnValue(query);
   query.maybeSingle.mockImplementation(async () => result);
-  query.upsert.mockImplementation(async () => result);
-  createClient.mockResolvedValue({ from: vi.fn(() => query) });
+  rpc.mockResolvedValue({ data: { optionsRevision: 0 }, error: null });
+  createClient.mockResolvedValue({ from: vi.fn(() => query), rpc });
 });
-
-it("reads through the authenticated request-bound client and validates stored JSON", async () => {
-  result.data = { schema_version: 1, snapshot };
-  expect(await readAccountSnapshot(accountId)).toEqual(snapshot);
-  expect(query.select).toHaveBeenCalledWith("schema_version,snapshot");
+it("loads validated owner data and its options revision through the request client", async () => {
+  result.data = { schema_version: 1, snapshot, options_revision: 3 };
+  expect(await readAccountSnapshot(accountId)).toEqual({ snapshot, optionsRevision: 3 });
+  expect(query.select).toHaveBeenCalledWith("schema_version,snapshot,options_revision");
   expect(query.eq).toHaveBeenCalledWith("account_id", accountId);
 });
-
-it("distinguishes absence from unavailable or invalid stored state", async () => {
-  expect(await readAccountSnapshot(accountId)).toBeNull();
+it("distinguishes no row with revision zero from unavailable or invalid stored state", async () => {
+  expect(await readAccountSnapshot(accountId)).toEqual({ snapshot: null, optionsRevision: 0 });
   result.error = { message: "private database detail" };
   await expect(readAccountSnapshot(accountId)).rejects.toThrow("could not be loaded");
   result.error = null;
-  result.data = { schema_version: 1, snapshot: { ...snapshot, schemaVersion: 2 } };
+  result.data = { schema_version: 1, snapshot: { ...snapshot, schemaVersion: 2 }, options_revision: 0 };
+  await expect(readAccountSnapshot(accountId)).rejects.toThrow();
+  result.data = { schema_version: 1, snapshot, options_revision: -1 };
   await expect(readAccountSnapshot(accountId)).rejects.toThrow();
 });
-
-it("atomically upserts the complete validated snapshot with owner-derived columns", async () => {
-  await writeAccountSnapshot(accountId, snapshot);
-  expect(query.upsert).toHaveBeenCalledWith({ account_id: accountId, schema_version: 1, snapshot }, { onConflict: "account_id" });
+it("sends the validated versioned batch to one authenticated RPC", async () => {
+  expect(await writeAccountSnapshot(accountId, merge)).toEqual({ optionsRevision: 0 });
+  expect(rpc).toHaveBeenCalledWith("merge_learning_snapshot", { batch: merge });
 });
-
-it("accepts and stores a valid snapshot immediately below the compact 2 MiB limit", async () => {
-  const nearLimit: AccountSnapshot = {
-    ...snapshot,
-    runs: [{
-      runId: "near-limit", lessonId: "lesson", lessonVersion: "2026-09-10T00:00:00.000Z",
-      lessonName: "", language: "english", level: 1, stage: 2, nextUnit: 0, nextPhrase: 0,
-      activeMs: 0, settings: DEFAULT_SESSION_SETTINGS, confirmedCycles: 0,
-    }],
-  };
-  const baseBytes = new TextEncoder().encode(JSON.stringify(nearLimit)).byteLength;
-  nearLimit.runs[0].lessonName = "x".repeat(SNAPSHOT_MAX_BYTES - baseBytes - 1);
-  expect(new TextEncoder().encode(JSON.stringify(nearLimit)).byteLength).toBe(SNAPSHOT_MAX_BYTES - 1);
-  await writeAccountSnapshot(accountId, nearLimit);
-  expect(query.upsert).toHaveBeenCalledWith({ account_id: accountId, schema_version: 1, snapshot: nearLimit }, { onConflict: "account_id" });
-  result.data = { schema_version: 1, snapshot: nearLimit };
-  expect(await readAccountSnapshot(accountId)).toEqual(nearLimit);
+it("rejects the legacy snapshot and foreign account before calling storage", async () => {
+  await expect(writeAccountSnapshot(accountId, snapshot as unknown as LearningMerge)).rejects.toMatchObject({ code: "client-update-required" });
+  await expect(writeAccountSnapshot("other", merge)).rejects.toMatchObject({ code: "account-changed" });
+  expect(rpc).not.toHaveBeenCalled();
 });
-
-it("fails closed when no authenticated request client is configured", async () => {
+it.each([["P1001", "invalid-merge"], ["P1002", "client-update-required"], ["P1003", "options-conflict"], ["P1004", "account-changed"], ["P1005", "merge-limit"], ["42501", "unauthorized"]])("maps database %s to a stable safe code", async (code, expected) => {
+  rpc.mockResolvedValue({ data: null, error: { code, message: "sensitive database detail" } });
+  await expect(writeAccountSnapshot(accountId, merge)).rejects.toMatchObject({ code: expected, message: expected });
+});
+it("keeps unknown persistence errors transient and never acknowledges malformed RPC responses", async () => {
+  rpc.mockResolvedValueOnce({ data: null, error: { code: "XX000", message: "sensitive detail" } });
+  await expect(writeAccountSnapshot(accountId, merge)).rejects.toMatchObject({ message: "snapshot-save-failed" });
+  rpc.mockResolvedValueOnce({ data: null, error: null });
+  await expect(writeAccountSnapshot(accountId, merge)).rejects.toMatchObject({ message: "snapshot-save-failed" });
+});
+it("does not resolve an acknowledgement before the database request finishes", async () => {
+  let commit!: (value: unknown) => void;
+  rpc.mockReturnValue(new Promise(resolve => { commit = resolve; }));
+  let acknowledged = false;
+  const pending = writeAccountSnapshot(accountId, merge).then(() => { acknowledged = true; });
+  await vi.waitFor(() => expect(rpc).toHaveBeenCalled());
+  expect(acknowledged).toBe(false);
+  commit({ data: { optionsRevision: 1 }, error: null });
+  await pending;
+  expect(acknowledged).toBe(true);
+});
+it("fails closed without a configured authenticated client", async () => {
   createClient.mockResolvedValueOnce(null);
   await expect(readAccountSnapshot(accountId)).rejects.toThrow("unavailable");
   createClient.mockResolvedValueOnce(null);
-  await expect(writeAccountSnapshot(accountId, snapshot)).rejects.toThrow("unavailable");
+  await expect(writeAccountSnapshot(accountId, merge)).rejects.toThrow("snapshot-save-failed");
 });

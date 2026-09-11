@@ -61,9 +61,9 @@ test("quota failure holds the phrase until the same local save succeeds", async 
     window.addEventListener("restore-storage", () => { IDBObjectStore.prototype.put = original; }, { once: true });
   });
   await page.getByRole("button", { name: "NEXT · 다음 프레이즈", exact: true }).click();
-  await expect(page.getByRole("alert", { name: "기기 저장 알림" })).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: "기기에 학습을 저장하지 못했습니다." })).toBeVisible();
   await expect(page.getByText("I wake up at seven.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "NEXT · 다음 프레이즈", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "NEXT · 다음 프레이즈", exact: true, includeHidden: true })).toBeDisabled();
   await page.evaluate(() => window.dispatchEvent(new Event("restore-storage")));
   await page.getByRole("button", { name: "기기 저장 재시도" }).click();
   await expect(page.getByText("I wash my face.", { exact: true })).toBeVisible();
@@ -134,7 +134,7 @@ test("network rejection preserves prior access but explicit 401 and 403 fence it
     await page.unroute("**/api/learner/local-access");
     await page.route("**/api/learner/local-access", route => route.fulfill({ status, json: { error: "unauthorized" } }));
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-    await expect(page.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("alertdialog", { name: "온라인 로그인이 필요합니다." })).toBeVisible();
     await expect(page.locator("audio")).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem("meta-shadowing:device-access:v1"))).toBeNull();
     if (status === 401) {
@@ -157,11 +157,11 @@ test("offline logout removes access and retains inaccessible local records", asy
     page.waitForNavigation({ waitUntil: "domcontentloaded" }),
     page.getByRole("button", { name: "로그아웃", exact: true }).click(),
   ]);
-  await expect(page.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: "온라인 로그인이 필요합니다." })).toBeVisible();
   expect(await page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
   await page.goto(player);
   await expect(page.locator('meta[name="device-offline-shell"]')).toHaveAttribute("content", "1");
-  await expect(page.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: "온라인 로그인이 필요합니다." })).toBeVisible();
   await expect(page.locator("audio")).toHaveCount(0);
   await setDeviceOffline(context, false);
   await loadPackageModules(page);
@@ -180,7 +180,7 @@ test("storage denial never creates an in-memory learning session", async ({ page
   });
   await page.goto(player);
   await page.getByRole("group", { name: "Morning Routine 다운로드" }).getByRole("button", { name: "Morning Routine 다운로드", exact: true }).click();
-  await expect(page.getByRole("alert", { name: "기기 저장 알림" })).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: "기기에 학습을 저장하지 못했습니다." })).toBeVisible();
   await expect(page.locator("audio")).toHaveCount(0);
 });
 
@@ -193,7 +193,7 @@ test("online logout with an unavailable remote endpoint cannot resurrect local a
   await expect(page).toHaveURL(/\/login$/);
   expect((await page.request.get("/api/learner/local-access")).status()).toBe(401);
   await page.goto("/offline");
-  await expect(page.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: "온라인 로그인이 필요합니다." })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("meta-shadowing:device-access:v1"))).toBeNull();
   await expect(page.locator("audio")).toHaveCount(0);
 });
@@ -227,7 +227,7 @@ test("static cache excludes authenticated documents, RSC, APIs and credentials",
     await expect.poll(() => fresh.evaluate(() => navigator.serviceWorker.controller !== null), { timeout: 15000 }).toBe(true);
     await setDeviceOffline(empty, true); await fresh.reload();
     await expect(fresh.locator('meta[name="device-offline-shell"]')).toHaveAttribute("content", "1");
-    await expect(fresh.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+    await expect(fresh.getByRole("alertdialog", { name: "온라인 로그인이 필요합니다." })).toBeVisible();
     await expect(fresh.locator("audio")).toHaveCount(0);
   } finally { await empty.close(); }
 });
