@@ -132,7 +132,16 @@ test("blocked identity storage shows the device gate and never pretends completi
   await page.addInitScript(() => Object.defineProperty(window, "localStorage", { get() { throw new DOMException("Storage blocked", "SecurityError"); } }));
   await signIn(page);
   await page.goto("/player?lesson=10000000-0000-4000-8000-000000000003&level=8&mode=automatic&lineGap=0");
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("기기 계정 저장 공간을 확인해 주세요.");
+  const failure = page.getByRole("alertdialog", { name: "기기 계정 저장 공간을 확인해 주세요.", exact: true });
+  await expect(failure).toBeVisible();
+  await expect(failure.getByRole("button", { name: "다시 확인", exact: true })).toBeEnabled();
+  // The root error dialog hides the page from accessibility queries. Inspect
+  // hidden content too so the dialog cannot mask an incorrectly started player.
+  await expect(page.getByRole("button", { name: /^CONTINUE/, includeHidden: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "레벨 8 학습 완료", includeHidden: true })).toHaveCount(0);
+  await expect(page.locator("audio")).toHaveCount(0);
+  await failure.getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(failure).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^CONTINUE/ })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "레벨 8 학습 완료" })).toHaveCount(0);
 });

@@ -16,18 +16,20 @@ for (const [stage, groupSize] of [[7, 3], [8, 4]] as const) {
     await page.waitForLoadState("networkidle");
     let release!: () => void;
     const held = new Promise<void>(resolve => { release = resolve; });
-    let requested!: () => void;
-    const started = new Promise<void>(resolve => { requested = resolve; });
-    await page.route("**/api/learner/preferences?*", async route => {
-      requested();
+    let requests = 0;
+    await page.route("**/api/learner/local-access", async route => {
+      requests++;
       await held;
       await route.continue();
     });
     try {
       await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-      await started;
+      await expect.poll(() => requests).toBeGreaterThan(0);
       await selected.click();
       await expect(selected).toHaveAttribute("aria-checked", "true");
+      const refreshed = page.waitForResponse(response => new URL(response.url()).pathname === "/api/learner/local-access");
+      release();
+      expect((await refreshed).status()).toBe(200);
     } finally { release(); }
     await page.waitForLoadState("networkidle");
     await expect(selected).toHaveAttribute("aria-checked", "true");

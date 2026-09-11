@@ -98,27 +98,29 @@ test("dictionary and sentence analysis popups use the pinned package while their
   }
 });
 
-test("each audio level durably crosses its phrase or grouped boundary offline and reloads there", async ({ page, context }) => {
+for (const level of [1, 2, 3, 4, 5] as const) test(`audio level ${level} durably crosses its offline boundary and retains it after reload and a level switch`, async ({ page, context }) => {
   await page.request.post("/api/auth", { data: { password: "integration-beta-password" } });
-  await openLearnerPage(page, "/player?lesson=10000000-0000-4000-8000-000000000002&level=1&stage=1");
+  await openLearnerPage(page, `/player?lesson=10000000-0000-4000-8000-000000000002&level=${level}&stage=${level * 2 - 1}`);
   const remote: string[] = [];
   page.on("request", request => { if (/\/api\/learner\/(practice|preferences)|\/api\/lessons\/.*\/audio\//.test(request.url())) remote.push(new URL(request.url()).pathname); });
-  for (let level = 1; level <= 5; level++) {
-    await page.goto(`/player?lesson=10000000-0000-4000-8000-000000000002&level=${level}&stage=${level * 2 - 1}`);
-    await context.setOffline(true);
-    await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
-    for (let cycle = 0; cycle < 3; cycle++) await confirmManualListen(page);
-    await page.getByRole("button", { name: level >= 4 ? "NEXT · 다음 묶음" : "NEXT · 다음 프레이즈", exact: true }).click();
-    await context.setOffline(false);
-    await page.reload();
-    await expect(page.getByRole("progressbar", { name: level >= 4 ? "묶음 진행" : "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
-  }
-  expect(remote).toEqual([]);
+  await context.setOffline(true);
+  await page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true }).click();
+  for (let cycle = 0; cycle < 3; cycle++) await confirmManualListen(page);
+  await page.getByRole("button", { name: level >= 4 ? "NEXT · 다음 묶음" : "NEXT · 다음 프레이즈", exact: true }).click();
+  await context.setOffline(false);
+  await page.reload();
+  await expect(page.getByRole("progressbar", { name: level >= 4 ? "묶음 진행" : "프레이즈 진행" })).toHaveAttribute("aria-valuenow", "1");
+  const saved = (await readDeviceJournal(page))!.runs.find(value => value.level === level)!;
+  expect([saved.nextUnit, saved.nextPhrase, saved.confirmedCycles]).toEqual(level >= 4 ? [1, 2, 0] : [1, 1, 0]);
+  // Keep cross-level isolation coverage: creating another run must not reset
+  // the completed boundary. Each real learning flow gets its own test budget.
+  const otherLevel = level === 5 ? 1 : level + 1;
+  await page.goto(`/player?lesson=10000000-0000-4000-8000-000000000002&level=${otherLevel}&stage=${otherLevel * 2 - 1}`);
+  await expect(page.getByRole("button", { name: `메타쉐도잉 레벨 ${otherLevel}`, exact: true })).toBeVisible();
   const runs = (await readDeviceJournal(page))!.runs;
-  for (let level = 1; level <= 5; level++) {
-    const run = runs.find(value => value.level === level)!;
-    expect([run.nextUnit, run.nextPhrase, run.confirmedCycles]).toEqual(level >= 4 ? [1, 2, 0] : [1, 1, 0]);
-  }
+  expect(runs.find(value => value.level === level)).toEqual(saved);
+  expect(runs.find(value => value.level === otherLevel)).toMatchObject({ nextUnit: 0, nextPhrase: 0, confirmedCycles: 0 });
+  expect(remote).toEqual([]);
 });
 
 for (const level of [6, 7, 8] as const) test(`rapid level ${level} pauses, resumes, saves one line offline and reloads at the next line`, async ({ page, context }) => {
