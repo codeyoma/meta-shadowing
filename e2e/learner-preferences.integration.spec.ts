@@ -6,14 +6,10 @@ import { assertLocalSupabaseUrl, promoteLocalSessionToGoogle } from "./fixtures/
 
 test.skip(process.env.ADMIN_SUPABASE_INTEGRATION !== "1" || process.env.CLOUD_LEARNING_ENABLED !== "1", "requires isolated cloud-preferences integration");
 
-async function saveSilently(page: Page, action: () => Promise<unknown>) {
-  const receipt = page.waitForResponse(response => new URL(response.url()).pathname === "/api/learner/preferences" && response.request().method() === "PATCH");
-  await action();
-  const response = await receipt;
-  expect(response.status()).toBe(200);
-  await response.finished();
+async function expectQuietNavigation(page: Page) {
   await expect(page.getByText(/^(저장 중…|계정에 저장했습니다\. 다음 학습부터 적용됩니다\.)$/)).toHaveCount(0);
   await expect(page.getByRole("alert", { name: "계정 설정 알림" })).toHaveCount(0);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
 }
 
 test("legacy preference API and selection remain account-isolated for the server player boundary", async ({ browser, baseURL, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent }, testInfo) => {
@@ -128,25 +124,30 @@ test("legacy preference API and selection remain account-isolated for the server
       expect((await service.from("learner_preferences").select("user_id").eq("user_id", newAccount.id)).data).toEqual([]);
     });
 
-    await test.step("last language and non-default lesson persist; refocusing an older URL never writes it back", async () => {
+    let navigationPreferenceWrites = 0;
+    for (const page of [pageA, pageB]) page.on("request", request => {
+      if (new URL(request.url()).pathname === "/api/learner/preferences" && request.method() === "PATCH") navigationPreferenceWrites += 1;
+    });
+    await test.step("navigation stays device-local and refocusing preserves the selected lesson without legacy writes", async () => {
       await pageA.goto("/languages");
-      let savedSelection = pageA.waitForResponse(response => response.url().endsWith("/api/learner/preferences") && response.request().method() === "PATCH");
       await pageA.getByRole("link", { name: /일본어/ }).click();
-      expect((await savedSelection).status()).toBe(200);
-      await expect(pageA.getByLabel("계정 설정 알림")).toHaveCount(0);
-      savedSelection = pageA.waitForResponse(response => response.url().endsWith("/api/learner/preferences") && response.request().method() === "PATCH");
+      await expect(pageA.getByRole("heading", { name: "일본어 레슨" })).toBeVisible();
+      await expectQuietNavigation(pageA);
       await pageA.getByRole("link", { name: /Account lesson 1/ }).and(pageA.locator(`[href="/lessons/${lessonIds[1]}/stages"]`)).click();
-      expect((await (await savedSelection).json()).profile.selection.lessonId).toBe(lessonIds[1]);
-      await pageB.goto("/lessons");
-      await expect(pageB.getByRole("heading", { name: "일본어 레슨" })).toBeVisible();
-      await expect(pageB.getByRole("link", { name: "스테이지", exact: true })).toHaveAttribute("href", `/lessons/${lessonIds[1]}/stages`);
-      await saveSilently(pageB, () => pageB.goto(`/lessons/${lessonIds[0]}/stages`));
-      const refreshed = pageA.waitForResponse(response => response.url().includes("/api/learner/preferences?") && response.request().method() === "GET");
+      await expect(pageA).toHaveURL(new RegExp(`/lessons/${lessonIds[1]}/stages(?:\\?|$)`));
+      await pageB.goto(`/lessons?language=english&lesson=${lessonIds[0]}`);
+      await expect(pageB.getByRole("heading", { name: "영어 레슨" })).toBeVisible();
+      await expect(pageB.getByRole("link", { name: "스테이지", exact: true })).toHaveAttribute("href", `/lessons/${lessonIds[0]}/stages`);
+      const refreshed = pageA.waitForResponse(response => new URL(response.url()).pathname === "/api/learner/local-access" && response.request().method() === "GET");
       await pageA.evaluate(() => window.dispatchEvent(new Event("focus")));
-      await refreshed;
+      expect((await refreshed).status()).toBe(200);
       await pageA.waitForLoadState("networkidle");
+      await expect(pageA.getByRole("link", { name: "스테이지", exact: true })).toHaveAttribute("href", `/lessons/${lessonIds[1]}/stages`);
       const value = await service.from("learner_preferences").select("selection").eq("user_id", a.id).single();
-      expect(value.data?.selection).toEqual({ language: "english", lessonId: lessonIds[0] });
+      expect(value.error).toBeNull();
+      expect(value.data?.selection).toBeNull();
+      expect(navigationPreferenceWrites).toBe(0);
+      await expectQuietNavigation(pageA);
       await pageA.goto(`/player?lesson=${lessonIds[0]}`);
       // This catalog-only fixture has no installable audio. Entry must stop at
       // the package gate, not bypass acquisition to test account selection.
@@ -155,32 +156,34 @@ test("legacy preference API and selection remain account-isolated for the server
       await pageA.goto("/languages");
     });
 
-    await test.step("a last-selection conflict displays the server choice and never resaves the rejected URL", async () => {
-      await pageA.getByRole("link", { name: "언어", exact: true }).click();
-      await pageA.waitForLoadState("networkidle");
-      await pageA.route("**/api/learner/preferences", async route => {
-        const before = (await (await a.context.request.get("/api/learner/preferences")).json()).profile;
-        expect((await a.context.request.patch("/api/learner/preferences", { data: { accountId: a.id, revision: before.revision, changes: { selection: { language: "german", lessonId: null } } } })).status()).toBe(200);
-        await route.continue();
-      });
-      // The preceding scenario can leave the same alert visible. Wait for this
-      // request's receipt before removing the route that creates the conflict.
-      const conflict = pageA.waitForResponse(response => new URL(response.url()).pathname === "/api/learner/preferences" && response.request().method() === "PATCH");
+    await test.step("legacy selection conflicts preserve server data without redirecting device navigation", async () => {
+      const before = (await (await a.context.request.get("/api/learner/preferences")).json()).profile;
+      const selection = { language: "german", lessonId: null };
+      expect((await a.context.request.patch("/api/learner/preferences", { data: { accountId: a.id, revision: before.revision, changes: { selection } } })).status()).toBe(200);
+      const conflict = await a.context.request.patch("/api/learner/preferences", { data: {
+        accountId: a.id, revision: before.revision, changes: { selection: { language: "japanese", lessonId: lessonIds[1] } },
+      } });
+      expect(conflict.status()).toBe(409);
+      expect((await conflict.json()).profile.selection).toEqual(selection);
       await pageA.getByRole("link", { name: /일본어/ }).click();
-      expect((await conflict).status()).toBe(409);
-      await expect(pageA.getByRole("alert", { name: "계정 설정 알림" })).toContainText("최신 설정");
-      await pageA.unroute("**/api/learner/preferences");
-      await expect(pageA.getByRole("heading", { name: "독일어 레슨" })).toBeVisible();
+      await expect(pageA.getByRole("heading", { name: "일본어 레슨" })).toBeVisible();
+      await pageA.waitForLoadState("networkidle");
+      await expectQuietNavigation(pageA);
+      expect(navigationPreferenceWrites).toBe(0);
       expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.overrides.speed).toBe(2);
-      expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.selection).toEqual({ language: "german", lessonId: null });
+      expect((await (await a.context.request.get("/api/learner/preferences")).json()).profile.selection).toEqual(selection);
     });
 
     await test.step("account switches hide stale data before another profile is loaded", async () => {
+      await pageB.getByRole("button", { name: "설정", exact: true }).click();
+      await expect(pageB.getByLabel("재생속도", { exact: true })).toBeEnabled();
+      await pageB.getByLabel("재생속도", { exact: true }).selectOption("3");
+      await expect(pageB.getByLabel("재생속도", { exact: true })).toHaveValue("3");
       await b.clearCookies();
       await b.addCookies(await c.context.cookies());
       await pageB.evaluate(() => window.dispatchEvent(new Event("focus")));
       await expect(pageB.getByLabel("재생속도")).toHaveCount(0);
-      await expect(pageB.getByText("온라인 로그인이 필요합니다.", { exact: true })).toBeVisible();
+      await expect(pageB.getByRole("alertdialog", { name: "온라인 로그인이 필요합니다.", exact: true })).toBeVisible();
       expect(await pageB.evaluate(() => localStorage.getItem("meta-shadowing:device-access:v1"))).toBeNull();
       // The outer device-access gate now invalidates the old account before
       // the legacy preference alert can render. Re-enter without A's URL.
@@ -189,6 +192,7 @@ test("legacy preference API and selection remain account-isolated for the server
       await pageB.waitForLoadState("networkidle");
       expect((await (await c.context.request.get("/api/learner/preferences")).json()).profile.selection).toBeNull();
       await pageB.getByRole("button", { name: "설정", exact: true }).click();
+      await expect(pageB.getByLabel("재생속도")).toBeEnabled();
       await expect(pageB.getByLabel("재생속도")).toHaveValue("1");
     });
     expect(await pageA.evaluate(() => ({ ...localStorage }))).toMatchObject({

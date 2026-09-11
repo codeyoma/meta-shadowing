@@ -405,9 +405,14 @@ test("blocked package storage fails closed without creating a media player", asy
       };
     });
     await page.goto(`/player?lesson=${fixture.lessonId}&level=1&stage=1`);
-    await expect(page.getByRole("alert").filter({ hasText: "다운로드 저장 공간을 확인하지 못했습니다" })).toBeVisible();
+    const failure = page.getByRole("alertdialog", { name: "다운로드 저장 공간을 확인하지 못했습니다.", exact: true });
+    await expect(failure).toBeVisible();
+    await expect(failure.getByRole("button", { name: "다운로드 다시 확인", exact: true })).toBeEnabled();
     await expect(page.locator("audio")).toHaveCount(0);
+    // Dismissing an explanation must not remove the storage gate.
+    await failure.getByRole("button", { name: "닫기", exact: true }).click();
     await expect(page.getByRole("button", { name: "Package book 다운로드", exact: true })).toBeDisabled();
+    await expect(page.locator("audio")).toHaveCount(0);
   } finally { await fixture.cleanup(); }
 });
 

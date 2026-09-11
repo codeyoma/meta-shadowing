@@ -7,6 +7,7 @@ const learnerPreferences = process.argv.includes("--learner-preferences");
 const cloudPractice = process.argv.includes("--cloud-practice");
 const mp3Cache = process.argv.includes("--mp3-cache");
 const learnerUI = process.argv.includes("--learner-ui");
+const explicitProject = process.argv.some(argument => argument === "--project" || argument.startsWith("--project="));
 const workerOptions = process.argv.flatMap((argument, index) => argument === "--workers"
   ? [process.argv[index + 1]] : argument.startsWith("--workers=") ? [argument.slice(10)] : []);
 if (learnerUI && workerOptions.some(value => value !== "1")) {
@@ -68,7 +69,7 @@ const result = runPlaywright(
     "e2e/lesson-publication.integration.spec.ts",
     "e2e/session-defaults.integration.spec.ts",
     "e2e/lesson-lifecycle.integration.spec.ts"]),
-    "--project=desktop",
+    ...(explicitProject ? [] : ["--project=desktop"]),
     "--workers=1",
     `--output=${join(tmpdir(), `meta-shadowing-integration-${process.pid}`)}`,
     ...process.argv.slice(2).filter(argument => !["--learner-preferences", "--cloud-practice", "--mp3-cache", "--learner-ui"].includes(argument))

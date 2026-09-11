@@ -57,9 +57,14 @@ for (const level of [1,2,3,4,5,6,7,8]) test(`level ${level} failed local jump re
   await page.getByRole("button", { name: "학습 메뉴", exact: true }).click();
   await page.getByRole("button", { name: "문장 목록", exact: true }).click();
   await page.getByRole("button", { name: /We sit at the table/ }).click();
-  await expect(page.getByRole("button", { name: "기기 저장 재시도", exact: true })).toBeVisible();
+  const storageFailure = page.getByRole("alertdialog", { name: "기기에 학습을 저장하지 못했습니다.", exact: true });
+  await expect(storageFailure).toBeVisible();
+  await expect(storageFailure.getByRole("button", { name: "기기 저장 재시도", exact: true })).toBeVisible();
   expect((await readDeviceJournal(page))!.runs[0]).toEqual(initial);
-  await expect(page.getByRole("progressbar").first()).toHaveAttribute("aria-valuenow", "0");
+  // The blocking alert hides the player from assistive technology. Inspect its
+  // unchanged DOM state without treating the background as an available control.
+  await expect(page.getByRole("progressbar")).toHaveCount(0);
+  await expect(page.getByRole("progressbar", { includeHidden: true }).first()).toHaveAttribute("aria-valuenow", "0");
   const other = await browser.newContext({ baseURL, ignoreHTTPSErrors: true, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent,
     storageState: { cookies: await page.context().cookies(), origins: [] } });
   try {
@@ -69,7 +74,8 @@ for (const level of [1,2,3,4,5,6,7,8]) test(`level ${level} failed local jump re
     expect(independent.runId).not.toBe(initial.runId);
     expect(independent.nextUnit).toBe(0);
     await page.evaluate(() => window.dispatchEvent(new Event("restore-storage")));
-    await page.getByRole("button", { name: "기기 저장 재시도", exact: true }).click();
+    await storageFailure.getByRole("button", { name: "기기 저장 재시도", exact: true }).click();
+    await expect(storageFailure).toBeHidden();
     await expect(page.getByRole("progressbar").first()).toHaveAttribute("aria-valuenow", level === 4 || level === 5 ? "1" : "2");
     await page.reload();
     const saved = (await readDeviceJournal(page))!;

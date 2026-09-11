@@ -6,6 +6,12 @@ import { loadPackageModules } from "./package-store";
 
 const pendingRequests = new WeakMap<Page, Set<Request>>();
 export async function pauseCloudClock(page: Page, time: Date | number) {
+  // Downloading from the stage drawer can finish before the independent shell
+  // install. Fast-forwarding then fires its 10-second timeout in virtual time,
+  // creating a real error dialog while the worker is still doing real I/O.
+  if (process.env.PLAYWRIGHT_PRODUCTION === "1") {
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.state), { timeout: 15000 }).toBe("activated");
+  }
   await page.clock.pauseAt(time);
   // Entry must be ready before advancing a timed session.
   await expect(page.getByRole("button", { name: /CONTINUE|PAUSE/ }).first()).toBeEnabled();

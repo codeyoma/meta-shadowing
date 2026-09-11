@@ -57,7 +57,9 @@ jobs:
     env:
       SAFE_CI_ARTIFACT_DIR: ci-artifacts
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Both viewports now contain over 900 real-DB learner cases. The previous
+    # 20-minute suite cap left 50-95 cases unrun per shard even without a hang.
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +82,7 @@ jobs:
       - name: Configure this runner's disposable cloud database
         run: cp supabase/config.test.toml supabase/config.toml
       - run: npx --yes supabase@2.116.0 start
-      - run: npm run test:browser -- --workers=1 --reporter=line --global-timeout=1200000 --shard=${{ matrix.shard }}/4
+      - run: npm run test:browser -- --workers=1 --reporter=line --global-timeout=2400000 --shard=${{ matrix.shard }}/4
       - name: Retain credential-safe browser results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

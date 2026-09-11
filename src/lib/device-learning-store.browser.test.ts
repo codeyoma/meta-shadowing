@@ -32,6 +32,24 @@ beforeEach(async () => {
 afterEach(async () => { await context?.close(); });
 
 describe.skipIf(!enabled)("durable learning outbox in real IndexedDB", () => {
+  it("saves distinct microsecond package versions and retains them through reload and sync capture", async () => {
+    await page.evaluate(async () => {
+      // Real publication versions have microseconds; these differ within one millisecond.
+      const lesson = { id: "microsecond-lesson", name: "Fictional lesson", localizedName: "Lesson", language: "english" as const, phraseCount: 10, sectionCount: 0, entries: [], phrases: [] };
+      const first = await window.deviceStore.startDeviceRun(window.testWriter, { ...lesson, version: "2026-09-11T01:34:02.123456+00:00" }, 1);
+      await window.deviceStore.saveDeviceRun(window.testWriter, { ...first, nextPhrase: 10, nextUnit: 10, completedAt: "2026-09-11T02:00:00.123Z" }, 0);
+      await window.deviceStore.startDeviceRun(window.testWriter, { ...lesson, version: "2026-09-11T01:34:02.123457+00:00" }, 1);
+    });
+    await page.reload(); await page.addScriptTag({ content: bundle });
+    const result = await page.evaluate(async () => {
+      const access = window.deviceAccess.readDeviceAccess()!;
+      return { record: await window.deviceStore.readDeviceLearningRecord(access.accountId), batch: await window.deviceStore.captureLearningSyncBatch(access) };
+    });
+    expect(result.record?.runs.find(run => run.lessonId === "microsecond-lesson")?.lessonVersion).toBe("2026-09-11T01:34:02.123457+00:00");
+    expect(result.record?.history[0].lessonVersion).toBe("2026-09-11T01:34:02.123456+00:00");
+    expect(result.batch?.request.runs.find(run => run.lessonId === "microsecond-lesson")?.lessonVersion).toBe("2026-09-11T01:34:02.123457+00:00");
+    expect(result.batch?.request.history[0].lessonVersion).toBe("2026-09-11T01:34:02.123456+00:00");
+  });
   it("migrates schema-2 learning once, including history and days, and never reseeds after ACK", async () => {
     const result = await page.evaluate(async () => {
       const record = (await window.deviceStore.readDeviceLearningRecord(window.testWriter.accountId))!;

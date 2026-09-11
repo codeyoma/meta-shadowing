@@ -41,6 +41,21 @@ function localRecord(): DeviceLearningRecord {
 }
 
 describe("portable account snapshot", () => {
+  it.each([
+    "2026-09-11T01:34:02.1234+00:00",
+    "2026-09-11T01:34:02.12345+00:00",
+    "2026-09-11T01:34:02.123456+00:00",
+    "2026-09-11T10:34:02.123456+09:00",
+  ])("preserves the exact PostgreSQL lesson version %s on active and completed runs", lessonVersion => {
+    const snapshot = exportAccountSnapshot(localRecord());
+    snapshot.runs[0].lessonVersion = lessonVersion;
+    snapshot.history[0].lessonVersion = lessonVersion;
+    const parsed = parseAccountSnapshot(snapshot, accountId);
+    expect(parsed.runs[0].lessonVersion).toBe(lessonVersion);
+    expect(parsed.history[0].lessonVersion).toBe(lessonVersion);
+    expect(parsed.history[0].completedAt).toBe("2026-09-09T12:34:56.000Z");
+  });
+
   it("round-trips every level and history through an explicit private-field projection", () => {
     const snapshot = exportAccountSnapshot(localRecord());
     const encoded = JSON.stringify(snapshot);
@@ -73,7 +88,14 @@ describe("portable account snapshot", () => {
     ["invalid settings value", (value: Record<string, unknown>) => { (value.settings as Record<string, unknown>).groupSize = 9; }],
     ["invalid lesson timestamp", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].lessonVersion = "yesterday"; }],
     ["impossible lesson timestamp", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].lessonVersion = "2026-02-30T00:00:00Z"; }],
+    ["overprecise lesson timestamp", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].lessonVersion = "2026-09-11T01:34:02.1234567Z"; }],
+    ["impossible microsecond lesson date", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].lessonVersion = "2026-02-30T01:34:02.123456Z"; }],
+    ["microsecond lesson without timezone", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].lessonVersion = "2026-09-11T01:34:02.123456"; }],
+    ["invalid microsecond lesson hour", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].lessonVersion = "2026-09-11T24:34:02.123456Z"; }],
+    ["invalid microsecond lesson offset", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].lessonVersion = "2026-09-11T01:34:02.123456+24:00"; }],
     ["invalid completion timestamp", (value: Record<string, unknown>) => { (value.history as Record<string, unknown>[])[0].completedAt = "never"; }],
+    ["four-digit completion timestamp", (value: Record<string, unknown>) => { (value.history as Record<string, unknown>[])[0].completedAt = "2026-09-11T01:34:02.1234Z"; }],
+    ["six-digit completion timestamp", (value: Record<string, unknown>) => { (value.history as Record<string, unknown>[])[0].completedAt = "2026-09-11T01:34:02.123456Z"; }],
     ["negative counter", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].activeMs = -1; }],
     ["unsafe counter", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].nextPhrase = Number.MAX_SAFE_INTEGER + 1; }],
     ["too many cycles", (value: Record<string, unknown>) => { (value.runs as Record<string, unknown>[])[0].confirmedCycles = 6; }],

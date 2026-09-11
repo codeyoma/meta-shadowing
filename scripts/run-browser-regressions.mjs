@@ -9,7 +9,9 @@ if (!process.env.SUPABASE_TEST_WORKDIR && process.env.CI !== "true") {
 // Learner UI regressions use real Auth + SQL, including their setup records.
 for (const command of [
   ["npx", ["playwright", "test", "--pass-with-no-tests", ...args]],
-  ["node", ["scripts/run-admin-persistence-integration.mjs", "--learner-ui", "--project=mobile", "--pass-with-no-tests", ...args]],
+  // Keep both existing viewports explicit; the integration runner now honors
+  // project overrides rather than silently adding its desktop default.
+  ["node", ["scripts/run-admin-persistence-integration.mjs", "--learner-ui", "--project=mobile", "--project=desktop", "--pass-with-no-tests", ...args]],
 ]) {
   const status = command[0] === "npx" ? runPlaywright(command[1].slice(2))
     // Offline recovery needs the production shell's complete static dependency

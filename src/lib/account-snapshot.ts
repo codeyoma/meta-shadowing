@@ -75,10 +75,11 @@ function identifier(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && Array.from(value).length <= MAX_IDENTIFIER_LENGTH;
 }
 
-function timestamp(value: unknown): value is string {
+function timestamp(value: unknown, maxFractionDigits: 3 | 6 = 3): value is string {
   if (typeof value !== "string") return false;
-  const match = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(?:Z|([+-])(\d{2}):(\d{2}))$/);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|([+-])(\d{2}):(\d{2}))$/);
   if (!match || !validStudyDay(match[1]) || Number(match[2]) > 23 || Number(match[3]) > 59 || Number(match[4]) > 59) return false;
+  if ((value.match(/\.(\d+)/)?.[1].length ?? 0) > maxFractionDigits) return false;
   if (match[5] && (Number(match[6]) > 23 || Number(match[7]) > 59)) return false;
   return Number.isFinite(Date.parse(value));
 }
@@ -103,7 +104,8 @@ function parseSettings(value: unknown, complete: boolean): Partial<SessionSettin
 function parseRun(value: unknown, completed: boolean): SnapshotRun | SnapshotCompletion {
   if (!object(value) || !exactKeys(value, completed ? completionKeys : runKeys)) throw new SnapshotError("Account snapshot run fields are invalid");
   const level = value.level;
-  if (!identifier(value.runId) || !identifier(value.lessonId) || !timestamp(value.lessonVersion)
+  // PostgreSQL publication versions retain microseconds as exact package identities.
+  if (!identifier(value.runId) || !identifier(value.lessonId) || !timestamp(value.lessonVersion, 6)
     || typeof value.lessonName !== "string" || !isLanguage(value.language)
     || !Number.isSafeInteger(level) || Number(level) < 1 || Number(level) > 8 || !isStageForLevel(value.stage, Number(level))
     || !counter(value.nextUnit) || !counter(value.nextPhrase) || !counter(value.activeMs)

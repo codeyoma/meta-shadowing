@@ -60,10 +60,13 @@ test("corrupt package audio blocks entry and a verified retry starts with no com
   await page.goto("/player?lesson=10000000-0000-4000-8000-000000000001&level=1");
   const row = page.getByRole("group", { name: / 다운로드$/ });
   await row.getByRole("button", { name: / 다운로드$/ }).click();
-  await expect(row.getByRole("button", { name: / 이어받기$| 다시 받기$/ })).toBeVisible();
+  const failure = page.getByRole("alertdialog", { name: "레슨을 다운로드하지 못했습니다.", exact: true });
+  await expect(failure).toBeVisible();
+  await expect(failure.getByRole("button", { name: "다시 받기", exact: true })).toBeEnabled();
   await expect(page.locator("audio")).toHaveCount(0);
   corrupt = false;
-  await row.getByRole("button", { name: / 이어받기$| 다시 받기$/ }).click();
+  await failure.getByRole("button", { name: "다시 받기", exact: true }).click();
+  await expect(failure).toHaveCount(0);
   await expect(page.getByRole("button", { name: "CONTINUE · 첫 원음 듣기", exact: true })).toBeEnabled();
   await expect(page.getByLabel("완료한 듣기")).toHaveText("필수 0 / 3");
   await page.keyboard.press("Space");
