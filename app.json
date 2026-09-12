@@ -8,8 +8,7 @@
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "platforms": [
-      "ios",
-      "android"
+      "ios"
     ],
     "ios": {
       "deploymentTarget": "26.0",
@@ -18,9 +17,6 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
-    },
-    "android": {
-      "package": "app.metashadowing.prototype"
     },
     "plugins": [
       "./modules/package-store/app.plugin.js",

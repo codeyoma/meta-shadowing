@@ -4,11 +4,15 @@
   old PWA, Next.js, browser-storage, HTML-audio, backend, or admin implementation.
 - Respond in English unless the user explicitly requests another language.
 - Read docs/native-rebuild.md and docs/learning-contract.md before changing behavior.
-- M1 is an iPhone-first, local-only prototype. No authentication, commerce, cloud
-  synchronization, or hosted administration is implemented in this milestone.
-- The owner-approved next round is Apple-only (#44–#52), minimum iOS 26.0.
-  Read docs/apple-only-foundation.md. #44 is local foundation only; later tickets
-  separately implement StoreKit 2, Apple-hosted assets and private CloudKit.
+- The product roadmap is iPhone first, Android later (owner update 2026-09-13).
+  Before platform, purchase, delivery, or sync changes, read the current scope in
+  docs/apple-only-foundation.md. #44–#52 target iOS 26+; Android is planned, not
+  implemented or an acceptance gate for this phase. Keep current build targets iOS-only.
+- #44 is the local foundation. #45 StoreKit and #49 private CloudKit have local
+  implementations with real-service/device acceptance still pending. Apple-hosted
+  delivery remains separate work. Keep Apple service adapters outside shared
+  learning contracts; future Android services and cross-platform ownership/sync
+  require separate decisions, not speculative infrastructure now.
   Never use Supabase in the new app; the email/OTP proposal is superseded.
 - Supabase records, Auth, and Storage are protected: no hosted mutations.
 - Keep all Git history. Feature branches use codex/ and target dev; main releases

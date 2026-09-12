@@ -6,10 +6,19 @@ Supabase data and hosted services have not been modified.
 
 ## Current scope
 
-The approved next architecture is [Apple-only](docs/apple-only-foundation.md),
-with minimum iOS 26.0. #44 introduces explicit package/version learning context;
-StoreKit, Apple-hosted delivery and CloudKit remain later tickets, not active
-services. The Supabase/email-OTP proposal is superseded and must not be used.
+The product roadmap is [iPhone first, Android later](docs/apple-only-foundation.md).
+The current build and #44–#52 acceptance target iOS 26.0 or later. Android is a
+planned expansion, not implemented support or a gate for the iPhone phase.
+Its billing, delivery, identity and cross-platform ownership/sync require later
+decisions. Shared learning contracts remain separate from Apple service adapters.
+The Supabase/email-OTP proposal is superseded and must not be used.
+
+#44 provides explicit package/version learning context. #45 implements StoreKit 2
+purchase/restore and #49 implements private CloudKit progress backup/recovery.
+Real Apple sandbox and CloudKit device acceptance remain open; local tests do not
+prove them. Apple-hosted commercial delivery remains separate work (#46–#48).
+See [purchase setup](docs/storekit-purchases.md) and
+[CloudKit setup and limits](docs/cloudkit-progress.md) before testing these services.
 
 - Icon-only Books / Stages / Settings native tabs, with a shared language flag,
   level/XP bar and streak header. Player remains outside the browsing shell.
@@ -29,8 +38,9 @@ services. The Supabase/email-OTP proposal is superseded and must not be used.
 
 This is **not yet a completed phone-tested milestone**. See
 [verification](docs/verification.md) and the [roadmap](docs/native-rebuild.md).
-Remaining methods, dictionary/syntax, accounts, cloud sync, backend/admin,
-purchases, and additional platforms are intentionally deferred.
+Remaining methods, dictionary/syntax, commercial delivery, multi-device
+reconciliation and additional platforms are deferred. Purchase and backup
+implementations are present but not yet fully accepted on real Apple services.
 
 ## Run locally
 
@@ -75,8 +85,9 @@ establish independent offline launch acceptance. #44 verifies sample continuity;
 #48/#52 cover hosted recovery and end-to-end acceptance. #42/#43 were deleted
 by explicit owner request, not completed.
 After installing the sample, learning reads device files and SQLite only.
-Uninstalling the app may remove the package and all local progress; M1 has no
-cloud backup.
+Uninstalling the app may remove the package and all unsynchronized local progress.
+The optional #49 backup can recover only confirmed synchronized progress; its
+real-device clean-install acceptance is still pending.
 
 ## Development and recovery
 

@@ -1,4 +1,31 @@
-# Apple-only foundation — #44
+# iPhone-first foundation — #44
+
+## Current platform direction — 2026-09-13
+
+The owner confirmed **iPhone first, Android later**. "Apple-only" in the original
+2026-09-12 decision describes the services and acceptance scope of #44–#52, not
+a permanent restriction on the product. This file keeps its existing path so
+historical links remain valid.
+
+- Deliver and verify the iPhone phase on iOS 26+ first. Keep maintained Expo build
+  targets iOS-only until an Android implementation and its verification exist.
+- Android is a planned later phase. Its billing, content delivery, identity,
+  backup/sync, migration and cross-platform purchase policy remain undecided.
+  Apple purchases and private iCloud backups do not imply Android access or sync.
+- Keep shared learning rules, package/version identities, local progress formats
+  and tests independent of Apple service adapters. Preserve existing native
+  boundaries; this decision does not require a speculative portability rewrite.
+- StoreKit 2, Apple-hosted assets and private CloudKit remain the approved iPhone
+  services. The no-Supabase constraint remains in force, including later planning.
+- #44 is completed local foundation work. #45 purchases and #49 CloudKit backup
+  are implemented locally; their real-service/device acceptance remains open.
+  #46–#48 delivery and #50–#52 further recovery/acceptance remain separate work.
+
+Android implementation, new hosted services, cross-platform entitlements and
+public release each require a separately scoped decision. Android is not a
+completion requirement for the current iPhone tickets.
+
+## Original #44 scope — 2026-09-12
 
 Approved 2026-09-12. This decision supersedes the unimplemented private-package
 and email-OTP proposal. The native app must not use Supabase: no SDK, credentials,

@@ -1,6 +1,16 @@
 # Native rebuild: decisions and milestones
 
-## Current execution update — 2026-09-12
+## Current execution update — 2026-09-13
+
+The product is **iPhone first, Android later**. The current #44–#52 tickets and
+build target remain iOS 26+; Android is a planned later phase, not an iPhone
+acceptance gate. See the [platform direction](apple-only-foundation.md) for
+service boundaries and the decisions still needed before Android development.
+StoreKit #45 and private CloudKit #49 now have local implementations; their
+real-service/device acceptance is still open. Apple-hosted delivery remains
+separate work. Supabase remains excluded and native CI migration is unresolved.
+
+## Historical execution update — 2026-09-12
 
 The owner approved [Apple-only development](apple-only-foundation.md), tickets
 #44–#52, and starting #44 on the existing native branch. Minimum iOS is 26.0.
@@ -43,9 +53,10 @@ the [simulator guide](simulator-development.md) for #39.
 - Start fresh in a new workspace/worktree and a new codex-prefixed branch. Keep
   Git history and repository identity. Follow the repository's dev-based feature
   workflow; do not rewrite history or reuse the current dirty checkout as if clean.
-- iPhone is first. iPad, Mac, and Android are later milestones; their order and
-  delivery approach are not yet decided. Mac support is a separate feasibility
-  decision, not an assumed automatic result of choosing Expo.
+- iPhone is first; Android is a confirmed later expansion goal. Android timing,
+  services and cross-platform ownership/sync need a separate design decision.
+  iPad and Mac remain deferred with no committed order; Mac support is a separate
+  feasibility decision, not an automatic result of choosing Expo.
 - The app provides a learning player and learning-progress management.
 - Customers buy learning packages with one-time purchases, not a subscription.
 - First delivery target: an installed, working app on the owner's iPhone, not a
@@ -136,7 +147,8 @@ Native learning product
 |   |-- Carry forward quiet local-first behavior [candidate for confirmation]
 |   `-- Merge, account isolation, restoration, old-data migration [later round]
 |-- Commercial content [rights unverified; release checkpoint]
-`-- iPad / Mac / Android [deferred; order and implementation open]
+|-- Android [planned after iPhone; service design and timing open]
+`-- iPad / Mac [deferred; feasibility and order open]
 ```
 
 ## Milestones
@@ -152,7 +164,7 @@ functional scope and acceptance criteria will be refined through the interview.
 | M3: new content services, accounts, and synchronization | Build replacement content preparation/distribution and minimal administration; implement approved sign-in, account isolation, quiet uploads, and restoration | Newly built service contracts and authorization verified; offline/reconnect recovery; no duplicate history or cross-account transfer; no routine success notifications |
 | M4: paid package ownership | Store sandbox purchases, server-verified access, restoration, refunds/revocation behavior | Purchase, cancellation, pending transaction, reinstall/restore, and access failure tests; offline policy explicitly approved |
 | M5: distribution readiness | TestFlight validation followed by a separately approved App Store release | Rights/source review, required attribution, privacy disclosures, account/data controls, store review checklist, and real-device regression tests |
-| M6: additional platforms | iPad, Mac, and Android in a separately chosen order | Per-platform design, playback/storage, sign-in, purchases, restoration, and synchronization acceptance |
+| M6: Android expansion; other platforms deferred | Android after the iPhone phase; iPad/Mac remain separate decisions | Approve Android billing, delivery, identity, progress migration and cross-platform policies; verify native playback/storage, purchases, restoration and sync on Android devices before declaring support |
 
 No launch dates, paid service purchases, store submission, or automatic support
 for later platforms are promised by this draft.
