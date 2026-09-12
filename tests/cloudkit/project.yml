@@ -1,0 +1,38 @@
+name: ProgressCloudTests
+options:
+  deploymentTarget:
+    iOS: '26.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  CloudTestHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.progresscloud.tests
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  ProgressCloudTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - path: ../../modules/progress-cloud/ios
+        excludes: [ProgressCloudModule.swift, '*.podspec']
+    dependencies:
+      - target: CloudTestHost
+      - sdk: CloudKit.framework
+schemes:
+  ProgressCloudTests:
+    build:
+      targets:
+        CloudTestHost: all
+        ProgressCloudTests: [test]
+    test:
+      targets: [ProgressCloudTests]

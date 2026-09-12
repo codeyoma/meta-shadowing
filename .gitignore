@@ -4,7 +4,9 @@ dist/
 ios/
 android/
 !modules/package-store/ios/
+!modules/progress-cloud/ios/
 tests/storekit/*.xcodeproj/
+tests/cloudkit/*.xcodeproj/
 .DS_Store
 *.log
 *.tsbuildinfo
