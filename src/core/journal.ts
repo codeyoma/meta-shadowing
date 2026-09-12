@@ -9,7 +9,7 @@ export interface Database {
 
 export class Journal {
   readonly progress: Progression;
-  constructor(private db: Database, now: () => Date = () => new Date()) {
+  constructor(private db: Database, now: () => Date = () => new Date(), private onSaved?: () => void) {
     db.exec(`PRAGMA journal_mode = WAL;
       PRAGMA synchronous = FULL;
       CREATE TABLE IF NOT EXISTS checkpoints (
@@ -38,6 +38,7 @@ export class Journal {
         this.db.run('INSERT OR IGNORE INTO completions (package,stage,run) VALUES (?,?,?)', packageKey, state.stage, state.runId);
         if (!existing && identity) this.progress.record({ ...identity, stage: state.stage, run: state.runId });
       }
+      this.onSaved?.();
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
