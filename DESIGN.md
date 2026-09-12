@@ -1,423 +1,404 @@
 ---
-version: alpha
-name: Duolingo
-website: "https://www.duolingo.com"
-ref: "https://www.shadcn.io/design/duolingo"
-description: >-
-  A consumer-friendly language-learning system rendered on a pure-white canvas with a single saturated owl-green CTA pill ("#58cc02") that carries every primary action, a cartoon-illustration decoration layer of mascots and isometric phones, and two dedicated typefaces — Feather Bold for display headlines at 48–64px and DIN Round at 13–19px for body and uppercase 0.8px-tracked button labels. The system rejects the polite grayscale tone that other education brands lean on: navy headlines ("#042c60"), structural grays from "#3c3c3c" to "#afafaf", and accent colors named after animals (owl, macaw, cardinal, fox, bee) live inside CSS variables alongside per-character costume tints, while the white canvas runs edge-to-edge under every section.
-
-seo:
-  title: "Duolingo Design System for React — Owl green #58cc02, Feather Bold, 22 components"
-  metaDescription: "Duolingo's design system as a DESIGN.md file. Owl green #58cc02 CTA, navy #042c60, Feather + DIN Round, 22 components. For React, Next.js, and AI tools."
-  highlights:
-    - "Owl-green voltage — #58cc02 carries every primary CTA and the brand wordmark; no second saturated accent exists"
-    - "Two-typeface dialect — Feather Bold weight 700 at 48–64px for display, DIN Round weight 500–700 at 13–19px for body and UI"
-    - "Uppercase button labels — DIN Round 15px weight 700 with 0.8px letter-spacing on every primary CTA, never sentence case"
-    - "Mascot-driven decoration — Duo the owl, Lily, Junior, and Bea replace gradients, mesh backgrounds, and atmospheric depth"
-    - "Animal-named color vocabulary — 352 CSS variables grouped as owl, macaw, cardinal, fox, bee, koala instead of numeric scales"
-  tags:
-    - "Education & Learning"
-  lastUpdated: "2026-05-13"
-  author:
-    name: "Dov Azencot"
-    url: "https://x.com/dovazencot"
-  opening: |
-    Duolingo's marketing system reads as a children's-book classroom rendered with platform-grade UI rigor. The canvas is pure white edge-to-edge — no cream tint, no gradient mesh, no dark hero band — and every section is anchored by cartoon mascots: Duo the green owl, Lily the purple teenager, Junior the rosy toddler, Bea the blue trans flag-coded human. Display headlines run Feather Bold at 64px / weight 700 / -1.28px letter-spacing in deep navy ("#042c60"), while the iconic green section titles ("free. fun. effective.", "backed by science", "stay motivated") sit at 48px in owl green ("#58cc02"). Body paragraphs drop to DIN Round at 17px / weight 500 / line-height 24px in mid-gray ("#777777") — the contrast between the heavy cartoon display type and the modest body sans is the brand's central rhythm.
-
-    This page packages the marketing surface into one DESIGN.md file built on the Google Labs spec. Inside: 18 color tokens covering owl green CTA, navy display ink, mid-gray body, structural hairlines, and the animal-named accent family pulled from the site's 352 CSS variables (owl, macaw, cardinal, fox, bee, koala, beetle, fire-ant, kiwi); 11 typography tokens splitting Feather Bold display from DIN Round body, with the uppercase 0.8px-letter-spaced button label as its own token; 5 corner radii anchored at the 12px button-border-radius and 16px web-ui radius; 9 spacing values built on an 8px / 24px / 32px / 48px / 96px scale; and 22 components covering the green CTA pill, secondary outline button, language-flag chip row, mascot scene card, illustrated feature card, navy footer hero, and the top language switcher.
-
-    Feed the file to Claude, Cursor, or GitHub Copilot and the agent reproduces Duolingo's specific dialect — owl-green pill on white, uppercase button labels, navy display, mascot illustration in the margin — instead of a generic education-app theme of pastel rectangles and Inter headings. Reference the tokens directly in Tailwind config or as CSS variables. Where most ed-tech brands hedge with serif gravitas or muted earth tones to signal seriousness, Duolingo holds the line on a single saturated green and a cartoon owl — confidence by playful restraint, not corporate softening.
-  related:
-    - href: "/design"
-      title: "Browse all design systems"
-      description: "The full directory of DESIGN.md files on shadcn.io, with live mockups for each."
-    - href: "https://www.duolingo.com"
-      title: "Duolingo — official site"
-      description: "The free, fun, and effective way to learn a language, anchoring the design language documented here."
-    - href: "https://github.com/google-labs-code/design.md"
-      title: "The DESIGN.md specification"
-      description: "Google Labs' open spec for machine-readable design system files — the format this page is built on."
-  questions:
-    - id: "primary-color"
-      title: "What is Duolingo's primary brand color?"
-      answer: "Duolingo's primary is owl green at #58cc02 — the exact hex carried by the `--color-owl` and `--color-tree-frog` CSS variables. It anchors the wordmark, the 'Get started' CTA pill, the Duo mascot's body, and the section headings (`free. fun. effective.`, `backed by science`, `stay motivated`, `personalized learning`). The deeper press state is #58a700 (`--color-tree-frog`) and the soft tint is #d7ffb8 (`--color-sea-sponge`). The brand explicitly refuses to introduce a second saturated CTA color — secondary actions render as a blue-outlined pill with #1cb0f6 (macaw) text on white, not as a competing fill."
-    - id: "typography"
-      title: "What typography does Duolingo use, and what's the substitute?"
-      answer: "Duolingo runs two custom typefaces. Feather Bold (declared as `feather, sans-serif`) carries display at 48px and 64px, weight 700, with -1.28px letter-spacing on the 64px hero — used for `<h1>` and `<h2>` only. DIN Round (`din-round, sans-serif`) handles everything else: 17px body at weight 500 with 24px line-height, 13–15px UI labels at weight 700, and a signature uppercase button label at 15px / weight 700 / 0.8px letter-spacing. Neither face is open-source. Nunito Bold is the closest free substitute for Feather; DIN Next Rounded or Quicksand approximates DIN Round."
-    - id: "ctas"
-      title: "Why are Duolingo's primary buttons uppercase with letter-spacing?"
-      answer: "The primary CTA renders DIN Round at 15px / weight 700 / 0.8px letter-spacing / uppercase — the most-frequent typography signature in the extraction (42 occurrences). The all-caps treatment is the brand's UI confidence signal: it reads as a stamped game-button rather than a sentence. The pill geometry combines 16px border-radius (`--web-ui_button-border-radius`) with a 3–4px flat bottom-shadow lip that gives every primary button a tactile, gamepad-button feel. Sentence-case CTAs would break the gamified tone the system depends on."
-    - id: "mascots"
-      title: "What role do the cartoon mascots play in the system?"
-      answer: "Mascots are the entire decoration layer. The site has zero gradient meshes, zero atmospheric photography, zero pattern textures — instead, the 352 CSS variables include named characters (Duo, Lily, Junior, Bea, Falstaff, Eddy, Lin, Lucy, Vikram, Zari, Oscar, Bea Junior) each with their own `-shine`, `-radio`, and `-secondary` color triplets. Hero sections cluster mascots in floating constellations; feature sections pair one isometric mascot scene per illustrated text panel. Substituting stock illustration breaks the system; the character library is brand-specific IP."
-    - id: "color-vocabulary"
-      title: "Why are Duolingo's colors named after animals?"
-      answer: "The 352 `:root` CSS custom properties name colors after animals and birds rather than numeric scales — `--color-owl` (#58cc02), `--color-macaw` (#1cb0f6), `--color-cardinal` (#ff4b4b), `--color-fox` (#ff9600), `--color-bee` (#ffc800), `--color-koala` (#d7d7d7), `--color-beetle` (#ce82ff), `--color-fire-ant` (#ea2b2b), `--color-kiwi` (#7ac70c). The vocabulary mirrors the mascot taxonomy and makes the design tokens legible to non-designers across the org. Where shadcn's `primary` / `destructive` / `accent` are role-based, Duolingo's are character-based — color belongs to a creature."
-    - id: "use-in-project"
-      title: "Can I use this DESIGN.md to build a gamified learning React app?"
-      answer: "Yes — the file feeds Claude, Cursor, or Copilot and the agent will reproduce Duolingo's specific dialect (owl-green pill with bottom-shadow lip, uppercase DIN-Round labels, navy Feather display, mascot scene cards on pure white) rather than a generic shadcn theme of subdued grayscale. Every hex, type token, radius, and spacing value is a quoted value you can paste into Tailwind config or CSS variables. The mascot illustrations are Duolingo IP — source your own character set or rely on placeholder isometric shapes when reusing the system."
-
+name: 쇄도잉 Native
+description: Solid, friendly spoken practice for iPhone.
 colors:
-  primary: "#58cc02"
-  primary-pressed: "#58a700"
-  primary-soft: "#d7ffb8"
-  primary-mint: "#a5ed6e"
-  ink-display: "#042c60"
-  ink-display-deep: "#100f3e"
-  ink-display-blue: "#000437"
-  body: "#3c3c3c"
-  body-strong: "#4b4b4b"
-  body-muted: "#777777"
-  body-soft: "#afafaf"
-  canvas: "#ffffff"
-  link: "#0000ee"
-  link-ink: "#000000"
-  accent-macaw: "#1cb0f6"
-  accent-cardinal: "#ff4b4b"
-  accent-fox: "#ff9600"
-  accent-bee: "#ffc800"
-  accent-beetle: "#ce82ff"
-
+  primary: "#ffc800"
+  primary-pressed: "#ff9600"
+  accent-bee: "#58cc02"
+  accent-fox: "#58a700"
+  selection-light: "#d7ffb8"
+  selection-dark: "#254b34"
+  macaw: "#1cb0f6"
+  mint: "#2dd4bf"
+  beetle: "#ce82ff"
+  blue-soft-light: "#e4f5fd"
+  blue-soft-dark: "#143953"
+  link-dark: "#8dd8ff"
+  danger-light: "#ac3026"
+  danger-dark: "#ffb4a9"
+  canvas-light: "#ffffff"
+  soft-light: "#f7f7f7"
+  body-light: "#3c3c3c"
+  navy: "#042c60"
+  secondary-light: "#4b4b4b"
+  line-light: "#e5e5e5"
+  outline-light: "#afafaf"
+  canvas-dark: "#101c2c"
+  card-dark: "#192a3e"
+  soft-dark: "#20334a"
+  text-dark: "#f4f7fa"
+  secondary-dark: "#b8c7d8"
+  line-dark: "#344960"
+  outline-dark: "#7890ab"
 typography:
-  display-xl:
-    fontFamily: "feather, sans-serif"
-    fontSize: 64px
-    fontWeight: 700
-    lineHeight: 1.05
-    letterSpacing: "-1.28px"
-  display-lg:
-    fontFamily: "feather, sans-serif"
-    fontSize: 48px
-    fontWeight: 700
-    lineHeight: 1.1
-    letterSpacing: 0
-  heading-md:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 32px
-    fontWeight: 700
+  display:
+    fontFamily: "Nunito_800ExtraBold, system-ui, sans-serif"
+    fontSize: "30px"
+    fontWeight: 800
     lineHeight: 1.2
-    letterSpacing: 0
-  heading-sm:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 19px
+  sentence:
+    fontFamily: "Nunito_800ExtraBold, system-ui, sans-serif"
+    fontSize: "29px"
+    fontWeight: 800
+    lineHeight: 1.2
+  stage-title:
+    fontFamily: "Nunito_800ExtraBold, system-ui, sans-serif"
+    fontSize: "23px"
+    fontWeight: 800
+    lineHeight: 1.2
+  stage-number:
+    fontFamily: "Nunito_800ExtraBold, system-ui, sans-serif"
+    fontSize: "28px"
+    fontWeight: 800
+    lineHeight: 1.2
+  headline:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "27px"
+    fontWeight: 800
+    lineHeight: 1.45
+  title:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "21px"
     fontWeight: 700
-    lineHeight: 1.4
-    letterSpacing: 0
-  body-lg:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 17px
+    lineHeight: 1.45
+  body:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "17px"
     fontWeight: 500
-    lineHeight: 1.41
-    letterSpacing: 0
-  body-md:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 15px
-    fontWeight: 700
-    lineHeight: 1.47
-    letterSpacing: 0
-  body-sm:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 13px
-    fontWeight: 700
-    lineHeight: 1.23
-    letterSpacing: 0
-  label-uppercase:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 15px
-    fontWeight: 700
-    lineHeight: 1.33
-    letterSpacing: "0.8px"
-    textTransform: uppercase
-  label-uppercase-sm:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 14px
-    fontWeight: 700
-    lineHeight: 1.21
-    letterSpacing: "0.8px"
-    textTransform: uppercase
-  link-inline:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 17px
+    lineHeight: 1.45
+  support:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "14px"
     fontWeight: 500
-    lineHeight: 1.18
-    letterSpacing: 0
-  caption:
-    fontFamily: "din-round, sans-serif"
-    fontSize: 13px
-    fontWeight: 500
-    lineHeight: 1.5
-    letterSpacing: 0
-
+    lineHeight: 1.45
+  badge:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "13px"
+    fontWeight: 700
+    lineHeight: 1.45
+  button:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "17px"
+    fontWeight: 700
+    lineHeight: "24px"
+    letterSpacing: "0.2px"
 rounded:
-  none: "0px"
-  sm: "8px"
-  md: "12px"
-  lg: "16px"
-  full: "9999px"
-
+  track: "8px"
+  badge: "10px"
+  choice: "14px"
+  control: "16px"
+  symbol: "20px"
+  cycle: "22px"
 spacing:
-  xxs: "1px"
-  xs: "8px"
-  sm: "10px"
-  md: "12px"
-  base: "16px"
-  lg: "24px"
-  xl: "32px"
-  xxl: "48px"
-  section: "96px"
-
+  "4": "4px"
+  "8": "8px"
+  "10": "10px"
+  "12": "12px"
+  "14": "14px"
+  "16": "16px"
+  "20": "20px"
+  "24": "24px"
+  "40": "40px"
 components:
   button-primary:
     backgroundColor: "{colors.primary}"
-    textColor: "{colors.canvas}"
-    typography: "{typography.label-uppercase}"
-    rounded: "{rounded.lg}"
-    padding: "13px 16px"
-    height: "50px"
-    border: "0"
-  button-primary-pressed:
-    backgroundColor: "{colors.primary-pressed}"
-    textColor: "{colors.canvas}"
-    typography: "{typography.label-uppercase}"
-    rounded: "{rounded.lg}"
+    textColor: "{colors.navy}"
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+    padding: "13px 18px"
   button-secondary:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.accent-macaw}"
-    typography: "{typography.label-uppercase}"
-    rounded: "{rounded.lg}"
-    padding: "13px 16px"
-    height: "50px"
-    border: "2px solid {colors.body-soft}"
-  button-secondary-hover:
-    backgroundColor: "#f7f7f7"
-    textColor: "{colors.accent-macaw}"
-    typography: "{typography.label-uppercase}"
-    rounded: "{rounded.lg}"
-  language-chip:
-    backgroundColor: "transparent"
-    textColor: "{colors.body-muted}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.sm}"
-    padding: "9.5px 14px"
-    height: "40px"
-    border: "0"
-  language-chip-active:
-    backgroundColor: "{colors.primary-soft}"
-    textColor: "{colors.primary-pressed}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.sm}"
-  top-nav:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.body}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.none}"
-    height: "70px"
-    padding: "0px 16px"
-  language-switcher:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.body-muted}"
-    typography: "{typography.label-uppercase-sm}"
-    rounded: "{rounded.none}"
-    padding: "8px 24px"
-  section-heading-green:
-    backgroundColor: "transparent"
-    textColor: "{colors.primary}"
-    typography: "{typography.display-lg}"
-    rounded: "{rounded.none}"
-  display-heading-navy:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink-display}"
-    typography: "{typography.display-xl}"
-    rounded: "{rounded.none}"
-  body-paragraph:
-    backgroundColor: "transparent"
-    textColor: "{colors.body-muted}"
-    typography: "{typography.body-lg}"
-    rounded: "{rounded.none}"
-  link-inline:
-    backgroundColor: "transparent"
-    textColor: "{colors.link}"
-    typography: "{typography.link-inline}"
-    rounded: "{rounded.none}"
-  feature-scene-card:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.body-muted}"
-    typography: "{typography.body-lg}"
-    rounded: "{rounded.none}"
-    padding: "48px 0px"
-  app-store-button:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.body}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.md}"
-    padding: "9.5px 14px"
-    height: "48px"
-    border: "2px solid #e5e5e5"
-  hero-mascot-cluster:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink-display}"
-    typography: "{typography.body-lg}"
-    rounded: "{rounded.none}"
-    padding: "0px"
-  footer-canvas:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.body-muted}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.none}"
-    padding: "96px 0px"
-  text-input:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.body}"
-    typography: "{typography.body-lg}"
-    rounded: "{rounded.sm}"
-    padding: "12px 16px"
-    height: "48px"
-    border: "2px solid #e5e5e5"
-  text-input-focused:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.body}"
-    typography: "{typography.body-lg}"
-    rounded: "{rounded.sm}"
-    border: "2px solid {colors.accent-macaw}"
-  hairline-divider:
-    backgroundColor: "#e5e5e5"
-    textColor: "{colors.body-muted}"
-    typography: "{typography.caption}"
-    rounded: "{rounded.none}"
-    height: "1px"
-  badge-streak:
-    backgroundColor: "{colors.accent-fox}"
-    textColor: "{colors.canvas}"
-    typography: "{typography.label-uppercase-sm}"
-    rounded: "{rounded.full}"
-    padding: "8px 12px"
-  badge-error:
-    backgroundColor: "{colors.accent-cardinal}"
-    textColor: "{colors.canvas}"
-    typography: "{typography.label-uppercase-sm}"
-    rounded: "{rounded.full}"
-    padding: "8px 12px"
-  badge-gold:
-    backgroundColor: "{colors.accent-bee}"
-    textColor: "{colors.ink-display}"
-    typography: "{typography.label-uppercase-sm}"
-    rounded: "{rounded.full}"
-    padding: "8px 12px"
+    backgroundColor: "{colors.canvas-light}"
+    textColor: "{colors.navy}"
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+    padding: "13px 18px"
+  header-action:
+    textColor: "{colors.navy}"
+    rounded: "{rounded.choice}"
+    padding: "10px"
+  badge-blue:
+    backgroundColor: "{colors.blue-soft-light}"
+    textColor: "{colors.navy}"
+    typography: "{typography.badge}"
+    rounded: "{rounded.badge}"
+    padding: "5px 10px"
+  card:
+    backgroundColor: "{colors.canvas-light}"
+    textColor: "{colors.body-light}"
+    rounded: "{rounded.control}"
+    padding: "20px"
+  choice-selected:
+    backgroundColor: "{colors.selection-light}"
+    textColor: "{colors.navy}"
+    typography: "{typography.body}"
+    rounded: "{rounded.choice}"
+    padding: "16px"
+  progress-track:
+    backgroundColor: "{colors.line-light}"
+    rounded: "{rounded.track}"
+    height: "16px"
+  stage-number:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.navy}"
+    typography: "{typography.stage-number}"
+    rounded: "{rounded.symbol}"
+    padding: "10px"
 ---
+
+# Design System: 쇄도잉 Native
 
 ## Overview
 
-Duolingo's marketing chrome is built on one productive contradiction: a serious behavioral-science learning platform rendered with the visual vocabulary of a Saturday-morning cartoon. The canvas is pure white (`{colors.canvas}` — `#ffffff`), running edge-to-edge under every section with no hero band, no tint shift, no gradient mesh. Display headlines split into two roles: navy Feather Bold at 64px / `-1.28px` letter-spacing (`{colors.ink-display}` — `#042c60`) for the hero "learn anytime, anywhere", and owl-green Feather Bold at 48px (`{colors.primary}` — `#58cc02`) for the recurring section titles "free. fun. effective.", "backed by science", "stay motivated", "personalized learning". Body sits in DIN Round at 17px / weight 500 / mid-gray (`{colors.body-muted}` — `#777777`).
+**Creative North Star: "Friendly spoken practice"**
 
-**Mascot-as-decoration**: where most ed-tech brands lean on stock photography of laptops, students, and abstract gradients, Duolingo replaces the entire decoration layer with a named cast of cartoon characters. Duo the green owl, Lily the purple teenager, Junior the rosy toddler, Bea the human, Falstaff, Eddy, Vikram, Zari — each gets their own `-shine`, `-radio`, and `-secondary` color triplet inside the 352 `:root` CSS variables. Hero sections cluster mascots in floating constellations; feature sections pair one isometric mascot scene per illustrated text panel. The character library is not optional brand garnish — it is the system's only chromatic accent layer outside the primary green.
+쇄도잉 makes spoken practice feel approachable through solid surfaces, rounded display lettering, original lesson artwork, and buttons that visibly depress. The owner-approved Duolingo-inspired direction supplies the Bee-yellow, Macaw-blue, navy, and white palette; 쇄도잉 uses the owner-supplied name, logo and icon.
 
-Unlike the convention of softening pediatric branding with pastels and serif gravitas, Duolingo holds the line on a single saturated owl green (`#58cc02`) and a heavy display sans (Feather Bold at weight 700). The result reads as gamepad-grade UI confidence rather than infantilized warmth — the brand trusts kids and adults equally to register a bright green button as a primary action and an owl mascot as a guide rather than a mascot-as-apology.
+Native iPhone navigation and readable Korean and English organize this playful character around one clear next action. Crisp borders and generous spacing carry the hierarchy in both appearances. Encouragement comes from actual learning progress and plain, friendly language.
 
 **Key Characteristics:**
-- Pure white canvas (`{colors.canvas}` — #ffffff) edge-to-edge — no cream tint, no surface ladder, no full-bleed dark band on the marketing surface
-- Owl-green CTA pill (`{colors.primary}` — #58cc02) with white uppercase DIN Round 15px label at 0.8px letter-spacing — the brand's only saturated chromatic moment
-- Two-typeface dialect: Feather Bold display (h1/h2 only, 48–64px) + DIN Round UI/body (13–19px) — every text role belongs to exactly one of the two
-- Navy display ink (`{colors.ink-display}` — #042c60) reserved for top-of-page hero h1, switched to owl green for in-page section h2 — the navy/green pairing is the visual rhythm
-- Animal-named accent vocabulary — `{colors.accent-macaw}` (#1cb0f6), `{colors.accent-cardinal}` (#ff4b4b), `{colors.accent-fox}` (#ff9600), `{colors.accent-bee}` (#ffc800), `{colors.accent-beetle}` (#ce82ff) — color tokens map to characters, not to roles
-- 12–16px button radius via `--web-ui_button-border-radius: 16px` paired with a `{rounded.full}` pill chip vocabulary for streak and gold badges
-- 8px / 24px / 32px / 48px / 96px spacing scale — long 96px section gutters keep the cartoon scenes from feeling cluttered
+
+- Solid, tactile controls with a flat bottom lip.
+- Rounded English display type paired with system Korean and interface text.
+- Original lesson artwork and restrained semantic color.
+- Native navigation, scalable text, and truthful progress.
+
+This guide records the implemented native visual system. Sources are `src/components/theme.ts`, `src/components/ui.tsx`, the four screens in `src/app/`, and their native stack configuration. `PRODUCT.md` holds product constraints; `docs/design/native-learning.md` holds the approved surface direction. The owner's legacy DESIGN.md supplied color authority, not web layouts or proprietary assets. This document does not establish physical-device or release acceptance.
+
+Portable token sizes use `px` for DESIGN.md tooling; each numeric value represents a React Native logical point at font scale 1, not a CSS implementation or physical screen pixel. Frontmatter owns primitives. The sidecar's HTML/CSS is only a documentation preview: it uses local font fallbacks and simple SVG icon surrogates, not the native font bundle or SF Symbols renderer. Its synthesized tonal ramps are preview metadata, not additional app colors.
 
 ## Colors
 
-The palette is split into three layers: one saturated brand voltage (owl green and its tints), a four-step structural gray ladder for ink and hairlines, and an animal-named accent family pulled from the 352 CSS variables that color the mascots, badges, and gamification chrome.
+Bright Bee and Macaw accents sit against white or deep navy surfaces, with appearance-specific text and structural colors.
 
-- **Owl green (`#58cc02`)** — frequency 22. Used as text (10), border (10), background (2). The brand voltage, scoped to the wordmark, primary CTA fill, and the recurring section h2 headings ("free. fun. effective.", "backed by science", "stay motivated"). It is also `--color-owl` and `--color-tree-frog` in the CSS variable layer.
-- **Tree frog deep (`#58a700`)** — derived from `--color-tree-frog` (88, 167, 0). Used as: pressed-state owl green on hover and click states; never sits as a standalone surface or text.
-- **Sea sponge mint (`#a5ed6e`)** — frequency 128. Used as text (64), border (64). A lighter owl-green tint that appears as the active chip background under the language switcher row and as the "correct answer" highlight in the product (`--color-sea-sponge`, `--color-turtle`).
-- **Sea sponge soft (`#d7ffb8`)** — frequency 14. Used as text (7), border (7). The softest owl-green tint, scoped to selected-state language chips and the soft success-band variant.
-- **Navy display (`#042c60`)** — frequency 2. Used as text (1), border (1). Reserved for the top-of-page hero h1 "learn anytime, anywhere" — the only place navy carries display type. The system pairs it with owl green for h2 to avoid two saturated colors competing in one section.
-- **Eclipse navy (`#000437`)** — derived from `--color-eclipse` (0, 4, 55). Used as: deepest navy variant for hero text on the alternate dark-mode hero band; an extension of the display-ink ladder.
-- **Deep starling (`#100f3e`)** — frequency 1. Used as background (1). The single brand-layer hex returned by the extraction — it sits under a hero illustration band as a near-black violet, paired with the white logotype.
-- **Body ink (`#3c3c3c`)** — frequency 399. Used as text (200), border (199). The workhorse body-text color (`--color-black-text`) carried by nav links, footer text, and the dense legal copy in the long-form sections.
-- **Body strong (`#4b4b4b`)** — frequency 20. Used as text (11), border (9). The slightly darker variant (`--color-eel`) used on emphasized body and on headings that aren't display-tier.
-- **Body muted (`#777777`)** — frequency 268. Used as text (134), border (134). The second-most-common color in the system (`--color-wolf`) — carries every secondary paragraph, the "Learning with Duolingo is fun" body lede, and the soft-gray nav link in inactive state.
-- **Body soft (`#afafaf`)** — frequency 6. Used as text (3), border (3). The lightest readable gray (`--color-hare`) — appears on disabled text and quiet timestamps.
-- **Canvas white (`#ffffff`)** — frequency 8. Used as text (4), background (2), border (2). The dominant canvas, but its raw `total` is low because most page chrome sits on white inherited from `body` rather than being explicitly painted.
-- **Link standard (`#0000ee`)** — frequency 4. Used as text (2), border (2). Browser-default blue, scoped to the policy and ToS inline links in the footer — a deliberate choice to inherit user-agent accessibility defaults rather than re-skin policy chrome.
-- **Macaw blue (`#1cb0f6`)** — frequency 14. Used as text (9), border (5). The secondary CTA accent (`--color-macaw`) — carries the "I already have an account" outline button text and inline product-tour highlights.
-- **Cardinal red (`#ff4b4b`)** — derived from `--color-cardinal` (255, 75, 75). Used as: error states, streak-broken badge, the lost-heart icon in product chrome.
-- **Fox orange (`#ff9600`)** — derived from `--color-fox` (255, 150, 0). Used as: active streak flame badge, the "extended streak" panel background.
-- **Bee gold (`#ffc800`)** — derived from `--color-bee` (255, 200, 0). Used as: gold-tier league badge, milestone gradient stops, the achievement star icon.
-- **Beetle purple (`#ce82ff`)** — derived from `--color-beetle` (206, 130, 255). Used as: super-membership accent, Lily mascot's signature tint, the diamond-league highlight.
+### Primary
 
-The 352 `:root` custom properties extend this with full character costume palettes (Falstaff brown, Eddy red, Lily purple, Vikram pink, Zari magenta), but the marketing surface documented here uses the eighteen tokens above as its working palette.
+- **Bee yellow** drives primary actions, stage 1 numerals, and confirmed learning markers.
+- **Fox orange** forms the primary button lip and selected or completed borders.
+- **Soft green selection / Deep green selection** mark selected choices and completed-state support surfaces in light / dark appearance.
+
+### Secondary
+
+- **Macaw blue** distinguishes stage 2 and the optional blue progress fill.
+- **Pale blue support / Deep blue support** back informational badges and the speaker symbol.
+- **Light blue link** makes secondary-action labels readable on dark cards.
+
+### Tertiary
+
+- **Brick recovery ink / Pale coral recovery ink** identify the destructive lesson-removal action in light / dark appearance. These are semantic action colors, not alternate primary-button fills.
+
+### Neutral
+
+- **Canvas white** serves both light background and card; **Soft gray surface** backs neutral badges and unselected pressed choices.
+- **Navy ink** carries light headings, links, symbols, and text over bright accents. **Body charcoal** and **Secondary charcoal** separate main and supporting text.
+- **Structural gray** draws light borders, tracks, and disabled fills; **Waiting-state gray** outlines unconfirmed cycle markers.
+- **Deep navy canvas**, **Navy card surface**, and **Raised tonal surface** form the dark surface ladder.
+- **Near-white ink** serves dark headings and body text; **Soft blue-gray ink** supports secondary text.
+- **Blue-gray structure** draws dark borders, tracks, and disabled fills; **Waiting-state blue-gray** outlines unconfirmed cycle markers.
+
+| Native semantic role | Light token | Dark token |
+| --- | --- | --- |
+| background | canvas-light | canvas-dark |
+| card | canvas-light | card-dark |
+| soft | soft-light | soft-dark |
+| text | body-light | text-dark |
+| heading | navy | text-dark |
+| secondary | secondary-light | secondary-dark |
+| line / disabled | line-light | line-dark |
+| outline | outline-light | outline-dark |
+| accent / accentPressed | primary / primary-pressed | primary / primary-pressed |
+| onAccent | navy | navy |
+| selection | selection-light | selection-dark |
+| blue | macaw | macaw |
+| blueSoft | blue-soft-light | blue-soft-dark |
+| link | navy | link-dark |
+| danger | danger-light | danger-dark |
+
+**The Readable Accent Rule.** Use navy ink on Bee-yellow and Macaw-blue fills; use the appearance-specific heading and link colors on pale or dark surfaces.
+
+The owner swapped Primary and Accent Bee, and Primary Pressed and Accent Fox. Primary is now yellow and its lip is orange; accent-bee retains the former primary green, and accent-fox retains the former pressed green. These reserved accent roles are documented even when not drawn. Existing green selection surfaces are unchanged. Red remains outside these component tokens; illustration hues remain asset-local.
 
 ## Typography
 
-Duolingo runs two custom typefaces with a strict role split: Feather Bold for display, DIN Round for everything else.
+**Display Font:** bundled Nunito ExtraBold, loaded as `Nunito_800ExtraBold` (weight 800), with system fallback.
+**Body Font:** native system font, including Korean glyph support.
+**Character:** rounded English display lettering supplies warmth; Korean headings and functional text retain native readability. Labels use their natural language and case.
 
-**Feather Bold** (`feather, sans-serif`) carries h1 and h2 only. The hero h1 sits at 64px / weight 700 / `-1.28px` letter-spacing on "learn anytime, anywhere"; section h2s drop to 48px / weight 700 / normal tracking on "free. fun. effective.", "backed by science", "stay motivated", "personalized learning". Feather is a Duolingo proprietary face with a thick low-contrast cartoon-display silhouette — Nunito Bold is the closest open-source substitute.
+### Hierarchy
 
-**DIN Round** (`din-round, sans-serif`) handles every UI and body role. The most-frequent signature in the extraction (count 42) is the uppercase button label at `15px / weight 700 / lineHeight 20px / letterSpacing 0.8px / textTransform uppercase` — the same token carries every primary CTA, nav action, and footer category label. Body paragraphs render at 17px / weight 500 / 24px line-height in `{colors.body-muted}`. Secondary nav and small UI text drops to 13px / weight 700 / 16px line-height. The 19px / weight 700 variant carries feature-section subheads.
+- **Display:** `display` for the lesson title; `sentence` for the English learning sentence.
+- **Stage identity:** `stage-title` for “Stage 1” / “Stage 2”; `stage-number` for the colored numeral.
+- **Headline:** `headline` for Korean screen introductions; the completion heading uses a larger system size (30 points).
+- **Title:** `title` for settings group headings.
+- **Body:** `body` for explanatory text; translation uses a larger system size (18 points). Supporting variants use 14–16 points as their context requires.
+- **Label:** `support` for notes, `badge` for compact metadata, and `button` for action labels.
 
-**Weight strategy**: the system uses weight 500 for body and weight 700 for everything else — there is no weight 400, no weight 600, no weight 300. The two-weight discipline keeps the cartoon-display character of the face from drifting into corporate softness.
+Display line height is 1.2 times its scaled size; other `Label` text uses 1.45. Action labels scale their 17-point size and 24-point line height together. These are observed roles, not a uniform mathematical type scale. Native navigation titles use the system renderer with weight 700.
+
+**The One Scale Rule.** Scale custom text size and line height once with the current system font scale, without a text-size cap; allow text containers to grow.
+
+`Label` and action-label `Text` multiply size and line height by `useWindowDimensions().fontScale`; `allowFontScaling={false}` prevents a second scaling pass. It does not disable the explicit scaling. Icons scale separately, up to 1.5 times their base size. Display text falls back to the system if the bundled font cannot load.
 
 ## Layout
 
-Sections stack at `{spacing.section}` (96px) gutters with the white canvas running continuously between them. The captured 4500px scroll shows seven primary blocks: top language switcher, hero (mascot cluster + CTA pair), language flag chip row, alternating mascot-scene feature bands (illustration left / heading right and vice versa), and a footer hero with the "learn anytime, anywhere" navy display headline paired with floating phone illustrations.
+Use a single native scrolling column with automatic content insets. The screen gutter is 24 points; Library and Lesson groups use 24-point gaps, Player uses 20, and Settings uses 30. Standard cards use 20-point padding and 16-point internal gaps. Supporting clusters use the smaller spacing steps. Library, Lesson, and Settings end with 40-point scroll padding.
 
-Content sits in a generous ~1024px max-width column with 16px gutter padding (`0px 16px`) per the extracted spacing data. The language flag row uses 7-tile horizontal rhythm at 101px per tile — a fixed-pixel rhythm rather than a fluid grid. Feature sections alternate column order: text-left-illustration-right on "free. fun. effective.", flipped to illustration-left-text-right on "backed by science", flipped back on "stay motivated". The alternation is the layout's pacing device — no other rhythm interrupts the vertical scroll.
+The player's scroll content can grow and centers the sentence card when room permits. Its action region sits beneath the scroll view, with 24-point horizontal padding, no top divider, and bottom padding equal to the larger of the safe-area inset and 14 points. Preserve this native safe-area relationship.
+
+Metadata rows wrap. Learning Settings uses a native 0.25–3× slider in 0.05× increments, a large current-value label, endpoint labels, and proportionally positioned 1×/2× ticks. The slider has a 48-point touch region and an accessible name. Text containers remain intrinsic and scrollable. There is no progression-mode picker or explanatory footer.
+
+The supplied wide logo appears above Library content on a white plate in both appearances so its dark lettering stays readable. Preserve its 2:1 ratio and built-in transparent margins; cap the plate at 260 points wide and center it to leave room for the book action.
+
+The original lesson illustration fills the card width with a 1.9 aspect-ratio crop and repeats as a 72-point square thumbnail. Keep its central safe composition and separate visual decoration from readable text.
 
 ## Elevation & Depth
 
-Duolingo's depth vocabulary rejects atmospheric shadow in favor of **shadow-as-lip**: every primary button carries a 3–4px flat bottom-shadow lip in the press-state color (`{colors.primary-pressed}` — `#58a700`) directly beneath the green fill, giving the CTA a tactile gamepad-button quality. The lip disappears on click (the button drops 3–4px into the lip socket). There is no diffuse multi-stop shadow, no rgba blur, no atmospheric depth — only the flat color slab.
+Depth is structural. App cards use solid fills and crisp borders, without diffuse shadows. Action buttons alone receive a flat bottom lip; a wrapper reserves its space. The platform may render its own navigation-bar material or elevation around a header item.
 
-Cards and feature scenes sit flat on the white canvas with no shadow at all. Hairline dividers at `#e5e5e5` separate the language flag row from the feature stack. The system's only soft elevation moment is the floating phone illustration in the footer hero, which renders as drawn cartoon depth (perspective shadow inside the illustration) rather than CSS box-shadow.
+### Shadow Vocabulary
+
+- **Primary lip:** `0 4px 0` in `primary-pressed`.
+- **Secondary lip:** `0 4px 0` in the appearance's `line` color.
+- **Pressed / disabled:** no lip; a pressed action face translates down 4 points. Disabled actions keep a muted fill and do not press.
+
+**The Solid Press Rule.** Reserve app-drawn shadows for the flat action-button lip. Pressing lowers the button face into that lip without moving surrounding layout.
+
+The implemented press response is immediate, without a custom duration or spring. Header actions reduce opacity to 0.65; the destructive text action reduces it to 0.6. Native controls do not acquire web hover states. Keyboard focus and pointer styling in sidecar snippets serve the documentation panel only.
 
 ## Shapes
 
-The radius vocabulary is anchored by the CSS variable `--web-ui_button-border-radius: 16px` — every primary CTA pill, secondary outline button, and feature card rounds at 16px. Small UI chips and inputs drop to 8px, mid-tier elements use 12px (the extraction's only captured radius), badges and streak chips go fully pill at 9999px.
+Use continuous rounded rectangles for cards and action buttons with the `control` radius. Choices and custom header hit regions use `choice`; informational badges use `badge`. Progress tracks use `track`; stage numerals and speaker-symbol tiles use `symbol`. Cycle markers use `cycle` with a minimum 44-point size and intrinsic growth.
 
-The 16px radius is uniformly applied — Duolingo does not run a separate small-button geometry, and there are no sharp 0-radius elements in the marketing chrome outside the section text and the language flag images. The pill (`{rounded.full}`) is reserved for status badges (streak flame, gold milestone, error indicator) and the language-chip active state — never the primary button, which keeps its 16px softened-rectangle silhouette.
+Cards and choice outlines are 2 points; quiet section dividers are 1 point. Keep illustration clipping at the enclosing card edge. The stage numeral has a minimum 56-point width and height, 10-point padding, and no fixed height; it must expand with the numeral's scaled type.
 
 ## Components
 
-- **`button-primary`** — owl-green fill (`{colors.primary}`), white uppercase DIN Round label (`{typography.label-uppercase}`), 16px radius (`{rounded.lg}`), 50px height with `13px 16px` padding. The defining UI element; the shadow-lip beneath is `{colors.primary-pressed}`.
-- **`button-secondary`** — white fill (`{colors.canvas}`), macaw-blue uppercase label (`{colors.accent-macaw}`), 2px gray border, same 50px geometry. Used for "I already have an account" and second-action slots.
-- **`language-chip`** + **`language-chip-active`** — transparent text-only chip with a flag image; the active variant fills with `{colors.primary-soft}` and switches text to `{colors.primary-pressed}`.
-- **`top-nav`** — white 70px-tall bar carrying the Duo wordmark left and the language switcher right.
-- **`language-switcher`** — DIN Round uppercase label at 14px / 0.8px letter-spacing.
-- **`section-heading-green`** + **`display-heading-navy`** — the two display tokens; never used in the same section.
-- **`body-paragraph`** — 17px DIN Round at weight 500 in body-muted gray.
-- **`link-inline`** — browser-default `#0000ee` blue, scoped to footer policy text.
-- **`feature-scene-card`** — the transparent text-plus-illustration block that carries each section.
-- **`app-store-button`** — white pill with thin gray border + dark App Store / Google Play wordmark.
-- **`hero-mascot-cluster`** — the transparent grouping wrapper for the floating Duo + Lily + Junior + Bea constellation.
-- **`footer-canvas`** — the 96px-padded white footer hero block.
-- **`text-input`** + **`text-input-focused`** — 48px-tall white input with 8px radius and a 2px hairline border; focus swaps to macaw-blue 2px border.
-- **`hairline-divider`** — 1px `#e5e5e5` line; the only structural divider in the system.
-- **`badge-streak`** / **`badge-error`** / **`badge-gold`** — fully-pill chips in fox orange, cardinal red, and bee gold respectively, carrying short uppercase labels in white or navy.
+### Buttons
+
+Tactile, clear, and generously sized. `ActionButton` uses a minimum 54-point height, `control` radius, 13-point vertical / 18-point horizontal padding, and a 10-point icon-label gap. Primary actions use Bee with navy text. Secondary actions use the current card fill, link ink, and line border. Disabled actions use the current disabled fill and secondary ink. Labels wrap and center; the minimum is not a fixed height. Press behavior follows the Solid Press Rule.
+
+### Badges
+
+Compact informational labels, not rewards. `Badge` uses 5-point vertical / 10-point horizontal padding, a 6-point icon gap, and optional 14-point SF Symbol. Neutral, green, and blue tones use the semantic soft, selection, and blue-soft fills; all use heading ink. Text can expand the badge.
+
+### Cards and artwork
+
+The owner supplied `assets/brand/logo.png` and `assets/brand/app-icon.png`; preserve both original files without redrawing or recoloring. The app display name is **쇄도잉**. Bundle identifiers and URL schemes remain stable to preserve installed records. The icon includes transparency and rounded corners: it is a prototype source, not a certified App Store-ready icon.
+
+Solid containers with a 2-point line border, `control` radius, and the standard padding and gap. The Library variant removes outer padding, clips the illustration at its top edge, and restores padding around its content. The sentence card increases vertical padding to 26 points and separates content by 22. The shipping artwork is `assets/illustrations/morning-notes.png`; preserve its adjacent `morning-notes.prompt.txt` provenance. It is decorative and excluded from accessibility announcements.
+
+### Choices
+
+`Choice` is a labeled native radio action with minimum 54-point height, a 2-point border, and `choice` radius. Regular rows have 16-point padding, a 24-point check-circle or empty-circle symbol, title, and optional detail. Compact choices have 12-point padding and a 17-point selection symbol beneath the title. Selected rows use the selection fill and Fox border; unselected pressed rows use the soft fill. Save changes quietly and retain the visible checked state.
+
+### Navigation
+
+Settings is a category index with one implemented row, Learning Settings. The
+row uses a sliders symbol, flexible label and chevron; the nested screen has a
+native icon-only Back button and title. Both screens use the same native header
+height instead of toggling between an in-page heading and a navigation bar.
+Both remain within the browsing tab shell.
+
+Use icon-only Expo Router native tabs for Books, Stages and Settings, with labeled accessibility targets. The owner's transparent mascot occupies an inert, disabled item at the far left: no navigation, sound, or haptic. Its original colors are preserved. Native SF Symbols use books.vertical, map and gearshape, with selected filled variants. The OS owns the tab material and selection capsule; do not imitate it with app-drawn card shadows. Tab content follows the current canvas color.
+
+The shared browsing header contains exactly three groups: a language-flag button, level plus numeric XP and track, and flame plus consecutive-day count. The 8-point XP track sits above the level/XP text, half the standard track height; the level stays left-aligned and the numeric XP text aligns to the track's right edge. Each flag has a centered two-letter label underneath (EN, JP, CN, DE, ES, FR), and the streak count sits centered below the flame. Both side groups align to the bottom of the header content; the flag retains its 48-point touch target. Use actual language-local data, refresh on navigation, foreground and local midnight, and show a neutral pending state if unavailable. Language selection opens a native sheet with only supported languages. The header has a 24-point gutter, 12-point vertical padding and 2-point bottom divider; its height grows with Dynamic Type.
+
+`HeaderButton` supplies transparent content with a minimum 44-point hit region and 10-point padding inside the native bar container. Do not recreate that container with an additional filled circle, border, or shadow. The player is a separate stack screen without the browsing bars; its options icon pauses and opens a native form-sheet drawer, and interactive pop is disabled. The player header shows the sentence progress track and right-aligned `n/total`, reserving counter width from the total's digit count, with no XP display or duplicate track below. A clipped light sweep moves left to right over the existing filled portion without changing progress; Reduce Motion disables it. The row below has method-level, speed, and disabled analysis icons. Method level opens a native guide dialog labelled with the level and method; guidance content remains empty until supplied. The drawer's return button reads “학습 이어하기”; its stage-return action uses Cardinal (`#ff4b4b`) text and icon on white. No decorative speaker tile appears inside the sentence card. Fresh sentences have a one-second settling interval before audio; ordinary cycle confirmation remains immediate.
+
+### Progress and stages
+
+Enabled browsing buttons use `FeedbackPressable`: one light native haptic and
+the owner-supplied 100 ms `button-soft-tick.wav` on an accepted press. Books,
+Stages and Settings native-tab presses use the same feedback. The player footer
+is haptic-only. Options, speed/language settings, settings controls, the inert
+mascot, and disabled controls stay silent. Keep visual pressed
+states; feedback is cosmetic and must never delay learning or navigation.
+Do not play sounds on mount, save, or automatic progress updates. Reuse a single
+preloaded sound player, suppress rapid duplicate taps, and cancel pending sound
+on backgrounding. Physical iPhone testing is required for haptic feel.
+
+Tapping an available path coin opens an anchored orange popup instead of
+starting playback. Its heading reads “STAGE 01 · Lv 1 자막 쉐도잉”, using the
+selected stage's padded number, level and method name, followed by one white
+start/resume action. It lives inside the scroll content, not a blocking modal:
+the stage list remains scrollable and the popup moves with its coin. A tap on
+the path background or the selected coin dismisses it. Its brief opacity
+entrance respects Reduce Motion.
+The overview's resume banner remains a direct entry. Entering the player from
+either entry point waits one second, preserving confirmed cycle checks. Only an
+already-ended, unconfirmed pass restarts its audio; interrupted audio keeps its
+saved position. Returning from options or background activity remains paused.
+
+Language flags, in picker order: 🇬🇧 English, 🇯🇵 Japanese, 🇨🇳 Chinese,
+🇩🇪 German, 🇪🇸 Spanish, 🇫🇷 French. Keep the English identity and its existing
+records unchanged when changing its flag. The picker opens at 80% height and
+can expand/scroll. Unpopulated language catalogs and stage screens show a quiet
+empty state, not English fallback content or an error alert.
+
+Language selection leaves the row background unchanged; only the border uses
+the orange selected accent, alongside the checked radio indicator. Other Choice
+controls retain their green selected fill. Books has no instructional subtitle
+or prototype/offline footer copy beneath its catalog.
+
+`ProgressTrack` is a 16-point track with an 8-point radius, current line-color background, and Bee or Macaw fill. The fill is clamped to the real ratio and is absent at zero. Its small white highlight uses 0.3 opacity. Provide the native progress role, label, and numeric accessibility value.
+
+Book cards are compact horizontal rows: cover on the left, title, sentence/chapter counts on one line separated by a slash, completed stages and a progress track beneath, then a minimum 44-point action on the right. Unknown chapter counts display a dash, never an invented value. Owned installed books use an arrow; missing packages use Download and unowned books use Purchase. Purchase remains a non-charging placeholder until commerce ships.
+
+The stage screen uses a dark navy book summary with actual progress, a right-aligned stage count and a yellow resume banner, followed by a winding sixteen-node path. Nodes are 76-point circles scaled vertically to 0.8, with a solid raised edge and clipped diagonal highlights. Completed nodes use a green check, the current playable node uses a yellow play symbol, and locked/unavailable nodes use a lock and disabled semantics. Later stages unlock after the predecessor's required runs; completed stages remain replayable. Overview progress counts stages whose required runs are complete; the resume banner retains the saved phrase and cycle.
+
+The player uses a full-width connected timeline of 48-point cycle nodes, without visible numbers or a count caption. The active outline follows actual audio progress; explicit confirmation reveals a check (120 ms feedback), then fills the connecting line to the next node (140 ms). Repeat preserves checks and slides two new nodes in from the right while existing nodes redistribute over 180 ms. Older saved long repeat sequences remain readable and scroll horizontally rather than shrink nodes. The footer has one icon-only play action, disabled during playback. Only at the initial three-cycle decision, a recycle-icon action appears beside it at a 1:3 width ratio; at five cycles it is hidden. Footer layout changes do not animate sideways. Only the central sentence card fades on a phrase change (120 ms). Both controls retain accessible labels; reduced motion removes spatial feedback. Back navigation and interruption handling still pause safely.
+
+Show all sixteen stage identities, with 3–16 explicitly unavailable until their learning methods ship. The first newly completed stage chooses the book's XP stage for that day: up to two 10-XP runs for 1–10, three for 11–16. Other practice remains available without XP. Totals/levels/streaks are separate per language; no routine reward toast. Full rules live in `docs/learning-contract.md`.
+
+### Recovery
+
+Use native alerts for necessary recovery instructions and destructive confirmation. Inline destructive text uses the danger palette and a trash symbol. Preserve saved state and explain the next recovery action. There are no text-input fields in these four screens; do not synthesize one as part of this system.
 
 ## Do's and Don'ts
 
-**Do** use `#58cc02` for primary CTAs only — never for body text, large background fills, or feature card backgrounds. The brand reserves the green for action signal; treating it as a generic accent dilutes the wordmark voltage.
+### Stage label and geometry refinements
 
-**Do** keep button labels uppercase at 0.8px letter-spacing — the all-caps treatment is non-negotiable on every primary CTA. Sentence-case labels read as a different brand entirely.
+- Under each stage coin, show two stars for stages 1–10 or three for 11–16,
+  before the method label. Each completed full-stage run fills one orange star;
+  empty stars use an outline. Earned stars persist across days, capped at the
+  requirement, and do not count partial phrase cycles or session resumes.
+  The group exposes its earned/total count to accessibility without extra visible copy.
 
-**Do** pair navy display (`#042c60`) with owl-green h2 inside the same page — but never inside the same section. The rhythm depends on a navy hero followed by green section-titles below.
+- Stage-path background spans one continuous vertical gradient: Mint at 0%,
+  Macaw at 50%, Beetle at 100%, at 22% opacity over the current canvas.
+  This owner-requested path treatment is an exception to the general solid-surface rule.
+- Level badges use solid Mint for Lv 1–2, Macaw for Lv 3–5 and Beetle for Lv 6–8,
+  all with navy ink. Mint and Beetle are new method accents, not primary replacements.
+- The overview metadata shows sentence count and content chapter count, not stage
+  count. Missing chapter metadata stays a dash. Lock icons and disabled semantics
+  remain, without visible locked/coming-soon captions. The stage screen has no
+  package-delete action; its future location is not yet implemented.
 
-**Do** anchor every button at 16px radius with a 3–4px flat bottom-shadow lip. The lip is the system's signature tactile cue.
+- Both book and overview progress tracks place the compact `n/16` counter on the
+  same row, immediately to the right, without the visible word "stage".
+- Stage faces are true circles transformed vertically by 0.8: 76 points wide
+  and 60.8 points high. Their icons and number badges are not distorted. Path
+  connector centers and popup anchors use the same derived coin height.
+- Each pair shares a separate level badge and name, including locked stages:
+  Lv 1 자막 쉐도잉; Lv 2 순간 암기; Lv 3 첫 단어 힌트;
+  Lv 4 다문장 암기; Lv 5 다문장 첫 단어; Lv 6 속사포 영한;
+  Lv 7 속사포 한영; Lv 8 속사포 한글.
+- These method-level badges are distinct from the language XP level in the
+  browsing header. Renaming methods does not enable unfinished learning modes.
 
-**Don't** introduce a second saturated CTA color — Duolingo's secondary action is a white-fill outline pill with macaw-blue text (`#1cb0f6`), not a competing fill. A blue or red primary on the same page breaks the single-voltage discipline.
+### Do:
 
-**Don't** use `#a5ed6e` as a body or canvas background — it's a border-and-text token (frequency 128, all `text + border`, zero `bg`). Scoped to active-state language chips and "correct answer" highlights inside the product chrome. For light surfaces stay on `{colors.canvas}` (#ffffff) or `{colors.primary-soft}` (#d7ffb8) at 14 occurrences.
+- Do use the current semantic palette for light and dark appearances.
+- Do preserve the raised button geometry and keep touch targets at least 44 points.
+- Do let Korean and English wrap and let stage numerals grow with system text size.
+- Do show selection with a checkmark and progress with numbers as well as color.
+- Do derive progress and completion from confirmed learning state.
+- Do keep original raster artwork with its prompt provenance.
 
-**Don't** substitute Inter for Feather Bold on display — Inter's higher contrast and tighter spurs break the cartoon-display silhouette the brand depends on. Nunito Bold is the only acceptable open-source replacement, and even then the kerning needs hand-adjustment at 64px.
+### Don't:
 
-**Don't** lean on gradient meshes or atmospheric photography as decoration — the entire decoration layer is the mascot illustration set. Stock illustration of "diverse students at laptops" is incompatible with the system's character vocabulary.
-
-**Don't** use weight 400 or weight 600 in DIN Round — the system runs on a strict 500 / 700 weight pair. Intermediate weights read as a different typeface family and break the two-weight discipline.
-
-## Known Gaps
-
-- **In-product chrome not captured** — the lesson screen, league leaderboard, streak-freeze modal, super-membership paywall, and Duolingo Max conversational tutor surfaces are out of scope. This document captures the marketing site at `duolingo.com`, not the app.
-- **Mascot character library not enumerated** — the 352 CSS variables include color triplets for Duo, Lily, Junior, Bea, Falstaff, Eddy, Vikram, Zari, Lin, Lucy, Oscar, Bea Junior, but the full character pose library is not catalogued here.
-- **Dark mode tokens not documented** — the marketing site is light-only; the `--color-*-always-dark` CSS variable family hints at a dark mode used elsewhere in the product, but is not extracted as a coherent surface ladder.
-- **Animation and confetti timings out of scope** — Duolingo's signature celebration animations (XP burst, streak flame, league promotion) and the gamification motion language are not captured here.
-- **Form validation states beyond focus** — the input system documented covers default and focused states only; success, warning, and error border treatments are inferred from the badge palette but not directly extracted.
-- **Custom typeface licensing** — Feather Bold and DIN Round are licensed Duolingo typefaces with no public web-font distribution. Substitutes are named but pixel-accurate reproduction requires the original files.
+- Don't copy Duolingo characters or proprietary fonts, or invent reward/streak values instead of reading real local completion data.
+- Don't use white labels on the bright Bee-yellow primary button.
+- Don't draw a second filled button or shadow inside the native navigation-bar container.
+- Don't truncate or cap text to preserve a fixed card or badge size.
+- Don't introduce diffuse app-card shadows, glass panels, or decorative gradients into the solid interface.
+- Don't announce routine saves or turn interrupted practice into completion.

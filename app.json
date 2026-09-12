@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "쇄도잉",
+    "icon": "./assets/brand/app-icon-full-bleed.png",
+    "slug": "meta-shadowing-native",
+    "scheme": "metashadowing",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "platforms": [
+      "ios"
+    ],
+    "ios": {
+      "deploymentTarget": "26.0",
+      "supportsTablet": false,
+      "bundleIdentifier": "com.codeyoma.shadowshadowing",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "plugins": [
+      "./modules/package-store/app.plugin.js",
+      "./modules/progress-cloud/app.plugin.js",
+      "expo-router",
+      "expo-sqlite",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/brand/logo.png",
+          "imageWidth": 320,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

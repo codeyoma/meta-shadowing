@@ -1,0 +1,45 @@
+name: PackageStoreTests
+options:
+  deploymentTarget:
+    iOS: '26.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  StoreTestHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.packagestore.tests
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        CODE_SIGN_ENTITLEMENTS: Host/StoreTestHost.entitlements
+  PackageStoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - path: Fixtures
+        buildPhase: resources
+      - path: ../../modules/package-store/ios
+        excludes: [PackageStoreModule.swift, '*.podspec']
+    dependencies:
+      - target: StoreTestHost
+      - sdk: StoreKit.framework
+      - sdk: StoreKitTest.framework
+schemes:
+  PackageStoreTests:
+    run:
+      storeKitConfiguration: Fixtures/Books.storekit
+    build:
+      targets:
+        StoreTestHost: all
+        PackageStoreTests: [test]
+    test:
+      targets: [PackageStoreTests]
+      gatherCoverageData: true

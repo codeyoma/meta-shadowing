@@ -1,0 +1,577 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-11T11:37:50.784Z",
+  "title": "Design System: 쇄도잉 Native",
+  "extensions": {
+    "browsingNavigation": {
+      "header": "Language flag selector; actual language-specific level with numeric XP and track; flame and consecutive-day count. The header grows with Dynamic Type.",
+      "tabs": ["Books (books.vertical)", "Selected book stages (map)", "Settings (gearshape)"],
+      "presentation": "Icon-only native tabs with accessibility labels. Settings opens a category menu with Learning Settings in a nested native stack. Language selection uses a native sheet with normal row backgrounds, orange selected border and checkmark. Player is outside the browsing shell. Books omits instructional intro and prototype/offline footer copy.",
+      "rewards": "One eligible stage per book/local day. First two runs of stages 1–10 or first three of 11–16 earn 10 XP each; other practice earns none. Preserve history; no routine notifications.",
+      "catalog": "Picker: English (UK flag), Japanese, Chinese, German, Spanish, French. Only English currently has the Morning Notes package; others show empty Books/Stages screens. Stages 1–2 are playable; 3–16 are explicitly unavailable.",
+      "logo": "Original 2:1 logo on a centered white plate, at most 260 logical points wide."
+    },
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Bee yellow primary",
+        "canonical": "#ffc800",
+        "tonalRamp": [
+          "color-mix(in oklch, #ffc800 20%, black)",
+          "color-mix(in oklch, #ffc800 40%, black)",
+          "color-mix(in oklch, #ffc800 60%, black)",
+          "color-mix(in oklch, #ffc800 80%, black)",
+          "color-mix(in oklch, #ffc800 80%, white)",
+          "color-mix(in oklch, #ffc800 60%, white)",
+          "color-mix(in oklch, #ffc800 40%, white)",
+          "color-mix(in oklch, #ffc800 20%, white)"
+        ]
+      },
+      "primary-pressed": {
+        "role": "primary",
+        "displayName": "Fox orange pressed",
+        "canonical": "#ff9600",
+        "tonalRamp": [
+          "color-mix(in oklch, #ff9600 20%, black)",
+          "color-mix(in oklch, #ff9600 40%, black)",
+          "color-mix(in oklch, #ff9600 60%, black)",
+          "color-mix(in oklch, #ff9600 80%, black)",
+          "color-mix(in oklch, #ff9600 80%, white)",
+          "color-mix(in oklch, #ff9600 60%, white)",
+          "color-mix(in oklch, #ff9600 40%, white)",
+          "color-mix(in oklch, #ff9600 20%, white)"
+        ]
+      },
+      "selection-light": {
+        "role": "primary",
+        "displayName": "Soft green selection",
+        "tonalRamp": [
+          "oklch(15.00% 0.10123 131.98)",
+          "oklch(26.43% 0.10123 131.98)",
+          "oklch(37.86% 0.10123 131.98)",
+          "oklch(49.29% 0.10123 131.98)",
+          "oklch(60.71% 0.10123 131.98)",
+          "oklch(72.14% 0.10123 131.98)",
+          "oklch(83.57% 0.10123 131.98)",
+          "oklch(95.00% 0.10123 131.98)"
+        ]
+      },
+      "selection-dark": {
+        "role": "primary",
+        "displayName": "Deep green selection",
+        "tonalRamp": [
+          "oklch(15.00% 0.05922 155.62)",
+          "oklch(26.43% 0.05922 155.62)",
+          "oklch(37.86% 0.05922 155.62)",
+          "oklch(49.29% 0.05922 155.62)",
+          "oklch(60.71% 0.05922 155.62)",
+          "oklch(72.14% 0.05922 155.62)",
+          "oklch(83.57% 0.05922 155.62)",
+          "oklch(95.00% 0.05922 155.62)"
+        ]
+      },
+      "macaw": {
+        "role": "secondary",
+        "displayName": "Macaw blue",
+        "tonalRamp": [
+          "oklch(15.00% 0.15134 237.07)",
+          "oklch(26.43% 0.15134 237.07)",
+          "oklch(37.86% 0.15134 237.07)",
+          "oklch(49.29% 0.15134 237.07)",
+          "oklch(60.71% 0.15134 237.07)",
+          "oklch(72.14% 0.15134 237.07)",
+          "oklch(83.57% 0.15134 237.07)",
+          "oklch(95.00% 0.15134 237.07)"
+        ]
+      },
+      "blue-soft-light": {
+        "role": "secondary",
+        "displayName": "Pale blue support",
+        "tonalRamp": [
+          "oklch(15.00% 0.02095 227.52)",
+          "oklch(26.43% 0.02095 227.52)",
+          "oklch(37.86% 0.02095 227.52)",
+          "oklch(49.29% 0.02095 227.52)",
+          "oklch(60.71% 0.02095 227.52)",
+          "oklch(72.14% 0.02095 227.52)",
+          "oklch(83.57% 0.02095 227.52)",
+          "oklch(95.00% 0.02095 227.52)"
+        ]
+      },
+      "blue-soft-dark": {
+        "role": "secondary",
+        "displayName": "Deep blue support",
+        "tonalRamp": [
+          "oklch(15.00% 0.06224 242.64)",
+          "oklch(26.43% 0.06224 242.64)",
+          "oklch(37.86% 0.06224 242.64)",
+          "oklch(49.29% 0.06224 242.64)",
+          "oklch(60.71% 0.06224 242.64)",
+          "oklch(72.14% 0.06224 242.64)",
+          "oklch(83.57% 0.06224 242.64)",
+          "oklch(95.00% 0.06224 242.64)"
+        ]
+      },
+      "link-dark": {
+        "role": "secondary",
+        "displayName": "Light blue link",
+        "tonalRamp": [
+          "oklch(15.00% 0.09220 232.01)",
+          "oklch(26.43% 0.09220 232.01)",
+          "oklch(37.86% 0.09220 232.01)",
+          "oklch(49.29% 0.09220 232.01)",
+          "oklch(60.71% 0.09220 232.01)",
+          "oklch(72.14% 0.09220 232.01)",
+          "oklch(83.57% 0.09220 232.01)",
+          "oklch(95.00% 0.09220 232.01)"
+        ]
+      },
+      "danger-light": {
+        "role": "tertiary",
+        "displayName": "Brick recovery ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.16215 28.87)",
+          "oklch(26.43% 0.16215 28.87)",
+          "oklch(37.86% 0.16215 28.87)",
+          "oklch(49.29% 0.16215 28.87)",
+          "oklch(60.71% 0.16215 28.87)",
+          "oklch(72.14% 0.16215 28.87)",
+          "oklch(83.57% 0.16215 28.87)",
+          "oklch(95.00% 0.16215 28.87)"
+        ]
+      },
+      "danger-dark": {
+        "role": "tertiary",
+        "displayName": "Pale coral recovery ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.08957 28.41)",
+          "oklch(26.43% 0.08957 28.41)",
+          "oklch(37.86% 0.08957 28.41)",
+          "oklch(49.29% 0.08957 28.41)",
+          "oklch(60.71% 0.08957 28.41)",
+          "oklch(72.14% 0.08957 28.41)",
+          "oklch(83.57% 0.08957 28.41)",
+          "oklch(95.00% 0.08957 28.41)"
+        ]
+      },
+      "canvas-light": {
+        "role": "neutral",
+        "displayName": "Canvas white",
+        "tonalRamp": [
+          "oklch(15.00% 0.00000 0.00)",
+          "oklch(26.43% 0.00000 0.00)",
+          "oklch(37.86% 0.00000 0.00)",
+          "oklch(49.29% 0.00000 0.00)",
+          "oklch(60.71% 0.00000 0.00)",
+          "oklch(72.14% 0.00000 0.00)",
+          "oklch(83.57% 0.00000 0.00)",
+          "oklch(95.00% 0.00000 0.00)"
+        ]
+      },
+      "soft-light": {
+        "role": "neutral",
+        "displayName": "Soft gray surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.00000 0.00)",
+          "oklch(26.43% 0.00000 0.00)",
+          "oklch(37.86% 0.00000 0.00)",
+          "oklch(49.29% 0.00000 0.00)",
+          "oklch(60.71% 0.00000 0.00)",
+          "oklch(72.14% 0.00000 0.00)",
+          "oklch(83.57% 0.00000 0.00)",
+          "oklch(95.00% 0.00000 0.00)"
+        ]
+      },
+      "body-light": {
+        "role": "neutral",
+        "displayName": "Body charcoal",
+        "tonalRamp": [
+          "oklch(15.00% 0.00000 0.00)",
+          "oklch(26.43% 0.00000 0.00)",
+          "oklch(37.86% 0.00000 0.00)",
+          "oklch(49.29% 0.00000 0.00)",
+          "oklch(60.71% 0.00000 0.00)",
+          "oklch(72.14% 0.00000 0.00)",
+          "oklch(83.57% 0.00000 0.00)",
+          "oklch(95.00% 0.00000 0.00)"
+        ]
+      },
+      "navy": {
+        "role": "neutral",
+        "displayName": "Navy ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.10204 257.38)",
+          "oklch(26.43% 0.10204 257.38)",
+          "oklch(37.86% 0.10204 257.38)",
+          "oklch(49.29% 0.10204 257.38)",
+          "oklch(60.71% 0.10204 257.38)",
+          "oklch(72.14% 0.10204 257.38)",
+          "oklch(83.57% 0.10204 257.38)",
+          "oklch(95.00% 0.10204 257.38)"
+        ]
+      },
+      "secondary-light": {
+        "role": "neutral",
+        "displayName": "Secondary charcoal",
+        "tonalRamp": [
+          "oklch(15.00% 0.00000 0.00)",
+          "oklch(26.43% 0.00000 0.00)",
+          "oklch(37.86% 0.00000 0.00)",
+          "oklch(49.29% 0.00000 0.00)",
+          "oklch(60.71% 0.00000 0.00)",
+          "oklch(72.14% 0.00000 0.00)",
+          "oklch(83.57% 0.00000 0.00)",
+          "oklch(95.00% 0.00000 0.00)"
+        ]
+      },
+      "line-light": {
+        "role": "neutral",
+        "displayName": "Structural gray",
+        "tonalRamp": [
+          "oklch(15.00% 0.00000 0.00)",
+          "oklch(26.43% 0.00000 0.00)",
+          "oklch(37.86% 0.00000 0.00)",
+          "oklch(49.29% 0.00000 0.00)",
+          "oklch(60.71% 0.00000 0.00)",
+          "oklch(72.14% 0.00000 0.00)",
+          "oklch(83.57% 0.00000 0.00)",
+          "oklch(95.00% 0.00000 0.00)"
+        ]
+      },
+      "outline-light": {
+        "role": "neutral",
+        "displayName": "Waiting-state gray",
+        "tonalRamp": [
+          "oklch(15.00% 0.00000 0.00)",
+          "oklch(26.43% 0.00000 0.00)",
+          "oklch(37.86% 0.00000 0.00)",
+          "oklch(49.29% 0.00000 0.00)",
+          "oklch(60.71% 0.00000 0.00)",
+          "oklch(72.14% 0.00000 0.00)",
+          "oklch(83.57% 0.00000 0.00)",
+          "oklch(95.00% 0.00000 0.00)"
+        ]
+      },
+      "canvas-dark": {
+        "role": "neutral",
+        "displayName": "Deep navy canvas",
+        "tonalRamp": [
+          "oklch(15.00% 0.03584 255.93)",
+          "oklch(26.43% 0.03584 255.93)",
+          "oklch(37.86% 0.03584 255.93)",
+          "oklch(49.29% 0.03584 255.93)",
+          "oklch(60.71% 0.03584 255.93)",
+          "oklch(72.14% 0.03584 255.93)",
+          "oklch(83.57% 0.03584 255.93)",
+          "oklch(95.00% 0.03584 255.93)"
+        ]
+      },
+      "card-dark": {
+        "role": "neutral",
+        "displayName": "Navy card surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.04358 253.25)",
+          "oklch(26.43% 0.04358 253.25)",
+          "oklch(37.86% 0.04358 253.25)",
+          "oklch(49.29% 0.04358 253.25)",
+          "oklch(60.71% 0.04358 253.25)",
+          "oklch(72.14% 0.04358 253.25)",
+          "oklch(83.57% 0.04358 253.25)",
+          "oklch(95.00% 0.04358 253.25)"
+        ]
+      },
+      "soft-dark": {
+        "role": "neutral",
+        "displayName": "Raised tonal surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.04834 253.85)",
+          "oklch(26.43% 0.04834 253.85)",
+          "oklch(37.86% 0.04834 253.85)",
+          "oklch(49.29% 0.04834 253.85)",
+          "oklch(60.71% 0.04834 253.85)",
+          "oklch(72.14% 0.04834 253.85)",
+          "oklch(83.57% 0.04834 253.85)",
+          "oklch(95.00% 0.04834 253.85)"
+        ]
+      },
+      "text-dark": {
+        "role": "neutral",
+        "displayName": "Near-white ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.00513 247.88)",
+          "oklch(26.43% 0.00513 247.88)",
+          "oklch(37.86% 0.00513 247.88)",
+          "oklch(49.29% 0.00513 247.88)",
+          "oklch(60.71% 0.00513 247.88)",
+          "oklch(72.14% 0.00513 247.88)",
+          "oklch(83.57% 0.00513 247.88)",
+          "oklch(95.00% 0.00513 247.88)"
+        ]
+      },
+      "secondary-dark": {
+        "role": "neutral",
+        "displayName": "Soft blue-gray ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.02902 251.50)",
+          "oklch(26.43% 0.02902 251.50)",
+          "oklch(37.86% 0.02902 251.50)",
+          "oklch(49.29% 0.02902 251.50)",
+          "oklch(60.71% 0.02902 251.50)",
+          "oklch(72.14% 0.02902 251.50)",
+          "oklch(83.57% 0.02902 251.50)",
+          "oklch(95.00% 0.02902 251.50)"
+        ]
+      },
+      "line-dark": {
+        "role": "neutral",
+        "displayName": "Blue-gray structure",
+        "tonalRamp": [
+          "oklch(15.00% 0.04718 251.29)",
+          "oklch(26.43% 0.04718 251.29)",
+          "oklch(37.86% 0.04718 251.29)",
+          "oklch(49.29% 0.04718 251.29)",
+          "oklch(60.71% 0.04718 251.29)",
+          "oklch(72.14% 0.04718 251.29)",
+          "oklch(83.57% 0.04718 251.29)",
+          "oklch(95.00% 0.04718 251.29)"
+        ]
+      },
+      "outline-dark": {
+        "role": "neutral",
+        "displayName": "Waiting-state blue-gray",
+        "tonalRamp": [
+          "oklch(15.00% 0.04903 251.60)",
+          "oklch(26.43% 0.04903 251.60)",
+          "oklch(37.86% 0.04903 251.60)",
+          "oklch(49.29% 0.04903 251.60)",
+          "oklch(60.71% 0.04903 251.60)",
+          "oklch(72.14% 0.04903 251.60)",
+          "oklch(83.57% 0.04903 251.60)",
+          "oklch(95.00% 0.04903 251.60)"
+        ]
+      },
+      "accent-bee": {
+        "role": "secondary",
+        "displayName": "Accent Bee (former primary)",
+        "canonical": "#58cc02",
+        "tonalRamp": [
+          "color-mix(in oklch, #58cc02 20%, black)",
+          "color-mix(in oklch, #58cc02 40%, black)",
+          "color-mix(in oklch, #58cc02 60%, black)",
+          "color-mix(in oklch, #58cc02 80%, black)",
+          "color-mix(in oklch, #58cc02 80%, white)",
+          "color-mix(in oklch, #58cc02 60%, white)",
+          "color-mix(in oklch, #58cc02 40%, white)",
+          "color-mix(in oklch, #58cc02 20%, white)"
+        ]
+      },
+      "accent-fox": {
+        "role": "secondary",
+        "displayName": "Accent Fox (former pressed)",
+        "canonical": "#58a700",
+        "tonalRamp": [
+          "color-mix(in oklch, #58a700 20%, black)",
+          "color-mix(in oklch, #58a700 40%, black)",
+          "color-mix(in oklch, #58a700 60%, black)",
+          "color-mix(in oklch, #58a700 80%, black)",
+          "color-mix(in oklch, #58a700 80%, white)",
+          "color-mix(in oklch, #58a700 60%, white)",
+          "color-mix(in oklch, #58a700 40%, white)",
+          "color-mix(in oklch, #58a700 20%, white)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Rounded lesson title at base font scale."
+      },
+      "sentence": {
+        "displayName": "Sentence",
+        "purpose": "English practice sentence at base font scale."
+      },
+      "stage-title": {
+        "displayName": "Stage Title",
+        "purpose": "Rounded stage name."
+      },
+      "stage-number": {
+        "displayName": "Stage Number",
+        "purpose": "Intrinsic growing stage numeral."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Korean screen introduction using the system font."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Settings group heading using the system font."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Main explanatory text with native Korean glyph support."
+      },
+      "support": {
+        "displayName": "Support",
+        "purpose": "Supporting notes and metadata."
+      },
+      "badge": {
+        "displayName": "Badge",
+        "purpose": "Compact metadata label."
+      },
+      "button": {
+        "displayName": "Button",
+        "purpose": "Action label; scale size and line height together."
+      }
+    },
+    "shadows": [
+      {
+        "name": "primary-lip",
+        "value": "0 4px 0 #ff9600",
+        "purpose": "Flat action lip in both appearances; reserved space remains when pressed."
+      },
+      {
+        "name": "secondary-lip-light",
+        "value": "0 4px 0 #e5e5e5",
+        "purpose": "Light secondary action lip."
+      },
+      {
+        "name": "secondary-lip-dark",
+        "value": "0 4px 0 #344960",
+        "purpose": "Dark secondary action lip."
+      }
+    ],
+    "motion": [
+      {
+        "name": "action-press",
+        "value": "translateY(4px)",
+        "purpose": "Immediate touch-down translation; no custom duration or spring; remove lip while pressed."
+      },
+      {
+        "name": "header-press",
+        "value": "opacity: 0.65",
+        "purpose": "Immediate feedback on transparent content in the native bar."
+      },
+      {
+        "name": "destructive-press",
+        "value": "opacity: 0.6",
+        "purpose": "Immediate feedback on the lesson-removal text action."
+      }
+    ],
+    "brandAssets": {
+      "logo": "assets/brand/logo.png",
+      "appIcon": "assets/brand/app-icon.png",
+      "displayName": "쇄도잉",
+      "provenance": "Owner supplied; originals preserved without editing.",
+      "iconReadiness": "Prototype source includes transparency and rounded corners; App Store preparation remains separate."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Bee action face with navy ink and a reserved 4-point lip; pointer and keyboard states are documentation-only.",
+      "html": "<div class=\"ds-primary-space\"><button class=\"ds-primary\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 12h15m-6-6 6 6-6 6\"/></svg><span>레슨 열기</span></button></div>",
+      "css": ".ds-primary-space{padding-bottom:4px}.ds-primary{display:flex;align-items:center;justify-content:center;gap:10px;min-height:54px;width:100%;padding:13px 18px;border:0;border-radius:16px;background:#ffc800;color:#042c60;box-shadow:0 4px 0 #ff9600;font:700 17px/24px system-ui,sans-serif;letter-spacing:.2px;text-align:center}.ds-primary span{min-width:0}.ds-primary svg{flex-shrink:0}.ds-primary:hover{cursor:pointer}.ds-primary:focus-visible{outline:3px solid #042c60;outline-offset:5px}.ds-primary:active{transform:translateY(4px);box-shadow:none}.ds-primary:disabled{background:#e5e5e5;color:#4b4b4b;box-shadow:none;transform:none;cursor:default}"
+    },
+    {
+      "name": "Secondary Action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The secondary action in dark appearance, using card fill, light-blue link ink, and structural border/lip.",
+      "html": "<div class=\"ds-secondary-space\"><button class=\"ds-secondary\">두 번 더 연습</button></div>",
+      "css": ".ds-secondary-space{padding:12px 12px 16px;background:#101c2c}.ds-secondary{display:flex;align-items:center;justify-content:center;min-height:54px;width:100%;padding:13px 18px;border:2px solid #344960;border-radius:16px;background:#192a3e;color:#8dd8ff;box-shadow:0 4px 0 #344960;font:700 17px/24px system-ui,sans-serif;letter-spacing:.2px;text-align:center}.ds-secondary:hover{cursor:pointer}.ds-secondary:focus-visible{outline:3px solid #8dd8ff;outline-offset:5px}.ds-secondary:active{transform:translateY(4px);box-shadow:none}.ds-secondary:disabled{background:#344960;color:#b8c7d8;box-shadow:none;transform:none;cursor:default}"
+    },
+    {
+      "name": "Native Header Action",
+      "kind": "nav",
+      "refersTo": "header-action",
+      "description": "Transparent custom content inside a schematic native header; the platform owns the actual bar and its container.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"레슨 탐색\"><button class=\"ds-back\" aria-label=\"레슨\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m15 4-8 8 8 8\"/></svg></button><span class=\"ds-nav-title\">Stage 1</span><span class=\"ds-nav-spacer\" aria-hidden=\"true\"></span></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#ffffff;color:#042c60;font:700 17px/1.45 system-ui,sans-serif}.ds-back{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:10px;border:0;border-radius:14px;background:transparent;color:#042c60}.ds-nav-title{text-align:center}.ds-nav-spacer{width:44px}.ds-back:hover{cursor:pointer}.ds-back:focus-visible{outline:3px solid #042c60;outline-offset:2px}.ds-back:active{opacity:.65}"
+    },
+    {
+      "name": "Information Badge",
+      "kind": "chip",
+      "refersTo": "badge-blue",
+      "description": "A noninteractive blue badge for the actual lesson sentence count; no reward semantics.",
+      "html": "<span class=\"ds-badge\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M5 3h14v18H5zM8 3v18m3-13h5m-5 4h5\"/></svg><span>12문장</span></span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:10px;background:#e4f5fd;color:#042c60;font:700 13px/1.45 system-ui,sans-serif}.ds-badge svg{flex-shrink:0}"
+    },
+    {
+      "name": "Sentence Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The Player's dark sentence-card variant; display fonts fall back locally in this documentation preview.",
+      "html": "<article class=\"ds-sentence\"><div class=\"ds-speaker\"><svg aria-hidden=\"true\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M5 11h4l6-5v16l-6-5H5z\" fill=\"currentColor\"/><path d=\"M19 10q3 4 0 8m4-12q6 8 0 16\"/></svg></div><p class=\"ds-sentence-text\">I opened the window to let in the morning air.</p><p class=\"ds-translation\">아침 공기를 들이려고 창문을 열었어요.</p></article>",
+      "css": ".ds-sentence{display:flex;flex-direction:column;gap:22px;padding:26px 20px;border:2px solid #344960;border-radius:16px;background:#192a3e;color:#f4f7fa}.ds-speaker{align-self:flex-start;padding:14px;border-radius:20px;background:#143953;color:#f4f7fa}.ds-speaker svg{display:block}.ds-sentence-text{margin:0;font-family:Nunito_800ExtraBold,ui-rounded,system-ui,sans-serif;font-size:29px;font-weight:800;line-height:1.2}.ds-translation{margin:0;color:#b8c7d8;font:500 18px/1.45 system-ui,sans-serif}"
+    },
+    {
+      "name": "Learning-mode Choices",
+      "kind": "input",
+      "refersTo": "choice-selected",
+      "description": "Radio-choice rows with text and symbols; these are settings choices, not a text-input field. The preview is a static selection sample.",
+      "html": "<div class=\"ds-choices\" role=\"radiogroup\" aria-label=\"진행 방식\"><button class=\"ds-choice ds-choice-selected\" role=\"radio\" aria-checked=\"true\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m7 12 3 3 7-7\"/></svg><span class=\"ds-choice-copy\"><span class=\"ds-choice-title\">직접 확인</span><span class=\"ds-choice-detail\">말한 뒤 버튼을 눌러 다음 사이클로.</span></span></button><button class=\"ds-choice\" role=\"radio\" aria-checked=\"false\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><circle cx=\"12\" cy=\"12\" r=\"9\"/></svg><span class=\"ds-choice-copy\"><span class=\"ds-choice-title\">자동 진행</span><span class=\"ds-choice-detail\">말할 시간이 지나면 다음 사이클로.</span></span></button></div>",
+      "css": ".ds-choices{display:flex;flex-direction:column;gap:14px}.ds-choice{display:flex;align-items:flex-start;gap:8px;min-height:54px;padding:16px;border:2px solid #e5e5e5;border-radius:14px;background:#ffffff;color:#4b4b4b;text-align:left}.ds-choice svg{flex-shrink:0;margin-top:1px}.ds-choice-copy{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}.ds-choice-title{color:#042c60;font:700 17px/1.45 system-ui,sans-serif}.ds-choice-detail{color:#4b4b4b;font:500 14px/1.45 system-ui,sans-serif}.ds-choice-selected{border-color:#ff9600;background:#d7ffb8;color:#042c60}.ds-choice:hover{cursor:pointer}.ds-choice:focus-visible{outline:3px solid #042c60;outline-offset:3px}.ds-choice:active{background:#f7f7f7}.ds-choice-selected:active{background:#d7ffb8}"
+    },
+    {
+      "name": "Sentence Progress",
+      "kind": "custom",
+      "refersTo": "progress-track",
+      "description": "A dark track with an illustrative 1-of-12 value. Runtime fill must come from confirmed state; this is not live data.",
+      "html": "<div class=\"ds-progress-canvas\"><div class=\"ds-progress\" role=\"progressbar\" aria-label=\"문장 진행 예시\" aria-valuemin=\"0\" aria-valuemax=\"12\" aria-valuenow=\"1\"><div class=\"ds-progress-fill\"><div class=\"ds-progress-highlight\"></div></div></div></div>",
+      "css": ".ds-progress-canvas{padding:16px;background:#101c2c}.ds-progress{height:16px;border-radius:8px;overflow:hidden;background:#344960}.ds-progress-fill{height:100%;width:8.333333%;border-radius:8px;background:#ffc800;padding-top:3px;padding-left:6px;padding-right:6px;box-sizing:border-box}.ds-progress-highlight{height:4px;border-radius:2px;background:#ffffff;opacity:.3}"
+    },
+    {
+      "name": "Stage Identity",
+      "kind": "custom",
+      "refersTo": "stage-number",
+      "description": "The stage numeral has minimum dimensions plus padding and can grow with text; the count is a static uncompleted example.",
+      "html": "<div class=\"ds-stage\"><span class=\"ds-stage-number\">1</span><div class=\"ds-stage-copy\"><span class=\"ds-stage-title\">Stage 1</span><span class=\"ds-stage-count\">0회 완료</span></div></div>",
+      "css": ".ds-stage{display:flex;align-items:center;gap:14px;padding:20px;border:2px solid #e5e5e5;border-radius:16px;background:#ffffff}.ds-stage-number{display:flex;align-items:center;justify-content:center;flex-shrink:0;min-width:56px;min-height:56px;padding:10px;border-radius:20px;background:#ffc800;color:#042c60;box-sizing:border-box;font-family:Nunito_800ExtraBold,ui-rounded,system-ui,sans-serif;font-size:28px;font-weight:800;line-height:1.2}.ds-stage-copy{display:flex;flex:1;flex-direction:column;gap:5px;min-width:0}.ds-stage-title{color:#042c60;font-family:Nunito_800ExtraBold,ui-rounded,system-ui,sans-serif;font-size:23px;font-weight:800;line-height:1.2}.ds-stage-count{color:#4b4b4b;font:500 14px/1.45 system-ui,sans-serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Friendly spoken practice",
+    "overview": "쇄도잉 makes spoken practice feel approachable through solid surfaces, rounded display lettering, original lesson artwork, and buttons that visibly depress. The owner-approved Duolingo-inspired direction supplies the Bee-yellow, Macaw-blue, navy, and white palette; 쇄도잉 uses the owner-supplied name, logo and icon.\n\nNative iPhone navigation and readable Korean and English organize this playful character around one clear next action. Crisp borders and generous spacing carry the hierarchy in both appearances. Encouragement comes from actual learning progress and plain, friendly language.",
+    "keyCharacteristics": [
+      "Solid, tactile controls with a flat bottom lip.",
+      "Rounded English display type paired with system Korean and interface text.",
+      "Original lesson artwork and restrained semantic color.",
+      "Native navigation, scalable text, and truthful progress."
+    ],
+    "rules": [
+      {
+        "name": "The Readable Accent Rule",
+        "body": "Use navy ink on Bee-yellow and Macaw-blue fills; use the appearance-specific heading and link colors on pale or dark surfaces.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Scale Rule",
+        "body": "Scale custom text size and line height once with the current system font scale, without a text-size cap; allow text containers to grow.",
+        "section": "typography"
+      },
+      {
+        "name": "The Solid Press Rule",
+        "body": "Reserve app-drawn shadows for the flat action-button lip. Pressing lowers the button face into that lip without moving surrounding layout.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use the current semantic palette for light and dark appearances.",
+      "Do preserve the raised button geometry and keep touch targets at least 44 points.",
+      "Do let Korean and English wrap and let stage numerals grow with system text size.",
+      "Do show selection with a checkmark and progress with numbers as well as color.",
+      "Do derive progress and completion from confirmed learning state.",
+      "Do keep original raster artwork with its prompt provenance."
+    ],
+    "donts": [
+      "Don't copy Duolingo characters or proprietary fonts, or invent reward/streak values instead of reading real local completion data.",
+      "Don't use white labels on the bright Bee-yellow primary button.",
+      "Don't draw a second filled button or shadow inside the native navigation-bar container.",
+      "Don't truncate or cap text to preserve a fixed card or badge size.",
+      "Don't introduce diffuse app-card shadows, glass panels, or decorative gradients into the solid interface.",
+      "Don't announce routine saves or turn interrupted practice into completion."
+    ]
+  }
+}
