@@ -105,6 +105,35 @@ struct PackagePurchasesTests {
     #expect(fresh.snapshot.entitlementIssue == .unverified)
   }
 
+  @Test func unrelatedUnverifiedEntitlementDoesNotBlockThisBook() async throws {
+    let session = try session()
+    defer { session.clearTransactions() }
+    try await session.setSimulatedError(.verification(.invalidSignature), forAPI: StoreKitVerificationAPI())
+    _ = try await session.buyProduct(identifier: "com.example.packagestore.other")
+    let store = PackagePurchases(productID: productID)
+    defer { store.stopObserving() }
+    await store.refresh()
+    #expect(store.snapshot.product?.id == productID)
+    #expect(store.snapshot.ownership == .notOwned)
+    #expect(store.snapshot.entitlementIssue == .none)
+  }
+
+  @Test func unrelatedUnverifiedUpdateDoesNotChangeThisBook() async throws {
+    let session = try session()
+    defer { session.clearTransactions() }
+    let store = PackagePurchases(productID: productID)
+    defer { store.stopObserving() }
+    await store.refresh()
+    let revision = store.snapshot.revision
+    try await session.setSimulatedError(.verification(.invalidSignature), forAPI: StoreKitVerificationAPI())
+    _ = try await session.buyProduct(identifier: "com.example.packagestore.other")
+    // The observer publishes even an ignored update; wait until it has consumed it.
+    try await waitUntil { store.snapshot.revision > revision }
+    #expect(store.snapshot.ownership == .notOwned)
+    #expect(store.snapshot.entitlementIssue == .none)
+    #expect(store.snapshot.outcome == .none)
+  }
+
   @Test(arguments: ["", "com.example.packagestore.missing"])
   func missingProductIsUnavailableNotAFabricatedOffer(id: String) async throws {
     let session = try session()

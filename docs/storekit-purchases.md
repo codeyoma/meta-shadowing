@@ -92,6 +92,14 @@ unavailable; the controlled sample remains usable.
 
 ## Measured verification — 2026-09-12
 
+Review follow-up, 2026-09-13: two new real StoreKitTest regressions reproduced
+unrelated-product verification failures in entitlement refresh and transaction
+updates (both failed before the fix). Filtering unverified results by configured
+product ID and non-consumable type makes all 14 native tests pass. Unverified
+metadata is used only to exclude unrelated products, never to grant ownership
+or finish a transaction. Existing same-product invalid-signature tests still pass.
+This is simulator evidence, not live sandbox acceptance.
+
 - `npm run check`: 73 domain tests passed, zero failures; TypeScript checking
   completed successfully.
 - The isolated iOS 26.5 StoreKit test run reported 12 test cases passed, zero

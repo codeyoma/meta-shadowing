@@ -8,7 +8,8 @@ acceptance gate. See the [platform direction](apple-only-foundation.md) for
 service boundaries and the decisions still needed before Android development.
 StoreKit #45 and private CloudKit #49 now have local implementations; their
 real-service/device acceptance is still open. Apple-hosted delivery remains
-separate work. Supabase remains excluded and native CI migration is unresolved.
+separate work. Supabase remains excluded. [Native CI](native-ci.md) replaces
+retired web checks; its remote results and protection migration govern merge readiness.
 
 ## Historical execution update — 2026-09-12
 
@@ -301,8 +302,8 @@ deployment, or hosted database change was performed.
 
 ## Native CI migration gate
 
-The old local `.github` files were removed with the retired application. This is
-not a change to the repository's hosted rulesets or approval settings. Before
-publishing this branch, propose native quality/domain tests and iOS build checks,
-and explicitly migrate the existing required web/database checks. Do not bypass
-required checks or pretend deleted legacy checks validate the new native app.
+The old `.github` files were removed with the retired application. The replacement
+[native workflow](native-ci.md) now supplies domain/SQLite checks, native service
+tests and an iOS Release build. Verify fresh remote results before migrating the
+`dev` ruleset from web/database check names; retain strict checks and conversation
+resolution. `main` migration and human release approval remain separate gates.

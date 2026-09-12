@@ -47,13 +47,16 @@ final class PackagePurchases {
 
   private func handleUpdate(_ result: VerificationResult<Transaction>) async {
     defer { publish() }
-    guard case .verified(let transaction) = result else {
+    if case .unverified(let transaction, _) = result {
+      // Untrusted metadata may exclude an unrelated result, never grant ownership.
+      guard transaction.productID == productID, transaction.productType == .nonConsumable else { return }
       entitlementRevision += 1
       snapshot.entitlementIssue = .unverified
       snapshot.outcome = .unverified
       return
     }
-    guard transaction.productID == productID, transaction.productType == .nonConsumable else { return }
+    guard case .verified(let transaction) = result,
+          transaction.productID == productID, transaction.productType == .nonConsumable else { return }
     await applyVerified(transaction)
   }
 
@@ -132,7 +135,10 @@ final class PackagePurchases {
     var ownership = PackageOwnership.notOwned
     var unverified = false
     for await result in Transaction.currentEntitlements {
-      if case .unverified = result { unverified = true }
+      if case .unverified(let transaction, _) = result,
+         transaction.productID == productID, transaction.productType == .nonConsumable {
+        unverified = true
+      }
       if case .verified(let transaction) = result, transaction.productID == productID,
          transaction.revocationDate == nil, transaction.productType == .nonConsumable {
         ownership = .owned

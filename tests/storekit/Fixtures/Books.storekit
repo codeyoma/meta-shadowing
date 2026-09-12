@@ -10,6 +10,15 @@
       "productID": "com.example.packagestore.book",
       "referenceName": "Local Test Book",
       "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "1.00",
+      "familyShareable": false,
+      "internalID": "100002",
+      "localizations": [{ "description": "Unrelated local test product.", "displayName": "Other Book", "locale": "en_US" }],
+      "productID": "com.example.packagestore.other",
+      "referenceName": "Other Local Book",
+      "type": "NonConsumable"
     }
   ],
   "settings": { "_failTransactionsEnabled": false, "_locale": "en_US", "_storefront": "USA" },

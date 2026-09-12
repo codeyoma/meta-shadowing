@@ -97,8 +97,9 @@ real-device clean-install acceptance is still pending.
 - Test speech can be regenerated on macOS with `npm run prepare:audio`. It uses
   local system speech and is for personal, noncommercial prototype testing only.
   Clear production voice/content rights separately before distribution.
-- Feature PRs target `dev`. Do not publish until native CI migration and privacy
-  checks are agreed; do not weaken remote protection as a shortcut.
+- Feature PRs target `dev`. [Native CI](docs/native-ci.md) validates domain/SQLite
+  behavior, the iOS bundle, native service fixtures and a Release Simulator build.
+  Required checks and privacy review must pass before merge; never bypass them.
 
 No commit, push, deployment, or Supabase mutation is part of this local milestone.
 

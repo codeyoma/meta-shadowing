@@ -1,0 +1,105 @@
+name: Native CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+  EXPO_NO_TELEMETRY: '1'
+  EXPO_NO_DOTENV: '1'
+
+jobs:
+  ci-branch-policy:
+    name: ci-branch-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: node --test scripts/check-branch-policy.test.mjs
+      - run: node scripts/check-branch-policy.mjs < "$GITHUB_EVENT_PATH"
+
+  ci-quality:
+    name: ci-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run bundle:ios
+
+  ci-native-tests:
+    name: ci-native-tests
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare native fixture projects
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodebuild -version
+          xcodegen generate --spec tests/storekit/project.yml
+          xcodegen generate --spec tests/cloudkit/project.yml
+      - name: Test real StoreKit and CloudKit boundaries on iOS Simulator
+        run: |
+          ci_simulator=$(xcrun simctl list devices available --json | jq -r '[.devices | to_entries[] | select(.key | contains(".iOS-26-")) | .value[] | select(.name | startswith("iPhone"))][0].udid // empty')
+          test -n "$ci_simulator"
+          xcodebuild test -project tests/storekit/PackageStoreTests.xcodeproj -scheme PackageStoreTests -destination "platform=iOS Simulator,id=$ci_simulator" -parallel-testing-enabled NO -quiet
+          xcodebuild test -project tests/cloudkit/ProgressCloudTests.xcodeproj -scheme ProgressCloudTests -destination "platform=iOS Simulator,id=$ci_simulator" -parallel-testing-enabled NO -quiet
+
+  ci-ios-build:
+    name: ci-ios-build
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Generate iOS project and install pods
+        run: npx expo prebuild --platform ios --no-install && npx pod-install
+      - name: Build standalone Release Simulator app without signing credentials
+        run: xcodebuild -workspace ios/app.xcworkspace -scheme app -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
+
+  release-approval:
+    name: release-approval
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: [ci-branch-policy, ci-quality, ci-native-tests, ci-ios-build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: release-approval
+    steps:
+      - run: echo 'Release candidate approved for merge. This job does not deploy or submit the app.'
