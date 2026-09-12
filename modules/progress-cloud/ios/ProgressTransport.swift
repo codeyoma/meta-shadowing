@@ -1,5 +1,7 @@
 import Foundation
 
+typealias CloudCancellation = @MainActor @Sendable () async -> Void
+
 /// Only the external CloudKit seam is replaced by native tests.
 @MainActor
 protocol ProgressCloudService: AnyObject {
@@ -7,7 +9,7 @@ protocol ProgressCloudService: AnyObject {
   func fetch(into store: ProgressStore) async throws
   func save(_ record: BackupRecord, asset: URL?, store: ProgressStore) async throws -> BackupRecord
   func delete(_ id: String, store: ProgressStore) async throws
-  func stop() async
+  func suspend() -> CloudCancellation
 }
 
 @MainActor
@@ -30,9 +32,13 @@ final class ProgressTransport {
     let identity = try await cloud.identity()
     guard scope == identity, ticket == epoch else { throw ProgressCloudError.accountChanged }
   }
-  func stop() async {
+  func suspend() -> CloudCancellation {
     epoch = UUID()
-    await cloud.stop()
+    return cloud.suspend()
+  }
+  func stop() async {
+    let cancel = suspend()
+    await cancel()
   }
   func list(scope: String) async throws -> [CloudBackup] {
     guard !publishing, !fetching else { throw ProgressCloudError.busy }

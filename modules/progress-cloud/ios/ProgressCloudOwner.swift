@@ -7,14 +7,24 @@ final class ProgressCloudOwner {
   private var epoch = UUID()
   private var observer: NSObjectProtocol?
   private var destroyed = false
-  nonisolated init() {}
-  func observe(_ changed: @escaping @Sendable () -> Void) {
+  struct ActivationAccess: Sendable {
+    let identity: @MainActor @Sendable () async throws -> String
+    let makeTransport: @MainActor @Sendable (String) throws -> ProgressTransport
+  }
+  private let activationAccess: @MainActor @Sendable () throws -> ActivationAccess
+  nonisolated init(activationAccess: @escaping @MainActor @Sendable () throws -> ActivationAccess = {
+    try ProgressCloudOwner.nativeActivationAccess()
+  }) {
+    self.activationAccess = activationAccess
+  }
+  func observe(_ changed: @escaping @MainActor @Sendable () -> Void) {
     guard !destroyed, observer == nil else { return }
     observer = NotificationCenter.default.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor in
         guard let self else { return }
-        await self.stop()
+        let cancel = self.suspend()
         changed()
+        await cancel()
       }
     }
   }
@@ -52,35 +62,50 @@ final class ProgressCloudOwner {
   func active(_ scope: String) async throws -> ProgressTransport {
     guard !destroyed else { throw ProgressCloudError.unavailable }
     let ticket = epoch
-    guard let configuration = Self.configuration() else { throw ProgressCloudError.unavailable }
-    let container = CKContainer(identifier: configuration.container)
-    let current = try await Self.identity(container, configuration)
+    let access = try activationAccess()
+    let current = try await access.identity()
     guard current == scope, ticket == epoch else { throw ProgressCloudError.accountChanged }
     if let transport, transport.scope == scope { return transport }
-    if let transport {
-      await transport.stop()
+    while let previous = transport, previous.scope != scope {
+      await previous.stop()
       guard ticket == epoch else { throw ProgressCloudError.accountChanged }
-      let confirmed = try await Self.identity(container, configuration)
+      let confirmed = try await access.identity()
       guard confirmed == scope, ticket == epoch else { throw ProgressCloudError.accountChanged }
+      // An overlapping activation can install this scope during either await.
+      // Retire only the instance we stopped, then reconsider the current owner.
+      if transport === previous { transport = nil }
     }
-    let cloud = CloudKitService(container: container, scope: scope) {
-      try await Self.identity(container, configuration)
-    }
-    let root = try FileManager.default.url(for: .applicationSupportDirectory,
-      in: .userDomainMask, appropriateFor: nil, create: true)
-      .appendingPathComponent("ProgressCloud", isDirectory: true)
-      .appendingPathComponent(ProgressStore.hash(Data(scope.utf8)), isDirectory: true)
-    let next = try ProgressTransport(directory: root, scope: scope, cloud: cloud)
+    if let transport { return transport }
+    let next = try access.makeTransport(scope)
     transport = next
     return next
   }
-  func stop() async {
+  private func suspend() -> CloudCancellation {
     epoch = UUID()
     let old = transport
     transport = nil
-    await old?.stop()
+    // Invalidate all native delivery synchronously before notifying JS consumers.
+    // Only the already-captured external operation cancellation may suspend later.
+    if let old { return old.suspend() }
+    return {}
+  }
+  func stop() async {
+    let cancel = suspend()
+    await cancel()
   }
   struct Configuration: Sendable { let container: String; let environment: String }
+  private static func nativeActivationAccess() throws -> ActivationAccess {
+    guard let configuration = configuration() else { throw ProgressCloudError.unavailable }
+    let container = CKContainer(identifier: configuration.container)
+    return ActivationAccess(identity: { try await identity(container, configuration) }, makeTransport: { scope in
+      let cloud = CloudKitService(container: container, scope: scope) { try await identity(container, configuration) }
+      let root = try FileManager.default.url(for: .applicationSupportDirectory,
+        in: .userDomainMask, appropriateFor: nil, create: true)
+        .appendingPathComponent("ProgressCloud", isDirectory: true)
+        .appendingPathComponent(ProgressStore.hash(Data(scope.utf8)), isDirectory: true)
+      return try ProgressTransport(directory: root, scope: scope, cloud: cloud)
+    })
+  }
   static func configuration(bundle: Bundle = .main) -> Configuration? {
     #if targetEnvironment(simulator)
     // Controlled tests use the cloud seam. Identity requires an owner-signed device.

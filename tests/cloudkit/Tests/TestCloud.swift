@@ -10,6 +10,7 @@ final class TestCloud: ProgressCloudService {
   var saveFailure: ProgressCloudError?
   var deletionFailure: ProgressCloudError?
   var onSave: ((BackupRecord) async -> Void)?
+  var onStop: (() async -> Void)?
   var savedResponse: ((BackupRecord) -> BackupRecord)?
   func identity() async throws -> String { account }
   func fetch(into store: ProgressStore) async throws {
@@ -31,5 +32,5 @@ final class TestCloud: ProgressCloudService {
     if let deletionFailure { throw deletionFailure }
     records.removeValue(forKey: id); assets.removeValue(forKey: id)
   }
-  func stop() async {}
+  func suspend() -> CloudCancellation { { await self.onStop?() } }
 }

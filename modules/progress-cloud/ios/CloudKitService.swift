@@ -6,7 +6,7 @@ import Foundation
 @MainActor
 final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
   static let zone = CKRecordZone.ID(zoneName: "LearningProgress")
-  let container: CKContainer
+  private let container: CKContainer?
   let scope: String
   let identityProvider: @MainActor () async throws -> String
   private var engine: CKSyncEngine?
@@ -19,7 +19,7 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
   private var deleted = false
   private var failure: ProgressCloudError?
 
-  init(container: CKContainer, scope: String, identity: @escaping @MainActor () async throws -> String) {
+  init(container: CKContainer? = nil, scope: String, identity: @escaping @MainActor () async throws -> String) {
     self.container = container; self.scope = scope; self.identityProvider = identity
   }
   func identity() async throws -> String { try await identityProvider() }
@@ -30,6 +30,7 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
   }
   private func engine(for store: ProgressStore) throws -> CKSyncEngine {
     if let engine { return engine }
+    guard let container else { throw ProgressCloudError.unavailable }
     self.store = store
     let serialization = try store.state.engine.map { try JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0) }
     var configuration = CKSyncEngine.Configuration(database: container.privateCloudDatabase,
@@ -89,11 +90,15 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     if let failure { throw failure }
     guard deleted else { throw ProgressCloudError.offline }
   }
-  func stop() async {
+  func suspend() -> CloudCancellation {
     epoch = UUID(); authorized = false; outgoing = nil; deleting = nil
     let old = engine
     engine = nil; store = nil
-    await old?.cancelOperations()
+    return { await old?.cancelOperations() }
+  }
+  func stop() async {
+    let cancel = suspend()
+    await cancel()
   }
 
   nonisolated func nextRecordZoneChangeBatch(_ context: CKSyncEngine.SendChangesContext,
@@ -136,14 +141,10 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
       guard engine === self.engine, let store else { return }
       switch event {
       case .stateUpdate(let update):
-        // If incoming staging failed, do not advance persisted change tokens.
-        guard failure == nil else { return }
         let data = try JSONEncoder().encode(update.stateSerialization)
-        try store.update { $0.engine = data }
+        try deliver(.state(data), into: store)
       case .fetchedRecordZoneChanges(let changes):
-        for item in changes.modifications where item.record.recordID.zoneID == Self.zone {
-          try stage(item.record, into: store)
-        }
+        try deliver(.records(changes.modifications.map(\.record)), into: store)
         for item in changes.deletions where item.recordID.zoneID == Self.zone {
           try store.remove(item.recordID.recordName)
         }
@@ -186,14 +187,42 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     } catch { failure = Self.sanitize(error) }
   }
 
+  /// Inbound CloudKit delivery boundary. The delegate verifies account/engine identity
+  /// before synchronously handing records or encoded engine state to this method.
+  enum Delivery { case records([CKRecord]), state(Data) }
+  func deliver(_ delivery: Delivery, into store: ProgressStore) throws {
+    do {
+      switch delivery {
+      case .records(let records):
+        for record in records where record.recordID.zoneID == Self.zone {
+          try stage(record, into: store)
+        }
+      case .state(let data):
+        if let failure { throw failure }
+        try store.update { $0.engine = data }
+      }
+    } catch {
+      let error = Self.sanitize(error)
+      failure = error
+      throw error
+    }
+  }
+
   private func stage(_ record: CKRecord, into store: ProgressStore) throws {
     let metadata = try Self.decode(record)
     var data: Data?
     if metadata.kind == "ProgressBackup" {
-      if let url = (record["asset"] as? CKAsset)?.fileURL,
-         let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-         size <= ProgressStore.maxBytes, size == metadata.bytes {
-        data = try? Data(contentsOf: url)
+      if let url = (record["asset"] as? CKAsset)?.fileURL {
+        // A local delivery/read error is not evidence of damaged server bytes.
+        // Fail staging so the engine's previous durable cursor can replay this record.
+        do {
+          guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+            throw ProgressCloudError.storage
+          }
+          if size <= ProgressStore.maxBytes, size == metadata.bytes {
+            data = try Data(contentsOf: url)
+          }
+        } catch { throw ProgressCloudError.storage }
       }
     }
     try store.receive(metadata, asset: data)
