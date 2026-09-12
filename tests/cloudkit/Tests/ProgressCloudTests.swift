@@ -30,7 +30,7 @@ struct ProgressCloudTests {
     defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: freshDirectory) }
     let cloud = TestCloud()
     let writer = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
-    _ = try await writer.publish(scope: "test-scope", revision: 1, json: "{\"valid\":true}")
+    try await cloud.seedLegacy(writer, revision: 1, json: "{\"valid\":true}")
     let head = try #require(cloud.records.values.first { $0.kind == "ProgressBackupHead" })
     let current = try #require(head.current)
     cloud.records["head-damaged"] = BackupRecord(id: "head-damaged", kind: "ProgressBackupHead", writer: "damaged",
@@ -49,8 +49,8 @@ struct ProgressCloudTests {
     defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: freshDirectory) }
     let cloud = TestCloud()
     let writer = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
-    _ = try await writer.publish(scope: "test-scope", revision: 1, json: "{\"value\":1}")
-    _ = try await writer.publish(scope: "test-scope", revision: 2, json: "{\"value\":2}")
+    try await cloud.seedLegacy(writer, revision: 1, json: "{\"value\":1}")
+    try await cloud.seedLegacy(writer, revision: 2, json: "{\"value\":2}")
     let head = try #require(cloud.records.values.first { $0.kind == "ProgressBackupHead" })
     let current = try #require(head.current), previous = try #require(head.previous)
     let record = try #require(cloud.records[current.id])
@@ -124,7 +124,7 @@ struct ProgressCloudTests {
     await #expect(throws: ProgressCloudError.offline) { try await transport.publish(scope: "test-scope", revision: 1, json: "{}") }
     #expect(cloud.records.isEmpty)
   }
-  @Test func quotaFailurePreservesCurrentAndPreviousAndDurablePending() async throws {
+  @Test func quotaFailurePreservesCurrentAndDurablePending() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let cloud = TestCloud()
@@ -133,11 +133,11 @@ struct ProgressCloudTests {
     _ = try await transport.publish(scope: "test-scope", revision: 2, json: "{\"value\":2}")
     cloud.saveFailure = .quota
     await #expect(throws: ProgressCloudError.quota) { try await transport.publish(scope: "test-scope", revision: 3, json: "{\"value\":3}") }
-    #expect(try await transport.list(scope: "test-scope").count == 2)
+    #expect(try await transport.list(scope: "test-scope").count == 1)
     let reopened = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
     #expect(reopened.pendingRevision == 3)
   }
-  @Test func retainsTwoGenerationsAndRetriesOnlyAcknowledgedCleanup() async throws {
+  @Test func retainsSingletonAndRetriesAcknowledgedCleanup() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let otherDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: otherDirectory) }
@@ -146,15 +146,15 @@ struct ProgressCloudTests {
     _ = try await other.publish(scope: "test-scope", revision: 50, json: "{\"other\":true}")
     let transport = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
     for revision in 1...10 { _ = try await transport.publish(scope: "test-scope", revision: revision, json: "{\"value\":\(revision)}") }
-    #expect(cloud.assets.count == 3)
-    #expect(try await transport.list(scope: "test-scope").count == 3)
+    #expect(cloud.assets.count == 1)
+    #expect(try await transport.list(scope: "test-scope").count == 1)
     cloud.deletionFailure = .offline
-    await #expect(throws: ProgressCloudError.offline) { try await transport.publish(scope: "test-scope", revision: 11, json: "{\"value\":11}") }
-    #expect(cloud.assets.count == 4)
+    _ = try await transport.publish(scope: "test-scope", revision: 11, json: "{\"value\":11}")
+    #expect(cloud.assets.count == 2)
     cloud.deletionFailure = nil
     let reopened = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
     #expect(try await reopened.publish(scope: "test-scope", revision: 11, json: "{\"value\":11}") == 11)
-    #expect(cloud.assets.count == 3)
+    #expect(cloud.assets.count == 1)
   }
   @Test func incompleteHeadIsNotAnEmptyAccount() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -172,8 +172,8 @@ struct ProgressCloudTests {
     defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: freshDirectory) }
     let cloud = TestCloud()
     let writer = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
-    _ = try await writer.publish(scope: "test-scope", revision: 1, json: "{\"value\":1}")
-    _ = try await writer.publish(scope: "test-scope", revision: 2, json: "{\"value\":2}")
+    try await cloud.seedLegacy(writer, revision: 1, json: "{\"value\":1}")
+    try await cloud.seedLegacy(writer, revision: 2, json: "{\"value\":2}")
     let head = try #require(cloud.records.values.first { $0.kind == "ProgressBackupHead" })
     let current = try #require(head.current), previous = try #require(head.previous)
     cloud.assets[current.id] = Data("broken".utf8)
@@ -182,7 +182,7 @@ struct ProgressCloudTests {
     await #expect(throws: ProgressCloudError.corrupt) { try await reader.read(scope: "test-scope", id: current.id) }
     #expect(try await reader.read(scope: "test-scope", id: previous.id) == "{\"value\":1}")
   }
-  @Test func newerPayloadFinishesDurablePendingBeforePublishingItsOwnGeneration() async throws {
+  @Test func newerPayloadSupersedesUncommittedDurablePending() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let cloud = TestCloud()
@@ -197,10 +197,10 @@ struct ProgressCloudTests {
     cloud.failHead = false
     #expect(try await reopened.publish(scope: "test-scope", revision: 7, json: "{\"value\":2}") == 7)
     let backups = try await reopened.list(scope: "test-scope")
-    #expect(backups.count == 2)
+    #expect(backups.count == 1)
     var values: Set<String> = []
     for backup in backups { values.insert(try await reopened.read(scope: "test-scope", id: backup.id)) }
-    #expect(values == ["{\"value\":1}", "{\"value\":2}"])
+    #expect(values == ["{\"value\":2}"])
   }
   @Test func publicationSurvivesReopenAndRestoresExactJSON() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
