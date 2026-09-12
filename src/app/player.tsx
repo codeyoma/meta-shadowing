@@ -10,9 +10,10 @@ import { Player } from '../core/player';
 import { createSession, type Session } from '../core/session';
 import { getJournal } from '../native/journal';
 import { nativeAudio } from '../native/audio';
-import { lesson, packageKey, isInstalled } from '../native/package';
+import { isInstalled } from '../native/package';
 import { readSettings } from '../native/settings';
-import { sampleIdentity } from '@/native/catalog';
+import { selectedPackage } from '@/native/catalog';
+import { LearningContext } from '@/core/learning-context';
 import { playableStage } from '@/core/catalog';
 import { canOpenStage } from '@/core/stage-overview';
 import { CycleTimeline } from '@/components/cycle-timeline';
@@ -23,9 +24,17 @@ import { PlayerHeaderProgress } from '@/components/player-header-progress';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
-export default function PlayerScreen() {
-  const { stage: param } = useLocalSearchParams<{ stage: string }>();
+export default function PlayerRoute() {
+  const { stage: param, package: key } = useLocalSearchParams<{ stage: string; package: string }>();
   const stage = playableStage(param);
+  const pack = selectedPackage(key);
+  if (!pack || !stage) return <View style={{ padding: 24 }}><Label>학습을 시작할 수 없어요.</Label>
+    <ActionButton title="레슨으로" onPress={() => router.replace('/lesson')} /></View>;
+  return <PlayerScreen key={`${pack.packageKey}:${stage}`} pack={pack} stage={stage} />;
+}
+
+function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof selectedPackage>>; stage: 1 | 2 }) {
+  const lesson = pack.manifest;
   const c = usePalette();
   const insets = useSafeAreaInsets();
   const engine = useRef<Player | null>(null);
@@ -43,21 +52,20 @@ export default function PlayerScreen() {
     let appState: { remove(): void } | undefined;
     const initialize = async () => {
       try {
-        if (stage === null) { if (active) setUnavailable(true); return; }
-        if (!await isInstalled()) { if (active) setUnavailable(true); return; }
+        if (!await isInstalled(pack)) { if (active) setUnavailable(true); return; }
         if (!active) return;
-        const journal = getJournal();
-        if (!canOpenStage(stage, [{ stage: 1, count: journal.completions(packageKey, 1), session: null }])) {
+        const context = new LearningContext(pack, getJournal());
+        if (!canOpenStage(stage, [{ stage: 1, count: context.completions(1), session: null }])) {
           if (active) setUnavailable(true);
           return;
         }
-        const saved = journal.load(packageKey, stage, lesson.phrases.length);
+        const saved = context.load(stage);
         const fresh = !saved || (saved.phase === 'complete' && !opened.current);
         const initial = !fresh && saved ? saved : createSession({ runId: randomUUID(), stage, phraseCount: lesson.phrases.length, ...readSettings() });
         const firstEntry = !opened.current;
         opened.current = true;
-        const audio = nativeAudio(duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause());
-        const player = new Player(initial, audio, s => journal.save(packageKey, s, sampleIdentity), () => performance.now(), () => {
+        const audio = nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause());
+        const player = new Player(initial, audio, s => context.save(s), () => performance.now(), () => {
           if (!active) return;
           setState({ ...player.state }); setError(player.error);
           const mediaDuration = audio.duration?.() ?? 0;
@@ -92,12 +100,12 @@ export default function PlayerScreen() {
     };
     void initialize();
     return () => { active = false; if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
-  }, [stage]));
+  }, [stage, pack, lesson]));
   const phrase = state ? lesson.phrases[state.phrase] : null;
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = () => {
     engine.current?.pause();
-    if (stage && engine.current && engine.current.error !== 'save') router.push({ pathname: '/player-options', params: { stage } });
+    if (stage && engine.current && engine.current.error !== 'save') router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey } });
   };
   const openGuide = () => {
     engine.current?.pause();
@@ -151,7 +159,7 @@ export default function PlayerScreen() {
         <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 16 }}>
           <Animated.View key={`${state.runId}:${state.phrase}:${state.phase === 'complete'}`} entering={CONTENT_ENTER}>
           <Card style={{ gap: 22, paddingVertical: 26 }}>
-            {state.phase === 'complete' ? <><Label size={30} weight="800" color={c.heading}>잘 마쳤어요!</Label><Label muted>열두 문장을 내 목소리로 연습했어요.</Label></> : <>
+            {state.phase === 'complete' ? <><Label size={30} weight="800" color={c.heading}>잘 마쳤어요!</Label><Label muted>{state.phraseCount}개 문장을 내 목소리로 연습했어요.</Label></> : <>
               <Label size={29} display color={c.heading}>{phrase?.text}</Label><Label size={18} muted>{phrase?.translation}</Label>
             </>}
           </Card>

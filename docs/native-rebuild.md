@@ -1,5 +1,17 @@
 # Native rebuild: decisions and milestones
 
+## Current execution update — 2026-09-12
+
+The owner approved [Apple-only development](apple-only-foundation.md), tickets
+#44–#52, and starting #44 on the existing native branch. Minimum iOS is 26.0.
+StoreKit 2, Apple-hosted asset delivery and private CloudKit replace the rejected
+Supabase/email proposal. #44 implements only the package-context/local foundation;
+service integrations remain separate later tickets. #42/#43 were permanently
+deleted on the owner's subsequent explicit request, not completed or closed.
+The original M0/M1 decisions below remain historical; where they differ, this
+update and the Apple-only plan govern the new work. Hosted resources, Git history
+and unrelated local UI edits are preserved. Native CI migration is still gated.
+
 Status: Q15 approved M0/M1 and recoverable backlog closure on 2026-09-11.
 M0 is complete. The #39 simulator development loop, owner-amended manual-only
 #40 stage/settings flow, and #41 simulator recovery/failure checks have passed;

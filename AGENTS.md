@@ -6,6 +6,10 @@
 - Read docs/native-rebuild.md and docs/learning-contract.md before changing behavior.
 - M1 is an iPhone-first, local-only prototype. No authentication, commerce, cloud
   synchronization, or hosted administration is implemented in this milestone.
+- The owner-approved next round is Apple-only (#44–#52), minimum iOS 26.0.
+  Read docs/apple-only-foundation.md. #44 is local foundation only; later tickets
+  separately implement StoreKit 2, Apple-hosted assets and private CloudKit.
+  Never use Supabase in the new app; the email/OTP proposal is superseded.
 - Supabase records, Auth, and Storage are protected: no hosted mutations.
 - Keep all Git history. Feature branches use codex/ and target dev; main releases
   need explicit approval. Do not merge, commit, push, deploy, delete historical

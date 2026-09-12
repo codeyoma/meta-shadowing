@@ -8,26 +8,26 @@ import { StagePath } from '@/components/stage-path';
 import { useBookRecords } from '@/components/use-book-records';
 import { useLibrary } from '@/components/library-context';
 import { isInstalled } from '@/native/package';
-import { books, languages } from '@/native/catalog';
+import { selectedPackage, languages } from '@/native/catalog';
 import { canOpenStage } from '@/core/stage-overview';
 import { MethodLabel } from '@/components/method-label';
 
 export default function Lesson() {
   const c = usePalette();
   const { selection, progress } = useLibrary();
-  const selectedBook = books.find(book => book.id === selection.book && book.language === selection.language);
-  const { records, overview } = useBookRecords();
+  const selectedBook = selectedPackage(selection.packageKey);
+  const { records, overview } = useBookRecords(selectedBook ?? null);
   const [ready, setReady] = useState<boolean | null>(null);
   useFocusEffect(useCallback(() => {
     let active = true;
     setReady(null);
     if (selectedBook && !selectedBook.owned) setReady(false);
-    if (selectedBook?.owned) isInstalled().then(value => { if (active) setReady(value); })
+    if (selectedBook?.owned) isInstalled(selectedBook).then(value => { if (active) setReady(value); })
       .catch(() => { if (active) Alert.alert('레슨을 확인할 수 없어요', '저장 공간을 확인하고 다시 시도해 주세요.'); });
     return () => { active = false; };
   }, [selectedBook]));
   function open(stage: number) {
-    if (ready && selectedBook?.owned && records && canOpenStage(stage, records)) router.push({ pathname: '/player', params: { stage } });
+    if (ready && selectedBook?.owned && records && canOpenStage(stage, records)) router.push({ pathname: '/player', params: { stage, package: selectedBook.packageKey } });
   }
   if (!selectedBook) return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 40 }}>
     <Label size={27} weight="800" color={c.heading}>{languages.find(l => l.id === selection.language)?.name} 스테이지</Label>

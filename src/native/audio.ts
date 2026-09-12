@@ -1,11 +1,12 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { audioPort } from '../core/audio';
 import { audioUri } from './package';
+import type { LearningPackage } from '@/core/learning-context';
 
-export function nativeAudio(ended: (duration: number) => void, failed: () => void, interrupted: () => void) {
+export function nativeAudio(pack: LearningPackage, ended: (duration: number) => void, failed: () => void, interrupted: () => void) {
   return audioPort(() => setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false,
     allowsRecording: false, interruptionMode: 'doNotMix' }), phrase => {
-    const player = createAudioPlayer({ uri: audioUri(phrase) }, { updateInterval: 200 });
+    const player = createAudioPlayer({ uri: audioUri(pack, phrase) }, { updateInterval: 200 });
     return {
       get currentTime() { return player.currentTime; },
       get duration() { return player.duration; },

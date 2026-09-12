@@ -1,7 +1,10 @@
 # #42: private packages and email-code sign-in
 
-Status: proposed implementation contract, awaiting owner review. No hosted
-authentication, policy, bucket or package changes have been applied by this work.
+Status: **superseded; historical proposal only**. The owner rejected all Supabase
+use and approved the [Apple-only direction](../../apple-only-foundation.md) on
+2026-09-12. Do not implement this proposal. No hosted authentication, policy,
+bucket or package changes were applied by this work. #42 was subsequently deleted
+by explicit owner request; this file preserves the decision history only.
 
 ## Owner-approved scope amendment
 

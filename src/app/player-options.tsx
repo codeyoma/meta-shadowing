@@ -7,28 +7,29 @@ import { MethodLabel } from '@/components/method-label';
 import { playableStage } from '@/core/catalog';
 import { changeSessionRate } from '@/core/session';
 import { getJournal } from '@/native/journal';
-import { lesson, packageKey } from '@/native/package';
-import { sampleIdentity } from '@/native/catalog';
+import { selectedPackage } from '@/native/catalog';
+import { LearningContext } from '@/core/learning-context';
 
 export default function PlayerOptionsScreen() {
-  const { stage: param } = useLocalSearchParams<{ stage: string }>();
+  const { stage: param, package: key } = useLocalSearchParams<{ stage: string; package: string }>();
   const stage = playableStage(param);
   const c = usePalette();
+  const pack = selectedPackage(key);
   const [rate, setRate] = useState<number | null>(null);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     try {
-      if (stage) setRate(getJournal().load(packageKey, stage, lesson.phrases.length)?.rate ?? null);
+      setRate(stage && pack ? new LearningContext(pack, getJournal()).load(stage)?.rate ?? null : null);
     } catch { Alert.alert('학습 옵션을 열 수 없어요', '저장된 학습 기록을 확인해 주세요. 기록은 초기화하지 않았어요.'); }
-  }, [stage]);
+  }, [stage, pack]);
   function change(rate: number) {
-    if (!stage) return;
+    if (!stage || !pack) return;
     try {
-      const journal = getJournal();
-      const saved = journal.load(packageKey, stage, lesson.phrases.length);
+      const context = new LearningContext(pack, getJournal());
+      const saved = context.load(stage);
       if (!saved) throw Error('Missing checkpoint.');
       const next = changeSessionRate(saved, Number(rate.toFixed(2)));
-      journal.save(packageKey, next, sampleIdentity);
+      context.save(next);
       setRate(next.rate);
     } catch {
       setRevision(value => value + 1);

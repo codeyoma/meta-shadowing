@@ -1,5 +1,5 @@
-export type CatalogBook = { id: string; language: string };
-export type Selection = { language: string; book: string | null };
+export type CatalogBook = { id: string; language: string; packageKey?: string };
+export type Selection = { language: string; book: string | null; packageKey?: string };
 export const languages = [
   { id: 'english', name: '영어', flag: '🇬🇧', displayCode: 'EN' },
   { id: 'japanese', name: '일본어', flag: '🇯🇵', displayCode: 'JP' },
@@ -18,5 +18,11 @@ export function resolveSelection(books: readonly CatalogBook[], stored: unknown)
   const value = stored && typeof stored === 'object' ? stored as Partial<Selection> : {};
   const language = languages.find(l => l.id === value.language)?.id ?? 'english';
   const candidates = availableBooks(books, language);
-  return { language, book: candidates.find(b => b.id === value.book)?.id ?? candidates[0]?.id ?? null };
+  // Only legacy book-only selections may choose the catalog's default version.
+  // An explicit version must never be reinterpreted as another version's content.
+  const matches = value.packageKey === undefined ? [] : candidates.filter(b => b.packageKey === value.packageKey && b.id === value.book);
+  const selected = value.packageKey === undefined
+    ? candidates.find(b => b.id === value.book) ?? candidates[0]
+    : matches.length === 1 ? matches[0] : undefined;
+  return { language, book: selected?.id ?? null, ...(selected?.packageKey ? { packageKey: selected.packageKey } : {}) };
 }

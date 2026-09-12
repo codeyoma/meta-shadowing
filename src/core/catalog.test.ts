@@ -28,3 +28,15 @@ test('unimplemented and malformed stage links never silently start a different s
   assert.equal(playableStage('2'), 2);
   for (const param of ['3', '16', '0', '', undefined, ['1'], '01']) assert.equal(playableStage(param), null);
 });
+test('library selection retains an exact version and migrates legacy book-only choices without fallback from stale versions', () => {
+  const versions = [
+    { id: 'notes', language: 'english', packageKey: 'notes-v1' },
+    { id: 'notes', language: 'english', packageKey: 'notes-v2' },
+  ];
+  assert.deepEqual(resolveSelection(versions, { language: 'english', book: 'notes', packageKey: 'notes-v2' }),
+    { language: 'english', book: 'notes', packageKey: 'notes-v2' });
+  assert.deepEqual(resolveSelection(versions, { language: 'english', book: 'notes' }),
+    { language: 'english', book: 'notes', packageKey: 'notes-v1' });
+  assert.deepEqual(resolveSelection(versions, { language: 'english', book: 'notes', packageKey: 'notes-v99' }),
+    { language: 'english', book: null });
+});

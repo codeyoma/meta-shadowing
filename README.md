@@ -6,6 +6,11 @@ Supabase data and hosted services have not been modified.
 
 ## Current scope
 
+The approved next architecture is [Apple-only](docs/apple-only-foundation.md),
+with minimum iOS 26.0. #44 introduces explicit package/version learning context;
+StoreKit, Apple-hosted delivery and CloudKit remain later tickets, not active
+services. The Supabase/email-OTP proposal is superseded and must not be used.
+
 - Icon-only Books / Stages / Settings native tabs, with a shared language flag,
   level/XP bar and streak header. Player remains outside the browsing shell.
 - Per-language XP; first completed stage per book/day can reward its required
@@ -31,7 +36,7 @@ purchases, and additional platforms are intentionally deferred.
 
 Start with the [iPhone Simulator guide](docs/simulator-development.md) for the
 Expo Go smoke test, our own local Debug build, Fast Refresh and recovery. A
-physical phone is not needed for tickets #39–#43; physical-device acceptance
+physical phone is not needed for the #44 foundation; physical-device acceptance
 remains a later M1 gate.
 
 Use Node 24+ and the locked dependencies:
@@ -66,7 +71,9 @@ ignored; keep signing credentials and team identifiers out of tracked files.
 The bundled sample is a controlled installation source, **not the commercial
 download service**. Expo Go and our local Debug build depend on Metro for
 development JavaScript. A Release build with an embedded bundle is needed to
-establish independent offline launch acceptance; that is covered by #42.
+establish independent offline launch acceptance. #44 verifies sample continuity;
+#48/#52 cover hosted recovery and end-to-end acceptance. #42/#43 were deleted
+by explicit owner request, not completed.
 After installing the sample, learning reads device files and SQLite only.
 Uninstalling the app may remove the package and all local progress; M1 has no
 cloud backup.

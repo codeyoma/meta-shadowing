@@ -12,6 +12,7 @@
       "android"
     ],
     "ios": {
+      "deploymentTarget": "26.0",
       "supportsTablet": false,
       "bundleIdentifier": "app.metashadowing.prototype",
       "infoPlist": {
