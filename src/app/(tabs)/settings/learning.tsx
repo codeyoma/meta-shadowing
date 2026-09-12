@@ -3,8 +3,10 @@ import { Alert, ScrollView, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Label, Icon, usePalette } from '@/components/ui';
 import { readSettings, saveSettings, type Settings } from '@/native/settings';
+import { useProgressProfile } from '@/components/progress-profile';
 
 export default function LearningSettingsScreen() {
+  const profile = useProgressProfile();
   const c = usePalette();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [draftRate, setDraftRate] = useState(1);
@@ -16,7 +18,7 @@ export default function LearningSettingsScreen() {
   }, []);
   function change(rate: number) {
     const next: Settings = { mode: 'manual', rate: Number(rate.toFixed(2)) };
-    try { saveSettings(next); setSettings(next); setDraftRate(next.rate); }
+    try { saveSettings(next, profile.id); setSettings(next); setDraftRate(next.rate); }
     catch {
       setDraftRate(settings?.rate ?? 1);
       setSliderRevision(value => value + 1);

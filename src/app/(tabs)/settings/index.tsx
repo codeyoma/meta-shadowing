@@ -2,6 +2,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { Icon, Label, usePalette } from '@/components/ui';
 import { RestorePurchases } from '@/components/restore-purchases';
+import { ICloudBackup } from '@/components/icloud-backup';
 
 export default function SettingsScreen() {
   const c = usePalette();
@@ -16,5 +17,6 @@ export default function SettingsScreen() {
         <Icon name="chevron.right" size={18} color={c.secondary} />
       </Pressable>
       <RestorePurchases />
+      <ICloudBackup />
   </ScrollView>;
 }

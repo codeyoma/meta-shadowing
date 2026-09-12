@@ -21,6 +21,8 @@ import { PlayerControls } from '@/components/player-controls';
 import { canOfferRepeat, mainPlayerAction } from '@/core/player-presentation';
 import { methodNames } from '@/components/method-label';
 import { PlayerHeaderProgress } from '@/components/player-header-progress';
+import { getProgressSync } from '@/native/progress-sync';
+import { useProgressProfile } from '@/components/progress-profile';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
@@ -34,6 +36,7 @@ export default function PlayerRoute() {
 }
 
 function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof selectedPackage>>; stage: 1 | 2 }) {
+  const profile = useProgressProfile();
   const lesson = pack.manifest;
   const c = usePalette();
   const insets = useSafeAreaInsets();
@@ -50,10 +53,11 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     let shown: string | null = null;
     let timer: ReturnType<typeof setInterval> | undefined;
     let appState: { remove(): void } | undefined;
+    let removeGuard: (() => void) | undefined;
     const initialize = async () => {
       try {
         if (!await isInstalled(pack)) { if (active) setUnavailable(true); return; }
-        if (!active) return;
+        if (!active || getProgressSync().profiles.id() !== profile.id) return;
         const context = new LearningContext(pack, getJournal());
         if (!canOpenStage(stage, [{ stage: 1, count: context.completions(1), session: null }])) {
           if (active) setUnavailable(true);
@@ -87,11 +91,15 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
           if (!player.error) shown = null;
         });
         engine.current = player;
+        removeGuard = getProgressSync().beforeSwitch(() => {
+          player.pause();
+          if (player.error === 'save') throw Error('progress-cloud-storage');
+        });
         acting.current = false; setBusy(false);
         setState({ ...initial });
         timer = setInterval(() => { if (AppState.currentState === 'active') player.tick(); }, 100);
         appState = AppState.addEventListener('change', next => { if (next !== 'active') player.pause(); });
-        if (firstEntry && AppState.currentState === 'active') {
+        if (firstEntry && !profile.suppressEntry && AppState.currentState === 'active') {
           setBusy(true);
           await player.enter();
           if (active) setBusy(false);
@@ -99,8 +107,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       } catch { if (active) { setUnavailable(true); Alert.alert('학습을 열 수 없어요', '기록을 초기화하지 않았어요. 저장 공간과 레슨 설치 상태를 확인해 주세요.'); } }
     };
     void initialize();
-    return () => { active = false; if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
-  }, [stage, pack, lesson]));
+    return () => { active = false; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
+  }, [stage, pack, lesson, profile.id, profile.suppressEntry]));
   const phrase = state ? lesson.phrases[state.phrase] : null;
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = () => {

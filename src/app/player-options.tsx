@@ -9,8 +9,11 @@ import { changeSessionRate } from '@/core/session';
 import { getJournal } from '@/native/journal';
 import { selectedPackage } from '@/native/catalog';
 import { LearningContext } from '@/core/learning-context';
+import { getProgressSync } from '@/native/progress-sync';
+import { useProgressProfile } from '@/components/progress-profile';
 
 export default function PlayerOptionsScreen() {
+  const profile = useProgressProfile();
   const { stage: param, package: key } = useLocalSearchParams<{ stage: string; package: string }>();
   const stage = playableStage(param);
   const c = usePalette();
@@ -23,7 +26,7 @@ export default function PlayerOptionsScreen() {
     } catch { Alert.alert('학습 옵션을 열 수 없어요', '저장된 학습 기록을 확인해 주세요. 기록은 초기화하지 않았어요.'); }
   }, [stage, pack]);
   function change(rate: number) {
-    if (!stage || !pack) return;
+    if (!stage || !pack || profile.id !== getProgressSync().profiles.id()) return;
     try {
       const context = new LearningContext(pack, getJournal());
       const saved = context.load(stage);
