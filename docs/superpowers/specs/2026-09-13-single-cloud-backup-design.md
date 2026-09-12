@@ -1,9 +1,10 @@
 # Single account backup and cross-device continuation
 
 Status: written specification approved by the owner on 2026-09-13. Implementation
-is present but not ready to merge: final scoped review reproduced a metadata-only
-cleanup / pending-publication retry conflict. See docs/cloudkit-progress.md. No
-live cloud migration performed.
+is present with controlled regression verification. The final-review metadata-only
+cleanup / pending-publication retry conflict has been corrected following the
+owner's checkpoint request; see docs/cloudkit-progress.md. Live cloud migration
+and physical multi-device acceptance remain pending.
 
 ## Approved outcome
 

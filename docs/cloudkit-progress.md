@@ -276,7 +276,7 @@ passed, including CloudKit Development and development-push entitlements. Releas
 simulator build/launch and the unavailable-account Settings state also passed.
 These remain controlled test results, not live CloudKit or physical acceptance.
 
-### Open final-review finding — not ready to merge
+### Metadata-only pending retry — reproduced and corrected
 
 The scoped re-review confirmed the original orphan-retirement defect is addressed,
 but reproduced an Important interaction introduced by metadata-only head updates:
@@ -294,10 +294,19 @@ An additional local edit currently escapes that matching-pending branch, but thi
 is not an acceptable recovery contract. No data loss was observed; publication can
 remain stalled. Passing existing suites do not cover or negate this finding.
 
-Required correction before merge: rebuild the conditional pending head from fresh,
+The correction rebuilds the conditional pending head from fresh,
 verified metadata when the expected progress base is unchanged, retaining its
 pending asset and expected base and carrying forward all new cleanup authority.
-A genuine progress-base change must still conflict. Add regression coverage for
-unchanged-payload retries/restart, repeated metadata races, authority preservation,
-and refusal to rebase onto changed progress. This remains unimplemented; do not
-describe this branch as merge-ready or the singleton work as fully accepted.
+A genuine progress-base change still conflicts. Fresh CAS metadata, exact asset
+retirement authority and captured legacy-head retirement authority persist in one
+local state update; an additional race fails safely and the next retry fetches
+again. No caller API, progress revision or account-identity behavior changed.
+
+The owner requested a checkpoint commit before this correction. The regression
+test then reproduced three failures (normal retry, restart, a second metadata race),
+while its changed-progress rejection passed. After the correction, all 32 native
+tests / 57 parameter-expanded runs passed with no failures or skips, including
+unchanged-payload retries, pending-asset identity, cleanup authority preservation
+and fresh-installation cleanup. All 154 TypeScript tests and typechecking passed.
+The fully bundled, development-signed Release iPhone build also passed. This does
+not replace the outstanding real CloudKit and physical multi-device acceptance.

@@ -68,6 +68,68 @@ struct SingletonTests {
   }
   private func directory() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
 
+  @Test(arguments: ["retry", "restart", "second-race", "progress-changed"])
+  func pendingPublicationSurvivesMetadataCleanup(boundary: String) async throws {
+    let a = directory(), b = directory(), c = directory()
+    defer { for url in [a, b, c] { try? FileManager.default.removeItem(at: url) } }
+    let cloud = TestCloud(), loser = try ProgressTransport(directory: a, scope: "test-scope", cloud: cloud)
+    let writer = try ProgressTransport(directory: b, scope: "test-scope", cloud: cloud)
+    let initial = try await loser.publish(scope: "test-scope", revision: 1, json: "{}", base: "")
+    cloud.failHead = true
+    await #expect(throws: ProgressCloudError.offline) {
+      try await loser.publish(scope: "test-scope", revision: 2, json: "{\"loser\":true}", base: initial.token)
+    }
+    let abandoned = try #require(loser.store.state.pending?.backup.id)
+    cloud.failHead = false
+    let chosen = try await writer.publish(scope: "test-scope", revision: 3, json: "{\"winner\":true}", base: initial.token)
+    cloud.failHead = true
+    await #expect(throws: ProgressCloudError.offline) {
+      try await writer.publish(scope: "test-scope", revision: 4, json: "{\"next\":true}", base: chosen.token)
+    }
+    let pending = try #require(writer.store.state.pending)
+    cloud.failHead = false; cloud.deletionFailure = .offline
+    #expect(try await loser.cleanupAdopted(scope: "test-scope", base: chosen.token, abandoned: abandoned))
+    #expect(cloud.records[ProgressTransport.sharedHead]?.current?.id == chosen.token)
+    #expect(cloud.records[ProgressTransport.sharedHead]?.changeTag != pending.head.changeTag)
+    let retry = try ProgressTransport(directory: boundary == "restart" ? b : c, scope: "test-scope", cloud: cloud)
+    let active = boundary == "restart" ? retry : writer
+    if boundary == "progress-changed" {
+      let newer = try await retry.publish(scope: "test-scope", revision: 8, json: "{\"other\":true}", base: chosen.token)
+      await #expect(throws: ProgressCloudError.conflict) {
+        try await active.publish(scope: "test-scope", revision: 4, json: "{\"next\":true}", base: chosen.token)
+      }
+      #expect(active.store.state.pending?.expectedBase == chosen.token)
+      #expect(cloud.records[ProgressTransport.sharedHead]?.current?.id == newer.token)
+      return
+    }
+    if boundary == "second-race" {
+      // A second metadata writer wins after fetch but before the conditional save.
+      cloud.onSave = { record in
+        guard record.id == ProgressTransport.sharedHead else { return }
+        cloud.onSave = nil
+        guard var head = cloud.records[ProgressTransport.sharedHead] else {
+          Issue.record("Missing confirmed shared head"); return
+        }
+        head.changeTag = UUID().uuidString
+        cloud.records[head.id] = head
+      }
+      await #expect(throws: ProgressCloudError.conflict) {
+        try await active.publish(scope: "test-scope", revision: 4, json: "{\"next\":true}", base: chosen.token)
+      }
+    }
+    let saved = try await active.publish(scope: "test-scope", revision: 4, json: "{\"next\":true}", base: chosen.token)
+    #expect(saved.id == pending.backup.id && saved.revision == 4)
+    #expect(saved.cleanupPending)
+    #expect(try await active.read(scope: "test-scope", id: saved.id) == "{\"next\":true}")
+    let head = try #require(cloud.records[ProgressTransport.sharedHead])
+    #expect(try CleanupManifest.decode(try #require(head.cleanupManifest)).assets.contains(abandoned))
+    cloud.deletionFailure = nil
+    let fresh = try ProgressTransport(directory: directory(), scope: "test-scope", cloud: cloud)
+    defer { try? FileManager.default.removeItem(at: fresh.store.directory) }
+    #expect(try await fresh.cleanupAdopted(scope: "test-scope", base: saved.token, abandoned: nil) == false)
+    #expect(cloud.assets.count == 1 && cloud.assets[saved.id] != nil)
+  }
+
   @Test(arguments: ["normal", "before-authority", "lost-authority-reply", "delete-failure", "other-installation"])
   func adoptedWinnerRetiresExactLoserWithoutNewProgress(boundary: String) async throws {
     let a = directory(), b = directory(), c = directory()

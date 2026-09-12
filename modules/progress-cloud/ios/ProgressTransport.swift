@@ -127,6 +127,7 @@ final class ProgressTransport {
     }
     guard base == token else { throw ProgressCloudError.conflict }
     if let pending = store.state.pending, matches(pending) {
+      try refreshPendingMetadata(pending)
       return try await finishPending(scope: scope, ticket: ticket)
     }
     // Only a caller with a freshly confirmed base may replace stale pending intent.
@@ -155,6 +156,30 @@ final class ProgressTransport {
         retirements: retirements, superseded: assets)
     }
     return try await finishPending(scope: scope, ticket: ticket)
+  }
+  /// Called only after a verified fetch and expected-progress-base equality.
+  /// Cleanup can change the head's CAS metadata without changing its progress.
+  private func refreshPendingMetadata(_ pending: PendingBackup) throws {
+    guard let current = store.state.records[Self.sharedHead],
+          pending.expectedBase == current.current?.id else { return }
+    var head = pending.head
+    head.systemFields = current.systemFields
+    head.changeTag = current.changeTag
+    var retirements: [String: BackupRecord] = [:]
+    for original in pending.retirements ?? [] { retirements[original.id] = original }
+    for (id, original) in store.state.retirementHeads ?? [:] where retirements[id] == nil {
+      retirements[id] = original
+    }
+    let heads = retirements.values.sorted { $0.id < $1.id }
+    let assets = Array(Set((pending.superseded ?? []) + store.state.cleanup)).sorted()
+    head.cleanupManifest = try CleanupManifest(heads: heads, assets: assets).encoded()
+    // Persist fresh conditional metadata and its exact cleanup authority together;
+    // a later CAS race still conflicts and the next explicit retry fetches again.
+    try store.update {
+      $0.pending = PendingBackup(backup: pending.backup, head: head,
+        assetAcknowledged: pending.assetAcknowledged, expectedBase: pending.expectedBase,
+        retirements: heads, superseded: assets)
+    }
   }
   private func finishPending(scope: String, ticket: UUID) async throws -> CloudPublication {
     guard let pending = store.state.pending else { throw ProgressCloudError.storage }
