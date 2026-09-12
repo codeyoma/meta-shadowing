@@ -1,6 +1,7 @@
 import { Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { Icon, Label, usePalette } from '@/components/ui';
+import { RestorePurchases } from '@/components/restore-purchases';
 
 export default function SettingsScreen() {
   const c = usePalette();
@@ -14,5 +15,6 @@ export default function SettingsScreen() {
         <View style={{ flex: 1 }}><Label size={19} weight="700" color={c.heading}>학습 설정</Label></View>
         <Icon name="chevron.right" size={18} color={c.secondary} />
       </Pressable>
+      <RestorePurchases />
   </ScrollView>;
 }

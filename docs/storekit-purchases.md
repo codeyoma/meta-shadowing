@@ -22,8 +22,14 @@ errors preserve any previously verified in-memory ownership; a new instance
 remains unknown. A failed restore or disconnected catalog query does not turn
 missing cached data into a definitive revocation.
 
-Ask to Buy denial/expiry need not emit an update. While pending, the restore
-button is explicitly labeled as an approval-status recheck; a successful sync
+Restore Purchases is a single action in the main Settings menu, not an action
+on each book card. It refreshes the shared verified ownership state; unowned
+products retain their purchase action. Restoration never starts a download.
+Purchased books can offer Download only once delivery is implemented and the
+package is actually downloadable. Until then they remain purchased/not downloaded.
+
+Ask to Buy denial/expiry need not emit an update. While pending, guidance points
+to Settings > Restore Purchases for an approval-status recheck; a successful sync
 without entitlement clears the pending UI and allows another purchase attempt.
 This is user-initiated, never background forced authentication.
 
@@ -112,6 +118,37 @@ appropriate sandbox build, purchase with the designated Sandbox Apple Account,
 relaunch, and restore ownership. No real-money purchase, agreement acceptance,
 TestFlight upload or public release is authorized here. Never request or publish
 the tester password. Keep raw logs and account/device details private.
+
+## Manual sandbox checklist
+
+1. In App Store Connect, verify the Paid Applications Agreement is signed by the
+   owner and the non-consumable has a product ID, localized name, price and intended
+   storefront availability. Metadata changes can take up to an hour to reach sandbox.
+2. Connect the test iPhone to Xcode, trust the Mac, enable Developer Mode, and run
+   a development-signed build with the approved bundle/product configuration.
+   Disable any local StoreKit fixture for this real-product test. A TestFlight
+   upload is not needed for the development-signed path.
+3. Use Settings > Developer > Sandbox Apple Account, not the main iCloud account,
+   to sign in to the designated tester. Apple notes this option can first appear
+   after a purchase attempt in the development-signed app. This path does not
+   require signing out of the normal Apple Account.
+4. Confirm the real product's localized title and price. Cancel one purchase and
+   confirm it stays unowned; then purchase using only the sheet marked Sandbox.
+   Stop if the test-environment indicator is absent. Sandbox transactions do not
+   charge real money.
+5. Relaunch, then use the app's Settings > Restore Purchases. Owned products must
+   not ask for payment again; unowned products remain purchasable. Currently the
+   paid book reads purchased/not downloaded, because delivery is deferred.
+6. Test no-purchase behavior with a separate empty sandbox tester. Do not clear
+   purchase history until the restore test is complete; do not uninstall an app
+   containing learning progress you want to preserve.
+
+Follow-up UI verification: 75 domain tests and TypeScript checking passed. The
+Release simulator build launched, the library no longer exposed Restore Purchases,
+and Settings exposed the single action. Real sandbox purchase is still unverified.
+
+During #49 development, the existing native StoreKit suite was rerun: 12 passed,
+0 failed, 0 skipped. This is local StoreKit evidence, not sandbox acceptance.
 
 Official references: [StoreKit transactions](https://developer.apple.com/documentation/storekit/transaction),
 [explicit sync](https://developer.apple.com/documentation/storekit/appstore/sync()),
