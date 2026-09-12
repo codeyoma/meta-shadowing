@@ -57,6 +57,7 @@ jobs:
     timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-26-5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,10 +70,20 @@ jobs:
           xcodegen generate --spec tests/cloudkit/project.yml
       - name: Test real StoreKit and CloudKit boundaries on iOS Simulator
         run: |
-          ci_simulator=$(xcrun simctl list devices available --json | jq -r '[.devices | to_entries[] | select(.key | contains(".iOS-26-")) | .value[] | select(.name | startswith("iPhone"))][0].udid // empty')
+          ci_simulator=$(xcrun simctl list devices available --json | jq -r --arg runtime "$IOS_TEST_RUNTIME" '[.devices[$runtime][]? | select(.isAvailable and (.name | startswith("iPhone")))][0].udid // empty')
           test -n "$ci_simulator"
-          xcodebuild test -project tests/storekit/PackageStoreTests.xcodeproj -scheme PackageStoreTests -destination "platform=iOS Simulator,id=$ci_simulator" -parallel-testing-enabled NO -quiet
-          xcodebuild test -project tests/cloudkit/ProgressCloudTests.xcodeproj -scheme ProgressCloudTests -destination "platform=iOS Simulator,id=$ci_simulator" -parallel-testing-enabled NO -quiet
+          mkdir -p "$RUNNER_TEMP/native-results"
+          xcodebuild test -project tests/storekit/PackageStoreTests.xcodeproj -scheme PackageStoreTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/storekit.xcresult" -quiet
+          xcodebuild test -project tests/cloudkit/ProgressCloudTests.xcodeproj -scheme ProgressCloudTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/cloudkit.xcresult" -quiet
+      - name: Report fixture test results without account or device metadata
+        if: always()
+        run: |
+          for ci_suite in storekit cloudkit; do
+            ci_result="$RUNNER_TEMP/native-results/$ci_suite.xcresult"
+            if [ -d "$ci_result" ]; then
+              xcrun xcresulttool get test-results summary --path "$ci_result" | jq '{result, totalTestCount, passedTests, failedTests, testFailures}'
+            fi
+          done
 
   ci-ios-build:
     name: ci-ios-build

@@ -13,6 +13,12 @@ to those branches. PR checkout uses GitHub's merge candidate, not only the head.
 
 Linux jobs use Node 24; native jobs use the standard `macos-26` runner and
 Xcode 26.6. [Runner toolchain inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md).
+Native fixture tests explicitly select the iOS 26.5 runtime rather than the first
+installed iOS 26 device. The initial hosted run selected 26.4.1 and failed StoreKit
+test actions; Apple documents the configuration-selection fix in
+[iOS 26.5 release notes](https://developer.apple.com/documentation/ios-ipados-release-notes/ios-ipados-26_5-release-notes).
+This pins the test harness, not the app's iOS 26.0 deployment minimum. Test result
+summaries expose assertion failures without dumping account/device metadata.
 Actions are pinned to commit SHAs, tokens are read-only, checkout credentials
 are not persisted, and private local environment files are not loaded. No
 signing credentials, Apple accounts, private lessons or hosted data are needed.
