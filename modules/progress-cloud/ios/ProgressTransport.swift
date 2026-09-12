@@ -48,22 +48,28 @@ final class ProgressTransport {
     try await verify(scope, ticket)
     try await cloud.fetch(into: store)
     try await verify(scope, ticket)
-    return try candidates()
+    return try candidates(allowPartialRecovery: true)
   }
-  private func candidates() throws -> [CloudBackup] {
-    try store.state.records.values.filter { $0.kind == "ProgressBackupHead" }
-      .flatMap { head in
-        guard head.current != nil else { throw ProgressCloudError.corrupt }
-        return try [head.current, head.previous].compactMap { reference -> CloudBackup? in
+  private func candidates(allowPartialRecovery: Bool = false) throws -> [CloudBackup] {
+    var corrupt = false
+    let backups = store.state.records.values.filter { $0.kind == "ProgressBackupHead" }
+      .flatMap { head -> [CloudBackup] in
+        if head.current == nil { corrupt = true }
+        return [head.current, head.previous].compactMap { reference -> CloudBackup? in
         guard let reference else { return nil }
         guard let backup = store.state.records[reference.id],
               backup.kind == "ProgressBackup", backup.writer == head.writer,
-              backup.hash == reference.hash else { throw ProgressCloudError.corrupt }
+              backup.hash == reference.hash else { corrupt = true; return nil }
         if reference == head.current {
-          guard backup.revision == head.revision, backup.createdAt == head.createdAt else { throw ProgressCloudError.corrupt }
+          guard backup.revision == head.revision, backup.createdAt == head.createdAt else { corrupt = true; return nil }
         }
         return CloudBackup(id: backup.id, createdAt: backup.createdAt, revision: backup.revision)
       } }.sorted { $0.createdAt > $1.createdAt }
+    // Recovery may salvage independently valid references; publication and
+    // cleanup still require every head to pass the original strict validation.
+    // A damaged account with no valid recovery choice must never look empty.
+    if corrupt && (!allowPartialRecovery || backups.isEmpty) { throw ProgressCloudError.corrupt }
+    return backups
   }
   func read(scope: String, id: String) async throws -> String {
     let candidates = try await list(scope: scope)

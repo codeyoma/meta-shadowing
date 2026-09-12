@@ -3,6 +3,73 @@ import Testing
 
 @MainActor
 struct ProgressCloudTests {
+  @Test(arguments: ["missing", "hash", "revision", "date"])
+  func invalidCurrentWithoutRecoveryIsNeverEmpty(damage: String) async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let cloud = TestCloud(), data = Data("{}".utf8)
+    let hash = ProgressStore.hash(data)
+    cloud.records["head-other"] = BackupRecord(id: "head-other", kind: "ProgressBackupHead", writer: "other",
+      revision: 1, createdAt: "2026-01-01T00:00:00Z", current: BackupReference(id: "current", hash: hash))
+    if damage != "missing" {
+      cloud.records["current"] = BackupRecord(id: "current", kind: "ProgressBackup", writer: "other",
+        revision: damage == "revision" ? 2 : 1,
+        createdAt: damage == "date" ? "2026-01-02T00:00:00Z" : "2026-01-01T00:00:00Z",
+        hash: damage == "hash" ? String(repeating: "a", count: 64) : hash, bytes: data.count)
+      cloud.assets["current"] = data
+    }
+    let reader = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
+    let before = cloud.records
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.list(scope: "test-scope") }
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.publish(scope: "test-scope", revision: 1, json: "{}") }
+    #expect(cloud.records == before)
+  }
+  @Test func validOtherHeadRemainsRecoverableAlongsideDamagedHead() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let freshDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: freshDirectory) }
+    let cloud = TestCloud()
+    let writer = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
+    _ = try await writer.publish(scope: "test-scope", revision: 1, json: "{\"valid\":true}")
+    let head = try #require(cloud.records.values.first { $0.kind == "ProgressBackupHead" })
+    let current = try #require(head.current)
+    cloud.records["head-damaged"] = BackupRecord(id: "head-damaged", kind: "ProgressBackupHead", writer: "damaged",
+      revision: 1, createdAt: "2026-01-01T00:00:00Z", current: BackupReference(id: "missing", hash: String(repeating: "a", count: 64)))
+    let reader = try ProgressTransport(directory: freshDirectory, scope: "test-scope", cloud: cloud)
+    #expect(try await reader.list(scope: "test-scope").map(\.id) == [current.id])
+    #expect(try await reader.read(scope: "test-scope", id: current.id) == "{\"valid\":true}")
+    let before = cloud.records
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.publish(scope: "test-scope", revision: 1, json: "{}") }
+    #expect(cloud.records == before)
+  }
+  @Test(arguments: ["missing", "hash", "revision", "date"])
+  func brokenCurrentMetadataPreservesPreviousRecovery(damage: String) async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let freshDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: freshDirectory) }
+    let cloud = TestCloud()
+    let writer = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
+    _ = try await writer.publish(scope: "test-scope", revision: 1, json: "{\"value\":1}")
+    _ = try await writer.publish(scope: "test-scope", revision: 2, json: "{\"value\":2}")
+    let head = try #require(cloud.records.values.first { $0.kind == "ProgressBackupHead" })
+    let current = try #require(head.current), previous = try #require(head.previous)
+    let record = try #require(cloud.records[current.id])
+    if damage == "missing" { cloud.records.removeValue(forKey: current.id) }
+    else {
+      cloud.records[current.id] = BackupRecord(id: record.id, kind: record.kind, writer: record.writer,
+        revision: damage == "revision" ? 99 : record.revision,
+        createdAt: damage == "date" ? "2026-01-01T00:00:00Z" : record.createdAt,
+        hash: damage == "hash" ? String(repeating: "a", count: 64) : record.hash, bytes: record.bytes)
+    }
+    let reader = try ProgressTransport(directory: freshDirectory, scope: "test-scope", cloud: cloud)
+    #expect(try await reader.list(scope: "test-scope").map(\.id) == [previous.id])
+    #expect(try await reader.read(scope: "test-scope", id: previous.id) == "{\"value\":1}")
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.read(scope: "test-scope", id: current.id) }
+    let before = cloud.records
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.publish(scope: "test-scope", revision: 1, json: "{}") }
+    #expect(cloud.records == before)
+    #expect(cloud.assets[previous.id] == Data("{\"value\":1}".utf8))
+  }
   @Test func mismatchedAcknowledgementNeverAdvancesHead() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }

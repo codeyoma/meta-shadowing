@@ -199,3 +199,47 @@ test('a transient offline publication retries quietly while remaining foreground
   t.mock.timers.tick(60_000); await Promise.resolve(); await Promise.resolve();
   assert.equal(published.length, 2); assert.equal(profiles.current().pending(), false);
 });
+
+test('unknown identity retries at a bounded interval and confirms identity before pending publication', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  const { sync, cloud, profiles, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const original = profiles.current(); original.saveValue('settings', '{"mode":"manual","rate":2}');
+  let lookups = 0;
+  cloud.account = async () => { lookups++; return { status: 'unknown' }; };
+  await sync.refreshAccount(); sync.changed();
+  t.mock.timers.tick(59_999); await Promise.resolve();
+  assert.equal(lookups, 1); assert.equal(profiles.current(), original); assert.equal(published.length, 1);
+  cloud.account = async () => { lookups++; return { status: 'available', scope: 'account-a' }; };
+  t.mock.timers.tick(1); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  assert.equal(lookups, 2); assert.equal(sync.getSnapshot().status, 'available');
+  t.mock.timers.tick(0); await Promise.resolve(); await Promise.resolve();
+  assert.equal(profiles.current(), original); assert.equal(published.length, 2);
+});
+
+for (const action of ['background', 'disable', 'dispose'] as const) test(`unknown identity retry is cancelled by ${action}`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  const { sync, cloud, profiles, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const original = profiles.current(); let lookups = 0;
+  cloud.account = async () => { lookups++; return { status: 'unknown' }; };
+  await sync.refreshAccount();
+  if (action === 'background') sync.setActive(false);
+  else if (action === 'disable') sync.disable();
+  else sync.dispose();
+  sync.changed(); t.mock.timers.tick(180_000); await Promise.resolve();
+  assert.equal(lookups, 1); assert.equal(profiles.current(), original); assert.equal(published.length, 1);
+});
+
+test('a delayed identity retry cannot replace a newer confirmed account generation', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  const { sync, cloud, profiles, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  cloud.account = async () => ({ status: 'unknown' }); await sync.refreshAccount();
+  const delayed = deferred<{ status: 'available'; scope: string }>(); cloud.account = () => delayed.promise;
+  t.mock.timers.tick(60_000);
+  cloud.account = async () => ({ status: 'available', scope: 'account-b' }); await sync.refreshAccount();
+  delayed.resolve({ status: 'available', scope: 'account-a' }); await Promise.resolve(); await Promise.resolve();
+  assert.equal(profiles.id(), 'guest'); assert.equal(sync.getSnapshot().hasProfile, false);
+  assert.equal(published.length, 1);
+});

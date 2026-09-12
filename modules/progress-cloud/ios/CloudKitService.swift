@@ -289,9 +289,7 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     value.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
   }
   private static func samePayload(_ left: CKRecord, _ right: CKRecord) throws -> Bool {
-    var a = try decode(left), b = try decode(right)
-    a.systemFields = nil; b.systemFields = nil
-    return a == b
+    try decode(left).hasSamePayload(as: decode(right))
   }
   static func sanitize(_ error: Error) -> ProgressCloudError {
     if let error = error as? ProgressCloudError { return error }

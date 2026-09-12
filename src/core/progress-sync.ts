@@ -52,6 +52,7 @@ export class ProgressSync {
   private guards = new Set<() => void>();
   private disposed = false;
   private active = true;
+  private retryIdentity = false;
   private flight: object | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private lastPublish = -Infinity;
@@ -79,6 +80,7 @@ export class ProgressSync {
   }
   async refreshAccount() {
     const generation = ++this.generation;
+    this.retryIdentity = false;
     this.scope = null; this.flight = null; this.candidates.clear();
     if (this.timer) clearTimeout(this.timer); this.timer = undefined;
     this.emit({ ready: false, enabled: false, hasProfile: false, busy: true, backups: [], error: null });
@@ -89,7 +91,8 @@ export class ProgressSync {
       this.emit({ status: account.status });
       if (account.status !== 'available') {
         if (account.status === 'no-account') this.switch('guest');
-        this.emit({ busy: false }); return;
+        this.retryIdentity = account.status === 'unknown';
+        this.emit({ busy: false }); this.changed(); return;
       }
       this.scope = account.scope;
       const local = this.profiles.account(account.scope);
@@ -149,6 +152,7 @@ export class ProgressSync {
       if (this.scope) this.profiles.select(this.profiles.id(), this.scope, false);
     } catch (error) { this.fail(error); return; }
     ++this.generation; this.flight = null;
+    this.retryIdentity = false;
     if (this.timer) clearTimeout(this.timer); this.timer = undefined;
     void this.cloud.stop().catch(() => {}); this.emit({ enabled: false, busy: false, backups: [], error: null });
   }
@@ -156,7 +160,7 @@ export class ProgressSync {
     if (this.disposed) return;
     this.emit();
     if (!this.active || this.flight || this.timer || this.snapshot.busy) return;
-    if (this.snapshot.error === 'progress-cloud-offline' || this.snapshot.error === 'progress-cloud-busy') {
+    if (this.retryIdentity || this.snapshot.error === 'progress-cloud-offline' || this.snapshot.error === 'progress-cloud-busy') {
       this.timer = setTimeout(() => { this.timer = undefined; void this.retry(); }, 60_000);
       return;
     }
