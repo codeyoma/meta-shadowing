@@ -1,6 +1,6 @@
 # Private iCloud progress backup — #49
 
-Status: proposed technical design for owner review; implementation has not begun.
+Status: owner approved implementation after a second consistency review.
 The owner approved the local-first direction and test seams, and requested that
 the final review include #45 as well as #49. This document does not record any
 successful CloudKit configuration, upload, or recovery.
@@ -117,7 +117,8 @@ Use two private record types in a dedicated progress zone:
 - `ProgressBackup`: schema version, random generation identity, source-local
   revision, opaque installation-writer identity, byte count, SHA-256, and the asset.
 - `ProgressBackupHead`: one pointer per installation writer, identifying its
-  latest completely acknowledged backup generation and checksum.
+  current and previous completely acknowledged generations and checksums. Both
+  referenced generations remain discoverable for recovery.
 
 Persist a fresh random writer identity per account profile on each installation;
 never derive it from a hardware identifier. Upload the immutable backup first.
@@ -224,6 +225,20 @@ use the repository's verified no-reply identity, and scan the exact staged paylo
 for private identifiers, paths, credentials, and lesson content. No push, merge,
 issue closure, real-money purchase, or release is implied.
 
-Next gate: owner review of this written design, then the implementation plan and
-TDD execution. No application code or cloud configuration changes are part of this
-design-only commit.
+## Second consistency review
+
+- Store settings/selection in the account profile's transactional store, not a
+  separate key-value commit during restore. Keep legacy guest keys readable.
+- Include the previous generation in the published head, so retaining its asset
+  actually permits recovery when the current generation is damaged.
+- Bind an in-flight player's save closure to its original profile; changing a
+  global journal must not redirect a late pause/save into another account.
+- Never replace a nonempty active profile on delayed fetch. First-time restore
+  targets an inactive profile and requires consent; regular fetch cannot overwrite
+  local edits. Multi-device merge remains #50.
+- Treat transport failures as unknown availability, never as an empty cloud backup.
+  Guest import or empty-profile publication requires a successful initial fetch.
+
+These corrections refine the approved safety boundaries without adding a backend
+or extending the ticket to two-device merging. Implementation proceeds from the
+companion plan; live CloudKit acceptance remains separately gated.
