@@ -1,0 +1,92 @@
+{
+  "id": "morning-notes",
+  "version": 1,
+  "title": "Morning Notes",
+  "language": "English",
+  "phrases": [
+    {
+      "text": "I opened the window to let in the morning air.",
+      "translation": "아침 공기를 들이려고 창문을 열었어요.",
+      "file": "audio/phrase-01.m4a",
+      "bytes": 14743,
+      "sha256": "c73e231982dc1a302135d69c7876a2222a275e96f6a27489638c32fd952ca7e8"
+    },
+    {
+      "text": "There is a small notebook beside my cup.",
+      "translation": "컵 옆에 작은 공책이 있어요.",
+      "file": "audio/phrase-02.m4a",
+      "bytes": 15011,
+      "sha256": "13c3356645ade1c51d3ec17e94031223e6a00ca6af1fddb27cb23dec8121ea97"
+    },
+    {
+      "text": "Let us take a short walk before lunch.",
+      "translation": "점심 전에 잠깐 산책해요.",
+      "file": "audio/phrase-03.m4a",
+      "bytes": 14848,
+      "sha256": "e80e6a5424a34979395f90051e8ef73a366ba1a83459209a00e41a4f77abd205"
+    },
+    {
+      "text": "The quiet path leads to a little garden.",
+      "translation": "조용한 길이 작은 정원으로 이어져요.",
+      "file": "audio/phrase-04.m4a",
+      "bytes": 14899,
+      "sha256": "c3180772b902e8dcc9f300e519601641b567b9bb0fd6b12db8134a4b1e740861"
+    },
+    {
+      "text": "I will bring some water for the trip.",
+      "translation": "여행에 마실 물을 가져갈게요.",
+      "file": "audio/phrase-05.m4a",
+      "bytes": 13020,
+      "sha256": "9a7e102f11b0bb6696d90bf0b3680de9d86fcc0010191fdfafa5329b293eae6c"
+    },
+    {
+      "text": "We can choose a different route tomorrow.",
+      "translation": "내일은 다른 길을 골라도 돼요.",
+      "file": "audio/phrase-06.m4a",
+      "bytes": 13345,
+      "sha256": "aeb8761717b54e0f271d4c10a695cdfa574f0c8ae9c86d69d6f3efb7a52ddc9a"
+    },
+    {
+      "text": "Please give me a moment to write this down.",
+      "translation": "이것을 적을 시간을 잠깐 주세요.",
+      "file": "audio/phrase-07.m4a",
+      "bytes": 14700,
+      "sha256": "16cc9fbe10215f5885fb671fd17fe3bb1a080aa7230ead140af68ca0103d8826"
+    },
+    {
+      "text": "Learning a little every day makes a difference.",
+      "translation": "매일 조금씩 배우면 달라져요.",
+      "file": "audio/phrase-08.m4a",
+      "bytes": 15812,
+      "sha256": "be41a959a528f54ff5ba78bc74ff28960f67e7d3a7426d9204ede8a18216259f"
+    },
+    {
+      "text": "I heard the rain while I was reading.",
+      "translation": "책을 읽다가 빗소리를 들었어요.",
+      "file": "audio/phrase-09.m4a",
+      "bytes": 13021,
+      "sha256": "dc1ec49790936f8028d8c6f56386bb9e54e0498e57074bc7971a76e68acd3e83"
+    },
+    {
+      "text": "The sky became clear in the afternoon.",
+      "translation": "오후가 되자 하늘이 맑아졌어요.",
+      "file": "audio/phrase-10.m4a",
+      "bytes": 14269,
+      "sha256": "2798f4a0129591fc270ec938ce3a08f5944b0c621c8ba039ab2e1224f89ec908"
+    },
+    {
+      "text": "We have enough time to try once more.",
+      "translation": "한 번 더 해 볼 시간이 충분해요.",
+      "file": "audio/phrase-11.m4a",
+      "bytes": 14105,
+      "sha256": "17cdb5ac7d2c8174faebbcaa7120cac4b16141cd603dbdf0a42821e3f3b74c3f"
+    },
+    {
+      "text": "I am ready to begin the next chapter.",
+      "translation": "다음 장을 시작할 준비가 됐어요.",
+      "file": "audio/phrase-12.m4a",
+      "bytes": 14487,
+      "sha256": "a231c242f05cbc440f81b4f8ecb42548c5b68733f0cc705522a2ba1e9907e2b2"
+    }
+  ]
+}

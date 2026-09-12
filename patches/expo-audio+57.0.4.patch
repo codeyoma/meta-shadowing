@@ -1,0 +1,13 @@
+diff --git a/node_modules/expo-audio/ios/AudioModule.swift b/node_modules/expo-audio/ios/AudioModule.swift
+index d265606..61260c6 100644
+--- a/node_modules/expo-audio/ios/AudioModule.swift
++++ b/node_modules/expo-audio/ios/AudioModule.swift
+@@ -216,7 +216,7 @@ public class AudioModule: Module {
+       }
+ 
+       Function("setPlaybackRate") { (player, rate: Double, pitchCorrectionQuality: PitchCorrectionQuality?) in
+-        let playerRate = rate < 0 ? 0.0 : Float(min(rate, 2.0))
++        let playerRate = rate < 0 ? 0.0 : Float(min(rate, 3.0))
+         player.currentRate = playerRate
+ 
+         if player.isPlaying {
