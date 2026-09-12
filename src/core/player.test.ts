@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSession, type Session } from './session';
 import { Player, type AudioPort } from './player';
+import { audioPort, type NativeHandle, type NativeStatus } from './audio';
 
 function rig() {
   let plays = 0, now = 0, failSave = false;
@@ -197,4 +198,48 @@ test('an audio failure saves a paused checkpoint and retries without confirming 
   await r.player.resume();
   assert.equal(r.player.state.confirmed, 0);
   assert.equal(r.positions.at(-1), 1.5);
+});
+
+test('native interruption and media reset preserve the cycle and ignore callbacks from released handles', async () => {
+  const callbacks: ((status: NativeStatus) => void)[] = [];
+  const handles: NativeHandle[] = [];
+  const saved: Session[] = [];
+  let plays = 0;
+  const status: NativeStatus = { isLoaded: true, playing: false, duration: 4, didJustFinish: false, error: null };
+  const audio = audioPort(async () => {}, () => {
+    const handle: NativeHandle = { currentTime: 0, duration: 4, currentStatus: status,
+      setPlaybackRate: () => {}, seekTo: async value => { handle.currentTime = value; },
+      play: () => { plays++; }, remove: () => {},
+      onStatus: callback => { callbacks.push(callback); return { remove: () => {} }; },
+    };
+    handles.push(handle); return handle;
+  }, duration => player.audioEnded(duration), () => player.audioFailed(), () => player.pause());
+  const initial = { ...createSession({ runId: 'native-interrupted', stage: 2, phraseCount: 12, mode: 'manual', rate: 0.75 }),
+    phrase: 6, confirmed: 3, planned: 5, phase: 'listening' as const, audioSeconds: 0.8 };
+  const player = new Player(initial, audio, state => saved.push({ ...state }), () => 0, () => {});
+  await player.resume();
+  callbacks[0]!({ ...status, playing: true });
+  handles[0]!.currentTime = 1.75;
+  callbacks[0]!(status);
+  assert.deepEqual(saved.at(-1), { ...initial, audioSeconds: 1.75 });
+  callbacks[0]!({ ...status, playing: true });
+  callbacks[0]!({ ...status, didJustFinish: true });
+  assert.equal(player.state.phase, 'listening');
+  assert.equal(player.state.running, false);
+  assert.equal(plays, 1);
+  await player.resume();
+  assert.equal(handles[1]!.currentTime, 1.75);
+  callbacks[1]!({ ...status, playing: true });
+  callbacks[0]!({ ...status, error: 'late old handle failure' });
+  assert.equal(player.error, null);
+  assert.equal(player.state.running, true);
+  handles[1]!.currentTime = 2.25;
+  callbacks[1]!({ ...status, mediaServicesDidReset: true });
+  assert.equal(player.error, 'audio');
+  assert.deepEqual(saved.at(-1), { ...initial, audioSeconds: 2.25 });
+  await player.resume();
+  assert.equal(handles[2]!.currentTime, 2.25);
+  assert.equal(player.state.confirmed, 3);
+  assert.equal(plays, 3);
+  player.dispose();
 });

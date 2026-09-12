@@ -65,7 +65,16 @@ export default function PlayerScreen() {
           if (player.error && player.error !== shown) {
             shown = player.error;
             Alert.alert(player.error === 'save' ? '학습을 저장하지 못했어요' : '음성을 재생할 수 없어요',
-              player.error === 'save' ? '학습을 잠시 멈췄어요. 저장 공간을 확인하고 다시 시도해 주세요.' : '학습 위치는 유지됩니다. 다시 시도하거나 레슨을 재설치해 주세요.');
+              player.error === 'save' ? '학습을 잠시 멈췄어요. 저장 공간을 확인하고 다시 시도해 주세요.' : '학습 위치는 유지됩니다. 다시 시도하거나 레슨을 재설치해 주세요.',
+              [{ text: '나중에', style: 'cancel' }, { text: '다시 시도', onPress: () => {
+                if (!active || engine.current !== player || AppState.currentState !== 'active') return;
+                shown = null;
+                if (player.error === 'save') player.retrySave();
+                else if (player.error === 'audio') {
+                  setBusy(true);
+                  void player.resume().finally(() => { if (active) setBusy(false); });
+                }
+              } }]);
           }
           if (!player.error) shown = null;
         });

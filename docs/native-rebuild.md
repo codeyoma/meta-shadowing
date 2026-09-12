@@ -1,8 +1,9 @@
 # Native rebuild: decisions and milestones
 
 Status: Q15 approved M0/M1 and recoverable backlog closure on 2026-09-11.
-M0 is complete. The #39 simulator development loop and owner-amended manual-only
-#40 simulator stage/settings flow have passed; the remaining M1
+M0 is complete. The #39 simulator development loop, owner-amended manual-only
+#40 stage/settings flow, and #41 simulator recovery/failure checks have passed;
+the remaining M1
 checks and physical-iPhone installation/acceptance are NOT complete. See
 [verification](verification.md) for evidence and open gates.
 

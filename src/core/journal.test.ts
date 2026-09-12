@@ -69,6 +69,75 @@ test('closing and reopening a disk-backed database preserves the unfinished spea
   } finally { db.close(); rmSync(dir, { recursive: true }); }
 });
 
+test('a failed confirmation save blocks practice; retry preserves that confirmation without starting audio', async () => {
+  const db = new DatabaseSync(':memory:');
+  const journal = open(db);
+  let plays = 0;
+  const audio = { prepare: async () => {}, play: () => { plays++; }, pause: () => {}, position: () => 1.25, dispose: () => {} };
+  const player = new Player(createSession({ runId: 'retry-run', stage: 1, phraseCount: 12, mode: 'manual', rate: 0.75 }),
+    audio, state => journal.save('sample-v1', state), () => 0, () => {});
+  try {
+    await player.resume();
+    player.audioEnded(2);
+    db.exec("CREATE TRIGGER deny_checkpoint BEFORE INSERT ON checkpoints BEGIN SELECT RAISE(ABORT, 'injected save failure'); END;");
+    await player.confirm();
+    assert.equal(player.error, 'save');
+    assert.equal(player.state.running, false);
+    assert.equal(player.state.confirmed, 1);
+    assert.equal(journal.load('sample-v1', 1, 12)?.confirmed, 0);
+    await player.confirm(); await player.choose('next');
+    player.retrySave();
+    assert.equal(player.error, 'save');
+    assert.equal(plays, 1);
+    db.exec('DROP TRIGGER deny_checkpoint');
+    player.retrySave();
+    assert.equal(player.error, null);
+    assert.equal(plays, 1);
+    assert.equal(journal.load('sample-v1', 1, 12)?.confirmed, 1);
+    assert.equal(journal.load('sample-v1', 1, 12)?.running, false);
+    assert.equal(journal.completions('sample-v1', 1), 0);
+    await player.resume();
+    assert.equal(plays, 2);
+    assert.equal(player.state.confirmed, 1);
+  } finally { db.close(); }
+});
+
+test('pause saves the current position while termination can recover only the last durable checkpoint', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'native-interruption-'));
+  const file = join(dir, 'learning.db');
+  let db = new DatabaseSync(file), journal = open(db);
+  let now = 0, position = 0, plays = 0;
+  const starts: number[] = [];
+  const audio = { prepare: async (_phrase: number, start: number) => { starts.push(start); position = start; },
+    play: () => { plays++; }, pause: () => {}, position: () => position, dispose: () => {} };
+  const makePlayer = (state: ReturnType<typeof createSession>) => new Player(state, audio,
+    checkpoint => journal.save('sample-v1', checkpoint), () => now, () => {});
+  const initial = { ...createSession({ runId: 'interrupted-run', stage: 2, phraseCount: 12, mode: 'manual', rate: 2.8 }),
+    phrase: 6, confirmed: 3, planned: 5, phase: 'listening' as const, audioSeconds: 0.8 };
+  try {
+    let player = makePlayer(initial);
+    await player.resume();
+    now = 500; position = 1.4; player.tick();
+    now = 749; position = 1.7; player.tick();
+    // No pause/dispose callback: a process loss cannot save this newer position.
+    db.close(); db = new DatabaseSync(file); journal = open(db);
+    let recovered = journal.load('sample-v1', 2, 12)!;
+    assert.deepEqual(recovered, { ...initial, audioSeconds: 1.4 });
+    player = makePlayer(recovered);
+    now = 90000; player.tick();
+    assert.equal(plays, 1);
+    assert.deepEqual(player.state, recovered);
+    await player.resume();
+    assert.deepEqual(starts, [0.8, 1.4]);
+    position = 2.15; player.pause();
+    player.dispose(); db.close(); db = new DatabaseSync(file); journal = open(db);
+    recovered = journal.load('sample-v1', 2, 12)!;
+    assert.deepEqual(recovered, { ...initial, audioSeconds: 2.15 });
+    assert.equal(journal.completions('sample-v1', 2), 0);
+    assert.equal(journal.load('sample-v1', 1, 12), null);
+  } finally { db.close(); rmSync(dir, { recursive: true }); }
+});
+
 test('full twelve-phrase runs unlock stage two and preserve independent history across disk reopen', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const dir = mkdtempSync(join(tmpdir(), 'native-stage-flow-'));

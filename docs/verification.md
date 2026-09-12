@@ -1,5 +1,93 @@
 # M1 verification
 
+## Ticket #41: unfinished-cycle recovery — 2026-09-12
+
+Passed on **iPhone 17 Pro Max Simulator, iOS 26.5**, using the existing local
+native **Debug app, Expo SDK 57**, with the previously built audio-rate patch and
+current JavaScript from Metro. No new native compile, Release/offline launch or
+physical-iPhone acceptance is claimed. Review scope starts at `2803609` (#40).
+
+The owner-approved #40 contract remains authoritative: speaking confirmation is
+manual, and legacy remaining-time fields are preserved without a countdown.
+Foregrounding/options return never plays automatically. Relaunch opens the library
+silently; explicitly entering a stage waits one second and resumes saved listening
+or replays an already-ended, unconfirmed pass. Neither action confirms a cycle.
+
+### Reproducible acceptance and observed results
+
+1. Open the installed twelve-sentence sample and start another Stage 2 run. Open
+   and close options while awaiting confirmation: practice stays paused. Confirm
+   once, switch to Home, and relaunch. The speaking checkpoint retains one check;
+   elapsed inactive time does not confirm another cycle.
+2. For a wider listening window, change this paused run to 0.3× in options. Resume
+   and confirm the next cycle, then press Home during audio. SQLite records
+   listening, paused, two confirmed cycles and position about 1.016 seconds.
+   Tap the app's Home Screen icon to foreground the same process: it shows Resume
+   and retains that position/count without starting audio. Explicit Resume
+   advances from the saved position. Opening options pauses at about 2.223 seconds.
+3. Stop and relaunch the app from that paused state. The library is silent and
+   the checkpoint still contains the same listening position and two checks.
+   Re-enter Stage 2 explicitly and let its unfinished audio end. Force-terminate
+   only the app process without a graceful pause. The last durable checkpoint is
+   speaking with two checks (its stored running flag is still true). Relaunch is
+   silent; loading restores paused state. Explicit stage entry replays this
+   unconfirmed pass without adding a check or completion record. This native
+   forced-termination test occurred in speaking, not mid-listening.
+4. Back up the controlled local simulator database, then temporarily reject Stage
+   2 checkpoint inserts with a SQLite abort trigger. Tap confirmation. The native
+   save-error alert offers Later and Retry; the durable count remains two. Retry
+   while writes still fail reopens the alert without practice advancing. Remove
+   the trigger and retry: saving recovers in paused state, with no automatic audio.
+   A subsequent explicit confirmation reaches the three-cycle decision.
+5. At that decision, temporarily move only the installed sample's second clip
+   aside, then choose Next. The native audio-error alert offers Later and Retry;
+   sentence 2 has zero confirmations. Restore the clip and tap Retry: playback
+   starts on that same sentence, still with zero confirmations. Opening options
+   pauses it at about 0.938 seconds.
+6. Remove the fault trigger and verify the restored clip against its shipped
+   hash. Restore the test-only run speed to the original 1× (a guarded local
+   checkpoint update after slider rounding left 0.95×), then relaunch and leave
+   the stage path open. No other checkpoint fields were changed by this cleanup.
+   Stage 2 remains at sentence 2, paused, with zero checks. History remains
+   **Stage 1: 2 runs; Stage 2: 1 run; XP: 20**; no full run or reward was added.
+   Global preferences were not changed. The simulator and Metro remain running.
+
+### Repair and deterministic verification
+
+- System error alerts now contain actionable retry buttons, guarded against
+  inactive screens, replaced engines and background execution. Save retry remains
+  paused; audio retry is an explicit request to resume the same checkpoint.
+- Three added regression/characterization tests use public boundaries: a real
+  SQLite write failure blocks practice and preserves a pending confirmation on
+  retry; a disk-backed checkpoint recovers only the last durable listening
+  position; real Player/audio-port integration ignores released SDK handles and
+  safely retries an interruption/media-services reset. Existing tests cover
+  cancellation during configuration/seeking and frozen legacy speaking time.
+  These core safety tests passed before the alert change; no new core repair or
+  red-to-green core result is claimed.
+- **67 tests passed, strict typecheck passed, iOS JS/Hermes export passed.** Export
+  is not a native compile. Dependency versions were unchanged; #40's recorded
+  Expo alignment/advisory gates still apply.
+
+### Limits
+
+Normal pause persists the observed stopped position. Unexpected termination can
+recover only a successful prior write: the deterministic listening test recovers
+1.4 seconds rather than a later unsaved 1.7 seconds. Periodic checkpoint attempts
+at 500 ms are not a maximum-loss guarantee, nor sample-exact crash recovery.
+Native UI/audio-finish events and local SQLite observations support these results;
+this is not a new human listening-quality assessment. Physical lock/unlock, calls,
+Bluetooth/headphone routing, real storage exhaustion and actual device SDK
+interruption ordering remain unverified. Media-services reset was tested at the
+SDK boundary, not injected into a physical device or the Simulator audio service.
+
+Metro had stopped before the first launch, producing a development-server error.
+Restarting the documented IPv4-first local server and reloading recovered the
+development session; no application change or data reset was required. No hosted
+DB/Auth/Storage change, push, remote CI run or deployment was performed. Only
+sanitized results belong in this document; raw logs, identifiers and backups stay
+private and ignored.
+
 ## Ticket #40: manual stage flow — 2026-09-12
 
 Passed on **iPhone 17 Pro Max Simulator, iOS 26.5**, in the existing local native
@@ -157,9 +245,9 @@ DB/Auth/Storage mutation, or deployment was performed.
 
 ## Not yet verified
 
-- Interruption/resume matrix (#41), Release-build offline launch and reinstall
-  scenarios (#42), and accessibility acceptance (#43). The #40 stage/settings
-  pass above does not complete these tickets.
+- Release-build offline launch and reinstall scenarios (#42), and accessibility
+  acceptance (#43). The simulator-only #41 pass does not complete these tickets
+  or the physical-device interruption matrix.
 - Physical installation and device acceptance, including screen lock, calls,
   headphones/Bluetooth and actual native audio interruption ordering.
 - Native SQLite/file persistence and storage-full behavior on a physical iPhone.
