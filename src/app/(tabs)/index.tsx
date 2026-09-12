@@ -2,6 +2,7 @@ import { ScrollView, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Label, usePalette } from '@/components/ui';
 import { LibraryBook } from '@/components/library-book';
+import { PackagePurchaseCard } from '@/components/package-purchase-card';
 import { useLibrary } from '@/components/library-context';
 import { availableBooks } from '@/core/catalog';
 import { books, languages } from '@/native/catalog';
@@ -17,6 +18,7 @@ export default function Library() {
     </View>
     <Label size={27} weight="800" color={c.heading}>{languages.find(l => l.id === selection.language)?.name} 도서</Label>
     {catalog.map(book => <LibraryBook key={book.packageKey} book={book} />)}
+    {selection.language === 'english' && <PackagePurchaseCard />}
     {!catalog.length && <Label muted>이 언어에서 지원하는 도서가 아직 없어요.</Label>}
   </ScrollView>;
 }

@@ -14,7 +14,7 @@
     "ios": {
       "deploymentTarget": "26.0",
       "supportsTablet": false,
-      "bundleIdentifier": "app.metashadowing.prototype",
+      "bundleIdentifier": "com.codeyoma.shadowshadowing",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -23,6 +23,7 @@
       "package": "app.metashadowing.prototype"
     },
     "plugins": [
+      "./modules/package-store/app.plugin.js",
       "expo-router",
       "expo-sqlite",
       [

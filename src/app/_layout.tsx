@@ -8,11 +8,13 @@ import { usePalette } from '../components/ui';
 import { LibraryProvider } from '@/components/library-context';
 import { StudyHeader } from '@/components/study-header';
 import { startTapFeedback } from '@/native/tap-feedback';
+import { startPurchases } from '@/native/purchases';
 
 void SplashScreen.preventAutoHideAsync();
 
 export default function Layout() {
   useEffect(startTapFeedback, []);
+  useEffect(startPurchases, []);
   const c = usePalette();
   const [fontsLoaded, fontError] = useFonts({ Nunito_800ExtraBold });
   useEffect(() => {

@@ -1,0 +1,18 @@
+{
+  "identifier": "A6B233AC-7290-4D2E-A1C0-8C1ECDAA1111",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "29.00",
+      "familyShareable": false,
+      "internalID": "100001",
+      "localizations": [{ "description": "Controlled local test package, no downloadable content.", "displayName": "Test Learning Book", "locale": "en_US" }],
+      "productID": "com.example.packagestore.book",
+      "referenceName": "Local Test Book",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": { "_failTransactionsEnabled": false, "_locale": "en_US", "_storefront": "USA" },
+  "subscriptionGroups": [],
+  "version": { "major": 3, "minor": 0 }
+}
