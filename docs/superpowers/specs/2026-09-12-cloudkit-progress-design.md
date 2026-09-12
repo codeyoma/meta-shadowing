@@ -22,15 +22,16 @@ Concurrent two-device reconciliation belongs to #50; comprehensive account-chang
 and deletion journeys belong to #51. Basic account isolation and stale-operation
 protection are mandatory here and cannot be deferred to those tickets.
 
-## Current implementation
+## Baseline before implementation
 
 - `Journal` commits checkpoints, completion identity, and reward history to
   `learning-v1.db`. Completion and XP writes already share a SQLite transaction.
 - Settings and library selection use existing SQLite key-value entries.
 - `getJournal()` currently returns one process-wide journal without account scope.
 - No CloudKit capability or container is configured in the generated entitlements.
-- Existing #45 purchase/restore and unrelated UI edits remain uncommitted. Preserve
-  them; do not stash, reset, or incorporate unrelated edits into #49 commits.
+- At design time, #45 purchase/restore follow-ups and unrelated UI edits remained
+  uncommitted. Preserve them; do not stash, reset, or incorporate unrelated edits
+  into #49 commits. The #45 follow-ups were subsequently committed separately.
 
 ## Architecture decision
 
