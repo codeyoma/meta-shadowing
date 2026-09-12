@@ -101,6 +101,23 @@ full account deletion journeys belong to #51.
   screenshot and build result were independently inspected. This does not verify
   an available-account profile switch, real upload, or clean-install recovery.
 - Physical CloudKit recovery and real StoreKit sandbox acceptance remain pending.
+- The combined #45/#49 review found two additional recovery gaps despite the
+  earlier green suites: a transient unknown iCloud identity did not schedule a
+  foreground retry, and invalid current-generation metadata hid an intact previous
+  recovery candidate. Both were reproduced before correction. Unknown identity now
+  schedules a bounded active retry without switching profiles or publishing before
+  confirmation. Recovery offers independently valid references, while publication
+  remains strict; damaged data with no valid candidates still fails closed.
+  The Standards axis also identified one duplicated payload-comparison helper;
+  it now delegates to the existing shared comparison rule. That axis reported no
+  hard repository-standard violation.
+- After the combined fix, the controller reran 103 TypeScript tests and typechecking
+  successfully and inspected the native result bundle: 17 CloudKit tests passed,
+  none failed or skipped. Parameterized cases cover missing metadata and mismatched
+  hash, revision and date. The updated Release build succeeded. StoreKit sources
+  were unchanged after its 12-test regression pass. Final scoped re-review confirmed
+  both Spec findings and the Standards suggestion addressed, with no new important
+  or critical defect in the fix. Actual Apple service acceptance remains open.
 
 The final report must update these entries with measured results, preserving the
 distinction between local verification and real sandbox/CloudKit acceptance.

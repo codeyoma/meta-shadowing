@@ -130,7 +130,7 @@ assert.equal(guest.journal.completions('sample-v1',1),1);
 - [x] Run `npm test`, `npm run typecheck`, `git diff --check`, native CloudKit test host and relevant StoreKit regression tests. Record exact totals and distinguish prior test evidence from current runs.
 - [x] Inspect generated entitlements privately. If container/signing/test iCloud identity are missing, record the exact prerequisite category; do not invent values or claim cloud acceptance. Document a controlled sample backup/reinstall test preserving the owner's unsynced data.
 - [x] Privacy-scan exact staged content and use repository no-reply commit identity. Commit only #45/#49 work; preserve unrelated dirty UI changes. No push.
-- [ ] Run the requested two-axis code-review from #44 baseline, passing both #45 and #49 specs and exact scoped commit/diff paths. Address correctness findings and re-run covering tests. Real sandbox/CloudKit acceptance gaps keep respective tickets open.
+- [x] Run the requested two-axis code-review from #44 baseline, passing both #45 and #49 specs and exact scoped commit/diff paths. Address correctness findings and re-run covering tests. Real sandbox/CloudKit acceptance gaps keep respective tickets open. Both Spec defects and the Standards suggestion were fixed and passed scoped re-review; final verification is recorded in `docs/cloudkit-progress.md`.
 
 ## Self-review and execution record
 
