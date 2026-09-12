@@ -90,3 +90,22 @@ cloud backup.
   checks are agreed; do not weaken remote protection as a shortcut.
 
 No commit, push, deployment, or Supabase mutation is part of this local milestone.
+
+## Deployment policy: native iOS only
+
+Vercel is no longer a deployment target. The retired web application and its
+GitHub Actions workflow are already absent from this native branch. Do not add
+Vercel build jobs, deploy commands, tokens, or web-preview requirements.
+
+The root `vercel.json` is only an opt-out: `git.deploymentEnabled: false` disables
+automatic Git deployments for all branches carrying this configuration. Removing
+deployment files alone does not disconnect an existing Vercel Git integration.
+See [Vercel's Git configuration](https://vercel.com/docs/project-configuration/git-configuration#turning-off-all-automatic-deployments).
+Local `.vercel/` link metadata is ignored and must not be committed.
+
+This opt-out does not delete historical deployments, disconnect the hosted Git
+integration, or change GitHub branch protections. Old commits and branches without
+the opt-out are not covered. Fully removing the integration requires a separate,
+project-scoped disconnect in Vercel; do not uninstall a shared integration from
+other repositories. Required GitHub checks are managed separately from deployment
+checks and must not be bypassed or replaced with fake passing results.
