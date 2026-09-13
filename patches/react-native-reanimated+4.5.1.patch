@@ -1,0 +1,26 @@
+diff --git a/node_modules/react-native-reanimated/apple/reanimated/apple/REAAssertJavaScriptQueue.h b/node_modules/react-native-reanimated/apple/reanimated/apple/REAAssertJavaScriptQueue.h
+index fa769d7..800a2c6 100644
+--- a/node_modules/react-native-reanimated/apple/reanimated/apple/REAAssertJavaScriptQueue.h
++++ b/node_modules/react-native-reanimated/apple/reanimated/apple/REAAssertJavaScriptQueue.h
+@@ -3,7 +3,7 @@
+ // Copied from RCTJSThreadManager.mm
+ static NSString *const RCTJSThreadName = @"com.facebook.react.runtime.JavaScript";
+ 
+-static BOOL REAIsJavaScriptQueue()
++static inline BOOL REAIsJavaScriptQueue()
+ {
+   return [NSThread.currentThread.name isEqualToString:RCTJSThreadName];
+ }
+diff --git a/node_modules/react-native-reanimated/apple/reanimated/apple/REAAssertTurboModuleManagerQueue.h b/node_modules/react-native-reanimated/apple/reanimated/apple/REAAssertTurboModuleManagerQueue.h
+index 46e41f6..0f786b7 100644
+--- a/node_modules/react-native-reanimated/apple/reanimated/apple/REAAssertTurboModuleManagerQueue.h
++++ b/node_modules/react-native-reanimated/apple/reanimated/apple/REAAssertTurboModuleManagerQueue.h
+@@ -2,7 +2,7 @@
+ 
+ constexpr auto turboModuleManagerQueueLabel = "com.meta.react.turbomodulemanager.queue";
+ 
+-static bool REAIsTurboModuleManagerQueue() {
++static inline bool REAIsTurboModuleManagerQueue() {
+   const auto currentQueueLabel = dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL);
+   return strcmp(currentQueueLabel, turboModuleManagerQueueLabel) == 0;
+ }

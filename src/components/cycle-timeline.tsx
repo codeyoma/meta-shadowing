@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { cubicBezier, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
 import type { Session } from '@/core/session';
-import { completedConnections, cycleTimeline } from '@/core/player-presentation';
+import { canPulseCycle, completedConnections, cycleTimeline } from '@/core/player-presentation';
 import { Icon, usePalette } from './ui';
 
 const SIZE = 48;
+const DOT_SIZE = 12;
+// Expand to 80% of the 40pt space inside the inset circle's border.
+const PULSE_MAX_SCALE = (SIZE - 2 * 2 - 2 * 2) * 0.8 / DOT_SIZE;
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+const PULSE_EASING = cubicBezier(0.77, 0, 0.175, 1);
 
 // Two clipped semicircles draw a continuous ring without an additional native dependency.
 function HalfRing({ progress, second, color }: { progress: SharedValue<number>; second: boolean; color: string }) {
@@ -22,8 +26,8 @@ function HalfRing({ progress, second, color }: { progress: SharedValue<number>; 
   </View>;
 }
 
-function CycleNode({ index, x, complete, active, progress, playing, added }: {
-  index: number; x: number; complete: boolean; active: boolean; progress: number; playing: boolean; added: boolean;
+function CycleNode({ index, x, complete, active, progress, playing, added, animate }: {
+  index: number; x: number; complete: boolean; active: boolean; progress: number; playing: boolean; added: boolean; animate: boolean;
 }) {
   const c = usePalette();
   const reduced = useReducedMotion();
@@ -54,13 +58,20 @@ function CycleNode({ index, x, complete, active, progress, playing, added }: {
     <View style={{ position: 'absolute', inset: 2, borderRadius: SIZE / 2, borderWidth: 2,
       borderColor: complete ? c.accentPressed : c.outline, backgroundColor: complete ? c.accent : c.card,
       alignItems: 'center', justifyContent: 'center' }}>
+      {active && !complete && <Animated.View pointerEvents="none" accessible={false}
+        style={{ width: DOT_SIZE, height: DOT_SIZE, borderRadius: DOT_SIZE / 2, backgroundColor: c.outline, opacity: 0.8,
+          transform: [{ scale: 0.65 }],
+          ...(animate && !reduced ? {
+            animationName: { from: { transform: [{ scale: 0.65 }] }, '50%': { transform: [{ scale: PULSE_MAX_SCALE }] }, to: { transform: [{ scale: 0.65 }] } },
+            animationDuration: 4200, animationIterationCount: 'infinite', animationTimingFunction: PULSE_EASING,
+          } : {}) }} />}
       {complete && <Animated.View style={check}><Icon name="checkmark" color={c.onAccent} size={21} /></Animated.View>}
     </View>
     {active && <><HalfRing progress={ring} second={false} color={c.accentPressed} /><HalfRing progress={ring} second color={c.accentPressed} /></>}
   </Animated.View>;
 }
 
-export function CycleTimeline({ state, duration }: { state: Session; duration: number }) {
+export function CycleTimeline({ state, duration, animate = true }: { state: Session; duration: number; animate?: boolean }) {
   const c = usePalette();
   const [width, setWidth] = useState(0);
   const initialCount = useRef(state.planned);
@@ -92,7 +103,7 @@ export function CycleTimeline({ state, duration }: { state: Session; duration: n
       {Array.from({ length: model.count }, (_, index) => <CycleNode key={index} index={index}
         x={(contentWidth - SIZE) * index / (model.count - 1)} complete={index < model.confirmed}
         active={index === model.active} progress={index === model.active ? model.progress : 0}
-        playing={state.running && state.phase === 'listening'} added={index >= initialCount.current} />)}
+        playing={state.running && state.phase === 'listening'} added={index >= initialCount.current} animate={animate && canPulseCycle(state)} />)}
     </ScrollView>
   </View>;
 }

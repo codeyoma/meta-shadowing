@@ -1,9 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSession, transition, restoreSession } from './session';
-import { cycleTimeline, mainPlayerAction, canOfferRepeat, completedConnections, phraseCounterText } from './player-presentation';
+import { cycleTimeline, mainPlayerAction, canOfferRepeat, completedConnections, phraseCounterText, canPulseCycle } from './player-presentation';
 
 const initial = () => createSession({ runId: 'presentation', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
+
+test('the cycle dot pulses only after audio ends, not while waiting, playing or interrupted', () => {
+  let state = initial();
+  assert.equal(canPulseCycle(state), false);
+  state = transition(state, { type: 'resume' });
+  assert.equal(canPulseCycle(state), false);
+  assert.equal(canPulseCycle(transition(state, { type: 'pause' })), false);
+  state = transition(state, { type: 'audio-ended', durationSeconds: 4 });
+  assert.equal(canPulseCycle(state), true);
+  assert.equal(canPulseCycle(transition(state, { type: 'pause' })), true);
+  state = transition(state, { type: 'confirm' });
+  assert.equal(canPulseCycle(state), false);
+  assert.equal(canPulseCycle({ ...state, confirmed: 3, phase: 'decision' }), false);
+  assert.equal(canPulseCycle({ ...state, confirmed: 3, phase: 'complete' }), false);
+});
 
 test('counter space depends on total phrase digits, not the growing current position', () => {
   for (const current of [1, 9, 10, 99]) {
@@ -16,7 +31,7 @@ test('counter space depends on total phrase digits, not the growing current posi
   assert.equal(phraseCounterText(1, 1000).measure, '8888/8888');
 });
 
-test('repeat is offered only at the initial three-cycle decision, never after five or legacy longer practice', () => {
+test('repeat is offered at the initial choice, never after five or legacy longer practice', () => {
   const decision = { ...initial(), phase: 'decision' as const, confirmed: 3 };
   assert.equal(canOfferRepeat(initial(), null), false);
   assert.equal(canOfferRepeat(decision, null), true);
@@ -25,6 +40,39 @@ test('repeat is offered only at the initial three-cycle decision, never after fi
     assert.equal(canOfferRepeat({ ...decision, planned, confirmed: planned }, null), false);
   }
   assert.equal(canOfferRepeat({ ...decision, phase: 'complete' }, null), false);
+});
+
+test('third-cycle choices stay visible while playback locks both actions', () => {
+  const ready = { ...initial(), confirmed: 2 };
+  assert.equal(canOfferRepeat(ready, null), false);
+  assert.equal(mainPlayerAction(ready, null), 'resume');
+  const listening = { ...ready, phase: 'listening' as const, running: true };
+  assert.equal(canOfferRepeat(listening, null), true);
+  assert.equal(mainPlayerAction(listening, null), 'wait');
+  assert.equal(mainPlayerAction({ ...listening, running: false }, null), 'resume');
+  const speaking = { ...listening, phase: 'speaking' as const };
+  assert.equal(canOfferRepeat(speaking, null), true);
+  assert.equal(mainPlayerAction(speaking, null), 'next');
+  assert.equal(canOfferRepeat(speaking, 'save'), false);
+  assert.equal(mainPlayerAction(speaking, 'audio'), 'recover');
+  for (const planned of [5, 7]) {
+    assert.equal(canOfferRepeat({ ...speaking, planned }, null), false);
+    assert.notEqual(mainPlayerAction({ ...speaking, planned }, null), 'next');
+  }
+});
+
+test('the fifth speaking cycle uses next for one-tap completion', () => {
+  const fifth = { ...initial(), planned: 5, confirmed: 4, phase: 'speaking' as const, running: true };
+  assert.equal(mainPlayerAction(fifth, null), 'next');
+  assert.equal(canOfferRepeat(fifth, null), false);
+});
+
+test('legacy seven and nine-cycle final speaking passes keep the confirm action', () => {
+  for (const planned of [7, 9]) {
+    const speaking = { ...initial(), planned, confirmed: planned - 1, phase: 'speaking' as const, running: true };
+    assert.equal(mainPlayerAction(speaking, null), 'confirm');
+    assert.equal(canOfferRepeat(speaking, null), false);
+  }
 });
 
 test('connections fill only after explicit confirmation and extend to the next active node', () => {

@@ -19,8 +19,10 @@
       }
     },
     "plugins": [
+      "./plugins/with-ios-build-settings.js",
       "./modules/package-store/app.plugin.js",
       "./modules/progress-cloud/app.plugin.js",
+      "./modules/package-delivery/app.plugin.js",
       "expo-router",
       "expo-sqlite",
       [

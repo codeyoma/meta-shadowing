@@ -14,7 +14,7 @@ import { MethodLabel } from '@/components/method-label';
 
 export default function Lesson() {
   const c = usePalette();
-  const { selection, progress } = useLibrary();
+  const { selection } = useLibrary();
   const selectedBook = selectedPackage(selection.packageKey);
   const { records, overview } = useBookRecords(selectedBook ?? null);
   const [ready, setReady] = useState<boolean | null>(null);
@@ -36,7 +36,6 @@ export default function Lesson() {
   </ScrollView>;
   const current = records?.find(record => record.stage === overview?.current);
   const resumed = current?.session && current.session.phase !== 'complete';
-  const daily = progress?.daily;
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}>
     <View style={{ backgroundColor: '#243541', padding: 18, borderRadius: 26, gap: 14, borderCurve: 'continuous' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -71,7 +70,6 @@ export default function Lesson() {
           <Label size={13} weight="800" color={c.onAccent} align="center">{resumed ? '이어하기' : '학습 시작'}</Label>
         </View>
       </Pressable>
-      {daily && <Label size={12} color="#b8c7d8">오늘의 XP · Stage {daily.stage} · {daily.awarded}/{daily.limit}회</Label>}
     </View>
     {ready === false && <Card><Label>레슨 설치가 필요해요.</Label><ActionButton title="도서 선택으로" onPress={() => router.navigate('/')} /></Card>}
     {records && overview && <StagePath records={records} current={overview.current} ready={ready === true} onSelect={open} />}

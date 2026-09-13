@@ -19,13 +19,13 @@ export default function PlayerOptionsScreen() {
   const profile = useProgressProfile();
   const c = useSettingsColors();
   const insets = useSafeAreaInsets();
-  const { stage: param, package: key } = useLocalSearchParams<{ stage: string; package: string }>();
+  const { stage: param, package: key, option } = useLocalSearchParams<{ stage: string; package: string; option?: string }>();
   const stage = playableStage(param);
   const pack = selectedPackage(key);
   const [rate, setRate] = useState<number | null>(null);
   const [revision, setRevision] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [selected, setSelected] = useState<LearningPreference | null>(null);
+  const [selected, setSelected] = useState<LearningPreference | null>(() => option === 'rate' ? 'rate' : null);
   useEffect(() => {
     try {
       setSettings(readSettings());

@@ -1,0 +1,79 @@
+diff --git a/node_modules/react-native/ReactCommon/react/renderer/mounting/ShadowViewMutation.h b/node_modules/react-native/ReactCommon/react/renderer/mounting/ShadowViewMutation.h
+index a34f965..930e5c3 100644
+--- a/node_modules/react-native/ReactCommon/react/renderer/mounting/ShadowViewMutation.h
++++ b/node_modules/react-native/ReactCommon/react/renderer/mounting/ShadowViewMutation.h
+@@ -45,6 +45,7 @@ struct ShadowViewMutation final {
+    * Creates and returns an `Insert` mutation.
+    * @deprecated Pass parentTag instead of parentShadowView.
+    */
++  [[deprecated("Pass parentTag instead of parentShadowView")]]
+   static ShadowViewMutation InsertMutation(const ShadowView &parentShadowView, ShadowView childShadowView, int index)
+   {
+     return InsertMutation(parentShadowView.tag, childShadowView, index);
+@@ -59,6 +60,7 @@ struct ShadowViewMutation final {
+    * Creates and returns a `Remove` mutation.
+    * @deprecated Pass parentTag instead of parentShadowView.
+    */
++  [[deprecated("Pass parentTag instead of parentShadowView")]]
+   static ShadowViewMutation RemoveMutation(const ShadowView &parentShadowView, ShadowView childShadowView, int index)
+   {
+     return RemoveMutation(parentShadowView.tag, childShadowView, index);
+@@ -73,6 +75,7 @@ struct ShadowViewMutation final {
+    * Creates and returns an `Update` mutation.
+    * @deprecated Pass parentTag instead of parentShadowView.
+    */
++  [[deprecated("Pass parentTag instead of parentShadowView")]]
+   static ShadowViewMutation
+   UpdateMutation(ShadowView oldChildShadowView, ShadowView newChildShadowView, const ShadowView &parentShadowView)
+   {
+diff --git a/node_modules/react-native/scripts/react-native-xcode.sh b/node_modules/react-native/scripts/react-native-xcode.sh
+index 1dcdf55..be93802 100755
+--- a/node_modules/react-native/scripts/react-native-xcode.sh
++++ b/node_modules/react-native/scripts/react-native-xcode.sh
+@@ -108,6 +108,9 @@ fi
+ BUNDLE_FILE="$CONFIGURATION_BUILD_DIR/$BUNDLE_NAME.jsbundle"
+ 
+ EXTRA_ARGS=()
++if [[ "$RESET_METRO_CACHE" == "1" ]]; then
++  EXTRA_ARGS+=("--reset-cache")
++fi
+ 
+ case "$PLATFORM_NAME" in
+   "macosx")
+@@ -157,7 +160,6 @@ fi
+   --entry-file "$ENTRY_FILE" \
+   --platform "$BUNDLE_PLATFORM" \
+   --dev $DEV \
+-  --reset-cache \
+   --bundle-output "$BUNDLE_FILE" \
+   --assets-dest "$DEST" \
+   "${EXTRA_ARGS[@]}" \
+@@ -176,7 +178,14 @@ else
+   if [[ $EMIT_SOURCEMAP == true ]]; then
+     EXTRA_COMPILER_ARGS="$EXTRA_COMPILER_ARGS -output-source-map"
+   fi
+-  "$HERMES_CLI_PATH" -emit-binary -max-diagnostic-width=80 $EXTRA_COMPILER_ARGS -out "$DEST/$BUNDLE_NAME.jsbundle" "$BUNDLE_FILE"
++  HERMES_DIAGNOSTIC_ARGS=()
++  if [[ -n "$HERMES_GLOBALS_FILE" ]]; then
++    HERMES_DIAGNOSTIC_ARGS+=("-include-globals=$HERMES_GLOBALS_FILE")
++  fi
++  if [[ "$HERMES_ALLOW_GLOBAL_EVAL" == "1" ]]; then
++    HERMES_DIAGNOSTIC_ARGS+=("-Wno-direct-eval")
++  fi
++  "$HERMES_CLI_PATH" -emit-binary -max-diagnostic-width=80 $EXTRA_COMPILER_ARGS "${HERMES_DIAGNOSTIC_ARGS[@]}" -out "$DEST/$BUNDLE_NAME.jsbundle" "$BUNDLE_FILE"
+   if [[ $EMIT_SOURCEMAP == true ]]; then
+     HBC_SOURCEMAP_FILE="$DEST/$BUNDLE_NAME.jsbundle.map"
+     "$NODE_BINARY" "$COMPOSE_SOURCEMAP_PATH" "$PACKAGER_SOURCEMAP_FILE" "$HBC_SOURCEMAP_FILE" -o "$SOURCEMAP_FILE"
+diff --git a/node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec b/node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec
+index 66c399a..2dca363 100644
+--- a/node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec
++++ b/node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec
+@@ -112,6 +112,8 @@ Pod::Spec.new do |spec|
+       spec.script_phase = {
+         :name => "[Hermes] Replace Hermes for the right configuration, if needed",
+         :execution_position => :before_compile,
++        # Configuration changes must always reach the script's own version check.
++        :always_out_of_date => '1',
+         :script => <<-EOS
+         . "$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh"
+ 

@@ -1,4 +1,4 @@
-import type { Session } from './session';
+import { canChooseNext, canShowThirdCycleChoices, type Session } from './session';
 
 export function phraseCounterText(current: number, total: number) {
   const digits = '8'.repeat(String(total).length);
@@ -6,8 +6,11 @@ export function phraseCounterText(current: number, total: number) {
 }
 
 export type MainPlayerAction = 'resume' | 'confirm' | 'next' | 'leave' | 'recover' | 'wait';
+export function canPulseCycle(state: Session): boolean {
+  return state.phase === 'speaking' && state.confirmed < state.planned;
+}
 export function canOfferRepeat(state: Session, error: 'save' | 'audio' | null): boolean {
-  return !error && state.phase === 'decision' && state.planned === 3;
+  return !error && state.planned === 3 && (state.phase === 'decision' || canShowThirdCycleChoices(state));
 }
 export function completedConnections(state: Session): number {
   return Math.min(state.confirmed, state.planned - 1);
@@ -15,7 +18,7 @@ export function completedConnections(state: Session): number {
 export function mainPlayerAction(state: Session, error: 'save' | 'audio' | null): MainPlayerAction {
   if (error) return 'recover';
   if (state.phase === 'complete') return 'leave';
-  if (state.phase === 'decision') return 'next';
+  if (canChooseNext(state)) return 'next';
   if (state.phase === 'speaking') return 'confirm';
   return state.running ? 'wait' : 'resume';
 }

@@ -1,4 +1,5 @@
 import { Journal, type Database } from './journal';
+import { restoreSession } from './session';
 import { columns, validateProgressBackup, validateValue, type Table, type Row, type ProgressBackup } from './progress-backup-codec';
 export { validateProgressBackup, type ProgressBackup } from './progress-backup-codec';
 
@@ -57,7 +58,13 @@ export class ProgressBackupStore {
     for (const table of Object.keys(columns) as Table[]) {
       tables[table] = this.db.all<Row>(`SELECT ${columns[table].join(',')} FROM ${table}`);
     }
-    return JSON.stringify(validateProgressBackup(JSON.stringify({ version: 1, tables })));
+    // Normalize historical local checkpoint extras before encoding. External
+    // v1/v2 payloads still pass the codec's exact field-set validation first.
+    tables.checkpoints = tables.checkpoints.map(row => {
+      const state = JSON.parse(String(row.state));
+      return { ...row, state: JSON.stringify(restoreSession(String(row.state), state.phraseCount, Number(row.stage) as 1 | 2)) };
+    });
+    return JSON.stringify(validateProgressBackup(JSON.stringify({ version: 2, tables })));
   }
   restoreBackup(json: string): void {
     const backup = validateProgressBackup(json);

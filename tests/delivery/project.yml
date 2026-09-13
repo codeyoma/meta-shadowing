@@ -1,0 +1,38 @@
+name: PackageDeliveryTests
+options:
+  deploymentTarget:
+    iOS: '26.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  DeliveryTestHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.packagedelivery.tests
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  PackageDeliveryTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - path: ../../modules/package-delivery/ios
+        excludes: ['*Module.swift', '*.podspec']
+    dependencies:
+      - target: DeliveryTestHost
+      - sdk: BackgroundAssets.framework
+schemes:
+  PackageDeliveryTests:
+    build:
+      targets:
+        DeliveryTestHost: all
+        PackageDeliveryTests: [test]
+    test:
+      targets: [PackageDeliveryTests]

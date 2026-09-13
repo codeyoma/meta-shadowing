@@ -1,29 +1,18 @@
 import { AppState } from 'react-native';
-import { createAudioPlayer } from 'expo-audio';
-import { impactAsync, ImpactFeedbackStyle } from 'expo-haptics';
-import { createTapFeedback, createTapSound } from '@/core/tap-feedback';
-
-const sound = createTapSound(() => {
-  const player = createAudioPlayer(require('../../assets/sounds/button-soft-tick.wav'), { updateInterval: 500 });
-  player.volume = 0.65;
-  return {
-    loaded: () => player.isLoaded,
-    seek: () => player.seekTo(0, 0, 0),
-    play: () => { if (AppState.currentState === 'active') player.play(); },
-    release: () => { player.pause(); player.remove(); player.release(); },
-  };
-});
-
-export function startTapFeedback() {
-  if (AppState.currentState === 'active') sound.activate();
-  const subscription = AppState.addEventListener('change', state => {
-    if (state === 'active') sound.activate(); else sound.deactivate();
-  });
-  return () => { subscription.remove(); sound.deactivate(); };
-}
+import { impactAsync, ImpactFeedbackStyle, notificationAsync, NotificationFeedbackType } from 'expo-haptics';
+import { createTapFeedback } from '@/core/tap-feedback';
+import type { LearningFeedback } from '@/core/learning-feedback';
 
 export const tapFeedback = createTapFeedback({
   active: () => AppState.currentState === 'active',
   haptic: () => impactAsync(ImpactFeedbackStyle.Light),
-  sound: sound.play,
 });
+
+export function learningHaptic(event: LearningFeedback) {
+  if (AppState.currentState !== 'active') return;
+  try {
+    const effect = event === 'complete' ? notificationAsync(NotificationFeedbackType.Success)
+      : impactAsync(event === 'next' ? ImpactFeedbackStyle.Medium : ImpactFeedbackStyle.Light);
+    void effect.catch(() => {});
+  } catch { /* Feedback must never affect learning or saving. */ }
+}

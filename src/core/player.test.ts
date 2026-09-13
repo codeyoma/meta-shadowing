@@ -154,6 +154,74 @@ test('repeat adds two cycles only once and cannot restart a five-cycle decision'
   assert.equal(r.plays(), 5);
 });
 
+test('third-cycle playback ignores repeat and next without stopping audio', async () => {
+  const r = rig();
+  r.player.state = { ...r.player.state, confirmed: 2 };
+  await r.player.resume();
+  let pauses = 0;
+  r.audio.pause = () => { pauses++; };
+  const before = { ...r.player.state };
+  await r.player.choose('repeat');
+  await r.player.choose('next');
+  assert.deepEqual(r.player.state, before);
+  assert.equal(pauses, 0);
+});
+
+test('third-cycle repeat works after audio ends and starts the first extra cycle from zero', async () => {
+  const r = rig();
+  r.player.state = { ...r.player.state, confirmed: 2 };
+  await r.player.resume();
+  r.player.audioEnded(2);
+  const events: string[] = [];
+  r.audio.pause = () => { events.push('pause'); };
+  r.audio.prepare = async (_phrase, position) => { events.push(`prepare:${position}`); };
+  r.audio.play = () => { events.push('play'); };
+  await r.player.choose('repeat');
+  assert.deepEqual(events, ['pause', 'prepare:0', 'play']);
+  assert.equal(r.player.state.confirmed, 3);
+  assert.equal(r.player.state.planned, 5);
+  assert.equal(r.player.state.phase, 'listening');
+  await r.player.choose('repeat');
+  assert.deepEqual(events, ['pause', 'prepare:0', 'play']);
+});
+
+test('a failed third-cycle choice save can retry without losing the explicit choice', async () => {
+  const r = rig();
+  r.player.state = { ...r.player.state, confirmed: 2 };
+  await r.player.resume();
+  r.player.audioEnded(2);
+  r.fail();
+  await r.player.choose('repeat');
+  assert.equal(r.player.error, 'save');
+  assert.equal(r.player.state.running, false);
+  assert.equal(r.plays(), 1);
+  assert.equal(r.player.state.confirmed, 3);
+  assert.equal(r.player.state.planned, 5);
+  r.recover(); r.player.retrySave();
+  await r.player.resume();
+  assert.equal(r.player.state.confirmed, 3);
+  assert.equal(r.player.state.planned, 5);
+  assert.equal(r.plays(), 2);
+});
+
+test('fifth-cycle next advances once, persists once, and ignores stale callbacks', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const r = rig();
+  r.player.state = { ...r.player.state, planned: 5, confirmed: 4, phase: 'speaking', running: true };
+  const saves = r.saved.length;
+  const next = r.player.choose('next');
+  assert.equal(r.player.state.phrase, 1);
+  assert.equal(r.saved.length, saves + 1);
+  r.player.audioEnded(2);
+  await r.player.choose('next');
+  assert.equal(r.player.state.phrase, 1);
+  assert.equal(r.saved.length, saves + 1);
+  t.mock.timers.tick(1000);
+  await next;
+  assert.equal(r.player.state.phrase, 1);
+  assert.equal(r.player.state.confirmed, 0);
+});
+
 test('elapsed time cannot confirm practice, including a legacy automatic state', async () => {
   const r = rig();
   r.player.state = { ...r.player.state, mode: 'auto' };

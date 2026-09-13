@@ -1,12 +1,12 @@
 import type { Session } from './session';
 
 export type StageRecord = { stage: number; count: number; session: Session | null };
-function requiredRuns(stage: number) { return stage <= 10 ? 2 : 3; }
+const requiredRuns = 3;
 export function stageStars(record: StageRecord): boolean[] {
-  return Array.from({ length: requiredRuns(record.stage) }, (_, index) => record.count > index);
+  return Array.from({ length: requiredRuns }, (_, index) => record.count > index);
 }
 export function stageComplete(record: StageRecord) {
-  return record.count >= requiredRuns(record.stage);
+  return record.count >= requiredRuns;
 }
 export function canOpenStage(stage: number, records: readonly StageRecord[]) {
   if (stage !== 1 && stage !== 2) return false;

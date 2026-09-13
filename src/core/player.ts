@@ -37,11 +37,11 @@ export class Player {
     }
     await this.resume(1000);
   }
-  async resume(delayMs = 0) {
+  async resume(delayMs = 0, persistBeforeStart = true) {
     if (this.disposed || this.preparing || this.state.running
       || ['decision', 'complete'].includes(this.state.phase)) return;
     this.error = null;
-    if (!this.persist()) return;
+    if (persistBeforeStart && !this.persist()) return;
     const generation = ++this.generation;
     const next = transition(this.state, { type: 'resume' });
     this.preparing = true;
@@ -102,10 +102,16 @@ export class Player {
   }
   async choose(type: 'repeat' | 'next') {
     if (this.error || this.disposed) return;
-    this.state = transition(this.state, { type });
+    const next = transition(this.state, { type });
+    if (next === this.state) return;
+    // Retire the current handle/pending preparation before publishing the choice.
+    this.generation++;
+    this.preparing = false;
+    this.audio.pause();
+    this.state = next;
     if (!this.persist()) return;
     this.changed();
-    if (this.state.phase === 'ready') await this.resume(type === 'next' ? 1000 : 0);
+    if (this.state.phase === 'ready') await this.resume(type === 'next' ? 1000 : 0, false);
   }
   retrySave() { this.error = null; this.persist(); this.changed(); }
   dispose() { this.pause(); this.disposed = true; this.audio.dispose(); }

@@ -7,9 +7,15 @@ required.
 
 ## First session: Expo Go
 
-Optional basic smoke test only. The full 0.25–3× playback range requires our
-local Debug app below: Expo Go cannot include the project's native audio patch
-and retains a 2× iOS cap. `npm ci` applies the patch; see `patches/README.md`.
+Optional startup/navigation smoke test only. Missing custom modules report
+unavailable instead of aborting module import. Expo Go does not contain
+`PackageDelivery`: hosted delivery and material management are unavailable, and
+bundled installation/readiness cannot perform their native containment/symlink
+preflight. Do not bypass that check or claim sample-install acceptance in Expo Go.
+Use our local Debug app below for installing and studying the sample. The full
+0.25–3× playback range also requires that app: Expo Go cannot include the project's
+native audio patch and retains a 2× iOS cap. `npm ci` applies the patch; see
+`patches/README.md`.
 
 1. Install Xcode and an iOS Simulator runtime in Xcode Settings → Components.
    Open Simulator and choose an available **iPhone**, not a physical device.
@@ -30,17 +36,12 @@ and retains a 2× iOS cap. `npm ci` applies the patch; see `patches/README.md`.
    Keep that terminal running. Press **i** to open Expo Go; **Shift+i** selects
    the simulator. Expo CLI installs the SDK-compatible simulator Expo Go when
    needed. Allow the first simulator boot and bundle compilation to finish.
-4. Dismiss Expo Go's developer-menu introduction. Install the sample from its
-   library book card, open the stage path, then choose Stage 1 and the popup's
-   start action (or use the current-stage card).
-   The first sentence is “I opened the window to let in the morning air.” with
-   “아침 공기를 들이려고 창문을 열었어요.” After the one-second entry delay,
-   playback should end with the footer's **말했어요, 다음 사이클** action enabled
-   (accessible name). The three cycle circles remain unchecked until confirmation.
+4. Dismiss Expo Go's developer-menu introduction. Verify that the library and
+   settings render without a missing-`PackageDelivery` startup exception. Hosted
+   delivery reports unavailable. Continue in our Debug app for installation and
+   playback checks.
 
-The install button becomes the lesson-open button only after all twelve stored
-speech files pass validation. Expo Go has its own app storage: installing the
-sample there does not install it in our separately built app.
+Expo Go has its own app storage; its data is not shared with our separately built app.
 
 ## Our own local Debug app
 
@@ -59,8 +60,12 @@ npx expo run:ios --device "iPhone 17 Pro" --configuration Debug --no-bundler
 
 Choose an installed iPhone simulator name if yours differs. Expo generates the
 native project when absent, installs its native dependencies, builds and installs
-the app. Repeat the sample-install and first-playback steps inside **Meta
-Shadowing**, not Expo Go. Never select a connected physical phone for this loop.
+the app. Inside **Meta Shadowing**, install the sample from its library card,
+open the stage path and start Stage 1. All twelve speech files must pass validation
+before the install action becomes the lesson-open action. The first sentence is
+“I opened the window to let in the morning air.” After the one-second entry delay,
+playback should end with the confirmation action enabled; cycle circles stay
+unchecked until confirmation. Never select a connected physical phone for this loop.
 
 For Xcode inspection, open the generated `ios/app.xcworkspace`, choose
 the **app** scheme, **Debug**, and the same iPhone Simulator. Expo uses this ASCII

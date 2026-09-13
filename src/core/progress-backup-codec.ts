@@ -2,6 +2,8 @@ import { restoreSession } from './session';
 import { decodeSettings } from './settings';
 import { languages } from './catalog';
 import { dailyLimit } from './progression';
+import { validCycleIdentity } from './cycle-credit';
+import { MAX_XP } from './levels';
 
 export const columns = {
   checkpoints: ['package', 'stage', 'state'],
@@ -10,14 +12,16 @@ export const columns = {
   stage_awards: ['language', 'book', 'run', 'day', 'stage', 'xp'],
   study_days: ['language', 'day'],
   preferences: ['key', 'value'],
+  cycle_credits: ['package', 'stage', 'run', 'language', 'book', 'phrase_count', 'phrase', 'confirmed', 'credited', 'day'],
 } as const;
 export type Table = keyof typeof columns;
 export type Row = Record<string, string | number>;
-export type ProgressBackup = { version: 1; tables: Record<Table, Row[]> };
+export type ProgressBackup = { version: 2; tables: Record<Table, Row[]> };
 const keys: Record<Table, readonly string[]> = {
   checkpoints: ['package', 'stage'], completions: ['package', 'stage', 'run'],
   daily_stages: ['language', 'book', 'day'], stage_awards: ['language', 'book', 'run'],
   study_days: ['language', 'day'], preferences: ['key'],
+  cycle_credits: ['package', 'stage', 'run'],
 };
 const limit = 16 * 1024 * 1024;
 function reject(): never { throw Error('Progress backup is incompatible or damaged.'); }
@@ -72,11 +76,12 @@ const compound = (row: Row, fields: readonly string[]) => JSON.stringify(fields.
 export function validateProgressBackup(json: string): ProgressBackup {
   checkBackupSize(json);
   const root = object(JSON.parse(json), ['version', 'tables']);
-  if (root.version !== 1) reject();
-  const tables = object(root.tables, Object.keys(columns));
-  const result = { version: 1, tables: {} } as ProgressBackup;
+  if (root.version !== 1 && root.version !== 2) reject();
+  const tableNames = Object.keys(columns).filter(table => root.version === 2 || table !== 'cycle_credits');
+  const tables = object(root.tables, tableNames);
+  const result = { version: 2, tables: {} } as ProgressBackup;
   for (const table of Object.keys(columns) as Table[]) {
-    const input = tables[table];
+    const input = root.version === 1 && table === 'cycle_credits' ? [] : tables[table];
     if (!Array.isArray(input) || input.length > 100000) return reject();
     const seen = new Set<string>();
     result.tables[table] = input.map(value => {
@@ -86,7 +91,11 @@ export function validateProgressBackup(json: string): ProgressBackup {
         const cell = original[column];
         if (column === 'stage') row[column] = integer(cell, 1, table === 'checkpoints' ? 2 : 16);
         else if (column === 'xp') { if (cell !== 0 && cell !== 10) reject(); row[column] = cell as number; }
-        else if (column === 'day') row[column] = day(cell);
+        else if (column === 'day') row[column] = table === 'cycle_credits' && cell === '' ? '' : day(cell);
+        else if (column === 'phrase_count') row[column] = integer(cell, 1, 100000);
+        else if (column === 'phrase') row[column] = integer(cell, 0, 99999);
+        else if (column === 'confirmed') row[column] = integer(cell, 0, 100000);
+        else if (column === 'credited') row[column] = integer(cell, 0, MAX_XP);
         else if (column === 'completed_at') {
           if (typeof cell !== 'string' || !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z?$/.test(cell)) reject();
           day((cell as string).slice(0, 10));
@@ -112,7 +121,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
       return left < right ? -1 : left > right ? 1 : 0;
     });
   }
-  const { checkpoints, completions, daily_stages, stage_awards, study_days } = result.tables;
+  const { checkpoints, completions, daily_stages, stage_awards, study_days, cycle_credits } = result.tables;
   const completed = new Set(completions.map(row => compound(row, ['stage', 'run'])));
   const history = new Set(completions.map(row => compound(row, ['package', 'stage', 'run'])));
   for (const checkpoint of checkpoints) {
@@ -134,6 +143,31 @@ export function validateProgressBackup(json: string): ProgressBackup {
       if (chosen.stage !== award.stage || count > dailyLimit(Number(chosen.stage))) reject();
       counts.set(dailyKey, count);
     }
+  }
+  const bindings = new Map<string, string>();
+  const frontiers = new Map(cycle_credits.map(row => [compound(row, ['package', 'stage', 'run']), row]));
+  for (const row of cycle_credits) {
+    if (!validCycleIdentity(String(row.package), { language: String(row.language), book: String(row.book) })
+      || String(row.run).length > 100 || Number(row.phrase) >= Number(row.phrase_count)
+      || Number(row.credited) > Number(row.phrase) * 100000 + Number(row.confirmed)) reject();
+    const binding = compound(row, ['language', 'book']);
+    const existing = bindings.get(String(row.package));
+    if (existing && existing !== binding) reject();
+    bindings.set(String(row.package), binding);
+    const isComplete = history.has(compound(row, ['package', 'stage', 'run']));
+    if (isComplete && (row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < 3 || Number(row.confirmed) % 2 !== 1)) reject();
+    if (row.day) {
+      const studyKey = compound(row, ['language', 'day']);
+      if (!isComplete || !study.has(studyKey) || row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < 3) reject();
+      usedStudy.add(studyKey);
+    } else if (isComplete && Number(row.credited) > 0) reject();
+  }
+  for (const checkpoint of checkpoints) {
+    const s = JSON.parse(String(checkpoint.state));
+    const row = frontiers.get(JSON.stringify([checkpoint.package, checkpoint.stage, s.runId]));
+    if (row && (row.phrase_count !== s.phraseCount || Number(row.phrase) < s.phrase
+      || (row.phrase === s.phrase && Number(row.confirmed) < s.confirmed))) reject();
+    if (row?.day && s.phase === 'complete' && (row.phrase !== s.phrase || row.confirmed !== s.confirmed)) reject();
   }
   if (usedDaily.size !== daily.size || usedStudy.size !== study.size) reject();
   return result;

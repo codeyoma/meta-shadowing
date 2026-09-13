@@ -14,9 +14,9 @@ dictionary, and sentence analysis are M2, clearly marked unavailable in M1.
 ## Eight methods / sixteen stages
 
 Each method has two stages. The path advances sequentially: complete the current
-stage's required full runs (two for 1–10, three for 11–16) before the next stage
-unlocks. These are cumulative completion records, not phrase cycles; XP still
-has its separate daily limits. Completed stages remain available for review.
+stage's required full runs (three for every stage, 1–16) before the next stage
+unlocks. These are cumulative completion records, not phrase cycles; each
+explicitly confirmed cycle earns XP independently. Completed stages remain available for review.
 Old checkpoints are preserved but do not bypass a locked predecessor. Completing
 a stage does not automatically start another stage. Unimplemented methods remain
 unavailable even after their predecessor is complete.
@@ -39,12 +39,15 @@ unavailable even after their predecessor is complete.
   waits before the actual action, counts as learning, or changes speech speed;
   unavailable feedback fails silently. Rapid taps cannot stack sound players,
   and pending feedback is cancelled on app interruption.
-- A phrase normally requires three confirmed cycles.
+- A phrase normally has three cycles. Once the third playback starts, Repeat and
+  Next remain visible, but neither can close an unfinished playback (owner update,
+  2026-09-13).
 - End of audio is not itself confirmation: enter the speaking/confirmation phase.
 - Confirmation is always explicit: elapsed time never confirms a speaking cycle.
   Legacy automatic settings/checkpoints become manual without resetting progress.
 - Playback speed uses a 0.25–3× slider in 0.25× increments. Existing finer-grained
-  saved rates remain readable; the next adjustment selects a quarter-step. New sessions use the
+  saved rates remain readable; the next adjustment selects a quarter-step. Fresh installations
+  default to 1× without resetting existing preferences or checkpoints. New sessions use the
   saved preference; unfinished sessions retain their checkpoint's speed. The
   player options drawer can explicitly change that paused session's speed without
   changing the phrase, cycle, or saved audio position.
@@ -60,16 +63,23 @@ unavailable even after their predecessor is complete.
   A completed three/five-cycle decision does not autoplay or advance. Repeated
   cycles of the same sentence do not add this delay. Opening options, leaving,
   or an app interruption cancels pending playback without confirming anything.
-- After three confirmed cycles, wait for Repeat or Next.
+- From the start of the third playback, show Repeat and Next but keep both locked
+  until that playback ends. A paused third playback remains resumable and cannot
+  be skipped. After audio ends, Repeat confirms the third cycle and starts cycle
+  four from zero, while Next confirms it and advances to the next phrase (or
+  completes the final phrase). Audio ending alone never advances.
 - Repeat adds exactly two additional cycles. It never resets confirmed progress.
-- Offer Repeat only at the initial three-cycle decision. At five cycles (and
+- Offer Repeat only during/after the initial third cycle. At five cycles (and
   older saved longer sequences), show only Next; preserve all saved cycles.
 - The player shows connected cycle nodes instead of a visible completion counter.
   The active outline follows actual media position/duration; audio ending fills
   the outline but does not check the node. The icon-only main action explicitly
-  confirms, then starts the next cycle. During playback it is disabled.
-- At the initial phrase decision, a recycle-icon Repeat action appears beside
-  the main action in a 1:3 width ratio, without sideways footer animation.
+  confirms, then starts the next cycle. During every playback it is disabled.
+  Cycles one/two and extra cycle four retain the existing explicit confirmation
+  rule; after fifth-cycle audio ends, Next confirms and advances in one tap.
+- From the third playback start, a recycle-icon Repeat action appears beside
+  the main action in a 1:3 width ratio. Repeat slides in from the left while the
+  main action narrows over 220 ms; Reduce Motion applies the final layout directly.
   Repeat reveals two more nodes from the right. Nodes have no visible numbers;
   explicit confirmation animates the check, then fills the line to the next node.
   Phrase-content transitions affect only the central sentence card. The footer
@@ -86,14 +96,19 @@ unavailable even after their predecessor is complete.
   method level, speed, and a disabled sentence-analysis icon (analysis remains
   deferred). The level action pauses and opens a native learning-guide dialog
   identified by level and method; guidance content is intentionally empty for now.
+  Tapping the speed indicator pauses/checkpoints and opens the drawer directly at
+  the speed editor; the options icon still opens the complete options menu.
 - Bubble display groups each target-language utterance and its Korean translation
   inside one bubble. Complete matching sequences of double-quoted utterances are
   paired in order; punctuation inside a quoted utterance does not split it. If
   quotation structure or pair counts do not match, keep all original text together
   rather than guessing alignment. This is presentation only: package phrase/audio
   boundaries, list mode, cycles, and checkpoints do not change.
-- Next is available only after all currently planned cycles are confirmed.
-- Moving to another phrase never confirms skipped practice.
+- Next becomes actionable after the initial third playback ends, after the fifth
+  playback ends when extra practice was chosen, or at an already-confirmed
+  decision checkpoint. Those actions explicitly confirm the final speaking pass;
+  playback time, interruption and restoration never confirm it.
+- Navigation outside that choice never confirms skipped practice.
 - Final Next completes a stage/run once. Restoring that state cannot duplicate
   completion history.
 - No backend request or acknowledgement is on the playback path.
@@ -129,24 +144,32 @@ confirmation. The current owner-approved behavior requires explicit confirmation
   preserve learning history and must never remove unrelated device files.
 - Local data can be lost on uninstall/clear-data; no cloud recovery is claimed in M1.
 
-## Language XP, daily book eligibility and streaks
+## Language XP and streaks
 
-- Each newly completed run earns 10 XP only when eligible. A book's first newly
-  completed stage chooses its XP stage for that device-local calendar date.
-- Stages 1–10 award XP for their first two runs that day; stages 11–16 for their
-  first three. Other unlocked stages and extra runs remain playable without XP.
-- Each book has its own daily allowance, stable across package versions. Totals
-  and levels are separate for each language. Sixteen stages contain 38 required
-  repetitions in total; this is not 38 rewards available on the same day.
-- Level 1 starts at zero XP. The next-level requirement is 100 × 1.08^(level − 1),
-  rounded to the nearest 10 XP: 100, 110, 120, 130, and so on. Surplus carries
-  forward. There is no gameplay level cap; level is not a certified proficiency.
+- Each explicitly confirmed sentence cycle earns 1 XP: three ordinary cycles
+  earn 3 XP; Repeat plus the two extra cycles earn 5 XP. A final Next that confirms
+  a speaking cycle earns that cycle once, including when it advances the phrase.
+- Audio ending, opening a screen, pausing, elapsed time and restoring practice
+  earn no XP. New runs, stages and books continue earning without a daily limit;
+  full-run completion no longer grants the former 10-XP bonus.
+- Historical 0/10-XP awards and completion records remain unchanged. Existing
+  checkpoints establish a zero-credit baseline; only subsequent confirmations
+  earn new XP. A compact frontier per package version, stage and run prevents
+  duplicate or stale saves from re-awarding observed cycles.
+- Totals and levels are separate for each language. Sixteen stages still require
+  three full runs each. Partial cycles do not add stage stars or unlock stages.
+- Level 1 starts at zero XP. Levels 1–998 require
+  `round(100 × 1.0053^(level − 1) / 10) × 10` XP for the next level, evaluated from
+  the unrounded curve. Surplus carries forward. Level 999 begins at 3,669,390 XP
+  and shows MAX with a full track. Total XP saturates at 2,147,483,647; further
+  practice and completion history still persist. Level is not certified proficiency.
 - A streak counts consecutive local dates with completed practice in that
   language, including zero-XP practice. Yesterday's streak stays visible today;
   missing an entire day breaks it. Restoring an old run creates no study day.
-- XP, daily eligibility, completion history and the checkpoint commit atomically
-  to SQLite. Retrying/reopening cannot award the same run twice. Existing history
-  is preserved without retroactively inventing rewards.
+- XP, completion history, streak day, checkpoint and backup revision commit
+  atomically to SQLite. Failed saves roll back together; retry awards once.
+  Version-2 backups include compact cycle frontiers. Version-1 backups preserve
+  historical rewards and baseline checkpoints without retrospective credit.
 - The day is captured at successful local save. Midnight/foreground refresh the
   browsing display without erasing history. Device-clock manipulation is not
   protected by an online authority in this local-only prototype.

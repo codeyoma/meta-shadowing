@@ -1,11 +1,12 @@
 import { Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import type { ComponentProps } from 'react';
 import { Icon, Label } from './ui';
+import { palettes } from './theme';
 
 export function useSettingsColors() {
   const dark = useColorScheme() === 'dark';
   return {
-    background: dark ? '#000000' : '#f2f2f7',
+    background: dark ? palettes.dark.background : '#f2f2f7',
     group: dark ? '#1c1c1e' : '#ffffff',
     pressed: dark ? '#3a3a3c' : '#e5e5ea',
     text: dark ? '#ffffff' : '#000000',
