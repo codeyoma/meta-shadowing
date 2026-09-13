@@ -310,3 +310,59 @@ unchanged-payload retries, pending-asset identity, cleanup authority preservatio
 and fresh-installation cleanup. All 154 TypeScript tests and typechecking passed.
 The fully bundled, development-signed Release iPhone build also passed. This does
 not replace the outstanding real CloudKit and physical multi-device acceptance.
+
+### Follow-up review regressions — 2026-09-13
+
+Three additional review findings are corrected with controlled regression tests:
+
+- An edit during a cloud lookup no longer creates a conflict when the adopted
+  cloud progress identity is unchanged. Publish the latest local revision using
+  the same conditional cloud base; genuine cloud changes still require review.
+- Guest settings and selection writes now invalidate in-flight recovery and
+  previously displayed conflict consent independently of the SQLite journal
+  revision. A new confirmation is required, including after a change-and-revert;
+  the original guest data remains separate from the activated account profile.
+- If publication committed but its response was lost, metadata-only cleanup by
+  another installation no longer prevents acknowledgement on retry or restart.
+  Match the committed progress independently of mutable cleanup metadata while
+  retaining the fetched head and its cleanup authority. Newer cloud progress
+  still rejects the old publication.
+
+Before correction, five coordinator regressions and two native parameter cases
+failed with the reported symptoms. After correction, all 161 TypeScript tests,
+typechecking, and 33 native tests / 60 parameter-expanded runs passed, with no
+test failures or skips. Native tests ran on an iOS 26.5 simulator with only the
+external cloud service replaced. No physical-device installation, live iCloud
+write, or fresh full-app build was performed for this follow-up; these results
+do not establish real-service acceptance.
+
+### Pre-publication review — 2026-09-13
+
+- The compact automatic-backup switch retains explicit first-use guest consent
+  through a native alert: include current records, start separately, or cancel.
+  Waiting/canceling does not publish or activate an account profile. An account
+  generation change invalidates a pending choice; re-enable keeps the existing
+  profile without another import prompt.
+- Matching-base reconciliation retries acknowledged cleanup even when new local
+  progress is pending. This lets a full native cache recover after deletion
+  becomes available, without restoring cloud data or discarding local edits.
+- Cleanup-manifest encoding and decoding share structural/count validation.
+  A direct boundary probe against the previous encoder accepted 257 assets even
+  though decoding rejected them. The new encoder rejects these inputs before
+  publication. This is defensive format validation: normal publication also has
+  a 256-record cache limit, so the review did not establish remote corruption
+  through a normal sequence of publications. An initial manifest-only test
+  fixture was discarded because absent asset IDs are filtered during fetch.
+
+The real-service acceptance gates above remain open. Local fixture tests and
+the prior empty-reward recovery do not prove current singleton clean-install
+recovery with completion/XP history.
+
+Fresh integrated verification: 179 TypeScript tests, typechecking, iOS bundling,
+34 native CloudKit tests and 14 native StoreKit tests passed with no test failures
+or skips. The normal-API capacity probe reached 255 publications with failed
+deletion (256 records / 254 cleanup entries): further publication stayed blocked
+after deletion recovered until acknowledged cleanup ran. The coordinator
+regression now covers retrying cleanup before pending progress is published.
+No live-service writes, physical-device reinstall, purchase, or release was used
+for these checks.

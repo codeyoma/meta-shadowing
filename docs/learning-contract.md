@@ -43,10 +43,16 @@ unavailable even after their predecessor is complete.
 - End of audio is not itself confirmation: enter the speaking/confirmation phase.
 - Confirmation is always explicit: elapsed time never confirms a speaking cycle.
   Legacy automatic settings/checkpoints become manual without resetting progress.
-- Playback speed uses a 0.25–3× slider in 0.05× increments. New sessions use the
+- Playback speed uses a 0.25–3× slider in 0.25× increments. Existing finer-grained
+  saved rates remain readable; the next adjustment selects a quarter-step. New sessions use the
   saved preference; unfinished sessions retain their checkpoint's speed. The
   player options drawer can explicitly change that paused session's speed without
   changing the phrase, cycle, or saved audio position.
+  All playback-speed editors reuse `PlaybackRateControl`: the “배속”
+  heading, one-line native slider with live rate on the right, and four dots at
+  the 0.25×/1×/2×/3× positions instead of scale labels. The settings heading sits
+  outside the card. The settings preference and paused-session rate keep their separate
+  persistence scopes; sharing the layout must not overwrite either implicitly.
 - Entering the player from a stage (new or restored) and each newly selected
   sentence wait one second before starting audio. Completed checks stay filled.
   Interrupted listening resumes at its saved audio position; an already-ended,
@@ -80,6 +86,12 @@ unavailable even after their predecessor is complete.
   method level, speed, and a disabled sentence-analysis icon (analysis remains
   deferred). The level action pauses and opens a native learning-guide dialog
   identified by level and method; guidance content is intentionally empty for now.
+- Bubble display groups each target-language utterance and its Korean translation
+  inside one bubble. Complete matching sequences of double-quoted utterances are
+  paired in order; punctuation inside a quoted utterance does not split it. If
+  quotation structure or pair counts do not match, keep all original text together
+  rather than guessing alignment. This is presentation only: package phrase/audio
+  boundaries, list mode, cycles, and checkpoints do not change.
 - Next is available only after all currently planned cycles are confirmed.
 - Moving to another phrase never confirms skipped practice.
 - Final Next completes a stage/run once. Restoring that state cannot duplicate

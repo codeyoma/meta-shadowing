@@ -5,6 +5,7 @@ import { ProgressProfiles, ProgressSync } from './progress-sync';
 import type { BackupDatabase } from './progress-backup';
 import type { ProgressCloud, CloudBackup, CloudPublication } from '../../modules/progress-cloud';
 import { createSession } from './session';
+import { enableAutomaticBackup } from './enable-backup';
 
 function fixture(t: TestContext) {
   const databases = new Map<string, DatabaseSync>();
@@ -17,7 +18,9 @@ function fixture(t: TestContext) {
       all: <T>(sql: string, ...args: (string | number)[]) => native.prepare(sql).all(...args) as T[] };
   };
   let sequence = 0;
-  const profiles = new ProgressProfiles(open, () => `profile-${++sequence}`);
+  const preferences = new Map<string, string>();
+  const profiles = new ProgressProfiles(open, () => `profile-${++sequence}`,
+    key => preferences.get(key) ?? null, (key, value) => { preferences.set(key, value); });
   const published: string[] = [];
   const heads = new Map<string, CloudPublication>();
   const payloads = new Map<string, string>();
@@ -41,6 +44,206 @@ function fixture(t: TestContext) {
 const publication = (revision: number, id = 'published-2'): CloudPublication => ({ id, token: id, revision, legacy: false, createdAt: '', cleanupPending: false });
 const backup = (id = 'remote'): CloudBackup => ({ id, token: id, revision: 90, legacy: false, createdAt: '' });
 const drain = () => new Promise<void>(resolve => setImmediate(resolve));
+
+test('first automatic backup waits for explicit import, separate, or cancel consent', async t => {
+  for (const choice of [true, false, null]) {
+    const { sync, profiles, published } = fixture(t);
+    profiles.saveValue('settings', '{"mode":"manual","rate":2}');
+    const guest = profiles.guestBackup();
+    await sync.refreshAccount(false);
+    let decide!: (value: boolean | null) => void;
+    const pending = enableAutomaticBackup(sync, () => new Promise(resolve => { decide = resolve; }));
+    await drain();
+    assert.equal(profiles.id(), 'guest');
+    assert.equal(published.length, 0);
+    assert.equal(sync.getSnapshot().enabled, false);
+    decide(choice); await pending;
+    assert.equal(sync.getSnapshot().enabled, choice !== null);
+    assert.equal(profiles.readValue('settings'), choice === false ? '{"mode":"manual","rate":1}' : '{"mode":"manual","rate":2}');
+    assert.equal(published.length, choice === null ? 0 : 1);
+    assert.equal(profiles.guestBackup(), guest);
+  }
+});
+
+test('first-enable consent cannot import into an account that changed while the dialog was open', async t => {
+  const { sync, profiles, cloud, published } = fixture(t);
+  await sync.refreshAccount(false);
+  let decide!: (value: boolean | null) => void;
+  const pending = enableAutomaticBackup(sync, () => new Promise(resolve => { decide = resolve; }));
+  cloud.account = async () => ({ status: 'available', scope: 'account-b' });
+  await sync.refreshAccount(false);
+  decide(true); await pending;
+  assert.equal(profiles.id(), 'guest');
+  assert.equal(published.length, 0);
+  assert.equal(sync.getSnapshot().enabled, false);
+});
+
+test('reenabling an existing backup does not ask to import guest records again', async t => {
+  const { sync, profiles } = fixture(t);
+  await sync.refreshAccount(false); await sync.enable(false); sync.disable();
+  const id = profiles.id();
+  await enableAutomaticBackup(sync, async () => { assert.fail('existing profile must not prompt for guest import'); });
+  assert.equal(profiles.id(), id);
+  assert.equal(sync.getSnapshot().enabled, true);
+});
+
+test('pending progress retries cleanup before publishing when the native backlog is full', async t => {
+  const { sync, profiles, cloud, heads, published } = fixture(t);
+  await sync.refreshAccount(false); await sync.enable(false);
+  heads.set('account-a', { ...heads.get('account-a')!, cleanupPending: true });
+  profiles.saveValue('settings', '{"mode":"manual","rate":2}');
+  let full = true, deletionsUnavailable = true;
+  cloud.cleanup = async () => {
+    if (!deletionsUnavailable) full = false;
+    return full;
+  };
+  const publish = cloud.publish;
+  cloud.publish = async (...args) => {
+    if (full) throw Error('progress-cloud-tooLarge');
+    return publish(...args);
+  };
+  await sync.retry();
+  assert.equal(profiles.current().pending(), true);
+  assert.equal(published.length, 1);
+  deletionsUnavailable = false;
+  await sync.retry();
+  assert.equal(sync.getSnapshot().error, null);
+  assert.equal(profiles.current().pending(), false);
+  assert.equal(published.length, 2);
+  assert.equal(profiles.readValue('settings'), '{"mode":"manual","rate":2}');
+});
+
+test('download preview is read-only and confirmation preserves automatic backup off', async t => {
+  const { sync, profiles, heads, payloads, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false); sync.disable();
+  const source = profiles.store('download-source'); source.saveValue('settings', '{"mode":"manual","rate":2}');
+  heads.set('account-a', publication(90, 'new-cloud')); payloads.set('new-cloud', source.exportBackup());
+  const before = profiles.id(), count = published.length;
+  await sync.prepareDownload();
+  assert.equal(profiles.id(), before);
+  assert.equal(published.length, count);
+  assert.equal(sync.getSnapshot().enabled, false);
+  const choice = sync.getSnapshot().conflict!;
+  assert.ok(choice);
+  await sync.resolveConflict('cloud', choice.token, undefined, false);
+  assert.equal(profiles.readValue('settings'), '{"mode":"manual","rate":2}');
+  assert.equal(sync.getSnapshot().enabled, false);
+  assert.equal(profiles.account('account-a')!.enabled, 0);
+  assert.equal(published.length, count);
+});
+
+test('cancelling a download preview resumes automatic backup without replacing local records', async t => {
+  const { sync, profiles, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  profiles.saveValue('settings', '{"mode":"manual","rate":2}');
+  await sync.prepareDownload();
+  const choice = sync.getSnapshot().conflict!;
+  sync.cancelDownload(choice.token);
+  assert.equal(sync.getSnapshot().conflict, null);
+  assert.equal(profiles.readValue('settings'), '{"mode":"manual","rate":2}');
+  await sync.retry();
+  assert.equal(published.length, 2);
+});
+
+test('a local edit after download confirmation was offered cannot be overwritten', async t => {
+  const { sync, profiles } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  await sync.prepareDownload();
+  const token = sync.getSnapshot().conflict!.token;
+  profiles.saveValue('settings', '{"mode":"manual","rate":3}');
+  await sync.resolveConflict('cloud', token, undefined, false);
+  assert.equal(profiles.readValue('settings'), '{"mode":"manual","rate":3}');
+  assert.notEqual(sync.getSnapshot().conflict!.token, token);
+});
+
+test('first-use download can retain automatic backup off across account refresh', async t => {
+  const { sync, profiles, heads, payloads, published } = fixture(t);
+  const source = profiles.store('download-source'); source.saveValue('settings', '{"mode":"manual","rate":2}');
+  heads.set('account-a', publication(90, 'remote')); payloads.set('remote', source.exportBackup());
+  await sync.prepareDownload();
+  assert.equal(profiles.id(), 'guest');
+  await sync.resolveConflict('cloud', sync.getSnapshot().conflict!.token, undefined, false);
+  const id = profiles.id();
+  assert.notEqual(id, 'guest');
+  await sync.refreshAccount();
+  assert.equal(profiles.id(), id);
+  assert.equal(sync.getSnapshot().enabled, false);
+  assert.equal(published.length, 0);
+});
+
+test('cancelling a download does not dismiss a preexisting divergent-record conflict', async t => {
+  const { sync, profiles, heads, payloads } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const source = profiles.store('download-source'); source.saveValue('settings', '{"mode":"manual","rate":2}');
+  heads.set('account-a', publication(90, 'remote')); payloads.set('remote', source.exportBackup());
+  profiles.saveValue('settings', '{"mode":"manual","rate":3}');
+  await sync.retry();
+  assert.ok(sync.getSnapshot().conflict);
+  await sync.prepareDownload();
+  const choice = sync.getSnapshot().conflict!;
+  sync.cancelDownload(choice.token);
+  assert.equal(sync.getSnapshot().conflict?.token, choice.token);
+  assert.equal(profiles.readValue('settings'), '{"mode":"manual","rate":3}');
+});
+
+test('local edits during an unchanged cloud lookup publish the latest revision without conflict', async t => {
+  const { sync, profiles, cloud, heads, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const list = cloud.list, delayed = deferred<CloudBackup[]>();
+  cloud.list = () => delayed.promise;
+  const retry = sync.retry(); await drain();
+  profiles.saveValue('settings', '{"mode":"manual","rate":2}');
+  sync.changed();
+  cloud.list = list; delayed.resolve([heads.get('account-a')!]); await retry;
+  assert.equal(sync.getSnapshot().conflict, null);
+  assert.equal(sync.getSnapshot().error, null);
+  assert.equal(profiles.current().pending(), false);
+  assert.equal(published.length, 2);
+  assert.equal(JSON.parse(published[1]!).tables.preferences[0].value, '{"mode":"manual","rate":2}');
+});
+
+for (const key of ['settings', 'selection'] as const) for (const choice of ['cloud', 'local'] as const)
+test(`guest ${key} edit invalidates an earlier ${choice} recovery confirmation`, async t => {
+  const { sync, profiles, cloud, published, heads } = fixture(t);
+  const source = profiles.store('source'); source.saveValue('settings', '{"mode":"manual","rate":2}');
+  heads.set('account-a', publication(90, 'remote'));
+  const read = deferred<string>(); cloud.read = () => read.promise;
+  await sync.refreshAccount();
+  const restore = sync.restore(sync.getSnapshot().backups[0]!.id); await drain();
+  profiles.current().journal.save('sample-v1', session());
+  read.resolve(source.exportBackup()); await restore;
+  const token = sync.getSnapshot().conflict!.token;
+  const value = key === 'settings' ? '{"mode":"manual","rate":3}' : '{"language":"english","book":null}';
+  profiles.saveValue(key, value);
+  await sync.resolveConflict(choice, token);
+  assert.equal(profiles.id(), 'guest');
+  assert.equal(profiles.readValue(key), value);
+  assert.ok(sync.getSnapshot().conflict);
+  assert.notEqual(sync.getSnapshot().conflict!.token, token);
+  assert.equal(published.length, 0);
+  await sync.resolveConflict(choice, sync.getSnapshot().conflict!.token);
+  assert.notEqual(profiles.id(), 'guest');
+  assert.equal(sync.getSnapshot().conflict, null);
+  assert.equal(profiles.readValue(key, 'guest'), value);
+  if (choice === 'local') assert.equal(profiles.readValue(key), value);
+  else assert.equal(profiles.readValue('settings'), '{"mode":"manual","rate":2}');
+});
+
+for (const revert of [false, true]) test(`guest preference edits during first download require confirmation; reverted=${revert}`, async t => {
+  const { sync, profiles, cloud, heads } = fixture(t);
+  const source = profiles.store('source'); source.saveValue('settings', '{"mode":"manual","rate":2}');
+  profiles.saveValue('settings', '{"mode":"manual","rate":1}');
+  heads.set('account-a', publication(90, 'remote'));
+  const read = deferred<string>(); cloud.read = () => read.promise;
+  await sync.refreshAccount();
+  const restore = sync.restore(sync.getSnapshot().backups[0]!.id); await drain();
+  profiles.saveValue('settings', '{"mode":"manual","rate":3}');
+  if (revert) profiles.saveValue('settings', '{"mode":"manual","rate":1}');
+  read.resolve(source.exportBackup()); await restore;
+  assert.equal(profiles.id(), 'guest');
+  assert.ok(sync.getSnapshot().conflict);
+  assert.equal(profiles.readValue('settings'), revert ? '{"mode":"manual","rate":1}' : '{"mode":"manual","rate":3}');
+});
 
 for (const interrupted of [false, true]) test(`cloud choice durably retires older native pending intent after newer local edits; interrupted=${interrupted}`, async t => {
   const { sync, profiles, cloud, heads, payloads, open, published } = fixture(t);

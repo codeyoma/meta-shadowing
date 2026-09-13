@@ -121,9 +121,15 @@ final class ProgressTransport {
       return try await publication(ack.backup, scope: scope, ticket: ticket)
     }
     if let pending = store.state.pending, matches(pending), token == pending.backup.id,
-       let head = store.state.records[Self.sharedHead], head.hasSamePayload(as: pending.head) {
-      try acknowledge(pending, head: head)
-      return try await publication(pending.backup, scope: scope, ticket: ticket)
+       let head = store.state.records[Self.sharedHead] {
+      // Cleanup metadata may change after this publication committed. Compare
+      // progress only, but retain the freshly fetched head and cleanup authority.
+      var progress = head
+      progress.cleanupManifest = pending.head.cleanupManifest
+      if progress.hasSamePayload(as: pending.head) {
+        try acknowledge(pending, head: head)
+        return try await publication(pending.backup, scope: scope, ticket: ticket)
+      }
     }
     guard base == token else { throw ProgressCloudError.conflict }
     if let pending = store.state.pending, matches(pending) {

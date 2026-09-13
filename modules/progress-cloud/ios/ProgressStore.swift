@@ -48,7 +48,18 @@ struct CloudBackup: Sendable {
 struct CleanupManifest: Codable {
   var heads: [BackupRecord]
   var assets: [String]
+  private func validate() throws {
+    guard heads.count <= 256, assets.count <= 256 else { throw ProgressCloudError.tooLarge }
+    guard assets.allSatisfy({ UUID(uuidString: $0) != nil }),
+          heads.allSatisfy({
+            $0.kind == "ProgressBackupHead" && UUID(uuidString: $0.writer) != nil
+              && $0.id == "head-" + $0.writer && $0.retired != true
+              && $0.current != nil && $0.cleanupManifest == nil
+          }) else { throw ProgressCloudError.corrupt }
+  }
   func encoded() throws -> String {
+    // A manifest must be readable before any conditional head publication.
+    try validate()
     let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
     let bytes = try encoder.encode(self)
     guard bytes.count <= 262_144 else { throw ProgressCloudError.tooLarge }
@@ -57,13 +68,7 @@ struct CleanupManifest: Codable {
   static func decode(_ value: String) throws -> Self {
     guard value.utf8.count <= 262_144,
           let manifest = try? JSONDecoder().decode(Self.self, from: Data(value.utf8)),
-          manifest.heads.count <= 256, manifest.assets.count <= 256,
-          manifest.assets.allSatisfy({ UUID(uuidString: $0) != nil }),
-          manifest.heads.allSatisfy({
-            $0.kind == "ProgressBackupHead" && UUID(uuidString: $0.writer) != nil
-              && $0.id == "head-" + $0.writer && $0.retired != true
-              && $0.current != nil && $0.cleanupManifest == nil
-          }) else { throw ProgressCloudError.corrupt }
+          (try? manifest.validate()) != nil else { throw ProgressCloudError.corrupt }
     return manifest
   }
 }

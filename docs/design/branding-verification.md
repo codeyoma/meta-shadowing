@@ -46,3 +46,25 @@ The supplied icon has transparency and rounded corners. App Store preparation
 and validation remain separate. This pass does not establish physical-device,
 VoiceOver, smaller-phone, Android, commercial package or M1 acceptance.
 No commit, push, deployment, hosted DB change or issue update is included.
+
+## Standalone tab mascot correction — 2026-09-12
+
+- Reproduced the owner's report in the installed Release build: the original
+  1254-pixel mascot overfilled the entire bottom bar and hid its other icons.
+- Traced the custom icon through react-native-screens into React Native's
+  bundled-asset loader, which can return the full UIImage without honoring the
+  requested 36-point size. Added a versioned native tab-image patch; original
+  artwork, JavaScript dimensions, navigation and learning state are unchanged.
+- Release build, install and launch passed on iPhone 17 Pro Max Simulator,
+  iOS 26.5. Native visual verification shows the full mascot contained in its
+  own item, with Books, Stages and Settings visible beside it.
+- Tapping the mascot leaves Books selected. Tapping Settings, Stages and Books
+  navigates correctly. Terminating and relaunching the app retains correct icon
+  sizing. The existing 20 XP and 1/16 book progress remain visible.
+- All 67 regression tests and strict typechecking passed. Both versioned native
+  patches apply through the existing postinstall command; diff whitespace checks
+  passed. The native image defect was reproduced and checked in the Simulator,
+  not covered by the domain-only JavaScript tests.
+- This verifies the logo correction only. It does not establish authenticated
+  package downloads, offline-network isolation, physical-device acceptance or
+  completion of #42. No hosted changes or progress reset were performed.

@@ -3,6 +3,68 @@ import Testing
 
 @MainActor
 struct SingletonTests {
+  @Test func cleanupManifestEncodingRemainsReadableAtItsBoundary() throws {
+    let assets = (0..<257).map { _ in UUID().uuidString }
+    let valid = CleanupManifest(heads: [], assets: Array(assets.prefix(256)))
+    #expect(try CleanupManifest.decode(valid.encoded()).assets == valid.assets)
+    #expect(throws: ProgressCloudError.tooLarge) {
+      try CleanupManifest(heads: [], assets: assets).encoded()
+    }
+    let heads = assets.map { BackupRecord(id: "head-" + $0, kind: "ProgressBackupHead", writer: $0,
+      revision: 1, createdAt: "", current: BackupReference(id: UUID().uuidString, hash: "")) }
+    #expect(try CleanupManifest.decode(CleanupManifest(heads: Array(heads.prefix(256)), assets: []).encoded()).heads.count == 256)
+    #expect(throws: ProgressCloudError.tooLarge) {
+      try CleanupManifest(heads: heads, assets: []).encoded()
+    }
+  }
+
+  @Test(arguments: ["retry", "restart", "progress-changed"])
+  func committedPendingSurvivesMetadataCleanup(boundary: String) async throws {
+    let a = directory(), b = directory()
+    defer { for url in [a, b] { try? FileManager.default.removeItem(at: url) } }
+    let cloud = TestCloud(), loser = try ProgressTransport(directory: a, scope: "test-scope", cloud: cloud)
+    let writer = try ProgressTransport(directory: b, scope: "test-scope", cloud: cloud)
+    let initial = try await loser.publish(scope: "test-scope", revision: 1, json: "{}", base: "")
+    cloud.failHead = true
+    await #expect(throws: ProgressCloudError.offline) {
+      try await loser.publish(scope: "test-scope", revision: 2, json: "{\"loser\":true}", base: initial.token)
+    }
+    let abandoned = try #require(loser.store.state.pending?.backup.id)
+    cloud.failHead = false
+    cloud.savedResponse = { record in
+      if record.id == ProgressTransport.sharedHead { var lost = record; lost.current = nil; return lost }
+      return record
+    }
+    await #expect(throws: ProgressCloudError.conflict) {
+      try await writer.publish(scope: "test-scope", revision: 3, json: "{\"winner\":true}", base: initial.token)
+    }
+    let pending = try #require(writer.store.state.pending)
+    cloud.savedResponse = nil; cloud.deletionFailure = .offline
+    #expect(try await loser.cleanupAdopted(scope: "test-scope", base: pending.backup.id, abandoned: abandoned))
+    let metadata = try #require(cloud.records[ProgressTransport.sharedHead]?.cleanupManifest)
+    #expect(metadata != pending.head.cleanupManifest)
+    let active = boundary == "restart" ? try ProgressTransport(directory: b, scope: "test-scope", cloud: cloud) : writer
+    if boundary == "progress-changed" {
+      let newer = try await loser.publish(scope: "test-scope", revision: 4, json: "{\"newer\":true}", base: pending.backup.id)
+      await #expect(throws: ProgressCloudError.conflict) {
+        try await active.publish(scope: "test-scope", revision: 3, json: "{\"winner\":true}", base: initial.token)
+      }
+      #expect(active.store.state.pending?.backup.id == pending.backup.id)
+      #expect(cloud.records[ProgressTransport.sharedHead]?.current?.id == newer.id)
+      return
+    }
+    let ack = try await active.publish(scope: "test-scope", revision: 3, json: "{\"winner\":true}", base: initial.token)
+    #expect(ack.id == pending.backup.id && ack.cleanupPending)
+    #expect(active.store.state.pending == nil)
+    #expect(active.store.state.records[ProgressTransport.sharedHead]?.cleanupManifest == metadata)
+    #expect(active.store.state.cleanup.contains(abandoned))
+    cloud.deletionFailure = nil
+    let repeated = try await active.publish(scope: "test-scope", revision: 3, json: "{\"winner\":true}", base: initial.token)
+    #expect(repeated.id == ack.id && !repeated.cleanupPending)
+    #expect(cloud.assets.count == 1)
+    #expect(try await active.read(scope: "test-scope", id: ack.id) == "{\"winner\":true}")
+  }
+
   @Test(arguments: ["asset-offline", "asset-quota", "head-offline", "head-quota", "lost-head-reply"])
   func failedPublicationBoundaryKeepsLastGoodAndRetries(boundary: String) async throws {
     let url = directory()

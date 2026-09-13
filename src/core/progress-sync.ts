@@ -5,6 +5,7 @@ type Preference = 'settings' | 'selection';
 export class ProgressProfiles {
   private db: BackupDatabase;
   private stores = new Map<string, ProgressBackupStore>();
+  private guestPreferenceRevision = 0;
   constructor(private open: (id: string) => BackupDatabase, private random: () => string,
     private legacy: (key: Preference) => string | null = () => null,
     private saveLegacy: (key: Preference, value: string) => void = () => {}) {
@@ -46,8 +47,14 @@ export class ProgressProfiles {
   }
   readValue(key: Preference, id = this.id()): string | null { return id === 'guest' ? this.legacy(key) : this.store(id).readValue(key); }
   saveValue(key: Preference, value: string, id = this.id()): void {
-    if (id === 'guest') this.saveLegacy(key, value); else this.store(id).saveValue(key, value);
+    if (id === 'guest') {
+      if (this.legacy(key) === value) return;
+      this.saveLegacy(key, value);
+      ++this.guestPreferenceRevision;
+    } else this.store(id).saveValue(key, value);
   }
+  // Consent is process-local; guest preferences live outside the journal DB.
+  preferenceRevision(): number { return this.id() === 'guest' ? this.guestPreferenceRevision : 0; }
   guestBackup(): string {
     const backup = JSON.parse(this.store('guest').exportBackup());
     backup.tables.preferences = (['settings', 'selection'] as const).flatMap(key => {
@@ -76,6 +83,8 @@ export class ProgressSync {
   private remote: CloudBackup[] = [];
   private choiceSequence = 0;
   private choiceBase: string | null = null;
+  private choiceCapture: ReturnType<ProgressSync['capture']> | null = null;
+  private downloadChoice: string | null = null;
   private snapshot: SyncSnapshot;
   constructor(readonly profiles: ProgressProfiles, private cloud: ProgressCloud, private now = () => Date.now()) {
     this.snapshot = { profile: profiles.id(), generation: 0, status: 'unknown', hasProfile: false, enabled: false, ready: false, busy: false, pending: false, error: null, backups: [], conflict: null, cleanupPending: false };
@@ -124,15 +133,18 @@ export class ProgressSync {
   }
   private conflict() {
     this.choiceBase = this.remoteBase();
+    this.choiceCapture = this.capture();
     this.emit({ conflict: { token: `${this.generation}:choice:${++this.choiceSequence}`, profile: this.profiles.id(),
       localRevision: this.profiles.current().revision(), generation: this.generation, backups: this.snapshot.backups },
     error: 'progress-cloud-conflict' });
   }
-  private capture() { return { generation: this.generation, profile: this.profiles.id(), revision: this.profiles.current().revision() }; }
+  private capture() { return { generation: this.generation, profile: this.profiles.id(), revision: this.profiles.current().revision(),
+    preferences: this.profiles.preferenceRevision() }; }
   private unchanged(capture: ReturnType<ProgressSync['capture']>) {
-    return this.valid(capture.generation) && this.profiles.id() === capture.profile && this.profiles.current().revision() === capture.revision;
+    return this.valid(capture.generation) && this.profiles.id() === capture.profile && this.profiles.current().revision() === capture.revision
+      && this.profiles.preferenceRevision() === capture.preferences;
   }
-  private async install(backup: CloudBackup, capture: ReturnType<ProgressSync['capture']>, downloaded?: string) {
+  private async install(backup: CloudBackup, capture: ReturnType<ProgressSync['capture']>, downloaded?: string, enabled = true) {
     const scope = this.scope!;
     const json = downloaded ?? await this.cloud.read(scope, backup.id);
     if (!this.valid(capture.generation)) return false;
@@ -153,8 +165,8 @@ export class ProgressSync {
     const pending = latest[0]?.pendingPublication;
     const abandoned = (pending !== backup.token ? pending : undefined) ?? this.profiles.account(scope)?.abandoned ?? undefined;
     const cleanup = latest.some(value => value.cleanupPending) || !!abandoned;
-    this.profiles.select(profile, scope, true, backup.token, cleanup, abandoned);
-    this.emit({ enabled: true, hasProfile: true, conflict: null, error: null, cleanupPending: cleanup });
+    this.profiles.select(profile, scope, enabled, backup.token, cleanup, abandoned);
+    this.emit({ enabled, hasProfile: true, conflict: null, error: null, cleanupPending: cleanup });
     if (!backup.legacy && cleanup) await this.clean(backup.token, capture.generation);
     return true;
   }
@@ -193,15 +205,18 @@ export class ProgressSync {
     const base = this.remoteBase(), local = this.profiles.account(scope)!;
     const cleanup = backups.some(backup => backup.cleanupPending) || !!local.cleanup || !!local.abandoned;
     const store = this.profiles.current();
-    if (!this.unchanged(capture)) { this.conflict(); return; }
+    if (this.profiles.id() !== capture.profile) return;
     if (this.snapshot.conflict) { this.conflict(); return; }
     if (local.base === base && !backups.some(backup => backup.legacy)) {
-      if (local.abandoned || (!store.pending() && cleanup)) await this.clean(base, generation);
+      // Retire acknowledged assets even with new local edits, so a full native
+      // cache can recover before attempting the next publication.
+      if (cleanup) await this.clean(base, generation);
       if (!this.valid(generation) || this.profiles.id() !== capture.profile) return;
       if (store.pending()) await this.publish(base, generation);
       else this.reconciled();
       return;
     }
+    if (!this.unchanged(capture)) { this.conflict(); return; }
     if (!backups.length) {
       if (local.base !== null && local.base !== '') { this.conflict(); return; }
       this.profiles.acknowledge(scope, '', false);
@@ -228,7 +243,7 @@ export class ProgressSync {
     if (local.base === null || store.pending() || backup.legacy) { this.conflict(); return; }
     await this.install(backup, capture, canonical);
   }
-  async refreshAccount() {
+  async refreshAccount(reconcile = true) {
     const generation = ++this.generation;
     this.retryIdentity = false;
     this.scope = null; this.flight = null; this.candidates.clear();
@@ -250,7 +265,7 @@ export class ProgressSync {
       const backups = await this.cloud.list(account.scope); if (!this.valid(generation)) return;
       this.observe(backups);
       this.emit({ ready: true, busy: false });
-      if (local?.enabled) await this.retry();
+      if (local?.enabled && reconcile) await this.retry();
       this.changed();
     } catch (error) { if (this.valid(generation)) this.fail(error); }
   }
@@ -294,10 +309,34 @@ export class ProgressSync {
     } catch (error) { if (this.flight === flight) await this.operationFailed(error, generation); }
     finally { if (this.valid(generation) && this.flight === flight) { this.flight = null; this.emit({ busy: false }); this.changed(); } }
   }
-  async resolveConflict(choice: 'cloud' | 'local', token: string, backupID?: string): Promise<void> {
+  /** Refresh candidates without uploading or replacing local data; UI asks for consent next. */
+  async prepareDownload() {
+    if (this.snapshot.busy || this.flight) return;
+    if (!this.snapshot.ready) await this.refreshAccount(false);
+    if (!this.scope || !this.snapshot.ready || this.snapshot.busy || this.flight) return;
+    const generation = this.generation, scope = this.scope, flight = {};
+    const hadConflict = !!this.snapshot.conflict;
+    this.flight = flight; this.emit({ busy: true, error: null });
+    try {
+      const backups = await this.cloud.list(scope);
+      if (!this.valid(generation)) return;
+      this.observe(backups);
+      if (backups.length) {
+        this.conflict();
+        this.downloadChoice = hadConflict ? null : this.snapshot.conflict!.token;
+      } else this.emit({ conflict: null });
+    } catch (error) { if (this.valid(generation)) this.fail(error); }
+    finally { if (this.valid(generation) && this.flight === flight) { this.flight = null; this.emit({ busy: false }); this.changed(); } }
+  }
+  cancelDownload(token: string) {
+    if (this.downloadChoice !== token || this.snapshot.conflict?.token !== token) return;
+    this.downloadChoice = null; this.choiceCapture = null; this.choiceBase = null;
+    this.emit({ conflict: null, error: null }); this.changed();
+  }
+  async resolveConflict(choice: 'cloud' | 'local', token: string, backupID?: string, restoreEnabled = true): Promise<void> {
     const conflict = this.snapshot.conflict, scope = this.scope, generation = this.generation;
     if (!scope || !conflict || conflict.token !== token || this.flight || this.snapshot.busy) return;
-    const base = this.choiceBase!, capture = { generation: conflict.generation, profile: conflict.profile, revision: conflict.localRevision };
+    const base = this.choiceBase!, capture = this.choiceCapture!;
     const selected = backupID ? this.candidates.get(backupID) : this.remote.length === 1 ? this.remote[0]!.id : undefined;
     const flight = {}; this.flight = flight; this.emit({ busy: true });
     try {
@@ -322,7 +361,7 @@ export class ProgressSync {
       else {
         const backup = backups.find(backup => backup.id === selected);
         if (!backup) { this.conflict(); return; }
-        if (await this.install(backup, capture)) {
+        if (await this.install(backup, capture, undefined, restoreEnabled)) {
           if (backup.legacy) await this.publish(base, generation);
         }
       }
