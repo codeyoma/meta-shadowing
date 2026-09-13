@@ -12,10 +12,13 @@ export function PackagePurchaseCard({ section }: { section: 'owned' | 'store' })
   const view = purchasePresentation(snapshot);
   const entry = paidLibraryEntry(snapshot);
   if (entry.section !== section) return null;
+  if (section === 'store' && (!view.showInStore || !packagePurchases.available || bridgeError)) return null;
   const issue = snapshot.entitlementIssue !== 'none' || snapshot.outcome === 'unverified';
   const failed = snapshot.catalogIssue === 'failed' || snapshot.outcome === 'failed' || bridgeError;
   const unavailable = !packagePurchases.available || snapshot.catalogIssue === 'unavailable';
-  return <Card>
+  return <View style={{ gap: 14 }}>
+    {section === 'store' && <Label size={23} weight="800" color={c.heading}>상점</Label>}
+    <Card>
     <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
       <Icon name="book.closed" size={28} />
       <View style={{ flex: 1, gap: 3 }}>
@@ -43,5 +46,6 @@ export function PackagePurchaseCard({ section }: { section: 'owned' | 'store' })
     </>}
     {(failed || unavailable || issue || snapshot.ownership === 'unknown') && packagePurchases.available &&
       <ActionButton title="다시 확인" secondary disabled={snapshot.busy} onPress={() => { void packagePurchases.refresh(); }} />}
-  </Card>;
+    </Card>
+  </View>;
 }

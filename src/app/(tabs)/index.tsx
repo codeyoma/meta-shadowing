@@ -34,12 +34,7 @@ export default function Library() {
       {selection.language === 'english' && <PackagePurchaseCard section="owned" />}
       {!catalog.length && <Label muted>이 언어에서 지원하는 구매/샘플 도서가 아직 없어요.</Label>}
     </View>
-    <View style={{ gap: 14 }}>
-      <Label size={23} weight="800" color={c.heading}>상점</Label>
-      {selection.language === 'english'
-        ? <PackagePurchaseCard section="store" />
-        : <Label muted>이 언어에서 구매할 수 있는 도서가 아직 없어요.</Label>}
-    </View>
+    {selection.language === 'english' && <PackagePurchaseCard section="store" />}
     <DeliveryDiagnostics />
   </ScrollView>;
 }

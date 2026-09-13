@@ -2,6 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { purchasePresentation, restorePresentation } from './package-purchase';
 
+test('store stays empty without a valid offer, including loading and catalog failures', () => {
+  const base = { revision: 1, busy: false, ownership: 'notOwned', outcome: 'none',
+    entitlementIssue: 'none', catalogIssue: 'none' } as const;
+  const product = { id: 'test.book', title: 'Book', price: '$29.00' };
+  for (const value of [base, { ...base, busy: true },
+    { ...base, catalogIssue: 'unavailable' as const }, { ...base, catalogIssue: 'failed' as const },
+    { ...base, product, catalogIssue: 'failed' as const },
+    { ...base, product, catalogIssue: 'unavailable' as const },
+    { ...base, product, ownership: 'owned' as const }]) {
+    assert.equal(purchasePresentation(value).showInStore, false);
+  }
+});
+
+test('a real store offer remains visible during purchase and pending approval', () => {
+  const base = { revision: 1, busy: false, ownership: 'notOwned', outcome: 'none',
+    entitlementIssue: 'none', catalogIssue: 'none',
+    product: { id: 'test.book', title: 'Book', price: '$29.00' } } as const;
+  for (const value of [base, { ...base, busy: true }, { ...base, outcome: 'pending' as const }]) {
+    assert.equal(purchasePresentation(value).showInStore, true);
+  }
+});
+
 test('verified ownership never offers a download or playable package before delivery exists', () => {
   const result = purchasePresentation({ revision: 3, busy: false, product: { id: 'test.book', title: 'Store Title', price: '$29.00' },
     ownership: 'owned', outcome: 'purchased', entitlementIssue: 'none', catalogIssue: 'none' });

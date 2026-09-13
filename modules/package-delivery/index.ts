@@ -1,4 +1,4 @@
-import { NativeModule, requireNativeModule } from 'expo';
+import { requireOptionalNativeModule } from 'expo';
 
 export type DeliveryStatus = {
   phase: 'idle' | 'downloading' | 'installing' | 'cancelling' | 'cancelled' | 'failed' | 'ready' | 'unavailable';
@@ -8,7 +8,7 @@ export type DiagnosticStatus = DeliveryStatus & {
   outcome: 'not-run' | 'observing' | 'cancelled-unpublished' | 'inconclusive' | 'failed';
   observedProgress: number;
 };
-declare class PackageDelivery extends NativeModule {
+interface PackageDelivery {
   readonly diagnosticsEnabled: boolean;
   diagnosticStatus(): Promise<DiagnosticStatus>;
   diagnosticStart(autoCancel: boolean): Promise<void>;
@@ -23,4 +23,22 @@ declare class PackageDelivery extends NativeModule {
   bundledBytes(): Promise<number>;
   removeBundledMaterials(): Promise<void>;
 }
-export default requireNativeModule<PackageDelivery>('PackageDelivery');
+const unavailable = async (): Promise<never> => { throw new Error('package-delivery-unavailable'); };
+const delivery: PackageDelivery = requireOptionalNativeModule<PackageDelivery>('PackageDelivery') ?? {
+  diagnosticsEnabled: false,
+  diagnosticStatus: async () => ({ phase: 'unavailable', progress: 0, outcome: 'not-run', observedProgress: 0 }),
+  diagnosticStart: unavailable,
+  diagnosticCancel: unavailable,
+  diagnosticDamage: unavailable,
+  diagnosticReset: unavailable,
+  status: async () => ({ phase: 'unavailable', progress: 0 }),
+  start: unavailable,
+  cancel: unavailable,
+  storage: unavailable,
+  removeMaterials: unavailable,
+  // This read also performs the native containment/symlink preflight. Never
+  // substitute zero bytes: callers rely on it before mutating bundled files.
+  bundledBytes: unavailable,
+  removeBundledMaterials: unavailable,
+};
+export default delivery;
