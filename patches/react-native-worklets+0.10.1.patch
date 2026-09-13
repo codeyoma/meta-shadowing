@@ -1,0 +1,80 @@
+diff --git a/node_modules/react-native-worklets/Common/cpp/worklets/SharedItems/MemoryManager.cpp b/node_modules/react-native-worklets/Common/cpp/worklets/SharedItems/MemoryManager.cpp
+index 1f0fe7d..24d6f04 100644
+--- a/node_modules/react-native-worklets/Common/cpp/worklets/SharedItems/MemoryManager.cpp
++++ b/node_modules/react-native-worklets/Common/cpp/worklets/SharedItems/MemoryManager.cpp
+@@ -7,7 +7,7 @@
+ namespace worklets {
+ void MemoryManager::loadAllCustomSerializables(const std::shared_ptr<WorkletRuntime> &runtime) {
+   std::lock_guard lock(customSerializationDataMutex_);
+-  runtime->executeSync([&](jsi::Runtime &rt) -> jsi::Value {
++  runtime->runSync([&](jsi::Runtime &rt) -> jsi::Value {
+     const auto registry = getCustomSerializationRegistry(rt);
+     for (const auto &data : customSerializationData_) {
+       loadCustomSerializable(rt, registry, data);
+@@ -20,7 +20,7 @@ void MemoryManager::loadCustomSerializable(
+     const std::shared_ptr<WorkletRuntime> &runtime,
+     const SerializationData &data) {
+   std::lock_guard lock(customSerializationDataMutex_);
+-  runtime->executeSync([this, data](jsi::Runtime &rt) -> jsi::Value {
++  runtime->runSync([this, data](jsi::Runtime &rt) -> jsi::Value {
+     const auto registry = getCustomSerializationRegistry(rt);
+     loadCustomSerializable(rt, registry, data);
+     return jsi::Value::undefined();
+diff --git a/node_modules/react-native-worklets/Common/cpp/worklets/WorkletRuntime/WorkletRuntime.h b/node_modules/react-native-worklets/Common/cpp/worklets/WorkletRuntime/WorkletRuntime.h
+index 17cf8f9..1b38d40 100644
+--- a/node_modules/react-native-worklets/Common/cpp/worklets/WorkletRuntime/WorkletRuntime.h
++++ b/node_modules/react-native-worklets/Common/cpp/worklets/WorkletRuntime/WorkletRuntime.h
+@@ -172,21 +172,26 @@ class WorkletRuntime : public jsi::HostObject, public std::enable_shared_from_th
+ 
+   /* #region deprecated */
+ 
+-  /** @deprecated Use `runSync` instead. */
+   template <typename... Args>
++  /** @deprecated Use `runSync` instead. */
++  [[deprecated("Use runSync instead")]]
+   jsi::Value runGuarded(const std::shared_ptr<SerializableWorklet> &worklet, Args &&...args) const {
+     return runSync(worklet, std::forward<Args>(args)...);
+   }
+ 
+   /** @deprecated Use `schedule` instead. */
++  [[deprecated("Use schedule instead")]]
+   void runAsyncGuarded(const std::shared_ptr<SerializableWorklet> &worklet);
+ 
+   /** @deprecated Use `runSyncSerialized` and extract to `jsi::Value` with
+    * `extractSerializableOrThrow` instead. */
++  [[deprecated("Use runSyncSerialized and extractSerializableOrThrow instead")]]
+   jsi::Value executeSync(jsi::Runtime &rt, const jsi::Value &worklet) const;
+   /** @deprecated Use `runSync` instead. */
++  [[deprecated("Use runSync instead")]]
+   jsi::Value executeSync(std::function<jsi::Value(jsi::Runtime &)> &&job) const;
+   /** @deprecated Use `runSync` instead. */
++  [[deprecated("Use runSync instead")]]
+   jsi::Value executeSync(const std::function<jsi::Value(jsi::Runtime &)> &job) const;
+ 
+   /* #endregion */
+diff --git a/node_modules/react-native-worklets/apple/worklets/apple/AssertJavaScriptQueue.h b/node_modules/react-native-worklets/apple/worklets/apple/AssertJavaScriptQueue.h
+index 4fa9a54..3b3791f 100644
+--- a/node_modules/react-native-worklets/apple/worklets/apple/AssertJavaScriptQueue.h
++++ b/node_modules/react-native-worklets/apple/worklets/apple/AssertJavaScriptQueue.h
+@@ -3,7 +3,7 @@
+ // Copied from RCTJSThreadManager.mm
+ static NSString *const RCTJSThreadName = @"com.facebook.react.runtime.JavaScript";
+ 
+-static BOOL IsJavaScriptQueue()
++static inline BOOL IsJavaScriptQueue()
+ {
+   return [NSThread.currentThread.name isEqualToString:RCTJSThreadName];
+ }
+diff --git a/node_modules/react-native-worklets/apple/worklets/apple/AssertTurboModuleManagerQueue.h b/node_modules/react-native-worklets/apple/worklets/apple/AssertTurboModuleManagerQueue.h
+index b5c99c3..3d4af46 100644
+--- a/node_modules/react-native-worklets/apple/worklets/apple/AssertTurboModuleManagerQueue.h
++++ b/node_modules/react-native-worklets/apple/worklets/apple/AssertTurboModuleManagerQueue.h
+@@ -2,7 +2,7 @@
+ 
+ constexpr auto turboModuleManagerQueueLabel = "com.meta.react.turbomodulemanager.queue";
+ 
+-static bool IsTurboModuleManagerQueue() {
++static inline bool IsTurboModuleManagerQueue() {
+   const auto currentQueueLabel = dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL);
+   return strcmp(currentQueueLabel, turboModuleManagerQueueLabel) == 0;
+ }

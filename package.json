@@ -10,6 +10,7 @@
     "test": "tsx --test src/core/*.test.ts",
     "typecheck": "tsc --noEmit",
     "test:build-settings": "EXPO_NO_DOTENV=1 node --test scripts/ios-build-settings.test.cjs",
+    "test:native-headers": "node --test scripts/native-header-diagnostics.test.cjs",
     "check": "npm run test && npm run test:build-settings && npm run typecheck",
     "bundle:ios": "expo export --platform ios",
     "prepare:audio": "node scripts/prepare-test-audio.mjs",

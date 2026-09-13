@@ -1,8 +1,24 @@
+diff --git a/node_modules/react-native-screens/ios/gamma/split/RNSSplitAppearanceApplicator.swift b/node_modules/react-native-screens/ios/gamma/split/RNSSplitAppearanceApplicator.swift
+index 36493d5..e85203f 100644
+--- a/node_modules/react-native-screens/ios/gamma/split/RNSSplitAppearanceApplicator.swift
++++ b/node_modules/react-native-screens/ios/gamma/split/RNSSplitAppearanceApplicator.swift
+@@ -28,7 +28,7 @@ class RNSSplitAppearanceApplicator {
+     }
+ 
+     appearanceCoordinator.updateIfNeeded(.secondaryScreenNavBarUpdate) { [weak self] in
+-      guard let self = self
++      guard self != nil
+       else {
+         return
+       }
 diff --git a/node_modules/react-native-screens/ios/tabs/RNSTabBarAppearanceCoordinator.mm b/node_modules/react-native-screens/ios/tabs/RNSTabBarAppearanceCoordinator.mm
 index fee81a8..7aaae52 100644
 --- a/node_modules/react-native-screens/ios/tabs/RNSTabBarAppearanceCoordinator.mm
 +++ b/node_modules/react-native-screens/ios/tabs/RNSTabBarAppearanceCoordinator.mm
-@@ -152,3 +152,19 @@ - (void)updateTabBarItem:(nullable UITabBarItem *)tabBarItem
+@@ -149,6 +149,22 @@ - (void)updateTabBarItem:(nullable UITabBarItem *)tabBarItem
+     return;
+   }
+ 
 +  // Bundled assets can bypass RCTImageLoader's requested-size decoding in Release.
 +  // Bound custom tab images before handing them to UIKit; a layout pass alone
 +  // does not shrink the resulting UIImage. Leave SF Symbols and asset catalogs alone.

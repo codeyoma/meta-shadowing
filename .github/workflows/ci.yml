@@ -107,6 +107,8 @@ jobs:
       - run: npm ci
       - name: Generate iOS project and install pods
         run: npx expo prebuild --platform ios --no-install && npx pod-install
+      - name: Check Release native headers with strict compiler diagnostics
+        run: npm run test:native-headers
       - name: Build standalone Release Simulator app without signing credentials
         run: xcodebuild -workspace ios/app.xcworkspace -scheme app -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet
 

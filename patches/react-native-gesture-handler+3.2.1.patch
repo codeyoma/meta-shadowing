@@ -1,0 +1,53 @@
+diff --git a/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m b/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
+index e67d02c..409a725 100644
+--- a/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
++++ b/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
+@@ -114,7 +114,7 @@ - (void)tryUpdateStylusData:(UIEvent *)event
+ }
+ #endif
+ 
+-- (void)activateAfterLongPress
++- (void)activateAfterLongPressElapsed
+ {
+ #if TARGET_OS_OSX
+   _blockAutomaticActivation = NO;
+@@ -163,7 +163,7 @@ - (void)interactionsBegan:(NSSet *)touches withEvent:(UIEvent *)event
+   [self triggerAction];
+ 
+   if (!isnan(_activateAfterLongPress)) {
+-    [self performSelector:@selector(activateAfterLongPress) withObject:nil afterDelay:_activateAfterLongPress];
++    [self performSelector:@selector(activateAfterLongPressElapsed) withObject:nil afterDelay:_activateAfterLongPress];
+   }
+ }
+ 
+@@ -302,7 +302,7 @@ - (void)reset
+ {
+   [self triggerActionFromReset];
+   [_gestureHandler.pointerTracker reset];
+-  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(activateAfterLongPress) object:nil];
++  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(activateAfterLongPressElapsed) object:nil];
+ #if TARGET_OS_OSX
+   _blockAutomaticActivation = NO;
+ #endif
+@@ -330,7 +330,7 @@ - (BOOL)shouldFailUnderCustomCriteria
+ #endif
+   // Apple docs say that 10 units is the default allowable movement for UILongPressGestureRecognizer
+   if (!isnan(_activateAfterLongPress) && trans.x * trans.x + trans.y * trans.y > 100) {
+-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(activateAfterLongPress) object:nil];
++    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(activateAfterLongPressElapsed) object:nil];
+     return YES;
+   }
+ 
+diff --git a/node_modules/react-native-gesture-handler/apple/RNGHStylusData.h b/node_modules/react-native-gesture-handler/apple/RNGHStylusData.h
+index 0e950d0..1d31035 100644
+--- a/node_modules/react-native-gesture-handler/apple/RNGHStylusData.h
++++ b/node_modules/react-native-gesture-handler/apple/RNGHStylusData.h
+@@ -20,7 +20,7 @@
+ 
+ @end
+ 
+-static CGPoint ghSpherical2tilt(double altitudeAngle, double azimuthAngle)
++static inline CGPoint ghSpherical2tilt(double altitudeAngle, double azimuthAngle)
+ {
+   CGPoint tilts = {.x = 0.0, .y = 0.0};
+ 

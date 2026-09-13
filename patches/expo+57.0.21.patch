@@ -1,0 +1,35 @@
+diff --git a/node_modules/expo/ios/Fetch/ExpoURLSessionTask.swift b/node_modules/expo/ios/Fetch/ExpoURLSessionTask.swift
+index 8f31e93..ec8fcaf 100644
+--- a/node_modules/expo/ios/Fetch/ExpoURLSessionTask.swift
++++ b/node_modules/expo/ios/Fetch/ExpoURLSessionTask.swift
+@@ -59,7 +59,7 @@ internal final class ExpoURLSessionTask: NSObject, URLSessionTaskDelegate, URLSe
+     task: URLSessionTask,
+     willPerformHTTPRedirection response: HTTPURLResponse,
+     newRequest request: URLRequest,
+-    completionHandler: @escaping (URLRequest?) -> Void
++    completionHandler: @escaping @Sendable (URLRequest?) -> Void
+   ) {
+     self.delegate.urlSession(
+       self,
+@@ -97,7 +97,7 @@ internal protocol ExpoURLSessionTaskDelegate: AnyObject, Sendable {
+     task: URLSessionTask,
+     willPerformHTTPRedirection response: HTTPURLResponse,
+     newRequest request: URLRequest,
+-    completionHandler: @escaping (URLRequest?) -> Void
++    completionHandler: @escaping @Sendable (URLRequest?) -> Void
+   )
+   func urlSession(_ session: ExpoURLSessionTask, task: URLSessionTask, didCompleteWithError error: Error?)
+ }
+diff --git a/node_modules/expo/ios/Fetch/NativeResponse.swift b/node_modules/expo/ios/Fetch/NativeResponse.swift
+index c2531d8..09b5133 100644
+--- a/node_modules/expo/ios/Fetch/NativeResponse.swift
++++ b/node_modules/expo/ios/Fetch/NativeResponse.swift
+@@ -180,7 +180,7 @@ internal final class NativeResponse: SharedObject, ExpoURLSessionTaskDelegate, @
+     task: URLSessionTask,
+     willPerformHTTPRedirection response: HTTPURLResponse,
+     newRequest request: URLRequest,
+-    completionHandler: @escaping (URLRequest?) -> Void
++    completionHandler: @escaping @Sendable (URLRequest?) -> Void
+   ) {
+     dispatchQueue.async { [weak self] in
+       guard let self else {

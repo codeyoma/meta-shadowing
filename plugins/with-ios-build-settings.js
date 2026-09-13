@@ -1,4 +1,5 @@
-const { withInfoPlist, withXcodeProject } = require('expo/config-plugins');
+const { withInfoPlist, withXcodeProject, withPodfile } = require('expo/config-plugins');
+const { mergeContents } = require('@expo/config-plugins/build/utils/generateCode');
 
 module.exports = function withIosBuildSettings(config) {
   config = withInfoPlist(config, mod => {
@@ -9,6 +10,28 @@ module.exports = function withIosBuildSettings(config) {
         mod.modResults.UIRequiresFullScreen === false) {
       delete mod.modResults.UIRequiresFullScreen;
     }
+    return mod;
+  });
+  config = withPodfile(config, mod => {
+    mod.modResults.contents = mergeContents({
+      src: mod.modResults.contents,
+      tag: 'sqlite-textual-c-headers',
+      anchor: /^\s*post_install do \|installer\|\s*$/,
+      offset: 1,
+      comment: '#',
+      newSrc: `    # SQLite's C macros conflict with Clang's imported Darwin module macros.
+    # Keep normal warnings enabled and use textual headers for this C file only.
+    sqlite_sources = installer.pods_project.targets
+      .select { |target| target.name == 'ExpoSQLite' }
+      .flat_map { |target| target.source_build_phase.files }
+      .select { |file| file.file_ref && file.file_ref.real_path.basename.to_s == 'sqlite3.c' }
+    raise 'Expected exactly one ExpoSQLite amalgamation source' unless sqlite_sources.length == 1
+    sqlite_sources.each do |file|
+      file.settings ||= {}
+      flags = file.settings['COMPILER_FLAGS'].to_s
+      file.settings['COMPILER_FLAGS'] = "#{flags} -fno-modules".strip unless flags.split.include?('-fno-modules')
+    end`,
+    }).contents;
     return mod;
   });
   return withXcodeProject(config, mod => {
