@@ -5,6 +5,7 @@ import { getProgressSync } from '@/native/progress-sync';
 import { SettingsSection } from './settings-section';
 import { useSettingsColors } from './settings-row';
 import { enableAutomaticBackup } from '@/core/enable-backup';
+import { buildICloudBackupUI, type BackupRecoveryAction } from '@/core/icloud-backup-ui';
 
 const errors: Record<string, string> = {
   'progress-cloud-unavailable': '이 기기에서는 iCloud 백업을 사용할 수 없어요. iCloud 설정과 앱 구성을 확인해 주세요.',
@@ -31,26 +32,22 @@ export function ICloudBackup() {
       ? '기기의 설정에서 iCloud에 로그인해 주세요.' : errors['progress-cloud-unavailable']));
   }
   function chooseRecords(enable: boolean, allowLocal = enable) {
-    const latest = sync.getSnapshot(), conflict = latest.conflict;
-    if (!conflict) { Alert.alert('iCloud 백업', '내려받을 백업이 없어요.'); return; }
-    const token = conflict.token;
-    const candidates = conflict.backups;
-    if (candidates.length !== 1 && !candidates.every(backup => backup.legacy)) {
-      Alert.alert('백업 확인 필요', '백업 상태를 확인하지 못했어요. 잠시 뒤 다시 내려받기를 눌러 주세요.'); return;
+    const ui = buildICloudBackupUI(sync.getSnapshot(), value => new Date(value).toLocaleString('ko-KR'), { enable, allowLocal });
+    const cancel = () => { if (ui.token) sync.cancelDownload(ui.token); };
+    if (!ui.actions.length) {
+      Alert.alert(ui.title, ui.message, [{ text: '확인', onPress: cancel }], { cancelable: true, onDismiss: cancel });
+      return;
     }
-    const cancel = () => sync.cancelDownload(conflict.token);
-    function confirm(choice: 'cloud' | 'local', backupID?: string) {
+    function confirm(action: BackupRecoveryAction) {
+      const { choice, token, backupID } = action.resolution;
       const cloud = choice === 'cloud';
-      Alert.alert(cloud ? 'iCloud 기록을 내려받을까요?' : '이 기기의 기록으로 백업할까요?',
-        (cloud ? '현재 기기 기록을 iCloud 기록으로 교체합니다. 두 기록은 합쳐지지 않아요.'
-          : 'iCloud에만 있는 기록은 새 백업에 포함되지 않아요. 두 기록은 합쳐지지 않습니다.')
-          + (enable && !latest.enabled ? '\n자동 백업도 켜집니다.' : ''), [
+      Alert.alert(action.confirmation.title, action.confirmation.message, [
           { text: '취소', style: 'cancel', onPress: cancel },
-          { text: cloud ? '내려받기' : '이 기기 기록 사용', style: 'destructive', onPress: () => {
+          { text: action.confirmation.confirm, style: 'destructive', onPress: () => {
             void (async () => {
-              await sync.resolveConflict(choice, token, backupID, enable || latest.enabled);
+              await sync.resolveConflict(choice, token, backupID, ui.enable);
               const result = sync.getSnapshot();
-              if (result.generation !== latest.generation) return;
+              if (result.generation !== ui.generation) return;
               if (result.conflict) Alert.alert('기록이 변경되었어요', '최신 기록을 다시 확인한 뒤 내려받기를 눌러 주세요.');
               else if (result.error) reportError();
               else Alert.alert('iCloud 백업', cloud ? '기록을 내려받았어요.' : '이 기기의 기록을 백업했어요.');
@@ -58,12 +55,10 @@ export function ICloudBackup() {
           } },
         ]);
     }
-    if (!allowLocal && candidates.length === 1) { confirm('cloud'); return; }
-    Alert.alert('사용할 기록 선택', '기록은 자동으로 합쳐지지 않아요.', [
+    if (ui.confirmDirectly) { confirm(ui.actions[0]!); return; }
+    Alert.alert(ui.title, ui.message, [
       { text: '취소', style: 'cancel', onPress: cancel },
-      ...candidates.map(backup => ({ text: candidates.length === 1 ? 'iCloud 기록 사용' : `iCloud · ${new Date(backup.createdAt).toLocaleString('ko-KR')}`,
-        onPress: () => confirm('cloud', candidates.length === 1 ? undefined : backup.id) })),
-      ...(allowLocal ? [{ text: '이 기기 기록 사용', onPress: () => confirm('local', candidates.length > 1 ? candidates[0]!.id : undefined) }] : []),
+      ...ui.actions.map(action => ({ text: action.title, onPress: () => confirm(action) })),
     ]);
   }
   async function run(enable: boolean) {

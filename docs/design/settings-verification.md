@@ -96,3 +96,19 @@
 - Player bubble/list visual behavior during playback and large-text/dark-mode layout.
 
 No real-device records were deleted or restored during this UI verification.
+
+## PR #55 review follow-up
+
+- The rendered iCloud recovery choices and confirmation dialogs now consume
+  `buildICloudBackupUI`; the former unused model's persistent-control branches
+  were removed. Tests cover the model actually used by the native component.
+- A single recovery candidate displays its saved date/time in both its choice
+  label and final confirmation. Download while automatic backup is off goes
+  directly to that timestamped confirmation without enabling backup. Legacy
+  choices retain their individual dates/identities; invalid dates are disclosed.
+- Recovery actions retain the captured conflict token/account generation.
+  Empty-download notices preserve cancellation so dismissing them releases the
+  read-only preview. First-enable guest consent remains a separate tested flow.
+- The timestamp regression failed before correction. All 182 TypeScript tests,
+  typechecking and iOS bundle export passed after the follow-up. These are not
+  a live-account dialog or physical-device restoration acceptance claim.
