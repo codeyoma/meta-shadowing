@@ -3,7 +3,7 @@ import { Text, View, useColorScheme, useWindowDimensions, type TextStyle, type V
 import { FeedbackPressable as Pressable } from './feedback-pressable';
 import { Image } from 'expo-image';
 import { isLoaded } from 'expo-font';
-import Animated, { useReducedMotion } from 'react-native-reanimated';
+import Animated, { Easing, LinearTransition, ReduceMotion, useReducedMotion } from 'react-native-reanimated';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { palettes } from './theme';
 
@@ -79,17 +79,21 @@ export function Badge({ children, icon, tone = 'neutral' }: PropsWithChildren<{ 
   </View>;
 }
 
-export function ProgressTrack({ value, total, label, blue = false, shimmer = false, height = 16 }: {
-  value: number; total: number; label: string; blue?: boolean; shimmer?: boolean; height?: number;
+const PROGRESS_LAYOUT = LinearTransition.duration(280).easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
+
+export function ProgressTrack({ value, total, label, blue = false, shimmer = false, animate = false, height = 16 }: {
+  value: number; total: number; label: string; blue?: boolean; shimmer?: boolean; animate?: boolean; height?: number;
 }) {
   const c = usePalette();
   const reduced = useReducedMotion();
   return <View accessibilityRole="progressbar" accessibilityLabel={label}
     accessibilityValue={{ min: 0, max: total, now: value }}
     style={{ height, borderRadius: height / 2, backgroundColor: c.line, overflow: 'hidden' }}>
-    {value > 0 && <View style={{ height: '100%', borderRadius: height / 2, width: `${Math.min(1, Math.max(0, value / Math.max(1, total))) * 100}%`,
-      backgroundColor: blue ? c.blue : c.accent, paddingTop: height * 3 / 16, paddingHorizontal: height * 6 / 16, overflow: 'hidden' }}>
-      <View style={{ height: height / 4, borderRadius: height / 8, backgroundColor: '#ffffff', opacity: shimmer ? 0.2 : 0.3 }} />
+    {(animate || value > 0) && <Animated.View layout={animate ? PROGRESS_LAYOUT : undefined}
+      style={{ height: '100%', borderRadius: height / 2, width: `${Math.min(1, Math.max(0, value / Math.max(1, total))) * 100}%`,
+        backgroundColor: blue ? c.blue : c.accent, overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', top: height * 3 / 16, left: height * 6 / 16, right: height * 6 / 16,
+        height: height / 4, borderRadius: height / 8, backgroundColor: '#ffffff', opacity: shimmer ? 0.2 : 0.3 }} />
       {shimmer && !reduced && <Animated.View pointerEvents="none" accessible={false}
         style={{ position: 'absolute', inset: 0,
           // A broad, feathered reflection instead of a narrow white scanning stripe.
@@ -103,7 +107,7 @@ export function ProgressTrack({ value, total, label, blue = false, shimmer = fal
           },
           animationDuration: 4200, animationTimingFunction: 'linear', animationIterationCount: 'infinite',
         }} />}
-    </View>}
+    </Animated.View>}
   </View>;
 }
 

@@ -5,6 +5,8 @@ import manifest from '../../assets/sample/manifest.json';
 import { installPackage, verifyPackage, type PackageIO } from '../core/package';
 import { packageKeyOf, type LearningPackage } from '../core/learning-context';
 import { hostedSample, hostedStatus } from './hosted-package';
+import delivery from '../../modules/package-delivery';
+import { knownMaterialKey, packageOperations } from '../core/package-storage';
 
 export type BundledPackage = LearningPackage & { delivery: 'bundled'; modules: Readonly<Record<string, number>> };
 const modules: Record<string, number> = {
@@ -49,15 +51,27 @@ function packageIO(pack: BundledPackage): PackageIO { return {
 }; }
 const installations = new Map<string, Promise<void>>();
 export function installBundledPackage(pack: BundledPackage, onProgress: (done: number) => void) {
-  const key = packageKeyOf(pack);
+  const key = knownMaterialKey(pack);
+  if (key !== 'morning-notes-v1') throw Error('Unsupported bundled material.');
   if (!installations.has(key)) installations.set(key,
-    installPackage(pack.manifest, packageIO(pack), onProgress).finally(() => { installations.delete(key); }));
+    packageOperations.run(key, async () => {
+      await delivery.bundledBytes(); // Native symlink/containment preflight before any JS file mutation.
+      await installPackage(samplePackage.manifest, packageIO(samplePackage), onProgress);
+    }).finally(() => { installations.delete(key); }));
   return installations.get(key)!;
 }
 export async function isInstalled(pack: LearningPackage): Promise<boolean> {
-  if (packageKeyOf(pack) === packageKeyOf(hostedSample)) return (await hostedStatus()).phase === 'ready';
-  if (!('modules' in pack)) return false;
-  return marker(pack).exists && await verifyPackage(pack.manifest, packageIO(pack as BundledPackage));
+  const key = knownMaterialKey(pack);
+  if (key === packageKeyOf(hostedSample)) return (await hostedStatus()).phase === 'ready';
+  if (packageOperations.busy(key)) return false;
+  return packageOperations.run(key, async () => {
+    await delivery.bundledBytes();
+    return verifyBundledMaterials();
+  });
+}
+// Caller must hold packageOperations; exported only for the storage adapter.
+export async function verifyBundledMaterials(): Promise<boolean> {
+  return marker(samplePackage).exists && await verifyPackage(samplePackage.manifest, packageIO(samplePackage));
 }
 export function audioUri(pack: LearningPackage, phrase: number): string {
   const item = pack.manifest.phrases[phrase];
@@ -65,9 +79,4 @@ export function audioUri(pack: LearningPackage, phrase: number): string {
   const file = new File(directory(pack), item.file);
   if (!file.exists) throw new Error('Lesson audio is missing.');
   return file.uri;
-}
-export function removePackage(pack: LearningPackage) {
-  if (installations.has(packageKeyOf(pack))) throw new Error('Installation is still running.');
-  const dir = directory(pack);
-  if (dir.exists) dir.delete();
 }

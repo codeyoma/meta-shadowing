@@ -14,3 +14,5 @@ const descriptor = JSON.stringify({ key: specification.key, files: [specificatio
 export const hostedStatus = () => delivery.status(descriptor);
 export const downloadHostedSample = () => delivery.start(descriptor);
 export const cancelHostedSample = () => delivery.cancel();
+export const hostedStorage = () => delivery.storage(descriptor);
+export const removeHostedMaterials = () => delivery.removeMaterials(descriptor);

@@ -1,4 +1,5 @@
 import { test, type TestContext } from 'node:test';
+import { Player } from './player';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { ProgressProfiles, ProgressSync } from './progress-sync';
@@ -519,11 +520,15 @@ test('nonempty rewards and unfinished checkpoints are restored with no new XP or
   const { sync, profiles, heads, payloads } = fixture(t);
   await sync.refreshAccount(); await sync.enable(false);
   const source = profiles.store('source');
-  source.journal.save('sample-v1', { ...session(), confirmed: 3, phase: 'complete' }, { language: 'en', book: 'sample' });
+  const player = new Player(session(), { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} },
+    state => source.journal.save('sample-v1', state, { language: 'english', book: 'sample' }), () => 0, () => {});
+  await player.resume();
+  for (let i = 0; i < 3; i++) { player.audioEnded(1); await player.confirm(); }
+  await player.choose('next');
   source.journal.save('sample-v1', { ...session(), runId: 'unfinished', stage: 2, confirmed: 1, audioSeconds: 1.25, phase: 'listening', running: true });
   heads.set('account-a', publication(70, 'other')); payloads.set('other', source.exportBackup());
   await sync.refreshAccount(); await sync.refreshAccount();
-  assert.equal(profiles.current().journal.progress.summary('en').xp, 10);
+  assert.equal(profiles.current().journal.progress.summary('english').xp, 3);
   assert.equal(profiles.current().journal.completions('sample-v1', 1), 1);
   assert.equal(profiles.current().journal.load('sample-v1', 2, 1)?.audioSeconds, 1.25);
   assert.equal(profiles.current().journal.load('sample-v1', 2, 1)?.running, false);
@@ -809,6 +814,23 @@ test('invalid remote data and failed pointer commits leave the existing guest an
   await sync.restore(sync.getSnapshot().backups[0]!.id);
   assert.equal(profiles.id(), 'guest'); assert.equal(profiles.account('account-a'), undefined);
   assert.equal(profiles.current().journal.load('sample-v1', 1, 1)?.runId, 'finished');
+  assert.equal(published.length, 0);
+});
+
+test('a future-version cloud backup never replaces local progress or gets overwritten by downgrade', async t => {
+  const { sync, cloud, profiles, published } = fixture(t);
+  profiles.current().journal.save('sample-v1', session());
+  const original = profiles.current().exportBackup();
+  const future = JSON.parse(original); future.version = 3;
+  const payload = JSON.stringify(future);
+  cloud.list = async () => [backup()]; cloud.read = async () => payload;
+  await sync.refreshAccount();
+  await sync.restore(sync.getSnapshot().backups[0]!.id);
+  assert.equal(sync.getSnapshot().error, 'progress-cloud-corrupt');
+  await sync.enable(true); await sync.retry();
+  assert.equal(profiles.id(), 'guest');
+  assert.equal(profiles.current().exportBackup(), original);
+  assert.equal(sync.getSnapshot().error, 'restore-required');
   assert.equal(published.length, 0);
 });
 

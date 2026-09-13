@@ -20,7 +20,8 @@ export function changeSessionRate(state: Session, rate: number): Session {
 
 export function createSession(input: Pick<Session, 'runId' | 'stage' | 'phraseCount' | 'mode' | 'rate'>): Session {
   if (!isPlaybackRate(input.rate)) throw Error('Invalid playback rate.');
-  return { ...input, mode: 'manual', version: 1, phrase: 0, confirmed: 0, planned: 3, phase: 'ready',
+  return { runId: input.runId, stage: input.stage, phraseCount: input.phraseCount, rate: input.rate,
+    mode: 'manual', version: 1, phrase: 0, confirmed: 0, planned: 3, phase: 'ready',
     running: false, audioSeconds: 0, remainingMs: 0 };
 }
 
@@ -31,8 +32,29 @@ function confirm(s: Session): Session {
     audioSeconds: 0, remainingMs: 0 };
 }
 
+/** The third-cycle choices stay visible once playback starts, even while locked. */
+export function canShowThirdCycleChoices(s: Session): boolean {
+  return s.planned === 3 && s.confirmed === 2 && (s.phase === 'listening' || s.phase === 'speaking');
+}
+
+function isFinalSpeakingCycle(s: Session): boolean {
+  return (s.planned === 3 || s.planned === 5)
+    && s.phase === 'speaking' && s.confirmed + 1 === s.planned;
+}
+
+export function canChooseRepeat(s: Session): boolean {
+  return s.planned === 3 && (s.phase === 'decision' || isFinalSpeakingCycle(s));
+}
+
+export function canChooseNext(s: Session): boolean {
+  return s.phase === 'decision' || isFinalSpeakingCycle(s);
+}
+
 export function transition(s: Session, action: Action): Session {
+  if (action.type === 'repeat' && !canChooseRepeat(s)) return s;
+  if (action.type === 'next' && !canChooseNext(s)) return s;
   if (s.mode !== 'manual') s = { ...s, mode: 'manual' };
+  if ((action.type === 'repeat' || action.type === 'next') && isFinalSpeakingCycle(s)) s = confirm(s);
   switch (action.type) {
     case 'resume':
       return s.phase === 'decision' || s.phase === 'complete' ? s
@@ -73,5 +95,9 @@ export function restoreSession(json: string, phraseCount: number, stage: 1 | 2):
     || (s.phase === 'complete' && s.phrase !== phraseCount - 1)) {
     throw new Error('Saved learning state is incompatible or damaged.');
   }
-  return { ...s, mode: 'manual', running: false };
+  // Old native callers spread full preferences into sessions. Keep only the
+  // learning checkpoint contract; settings remain in their own persistence.
+  return { version: 1, runId: s.runId, stage: s.stage, phraseCount: s.phraseCount, phrase: s.phrase,
+    mode: 'manual', rate: s.rate, confirmed: s.confirmed, planned: s.planned, phase: s.phase,
+    running: false, audioSeconds: s.audioSeconds, remainingMs: s.remainingMs };
 }

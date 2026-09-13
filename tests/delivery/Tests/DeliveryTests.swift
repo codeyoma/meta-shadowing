@@ -3,6 +3,107 @@ import Foundation
 import Testing
 
 struct DeliveryTests {
+  @Test func diagnosticResetOnlyRemovesItsOwnInstallation() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let data = Data("controlled fixture".utf8)
+    let package = DeliveryPackage(key: "delivery-diagnostic-v1", files: [entry("manifest.json", data), entry("audio/phrase-01.m4a", data)])
+    let other = DeliveryPackage(key: "hosted-morning-notes-v1", files: package.files)
+    let installer = PackageInstallation(root: root)
+    try installer.install(other) { _ in data }
+    let gate = DownloadGate()
+    await gate.finish()
+    let diagnostics = DeliveryDiagnostics(enabled: true, root: root, package: package, transport: HeldDelivery(gate: gate, data: data))
+    try await diagnostics.start(autoCancel: false)
+    try await diagnostics.reset()
+    #expect(try await diagnostics.status().phase != "ready")
+    #expect(try installer.isInstalled(other))
+    try await diagnostics.start(autoCancel: false)
+    #expect(try await diagnostics.status().phase == "ready")
+  }
+
+  @Test func anOSDownloadThatFinishesDuringCancellationIsInconclusive() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let data = Data("controlled fixture".utf8)
+    let package = DeliveryPackage(key: "delivery-diagnostic-v1", files: [entry("manifest.json", data), entry("audio/phrase-01.m4a", data)])
+    let gate = DownloadGate()
+    let diagnostics = DeliveryDiagnostics(enabled: true, root: root, package: package,
+      transport: HeldDelivery(gate: gate, data: data), cacheAvailable: { true })
+    let operation = Task { try await diagnostics.start(autoCancel: true) }
+    await gate.waitUntilStarted()
+    for _ in 0..<200 {
+      if try await diagnostics.status().phase == "cancelling" { break }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    await gate.finish()
+    _ = await operation.result
+    #expect(try await diagnostics.status().outcome == "inconclusive")
+    #expect(try await diagnostics.status().phase != "ready")
+  }
+
+  @Test func diagnosticCancellationWaitsForProgressAndCannotPublishLateFiles() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let data = Data("controlled fixture".utf8)
+    let package = DeliveryPackage(key: "delivery-diagnostic-v1", files: [entry("manifest.json", data), entry("audio/phrase-01.m4a", data)])
+    let gate = DownloadGate()
+    let diagnostics = DeliveryDiagnostics(enabled: true, root: root, package: package, transport: HeldDelivery(gate: gate, data: data))
+    let operation = Task { try await diagnostics.start(autoCancel: true) }
+    await gate.waitUntilStarted()
+    for _ in 0..<200 {
+      if try await diagnostics.status().phase == "cancelling" { break }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    let beforeFinish = try await diagnostics.status()
+    await #expect(throws: DeliveryError.busy) { try await diagnostics.damage("missing") }
+    await #expect(throws: DeliveryError.busy) { try await diagnostics.reset() }
+    await gate.finish()
+    _ = await operation.result
+    #expect(beforeFinish.phase == "cancelling")
+    #expect(try await diagnostics.status().phase == "cancelled")
+    #expect(try await diagnostics.status().outcome == "cancelled-unpublished")
+    #expect(try await diagnostics.status().observedProgress == 0.5)
+    try await diagnostics.start(autoCancel: false)
+    #expect(try await diagnostics.status().phase == "ready")
+  }
+
+  @Test(arguments: ["missing", "corrupt"])
+  func diagnosticFaultCanBeRecoveredWithoutChangingOtherPackages(fault: String) async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let data = Data("controlled fixture".utf8)
+    let package = DeliveryPackage(key: "delivery-diagnostic-v1", files: [entry("manifest.json", data), entry("audio/phrase-01.m4a", data)])
+    let other = DeliveryPackage(key: "morning-notes-v1", files: package.files)
+    let installer = PackageInstallation(root: root)
+    try installer.install(other) { _ in data }
+    let gate = DownloadGate()
+    await gate.finish()
+    let diagnostics = DeliveryDiagnostics(enabled: true, root: root, package: package, transport: HeldDelivery(gate: gate, data: data))
+    try await diagnostics.start(autoCancel: false)
+    #expect(try await diagnostics.status().phase == "ready")
+    try await diagnostics.damage(fault)
+    #expect(try await diagnostics.status().phase != "ready")
+    #expect(try installer.isInstalled(other))
+    try await diagnostics.start(autoCancel: false)
+    #expect(try await diagnostics.status().phase == "ready")
+    #expect(try installer.isInstalled(other))
+  }
+
+  @Test func normalBuildCannotRunDiagnosticActions() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let data = Data("controlled fixture".utf8)
+    let package = DeliveryPackage(key: "delivery-diagnostic-v1", files: [entry("manifest.json", data), entry("audio/phrase-01.m4a", data)])
+    let diagnostics = DeliveryDiagnostics(enabled: false, root: root, package: package, transport: nil)
+    await #expect(throws: DeliveryError.unavailable) { try await diagnostics.start(autoCancel: false) }
+    await #expect(throws: DeliveryError.unavailable) { try await diagnostics.damage("missing") }
+    await #expect(throws: DeliveryError.unavailable) { try await diagnostics.status() }
+    await #expect(throws: DeliveryError.unavailable) { try await diagnostics.reset() }
+    await #expect(throws: DeliveryError.unavailable) { try await diagnostics.cancel() }
+    #expect(!FileManager.default.fileExists(atPath: root.path))
+  }
+
   @Test func retryDiscardsOnlyItsInterruptedStagingDirectory() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

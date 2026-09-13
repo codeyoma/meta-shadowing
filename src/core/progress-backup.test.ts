@@ -2,8 +2,28 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { ProgressBackupStore, validateProgressBackup, type BackupDatabase } from './progress-backup';
-import { createSession } from './session';
+import { createSession, transition } from './session';
 import { Journal } from './journal';
+import { Player } from './player';
+
+test('version two round-trips partial cycle credit and the next confirmation earns only one', async t => {
+  const a = sqlite(), b = sqlite(); t.after(() => { a.native.close(); b.native.close(); });
+  const source = new ProgressBackupStore(a.db, now), target = new ProgressBackupStore(b.db, now);
+  const audio = { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} };
+  const player = new Player(session(), audio, state => source.journal.save('sample-v1', state, { book: 'sample', language: 'english' }), () => 0, () => {});
+  await player.resume();
+  player.audioEnded(1); await player.confirm();
+  player.audioEnded(1); await player.confirm();
+  player.audioEnded(1); await player.choose('repeat');
+  const payload = source.exportBackup();
+  assert.equal(JSON.parse(payload).version, 2);
+  target.restoreBackup(payload); target.restoreBackup(payload);
+  assert.equal(target.journal.progress.summary('english').xp, 3);
+  const restored = new Player(target.journal.load('sample-v1', 1, 1)!, audio,
+    state => target.journal.save('sample-v1', state, { book: 'sample', language: 'english' }), () => 0, () => {});
+  await restored.resume(); restored.audioEnded(1); await restored.confirm();
+  assert.equal(target.journal.progress.summary('english').xp, 4);
+});
 
 function sqlite() {
   const native = new DatabaseSync(':memory:');
@@ -17,6 +37,14 @@ function sqlite() {
 }
 const now = () => new Date('2026-09-12T12:00:00Z');
 const session = () => createSession({ runId: 'finished', stage: 1, phraseCount: 1, mode: 'manual', rate: 1 });
+
+// Historical SQLite rows are fixtures, not calls into the current reward path.
+function legacyCompletion(store: ProgressBackupStore, db: BackupDatabase, run = 'finished', xp = 10) {
+  store.journal.save('sample-v1', { ...session(), runId: run, confirmed: 3, phase: 'complete' });
+  db.run('INSERT OR IGNORE INTO daily_stages VALUES (?,?,?,?)', 'en', 'sample', '2026-09-12', 1);
+  db.run('INSERT INTO stage_awards VALUES (?,?,?,?,?,?)', 'en', 'sample', run, '2026-09-12', 1, xp);
+  db.run('INSERT OR IGNORE INTO study_days VALUES (?,?)', 'en', '2026-09-12');
+}
 
 test('all learning preferences survive an idempotent SQLite backup and restore without adding XP', t => {
   const a = sqlite(), b = sqlite();
@@ -36,7 +64,7 @@ test('backup restores complete and unfinished practice once with original XP and
   const a = sqlite(), b = sqlite();
   t.after(() => { a.native.close(); b.native.close(); });
   const source = new ProgressBackupStore(a.db, now);
-  source.journal.save('sample-v1', { ...session(), confirmed: 3, phase: 'complete' }, { language: 'en', book: 'sample' });
+  legacyCompletion(source, a.db);
   source.journal.save('sample-v1', { ...session(), runId: 'unfinished', stage: 2, confirmed: 1, audioSeconds: 1.25, phase: 'listening', running: true });
   const target = new ProgressBackupStore(b.db, () => new Date('2026-09-13T12:00:00Z'));
   target.restoreBackup(source.exportBackup()); target.restoreBackup(source.exportBackup());
@@ -51,7 +79,7 @@ test('backup restores complete and unfinished practice once with original XP and
 test('backup rejects malformed schemas, duplicates, oversized input and inconsistent history', t => {
   const fixture = sqlite(); t.after(() => fixture.native.close());
   const store = new ProgressBackupStore(fixture.db, now);
-  store.journal.save('sample-v1', { ...session(), confirmed: 3, phase: 'complete' }, { language: 'en', book: 'sample' });
+  legacyCompletion(store, fixture.db);
   const valid = store.exportBackup();
   const corrupt = (edit: (data: any) => void) => { const data = JSON.parse(valid); edit(data); return JSON.stringify(data); };
   for (const payload of [
@@ -78,7 +106,7 @@ test('backup rejects malformed schemas, duplicates, oversized input and inconsis
     corrupt(b => { b.tables.preferences = [{ key: 'purchase', value: '{}' }]; }),
     corrupt(b => { b.tables.preferences = [{ key: 'settings', value: '{"mode":"manual","rate":1,"owned":true}' }]; }),
   ]) assert.throws(() => validateProgressBackup(payload));
-  assert.equal(validateProgressBackup(valid).version, 1);
+  assert.equal(validateProgressBackup(valid).version, 2);
 });
 
 test('durable revisions include preferences and journal saves; old acknowledgements leave newer work pending', t => {
@@ -134,8 +162,7 @@ test('legacy completion history and zero-XP practice survive without inventing r
   legacy.save('sample-v1', { ...session(), runId: 'legacy', confirmed: 3, phase: 'complete' });
   const source = new ProgressBackupStore(a.db, now);
   assert.equal(source.pending(), true);
-  for (const runId of ['first', 'second', 'third']) source.journal.save('sample-v1',
-    { ...session(), runId, confirmed: 3, phase: 'complete' }, { language: 'en', book: 'sample' });
+  for (const runId of ['first', 'second', 'third']) legacyCompletion(source, a.db, runId, runId === 'third' ? 0 : 10);
   const target = new ProgressBackupStore(b.db, () => new Date('2026-09-13T12:00:00Z'));
   target.restoreBackup(source.exportBackup());
   assert.equal(target.journal.completions('sample-v1', 1), 4);
@@ -154,7 +181,7 @@ test('failure to increment backup revision rolls back checkpoint, reward and pre
   store.acknowledge(store.revision());
   const original = store.exportBackup(), revision = store.revision();
   fixture.native.exec("CREATE TRIGGER deny_revision BEFORE UPDATE OF revision ON backup_state BEGIN SELECT RAISE(ABORT, 'disk test'); END");
-  assert.throws(() => store.journal.save('sample-v1', { ...session(), confirmed: 3, phase: 'complete' }, { language: 'en', book: 'sample' }));
+  assert.throws(() => store.journal.save('sample-v1', { ...session(), confirmed: 3, phase: 'complete' }, { language: 'english', book: 'sample' }));
   assert.throws(() => store.saveValue('settings', '{"mode":"manual","rate":2}'));
   assert.equal(store.exportBackup(), original);
   assert.equal(store.revision(), revision);
@@ -175,4 +202,198 @@ test('identical backup content remains idempotent when JSON property order chang
   backup.tables.preferences[0].value = '{ "rate": 1, "mode": "manual" }';
   store.restoreBackup(JSON.stringify(backup));
   assert.equal(store.revision(), revision);
+});
+
+test('version one preserves legacy twenty XP and baselines partial history before the next real confirmation', async t => {
+  const a = sqlite(), b = sqlite(); t.after(() => { a.native.close(); b.native.close(); });
+  const source = new ProgressBackupStore(a.db, now), target = new ProgressBackupStore(b.db, now);
+  legacyCompletion(source, a.db, 'old-a'); legacyCompletion(source, a.db, 'old-b');
+  for (const table of ['stage_awards', 'daily_stages', 'study_days']) a.db.run(`UPDATE ${table} SET language='english'`);
+  source.journal.save('sample-v1', { ...session(), runId: 'partial', confirmed: 1, phase: 'speaking', running: true });
+  const legacy = JSON.parse(source.exportBackup()); legacy.version = 1; delete legacy.tables.cycle_credits;
+  target.restoreBackup(JSON.stringify(legacy));
+  assert.equal(target.journal.progress.summary('english').xp, 20);
+  const player = new Player(target.journal.load('sample-v1', 1, 1)!,
+    { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} },
+    state => target.journal.save('sample-v1', state, { book: 'sample', language: 'english' }), () => 0, () => {});
+  await player.resume(); await player.confirm();
+  assert.equal(target.journal.progress.summary('english').xp, 21);
+  assert.equal(target.journal.completions('sample-v1', 1), 2);
+  assert.equal(JSON.parse(target.exportBackup()).version, 2);
+  legacy.tables.stage_awards[0].xp = 11;
+  assert.throws(() => validateProgressBackup(JSON.stringify(legacy)));
+});
+
+test('version two rejects corrupt credits and missing completion links before replacing any profile', async t => {
+  const a = sqlite(), b = sqlite(); t.after(() => { a.native.close(); b.native.close(); });
+  const source = new ProgressBackupStore(a.db, now), target = new ProgressBackupStore(b.db, now);
+  const player = new Player(session(), { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} },
+    state => source.journal.save('sample-v1', state, { book: 'sample', language: 'english' }), () => 0, () => {});
+  await player.resume();
+  for (let i = 0; i < 2; i++) { player.audioEnded(1); await player.confirm(); }
+  player.audioEnded(1); await player.choose('next');
+  const valid = source.exportBackup(), before = target.exportBackup();
+  const changes = [
+    (b: any) => { b.version = 3; },
+    (b: any) => { b.tables.cycle_credits[0].credited = 4; },
+    (b: any) => { b.tables.cycle_credits[0].credited = -1; },
+    (b: any) => { b.tables.cycle_credits[0].confirmed = 4; b.tables.checkpoints = []; },
+    (b: any) => { b.tables.cycle_credits[0].language = 'en'; },
+    (b: any) => { b.tables.cycle_credits[0].book = 'other'; },
+    (b: any) => { b.tables.cycle_credits[0].phrase_count = 2; },
+    (b: any) => { b.tables.cycle_credits[0].day = ''; },
+    (b: any) => { b.tables.cycle_credits.push(b.tables.cycle_credits[0]); },
+    (b: any) => { b.tables.completions = []; },
+    (b: any) => { b.tables.study_days = []; },
+    (b: any) => { b.tables.cycle_credits[0].extra = 1; },
+    (b: any) => { b.tables.cycle_credits = Array(100001).fill(b.tables.cycle_credits[0]); },
+  ];
+  for (const change of changes) {
+    const broken = JSON.parse(valid); change(broken);
+    assert.throws(() => target.restoreBackup(JSON.stringify(broken)));
+    assert.equal(target.exportBackup(), before); assert.equal(target.revision(), 0);
+  }
+  target.restoreBackup(valid); target.restoreBackup(valid);
+  assert.equal(target.journal.progress.summary('english').xp, 3);
+  assert.equal(target.journal.progress.summary('english').streak, 1);
+});
+
+test('compact fifty-book forty-eight-run history fits backup bounds and round-trips', t => {
+  const a = sqlite(), b = sqlite(); t.after(() => { a.native.close(); b.native.close(); });
+  const source = new ProgressBackupStore(a.db, now), target = new ProgressBackupStore(b.db, now);
+  const payload = JSON.parse(source.exportBackup());
+  payload.tables.study_days.push({ language: 'english', day: '2026-09-12' });
+  for (let book = 0; book < 50; book++) for (let stage = 1; stage <= 16; stage++) for (let run = 0; run < 3; run++) {
+    const key = `book-${book}-v1`, id = `run-${book}-${stage}-${run}`;
+    payload.tables.completions.push({ package: key, stage, run: id, completed_at: '2026-09-12 12:00:00' });
+    payload.tables.cycle_credits.push({ package: key, stage, run: id, book: `book-${book}`, language: 'english',
+      phrase_count: 500, phrase: 499, confirmed: 3, credited: 1500, day: '2026-09-12' });
+  }
+  const json = JSON.stringify(payload);
+  assert.ok(Buffer.byteLength(json) < 1024 * 1024);
+  target.restoreBackup(json);
+  assert.equal(target.journal.progress.summary('english').xp, 3_600_000);
+  assert.equal(validateProgressBackup(target.exportBackup()).tables.cycle_credits.length, 2400);
+  target.restoreBackup(json);
+  assert.equal(target.journal.progress.summary('english').xp, 3_600_000);
+});
+
+test('bounded ledger totals saturate at int32 while later confirmations and completion still persist', async t => {
+  const a = sqlite(); t.after(() => a.native.close());
+  const store = new ProgressBackupStore(a.db, now);
+  const payload = JSON.parse(store.exportBackup());
+  payload.tables.study_days.push({ language: 'english', day: '2026-09-12' });
+  for (const run of ['large-a', 'large-b']) {
+    payload.tables.completions.push({ package: 'sample-v1', stage: 1, run, completed_at: '2026-09-12 12:00:00' });
+    payload.tables.cycle_credits.push({ package: 'sample-v1', stage: 1, run, book: 'sample', language: 'english',
+      phrase_count: 100000, phrase: 99999, confirmed: 99999, credited: 2_147_483_647, day: '2026-09-12' });
+  }
+  const overflow = structuredClone(payload); overflow.tables.cycle_credits[0].credited = 2_147_483_648;
+  assert.throws(() => validateProgressBackup(JSON.stringify(overflow)));
+  store.restoreBackup(JSON.stringify(payload));
+  assert.equal(store.journal.progress.summary('english').xp, 2_147_483_647);
+  assert.equal(store.journal.progress.summary('english').level, 999);
+  const player = new Player(session(), { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} },
+    state => store.journal.save('sample-v1', state, { book: 'sample', language: 'english' }), () => 0, () => {});
+  await player.resume();
+  for (let i = 0; i < 2; i++) { player.audioEnded(1); await player.confirm(); }
+  player.audioEnded(1); await player.choose('next');
+  assert.equal(store.journal.progress.summary('english').xp, 2_147_483_647);
+  assert.equal(store.journal.completions('sample-v1', 1), 3);
+  assert.equal(validateProgressBackup(store.exportBackup()).tables.cycle_credits.find(row => row.run === 'finished')?.credited, 3);
+});
+
+test('backup revision failure rolls back a real final confirmation and retry adds exactly one', async t => {
+  const a = sqlite(); t.after(() => a.native.close());
+  const store = new ProgressBackupStore(a.db, now);
+  const player = new Player(session(), { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} },
+    state => store.journal.save('sample-v1', state, { book: 'sample', language: 'english' }), () => 0, () => {});
+  await player.resume();
+  for (let i = 0; i < 2; i++) { player.audioEnded(1); await player.confirm(); }
+  player.audioEnded(1);
+  const before = store.exportBackup(), revision = store.revision();
+  a.db.exec("CREATE TRIGGER fail_cycle_revision BEFORE UPDATE OF revision ON backup_state BEGIN SELECT RAISE(ABORT,'full'); END");
+  await player.choose('next');
+  assert.equal(player.error, 'save');
+  assert.equal(store.exportBackup(), before); assert.equal(store.revision(), revision);
+  assert.equal(store.journal.progress.summary('english').xp, 2);
+  assert.equal(store.journal.progress.summary('english').streak, 0);
+  assert.equal(store.journal.completions('sample-v1', 1), 0);
+  a.db.exec('DROP TRIGGER fail_cycle_revision'); player.retrySave(); player.retrySave();
+  assert.equal(store.journal.progress.summary('english').xp, 3);
+  assert.equal(store.journal.progress.summary('english').streak, 1);
+  assert.equal(store.journal.completions('sample-v1', 1), 1);
+});
+
+test('locally saved legacy settings extras migrate to canonical backup without accepting external extras', t => {
+  const a = sqlite(); t.after(() => a.native.close());
+  const store = new ProgressBackupStore(a.db, now);
+  const old = { ...session(), confirmed: 1, phase: 'speaking', speechView: 'text', groupSize: 3, crazyWpm: [200, 267, 333, 400] };
+  a.db.run('INSERT INTO checkpoints VALUES (?,?,?)', 'sample-v1', 1, JSON.stringify(old));
+  const exported = JSON.parse(store.exportBackup());
+  const saved = JSON.parse(exported.tables.checkpoints[0].state);
+  assert.equal(saved.confirmed, 1); assert.equal(saved.phase, 'speaking');
+  assert.equal(Object.hasOwn(saved, 'crazyWpm'), false);
+  exported.tables.checkpoints[0].state = JSON.stringify(old);
+  assert.throws(() => validateProgressBackup(JSON.stringify(exported)));
+});
+
+test('an advanced snapshot for a displaced run cannot leave the checkpoint ahead of its credit frontier', t => {
+  const a = sqlite(); t.after(() => a.native.close());
+  const store = new ProgressBackupStore(a.db, now), identity = { book: 'sample', language: 'english' };
+  store.journal.save('sample-v1', session(), identity);
+  store.journal.save('sample-v1', { ...session(), runId: 'other' }, identity);
+  const before = store.exportBackup(), revision = store.revision();
+  assert.throws(() => store.journal.save('sample-v1', { ...session(), confirmed: 1 }, identity));
+  assert.equal(store.exportBackup(), before); assert.equal(store.revision(), revision);
+});
+
+test('a displaced completed legacy run rejects an unproven earlier frontier without changing its backup', t => {
+  const a = sqlite(); t.after(() => a.native.close());
+  const store = new ProgressBackupStore(a.db, now), identity = { book: 'sample', language: 'english' };
+  const initial = { ...session(), phraseCount: 2 };
+  const completed = { ...initial, phrase: 1, confirmed: 3, phase: 'complete' as const };
+  store.journal.save('sample-v1', completed);
+  assert.equal(store.journal.load('sample-v1', 1, 2)?.phase, 'complete');
+  store.journal.save('sample-v1', { ...initial, runId: 'other' });
+  const checkpoint = store.journal.load('sample-v1', 1, 2);
+  const before = store.exportBackup(), revision = store.revision();
+  assert.throws(() => store.journal.save('sample-v1', initial, identity));
+  assert.deepEqual(store.journal.load('sample-v1', 1, 2), checkpoint);
+  assert.equal(store.revision(), revision); assert.equal(store.exportBackup(), before);
+  assert.equal(store.journal.progress.summary('english').xp, 0);
+  assert.equal(store.journal.completions('sample-v1', 1), 1);
+  // A valid completed checkpoint can still be loaded/saved, without catch-up XP.
+  store.journal.save('sample-v1', completed, identity);
+  assert.equal(store.journal.load('sample-v1', 1, 2)?.phase, 'complete');
+  assert.equal(validateProgressBackup(store.exportBackup()).tables.cycle_credits[0]?.credited, 0);
+});
+
+test('a stale three-cycle completion cannot replace the durable five-cycle completion frontier', async t => {
+  const a = sqlite(); t.after(() => a.native.close());
+  const store = new ProgressBackupStore(a.db, now), identity = { book: 'sample', language: 'english' };
+  const player = new Player(session(), { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} },
+    state => store.journal.save('sample-v1', state, identity), () => 0, () => {});
+  await player.resume();
+  for (let i = 0; i < 2; i++) { player.audioEnded(1); await player.confirm(); }
+  player.audioEnded(1);
+  const thirdSpeaking = { ...player.state };
+  const thirdComplete = transition(thirdSpeaking, { type: 'next' });
+  await player.choose('repeat');
+  player.audioEnded(1); await player.confirm();
+  player.audioEnded(1); await player.choose('next');
+  assert.equal(store.journal.progress.summary('english').xp, 5);
+  const checkpoint = store.journal.load('sample-v1', 1, 1);
+  const before = store.exportBackup(), revision = store.revision();
+  for (const owner of [identity, undefined]) {
+    assert.throws(() => store.journal.save('sample-v1', thirdComplete, owner));
+    assert.deepEqual(store.journal.load('sample-v1', 1, 1), checkpoint);
+    assert.equal(store.revision(), revision); assert.equal(store.exportBackup(), before);
+    assert.equal(store.journal.progress.summary('english').xp, 5);
+  }
+  // Non-complete rewinds retain their existing replay policy and credit frontier.
+  store.journal.save('sample-v1', thirdSpeaking, identity);
+  assert.equal(store.journal.load('sample-v1', 1, 1)?.confirmed, 2);
+  assert.equal(store.journal.progress.summary('english').xp, 5);
+  assert.equal(validateProgressBackup(store.exportBackup()).tables.cycle_credits[0]?.confirmed, 5);
 });

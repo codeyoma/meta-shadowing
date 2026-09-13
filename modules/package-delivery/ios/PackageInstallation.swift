@@ -1,8 +1,8 @@
 import CryptoKit
 import Foundation
 
-struct DeliveryPackage: Codable, Sendable {
-  struct Entry: Codable, Sendable {
+struct DeliveryPackage: Codable, Sendable, Equatable {
+  struct Entry: Codable, Sendable, Equatable {
     let file: String
     let bytes: Int
     let sha256: String
@@ -20,6 +20,7 @@ struct PackageInstallation: Sendable {
 
   func isInstalled(_ package: DeliveryPackage) throws -> Bool {
     try validate(package)
+    try validateOwnedTree(package.key)
     let directory = root.appendingPathComponent(package.key)
     guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("ready").path) else { return false }
     return package.files.allSatisfy { entry in
@@ -37,6 +38,7 @@ struct PackageInstallation: Sendable {
     // The download owner serializes installs. This exact per-version path also
     // lets a new process recover a staging directory left by a terminated app.
     let staging = root.appendingPathComponent(".install-\(package.key)")
+    try validateOwnedTree(".install-\(package.key)")
     if fs.fileExists(atPath: staging.path) { try fs.removeItem(at: staging) }
     try fs.createDirectory(at: staging, withIntermediateDirectories: false)
     defer { try? fs.removeItem(at: staging) }

@@ -7,14 +7,12 @@ import { Nunito_800ExtraBold } from '@expo-google-fonts/nunito/800ExtraBold';
 import { usePalette } from '../components/ui';
 import { LibraryProvider } from '@/components/library-context';
 import { StudyHeader } from '@/components/study-header';
-import { startTapFeedback } from '@/native/tap-feedback';
 import { startPurchases } from '@/native/purchases';
 import { ProgressProfile } from '@/components/progress-profile';
 
 void SplashScreen.preventAutoHideAsync();
 
 export default function Layout() {
-  useEffect(startTapFeedback, []);
   useEffect(startPurchases, []);
   const c = usePalette();
   const [fontsLoaded, fontError] = useFonts({ Nunito_800ExtraBold });

@@ -8,7 +8,15 @@ const targetName = 'SampleDownloader';
 module.exports = function withPackageDelivery(config) {
   const group = process.env.APPLE_ASSET_APP_GROUP?.trim();
   const assetPackID = process.env.APPLE_SAMPLE_ASSET_PACK_ID?.trim();
+  const diagnostics = process.env.APPLE_DELIVERY_DIAGNOSTICS === '1';
+  if (diagnostics && (!group || !assetPackID || assetPackID === 'delivery-diagnostic-v1')) {
+    throw new Error('Diagnostics require separate configured sample delivery.');
+  }
   config = withInfoPlist(config, mod => {
+    const manifest = require('../../assets/sample/manifest.json');
+    const specification = require('../../assets/sample/delivery.json');
+    mod.modResults.SampleDescriptor = JSON.stringify({ key: specification.key, files: [specification.metadata,
+      ...manifest.phrases.map(({ file, bytes, sha256 }) => ({ file, bytes, sha256 }))] });
     const previousGroup = mod.modResults.BAAppGroupID;
     // An incremental project can contain this plugin's old target/entitlements.
     // Never silently retain them after disabling delivery or changing its group.
@@ -19,6 +27,17 @@ module.exports = function withPackageDelivery(config) {
       Object.assign(mod.modResults, { BAAppGroupID: group, BAHasManagedAssetPacks: true, BAUsesAppleHosting: true, SampleAssetPackID: assetPackID });
     } else {
       for (const key of ['BAAppGroupID', 'BAHasManagedAssetPacks', 'BAUsesAppleHosting', 'SampleAssetPackID']) delete mod.modResults[key];
+    }
+    for (const key of ['DeliveryDiagnosticsEnabled', 'DiagnosticAssetPackID', 'DiagnosticDescriptor']) delete mod.modResults[key];
+    if (diagnostics) {
+      const manifest = require('../../assets/sample/manifest.json');
+      const specification = require('../../assets/sample/delivery.json');
+      Object.assign(mod.modResults, {
+        DeliveryDiagnosticsEnabled: true,
+        DiagnosticAssetPackID: 'delivery-diagnostic-v1',
+        DiagnosticDescriptor: JSON.stringify({ key: 'delivery-diagnostic-v1', files: [specification.metadata,
+          ...manifest.phrases.map(({ file, bytes, sha256 }) => ({ file, bytes, sha256 }))] }),
+      });
     }
     return mod;
   });

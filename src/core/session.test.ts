@@ -83,6 +83,60 @@ test('new sessions are manual and the full supported rate range survives checkpo
   }
 });
 
+test('third-cycle choices are locked during playback and work only after audio ends', () => {
+  const initial = createSession({ runId: 'third-choice', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
+  const listening = { ...initial, confirmed: 2, phase: 'listening' as const, running: true, audioSeconds: 0.5 };
+  assert.deepEqual(transition(listening, { type: 'repeat' }), listening);
+  assert.deepEqual(transition(listening, { type: 'next' }), listening);
+  const legacyListening = { ...listening, mode: 'auto' as const };
+  assert.deepEqual(transition(legacyListening, { type: 'next' }), legacyListening);
+  const paused = transition(listening, { type: 'pause' });
+  assert.deepEqual(transition(paused, { type: 'repeat' }), paused);
+  assert.deepEqual(transition(paused, { type: 'next' }), paused);
+  assert.deepEqual(transition(paused, { type: 'resume' }), listening);
+
+  const speaking = transition(listening, { type: 'audio-ended', durationSeconds: 2 });
+  const repeated = transition(speaking, { type: 'repeat' });
+  assert.deepEqual(repeated, { ...initial, confirmed: 3, planned: 5 });
+  assert.deepEqual(restoreSession(JSON.stringify(repeated), 2, 1), repeated);
+  const next = transition(speaking, { type: 'next' });
+  assert.deepEqual(next, { ...initial, phrase: 1 });
+  assert.deepEqual(restoreSession(JSON.stringify(next), 2, 1), next);
+});
+
+test('next confirms and closes the fifth cycle in one action', () => {
+  const initial = createSession({ runId: 'fifth-choice', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
+  const speaking = { ...initial, planned: 5, confirmed: 4, phase: 'speaking' as const, running: true };
+  assert.deepEqual(transition(speaking, { type: 'next' }), { ...initial, phrase: 1 });
+  const complete = transition({ ...speaking, phrase: 1 }, { type: 'next' });
+  assert.deepEqual(complete, { ...speaking, phrase: 1, confirmed: 5, phase: 'complete', running: false });
+  assert.deepEqual(transition(complete, { type: 'next' }), complete);
+});
+
+test('legacy seven and nine-cycle speaking checkpoints still require confirm before next', () => {
+  const initial = createSession({ runId: 'legacy-long', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
+  for (const planned of [7, 9]) {
+    const speaking = { ...initial, planned, confirmed: planned - 1, phase: 'speaking' as const, running: true };
+    assert.deepEqual(transition(speaking, { type: 'next' }), speaking);
+    const decision = transition(speaking, { type: 'confirm' });
+    assert.equal(decision.phase, 'decision');
+    assert.equal(decision.confirmed, planned);
+    assert.equal(transition(decision, { type: 'next' }).phrase, 1);
+  }
+});
+
+test('early choices never bypass the first two cycles or additional practice', () => {
+  const initial = createSession({ runId: 'choice-guard', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
+  const cases = [initial, { ...initial, confirmed: 2 },
+    ...[0, 1].map(confirmed => ({ ...initial, confirmed, phase: 'listening' as const, running: true })),
+    ...[5, 7].flatMap(planned => [2, 3, planned - 1].map(confirmed =>
+      ({ ...initial, planned, confirmed, phase: 'listening' as const, running: true })))];
+  for (const state of cases) {
+    assert.deepEqual(transition(state, { type: 'repeat' }), state);
+    assert.deepEqual(transition(state, { type: 'next' }), state);
+  }
+});
+
 test('corrupt, foreign-stage and incompatible checkpoints are rejected without resetting progress', () => {
   const s = createSession({ runId: 'invalid', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
   for (const patch of [{ version: 2 }, { phrase: 2 }, { confirmed: -1 }, { phase: 'decision' },

@@ -306,15 +306,37 @@ The shared browsing header contains exactly three groups: a language-flag button
 
 ### Progress and stages
 
-Enabled browsing buttons use `FeedbackPressable`: one light native haptic and
-the owner-supplied 100 ms `button-soft-tick.wav` on an accepted press. Books,
-Stages and Settings native-tab presses use the same feedback. The player footer
-is haptic-only. Options, speed/language settings, settings controls, the inert
-mascot, and disabled controls stay silent. Keep visual pressed
-states; feedback is cosmetic and must never delay learning or navigation.
-Do not play sounds on mount, save, or automatic progress updates. Reuse a single
-preloaded sound player, suppress rapid duplicate taps, and cancel pending sound
-on backgrounding. Physical iPhone testing is required for haptic feel.
+Enabled browsing buttons use `FeedbackPressable`: one light native haptic on an
+accepted press. Books, Stages and Settings native-tab presses and the player footer
+use the same haptic-only feedback. The owner removed all button effects on
+2026-09-13; do not create or preload a button sound player. Lesson audio is separate
+and unchanged. Options, speed/language settings, settings controls, the inert
+mascot, and disabled controls retain their existing feedback exclusions. Keep
+visual pressed states; feedback must never delay learning or navigation. Suppress
+rapid duplicate taps and feedback while inactive. Physical iPhone testing is
+required for haptic feel.
+
+Learning feedback (owner update, 2026-09-13): the current cycle contains a small
+gray dot resting at its small size while audio is waiting, playing or interrupted.
+Only after audio ends, during the foreground speaking wait, it breathes on a
+4.2-second scale loop, expanding to 80% of the cycle outline's inner diameter before shrinking.
+It becomes static with Reduce Motion and while the screen is unfocused or
+the app inactive. Confirmed cycles replace it with the existing checkmark.
+The learning footer suppresses generic click haptics: successful durable cycle
+confirmation emits Light, phrase advancement Medium, and a newly persisted run
+completion emits the iOS Success pattern and one short, non-interactive confetti
+overlay. A restored completion never celebrates; a failed save cannot celebrate
+until its successful retry. Reduce Motion replaces confetti travel with a brief
+opacity-only decoration. Blur/background clears celebration instead of replaying
+it on return. No sounds, delayed navigation or persistence changes are involved.
+The completed-run screen hides the entire cycle timeline, identifies the stage,
+meta-shadowing level and method in its completion copy, and uses a checkmark
+for the return-to-stage action.
+At the third playback start, Repeat enters from the left over 220 ms while the
+main button narrows to the existing 1:3 split. Playback still locks both actions.
+The player header's sentence-progress fill grows to its new real ratio over
+280 ms, including the first increase from zero; saved progress appears immediately
+on initial mount. Reduce Motion skips the position and size transitions.
 
 Tapping an available path coin opens an anchored orange popup instead of
 starting playback. Its heading reads “STAGE 01 · Lv 1 자막 쉐도잉”, using the
@@ -347,7 +369,7 @@ The stage screen uses a dark navy book summary with actual progress, a right-ali
 
 The player uses a full-width connected timeline of 48-point cycle nodes, without visible numbers or a count caption. The active outline follows actual audio progress; explicit confirmation reveals a check (120 ms feedback), then fills the connecting line to the next node (140 ms). Repeat preserves checks and slides two new nodes in from the right while existing nodes redistribute over 180 ms. Older saved long repeat sequences remain readable and scroll horizontally rather than shrink nodes. The footer has one icon-only play action, disabled during playback. Only at the initial three-cycle decision, a recycle-icon action appears beside it at a 1:3 width ratio; at five cycles it is hidden. Footer layout changes do not animate sideways. Only the central sentence card fades on a phrase change (120 ms). Both controls retain accessible labels; reduced motion removes spatial feedback. Back navigation and interruption handling still pause safely.
 
-Show all sixteen stage identities, with 3–16 explicitly unavailable until their learning methods ship. The first newly completed stage chooses the book's XP stage for that day: up to two 10-XP runs for 1–10, three for 11–16. Other practice remains available without XP. Totals/levels/streaks are separate per language; no routine reward toast. Full rules live in `docs/learning-contract.md`.
+Show all sixteen stage identities, with 3–16 explicitly unavailable until their learning methods ship. Each explicitly confirmed sentence cycle earns 1 XP, including the two optional extra cycles; there is no daily allowance or new completed-run bonus. Historical 0/10-XP awards remain unchanged. Full runs alone advance stage stars and streak days. Totals/levels/streaks are separate per language; no routine reward toast. The browsing header carries surplus XP through the 0.53% nearest-ten level curve; level 999 begins at 3,669,390 XP and shows MAX with a full track. The total XP counter saturates at 2,147,483,647 while study history continues. Full rules live in `docs/learning-contract.md`.
 
 ### Recovery
 

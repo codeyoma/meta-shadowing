@@ -63,7 +63,7 @@ test('player confirmation and option saves remain scoped to the selected book wi
     assert.equal(context.completions(1), 1);
     assert.equal(sampleContext.completions(1), 0);
     assert.equal(sampleContext.load(1), null);
-    assert.equal(storage.progress.summary('english').xp, 10);
+    assert.equal(storage.progress.summary('english').xp, 3);
     assert.throws(() => sampleContext.save(saved), /Incompatible/);
     assert.equal(sampleContext.load(1), null);
   } finally { db.close(); }

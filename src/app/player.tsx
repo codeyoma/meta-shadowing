@@ -24,6 +24,9 @@ import { PlayerHeaderProgress } from '@/components/player-header-progress';
 import { getProgressSync } from '@/native/progress-sync';
 import { useProgressProfile } from '@/components/progress-profile';
 import { SpeechContent } from '@/components/speech-content';
+import { CompletionConfetti } from '@/components/completion-confetti';
+import { createLearningFeedback } from '@/core/learning-feedback';
+import { learningHaptic, tapFeedback } from '@/native/tap-feedback';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
@@ -49,9 +52,13 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const [duration, setDuration] = useState(0);
   const [busy, setBusy] = useState(false);
   const [speechView, setSpeechView] = useState<'bubble' | 'list'>('bubble');
+  const [celebrating, setCelebrating] = useState(false);
+  const [motionActive, setMotionActive] = useState(false);
+  const finishCelebration = useCallback(() => setCelebrating(false), []);
   const acting = useRef(false);
   useFocusEffect(useCallback(() => {
     let active = true;
+    setMotionActive(AppState.currentState === 'active');
     let shown: string | null = null;
     let timer: ReturnType<typeof setInterval> | undefined;
     let appState: { remove(): void } | undefined;
@@ -69,10 +76,21 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         setSpeechView(readSettings().speechView ?? 'bubble');
         const fresh = !saved || (saved.phase === 'complete' && !opened.current);
         const initial = !fresh && saved ? saved : createSession({ runId: randomUUID(), stage, phraseCount: lesson.phrases.length, ...readSettings() });
+        const observeFeedback = createLearningFeedback(initial);
         const firstEntry = !opened.current;
         opened.current = true;
         const audio = nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause());
-        const player = new Player(initial, audio, s => context.save(s), () => performance.now(), () => {
+        const player = new Player(initial, audio, s => {
+          context.save(s);
+          const event = observeFeedback(s);
+          if (event && active && AppState.currentState === 'active') {
+            // Cosmetic effects are downstream of the durable write, never part of it.
+            try {
+              learningHaptic(event);
+              if (event === 'complete') setCelebrating(true);
+            } catch { /* Optional feedback cannot turn a successful save into failure. */ }
+          }
+        }, () => performance.now(), () => {
           if (!active) return;
           setState({ ...player.state }); setError(player.error);
           const mediaDuration = audio.duration?.() ?? 0;
@@ -101,7 +119,10 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         acting.current = false; setBusy(false);
         setState({ ...initial });
         timer = setInterval(() => { if (AppState.currentState === 'active') player.tick(); }, 100);
-        appState = AppState.addEventListener('change', next => { if (next !== 'active') player.pause(); });
+        appState = AppState.addEventListener('change', next => {
+          setMotionActive(next === 'active');
+          if (next !== 'active') { setCelebrating(false); player.pause(); }
+        });
         if (firstEntry && !profile.suppressEntry && AppState.currentState === 'active') {
           setBusy(true);
           await player.enter();
@@ -110,12 +131,12 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       } catch { if (active) { setUnavailable(true); Alert.alert('학습을 열 수 없어요', '기록을 초기화하지 않았어요. 저장 공간과 레슨 설치 상태를 확인해 주세요.'); } }
     };
     void initialize();
-    return () => { active = false; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
+    return () => { active = false; setMotionActive(false); setCelebrating(false); removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
   }, [stage, pack, lesson, profile.id, profile.suppressEntry]));
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
-  const openOptions = () => {
+  const openOptions = (option?: 'rate') => {
     engine.current?.pause();
-    if (stage && engine.current && engine.current.error !== 'save') router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey } });
+    if (stage && engine.current && engine.current.error !== 'save') router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, ...(option ? { option } : {}) } });
   };
   const openGuide = () => {
     engine.current?.pause();
@@ -134,12 +155,12 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         return;
       }
       switch (mainPlayerAction(player.state, player.error)) {
-        case 'resume': await player.resume(); break;
+        case 'resume': tapFeedback(); await player.resume(); break;
         case 'confirm':
           if (!player.state.running) await player.resume();
           await player.confirm(); break;
         case 'next': await player.choose('next'); break;
-        case 'leave': leave(); break;
+        case 'leave': tapFeedback(); leave(); break;
         case 'recover': player.retrySave(); if (!player.error) await player.resume(); break;
         case 'wait': break;
       }
@@ -147,7 +168,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   }
   return <View style={{ flex: 1 }}>
     <Stack.Screen options={{ title: '학습', headerBackVisible: false,
-      header: () => <PlayerHeaderProgress onOptions={openOptions} current={state ? state.phrase + 1 : 1}
+      header: () => <PlayerHeaderProgress onOptions={() => openOptions()} current={state ? state.phrase + 1 : 1}
         total={state?.phraseCount ?? lesson.phrases.length}
         completed={state ? state.phase === 'complete' ? state.phraseCount : state.phrase : 0} /> }} />
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, padding: 24, gap: 20 }}>
@@ -157,7 +178,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
             <Icon name="graduationcap.fill" /><Label size={14} weight="700">Lv {Math.ceil(state.stage / 2)}</Label>
           </Pressable>
-          <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={`재생 속도 ${state.rate}배, 변경`} onPress={openOptions}
+          <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={`재생 속도 ${state.rate}배, 변경`} onPress={() => openOptions('rate')}
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
             <Icon name="speedometer" /><Label size={14} weight="700">{state.rate}×</Label>
           </Pressable>
@@ -169,11 +190,16 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 16 }}>
           <Animated.View key={`${state.runId}:${state.phrase}:${state.phase === 'complete'}`} entering={CONTENT_ENTER}>
           {state.phase === 'complete'
-            ? <Card style={{ gap: 22, paddingVertical: 26 }}><Label size={30} weight="800" color={c.heading}>잘 마쳤어요!</Label><Label muted>{state.phraseCount}개 문장을 내 목소리로 연습했어요.</Label></Card>
+            ? <Card style={{ gap: 22, paddingVertical: 26 }}>
+              <Label size={30} weight="800" color={c.heading}>잘 마쳤어요!</Label>
+              <Label muted>스테이지 {state.stage} · 메타쉐도잉 Lv {Math.ceil(state.stage / 2)}{ '\n' }
+                {methodNames[Math.ceil(state.stage / 2) - 1]} 학습을 마쳤어요.</Label>
+              <Label muted>{state.phraseCount}개 문장을 내 목소리로 연습했어요.</Label>
+            </Card>
             : <SpeechContent phrases={lesson.phrases} active={state.phrase} view={speechView} />}
           </Animated.View>
         </View>
-        <CycleTimeline key={`${state.runId}:${state.phrase}`} state={state} duration={duration} />
+        {state.phase !== 'complete' && <CycleTimeline key={`${state.runId}:${state.phrase}`} state={state} duration={duration} animate={motionActive && !error} />}
       </>}
     </ScrollView>
     {state && <View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 12,
@@ -181,5 +207,6 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       <PlayerControls action={mainPlayerAction(state, error)} repeat={canOfferRepeat(state, error)} busy={busy}
         onMain={() => void act()} onRepeat={() => void act(true)} />
     </View>}
+    {celebrating && motionActive && <CompletionConfetti onFinish={finishCelebration} />}
   </View>;
 }

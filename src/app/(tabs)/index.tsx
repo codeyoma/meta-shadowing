@@ -1,24 +1,45 @@
-import { ScrollView, View } from 'react-native';
+import { ScrollView, View, useColorScheme } from 'react-native';
+import { useState } from 'react';
 import { Image } from 'expo-image';
 import { Label, usePalette } from '@/components/ui';
+import { FeedbackPressable as Pressable } from '@/components/feedback-pressable';
 import { LibraryBook } from '@/components/library-book';
 import { PackagePurchaseCard } from '@/components/package-purchase-card';
 import { useLibrary } from '@/components/library-context';
 import { availableBooks } from '@/core/catalog';
-import { books, languages } from '@/native/catalog';
+import { books } from '@/native/catalog';
+import { DeliveryDiagnostics } from '@/components/delivery-diagnostics';
 
 export default function Library() {
   const c = usePalette();
+  const dark = useColorScheme() === 'dark';
   const { selection } = useLibrary();
+  const [editing, setEditing] = useState(false);
   const catalog = availableBooks(books, selection.language);
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 40 }}>
-    <View style={{ backgroundColor: '#ffffff', borderRadius: 16, overflow: 'hidden', alignSelf: 'center', width: '100%', maxWidth: 260 }}>
-      <Image source={require('../../../assets/brand/logo.png')} accessibilityLabel="쇄도잉" accessible
+    <View style={{ alignSelf: 'center', width: '100%', maxWidth: 260 }}>
+      <Image source={dark ? require('../../../assets/brand/banner-dark.png') : require('../../../assets/brand/banner-light.png')} accessibilityLabel="쇄도잉" accessible
         contentFit="contain" style={{ width: '100%', aspectRatio: 2 }} />
     </View>
-    <Label size={27} weight="800" color={c.heading}>{languages.find(l => l.id === selection.language)?.name} 도서</Label>
-    {catalog.map(book => <LibraryBook key={book.packageKey} book={book} />)}
-    {selection.language === 'english' && <PackagePurchaseCard />}
-    {!catalog.length && <Label muted>이 언어에서 지원하는 도서가 아직 없어요.</Label>}
+    <View style={{ gap: 14 }}>
+      <View style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <Label size={23} weight="800" color={c.heading}>구매한 도서</Label>
+        <Pressable accessibilityRole="button" accessibilityLabel={editing ? '편집 완료' : '학습 자료 편집'}
+          onPress={() => setEditing(value => !value)} style={({ pressed }) => ({ minWidth: 60, minHeight: 44,
+            paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center', opacity: pressed ? 0.6 : 1 })}>
+          <Label size={16} weight="700" color={c.link}>{editing ? '완료' : '편집'}</Label>
+        </Pressable>
+      </View>
+      {catalog.map(book => <LibraryBook key={book.packageKey} book={book} editing={editing} />)}
+      {selection.language === 'english' && <PackagePurchaseCard section="owned" />}
+      {!catalog.length && <Label muted>이 언어에서 지원하는 구매/샘플 도서가 아직 없어요.</Label>}
+    </View>
+    <View style={{ gap: 14 }}>
+      <Label size={23} weight="800" color={c.heading}>상점</Label>
+      {selection.language === 'english'
+        ? <PackagePurchaseCard section="store" />
+        : <Label muted>이 언어에서 구매할 수 있는 도서가 아직 없어요.</Label>}
+    </View>
+    <DeliveryDiagnostics />
   </ScrollView>;
 }

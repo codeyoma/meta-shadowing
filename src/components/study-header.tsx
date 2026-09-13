@@ -25,7 +25,7 @@ export function StudyHeader() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
           <Label size={19} display color={c.heading}>Lv. {progress?.level ?? '—'}</Label>
           <View style={{ flexGrow: 1, alignItems: 'flex-end' }}>
-            <Label size={12} muted align="right">{progress ? `${progress.current} / ${progress.required} XP` : '— XP'}</Label>
+            <Label size={12} muted align="right">{progress?.maxLevel ? 'MAX' : progress ? `${progress.current} / ${progress.required} XP` : '— XP'}</Label>
           </View>
         </View>
       </View>
