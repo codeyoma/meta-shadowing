@@ -92,6 +92,33 @@ unavailable; the controlled sample remains usable.
 
 ## Measured verification — 2026-09-12
 
+CI timing investigation, 2026-09-13: PR #55's native job failed while waiting
+for an unverified purchase to appear in `Transaction.unfinished`; its immediate
+unverified/unowned assertions passed. The exact assertion did not recur in 12
+isolated runs or 56 full-suite repetitions. Those repetitions did expose a
+refund race and two runs where a fixture purchase was not yet visible when the
+test asserted restored ownership. The latter is a confirmed setup race; the
+same propagation issue is a likely, not conclusively reproduced, cause of the
+original CI failure.
+
+The fixture now waits for cleared history and the purchased transaction's
+entitlement before proceeding. Refund checks wait for the observer's completed
+publication, not the ownership assignment that precedes `finish()`. Every store
+observer is explicitly stopped before fixture cleanup. Query/update waits use
+a ten-second monotonic deadline and fail when an unsuccessful poll reaches it;
+they do not
+retry whole tests or repeat purchase/restore actions. The unverified test still
+requires exactly one unfinished transaction and no ownership. Production
+purchase handling is unchanged.
+
+The revised StoreKit suite passed 20 consecutive repetitions (320 invocations,
+including parameterized cases), with zero failures or skips. A temporary mutation
+that finished an unverified purchase failed the unfinished-transaction check at
+its deadline; the mutation was removed. This confirms that the bounded wait does
+not turn that safety regression into a passing test.
+After removing the mutation, fresh full suites passed: StoreKit 14/14, CloudKit
+34/34, and `npm run check` passed 182 domain tests plus TypeScript checking.
+
 Review follow-up, 2026-09-13: two new real StoreKitTest regressions reproduced
 unrelated-product verification failures in entitlement refresh and transaction
 updates (both failed before the fix). Filtering unverified results by configured

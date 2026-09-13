@@ -1,0 +1,24 @@
+diff --git a/node_modules/react-native-screens/ios/tabs/RNSTabBarAppearanceCoordinator.mm b/node_modules/react-native-screens/ios/tabs/RNSTabBarAppearanceCoordinator.mm
+index fee81a8..7aaae52 100644
+--- a/node_modules/react-native-screens/ios/tabs/RNSTabBarAppearanceCoordinator.mm
++++ b/node_modules/react-native-screens/ios/tabs/RNSTabBarAppearanceCoordinator.mm
+@@ -152,3 +152,19 @@ - (void)updateTabBarItem:(nullable UITabBarItem *)tabBarItem
++  // Bundled assets can bypass RCTImageLoader's requested-size decoding in Release.
++  // Bound custom tab images before handing them to UIKit; a layout pass alone
++  // does not shrink the resulting UIImage. Leave SF Symbols and asset catalogs alone.
++  CGSize requestedSize = (isSelected ? screenView.selectedIconImageSource : screenView.iconImageSource).size;
++  if (image != nil && requestedSize.width > 0 && requestedSize.height > 0 &&
++      image.size.width > 0 && image.size.height > 0 &&
++      (image.size.width > requestedSize.width || image.size.height > requestedSize.height)) {
++    CGFloat ratio = MIN(requestedSize.width / image.size.width, requestedSize.height / image.size.height);
++    CGSize fittedSize = CGSizeMake(image.size.width * ratio, image.size.height * ratio);
++    UIImageRenderingMode renderingMode = image.renderingMode;
++    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:fittedSize];
++    image = [[renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
++      [image drawInRect:(CGRect){CGPointZero, fittedSize}];
++    }] imageWithRenderingMode:renderingMode];
++  }
++
+   if (isSelected) {
+     tabBarItem.selectedImage = image;
+   } else {

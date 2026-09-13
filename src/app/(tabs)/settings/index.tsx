@@ -1,22 +1,19 @@
-import { Pressable, ScrollView, View } from 'react-native';
-import { router } from 'expo-router';
-import { Icon, Label, usePalette } from '@/components/ui';
+import { ScrollView, View } from 'react-native';
+import { Stack, router } from 'expo-router';
 import { RestorePurchases } from '@/components/restore-purchases';
-import { ICloudBackup } from '@/components/icloud-backup';
+import { SettingsRow, useSettingsColors } from '@/components/settings-row';
 
 export default function SettingsScreen() {
-  const c = usePalette();
-  return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 40 }}>
-      <Pressable onPress={() => router.push('/settings/learning')} accessibilityRole="button" accessibilityLabel="학습 설정" style={({ pressed }) => ({
-        minHeight: 64, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 14,
-        backgroundColor: pressed ? c.soft : c.card, borderColor: c.line, borderWidth: 2,
-        borderRadius: 16, borderCurve: 'continuous',
-      })}>
-        <Icon name="slider.horizontal.3" color={c.heading} />
-        <View style={{ flex: 1 }}><Label size={19} weight="700" color={c.heading}>학습 설정</Label></View>
-        <Icon name="chevron.right" size={18} color={c.secondary} />
-      </Pressable>
+  const c = useSettingsColors();
+  return <ScrollView contentInsetAdjustmentBehavior="automatic" style={{ backgroundColor: c.background }}
+    contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+    <Stack.Screen options={{ headerTintColor: c.text }} />
+    <View style={{ backgroundColor: c.group, borderRadius: 24, borderCurve: 'continuous', overflow: 'hidden' }}>
+      <SettingsRow title="학습 설정" icon="slider.horizontal.3" iconColor="#8e8e93" disclosure separator
+        onPress={() => router.push('/settings/learning')} />
+      <SettingsRow title="iCloud 백업" icon="icloud.fill" iconColor="#007aff" disclosure separator
+        onPress={() => router.push('/settings/icloud')} />
       <RestorePurchases />
-      <ICloudBackup />
+    </View>
   </ScrollView>;
 }

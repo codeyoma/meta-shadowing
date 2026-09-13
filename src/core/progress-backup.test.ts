@@ -18,6 +18,20 @@ function sqlite() {
 const now = () => new Date('2026-09-12T12:00:00Z');
 const session = () => createSession({ runId: 'finished', stage: 1, phraseCount: 1, mode: 'manual', rate: 1 });
 
+test('all learning preferences survive an idempotent SQLite backup and restore without adding XP', t => {
+  const a = sqlite(), b = sqlite();
+  t.after(() => { a.native.close(); b.native.close(); });
+  const source = new ProgressBackupStore(a.db, now), target = new ProgressBackupStore(b.db, now);
+  const settings = { mode: 'manual', rate: 1.25, speechView: 'list', groupSize: 4, crazyWpm: [175, 200, 250, 300] };
+  source.saveValue('settings', JSON.stringify(settings));
+  target.restoreBackup(source.exportBackup());
+  assert.deepEqual(JSON.parse(target.readValue('settings')!), settings);
+  assert.equal(target.journal.progress.summary('en').xp, 0);
+  const revision = target.revision();
+  target.restoreBackup(source.exportBackup());
+  assert.equal(target.revision(), revision);
+});
+
 test('backup restores complete and unfinished practice once with original XP and study date', t => {
   const a = sqlite(), b = sqlite();
   t.after(() => { a.native.close(); b.native.close(); });

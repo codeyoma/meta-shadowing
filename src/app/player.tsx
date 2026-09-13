@@ -23,6 +23,7 @@ import { methodNames } from '@/components/method-label';
 import { PlayerHeaderProgress } from '@/components/player-header-progress';
 import { getProgressSync } from '@/native/progress-sync';
 import { useProgressProfile } from '@/components/progress-profile';
+import { SpeechContent } from '@/components/speech-content';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
@@ -47,6 +48,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const [error, setError] = useState<'save' | 'audio' | null>(null);
   const [duration, setDuration] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [speechView, setSpeechView] = useState<'bubble' | 'list'>('bubble');
   const acting = useRef(false);
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -64,6 +66,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
           return;
         }
         const saved = context.load(stage);
+        setSpeechView(readSettings().speechView ?? 'bubble');
         const fresh = !saved || (saved.phase === 'complete' && !opened.current);
         const initial = !fresh && saved ? saved : createSession({ runId: randomUUID(), stage, phraseCount: lesson.phrases.length, ...readSettings() });
         const firstEntry = !opened.current;
@@ -109,7 +112,6 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     void initialize();
     return () => { active = false; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
   }, [stage, pack, lesson, profile.id, profile.suppressEntry]));
-  const phrase = state ? lesson.phrases[state.phrase] : null;
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = () => {
     engine.current?.pause();
@@ -155,7 +157,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
             <Icon name="graduationcap.fill" /><Label size={14} weight="700">Lv {Math.ceil(state.stage / 2)}</Label>
           </Pressable>
-          <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={`배속 ${state.rate}배, 변경`} onPress={openOptions}
+          <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={`재생 속도 ${state.rate}배, 변경`} onPress={openOptions}
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
             <Icon name="speedometer" /><Label size={14} weight="700">{state.rate}×</Label>
           </Pressable>
@@ -166,11 +168,9 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         </View>
         <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 16 }}>
           <Animated.View key={`${state.runId}:${state.phrase}:${state.phase === 'complete'}`} entering={CONTENT_ENTER}>
-          <Card style={{ gap: 22, paddingVertical: 26 }}>
-            {state.phase === 'complete' ? <><Label size={30} weight="800" color={c.heading}>잘 마쳤어요!</Label><Label muted>{state.phraseCount}개 문장을 내 목소리로 연습했어요.</Label></> : <>
-              <Label size={29} display color={c.heading}>{phrase?.text}</Label><Label size={18} muted>{phrase?.translation}</Label>
-            </>}
-          </Card>
+          {state.phase === 'complete'
+            ? <Card style={{ gap: 22, paddingVertical: 26 }}><Label size={30} weight="800" color={c.heading}>잘 마쳤어요!</Label><Label muted>{state.phraseCount}개 문장을 내 목소리로 연습했어요.</Label></Card>
+            : <SpeechContent phrases={lesson.phrases} active={state.phrase} view={speechView} />}
           </Animated.View>
         </View>
         <CycleTimeline key={`${state.runId}:${state.phrase}`} state={state} duration={duration} />

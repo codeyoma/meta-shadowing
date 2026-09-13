@@ -57,6 +57,14 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
       await stop()
       throw failure
     }
+    // Pre-singleton stores already have durable system fields and an engine
+    // cursor, so unchanged legacy heads may not be delivered again on upgrade.
+    // Recover their tag from those fields for the same fingerprint as a reinstall.
+    for var record in store.state.records.values where record.kind == "ProgressBackupHead"
+      && record.changeTag == nil && record.systemFields != nil {
+      record.changeTag = try Self.encode(record, asset: nil).recordChangeTag
+      try store.stage(record)
+    }
   }
   func save(_ record: BackupRecord, asset: URL?, store: ProgressStore) async throws -> BackupRecord {
     let ticket = epoch
@@ -78,7 +86,8 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     try await check(ticket)
     let engine = try engine(for: store)
     guard store.state.cleanup.contains(id), let record = store.state.records[id],
-          record.writer == store.state.writer, record.kind == "ProgressBackup",
+          record.kind == "ProgressBackup", store.state.pending?.backup.id != id,
+          store.state.records[ProgressTransport.sharedHead]?.current != nil,
           !store.state.records.values.contains(where: { $0.current?.id == id || $0.previous?.id == id })
     else { throw ProgressCloudError.conflict }
     let recordID = CKRecord.ID(recordName: id, zoneID: Self.zone)
@@ -116,7 +125,9 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     }
     if let deleting, context.options.scope.contains(deleting) {
       guard let store, store.state.cleanup.contains(deleting.recordName),
-            store.state.records[deleting.recordName]?.writer == store.state.writer,
+            store.state.records[deleting.recordName]?.kind == "ProgressBackup",
+            store.state.pending?.backup.id != deleting.recordName,
+            store.state.records[ProgressTransport.sharedHead]?.current != nil,
             !store.state.records.values.contains(where: {
               $0.current?.id == deleting.recordName || $0.previous?.id == deleting.recordName
             }) else { failure = .conflict; return nil }
@@ -130,9 +141,8 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
   }
   private func receive(_ event: CKSyncEngine.Event, engine: CKSyncEngine) async {
     guard engine === self.engine else { return }
-    if case .accountChange = event {
-      epoch = UUID(); authorized = false; outgoing = nil; deleting = nil
-      failure = .accountChanged
+    if case .accountChange(let change) = event {
+      await receiveAccountChange(change.changeType)
       return
     }
     let ticket = epoch
@@ -185,6 +195,23 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
       default: break
       }
     } catch { failure = Self.sanitize(error) }
+  }
+
+  func receiveAccountChange(_ change: CKSyncEngine.Event.AccountChange.ChangeType) async {
+    // A fresh engine reports sign-in even for the already-selected account.
+    // Reconfirm identity without invalidating the in-flight fetch or granting sends.
+    // Never clear an earlier failure: a signed-out/replaced engine stays retired.
+    if case .signIn = change {
+      let ticket = epoch
+      do { try await check(ticket); return }
+      catch {
+        epoch = UUID(); authorized = false; outgoing = nil; deleting = nil
+        failure = Self.sanitize(error)
+        return
+      }
+    }
+    epoch = UUID(); authorized = false; outgoing = nil; deleting = nil
+    failure = .accountChanged
   }
 
   /// Inbound CloudKit delivery boundary. The delegate verifies account/engine identity
@@ -248,6 +275,8 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
       guard let asset else { throw ProgressCloudError.corrupt }
       record["asset"] = CKAsset(fileURL: asset)
     } else {
+      record["retired"] = value.retired.map { NSNumber(value: $0) }
+      record["cleanupManifest"] = value.cleanupManifest as NSString?
       record["currentID"] = value.current?.id as NSString?
       record["currentHash"] = value.current?.hash as NSString?
       record["previousID"] = value.previous?.id as NSString?
@@ -264,7 +293,7 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     let coder = NSKeyedArchiver(requiringSecureCoding: true)
     record.encodeSystemFields(with: coder); coder.finishEncoding()
     var value = BackupRecord(id: record.recordID.recordName, kind: record.recordType, writer: writer,
-      revision: revision, createdAt: createdAt, systemFields: coder.encodedData)
+      revision: revision, createdAt: createdAt, systemFields: coder.encodedData, changeTag: record.recordChangeTag)
     if record.recordType == "ProgressBackup" {
       guard let hash = record["hash"] as? String, validHash(hash), let bytes = record["bytes"] as? Int,
             bytes > 0, bytes <= ProgressStore.maxBytes,
@@ -272,12 +301,26 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
       else { throw ProgressCloudError.corrupt }
       value.hash = hash; value.bytes = bytes
     } else if record.recordType == "ProgressBackupHead" {
-      guard value.id == "head-" + writer, let id = record["currentID"] as? String,
+      guard value.id == "head-" + writer || value.id == ProgressTransport.sharedHead else { throw ProgressCloudError.corrupt }
+      if let manifest = record["cleanupManifest"] {
+        guard value.id == ProgressTransport.sharedHead, let json = manifest as? String else { throw ProgressCloudError.corrupt }
+        _ = try CleanupManifest.decode(json)
+        value.cleanupManifest = json
+      }
+      if let retired = record["retired"] {
+        guard let flag = retired as? NSNumber, flag == 1, value.id != ProgressTransport.sharedHead,
+              record["currentID"] == nil, record["currentHash"] == nil,
+              record["previousID"] == nil, record["previousHash"] == nil else { throw ProgressCloudError.corrupt }
+        value.retired = true
+        return value
+      }
+      guard let id = record["currentID"] as? String,
             UUID(uuidString: id) != nil, let hash = record["currentHash"] as? String, validHash(hash)
       else { throw ProgressCloudError.corrupt }
       value.current = BackupReference(id: id, hash: hash)
       if record["previousID"] != nil || record["previousHash"] != nil {
-        guard let previous = record["previousID"] as? String, UUID(uuidString: previous) != nil,
+        guard value.id != ProgressTransport.sharedHead,
+              let previous = record["previousID"] as? String, UUID(uuidString: previous) != nil,
               previous != id, let hash = record["previousHash"] as? String, validHash(hash)
         else { throw ProgressCloudError.corrupt }
         value.previous = BackupReference(id: previous, hash: hash)
