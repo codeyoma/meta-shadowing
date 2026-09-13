@@ -1,15 +1,18 @@
-import { useSyncExternalStore } from 'react';
-import { View } from 'react-native';
-import { ActionButton, Card, Label, usePalette } from './ui';
+import { useRef, useSyncExternalStore } from 'react';
+import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Label } from './ui';
 import { getProgressSync } from '@/native/progress-sync';
+import { SettingsSection } from './settings-section';
+import { useSettingsColors } from './settings-row';
+import { enableAutomaticBackup } from '@/core/enable-backup';
 
 const errors: Record<string, string> = {
   'progress-cloud-unavailable': '이 기기에서는 iCloud 백업을 사용할 수 없어요. iCloud 설정과 앱 구성을 확인해 주세요.',
   'progress-cloud-offline': 'iCloud에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.',
   'progress-cloud-quota': 'iCloud 저장 공간이 부족해요. 공간을 확보한 뒤 다시 시도해 주세요.',
   'progress-cloud-permission': 'iCloud 접근이 허용되지 않았어요. 기기의 iCloud 설정을 확인해 주세요.',
-  'progress-cloud-conflict': '다른 백업과 충돌했어요. 이 기기의 기록은 유지됩니다. 나중에 다시 확인해 주세요.',
-  'progress-cloud-corrupt': '이 백업을 읽을 수 없어요. 다른 복구 시점을 선택해 주세요.',
+  'progress-cloud-conflict': '두 곳의 학습 기록이 모두 변경되었어요. 아래에서 사용할 기록을 선택해 주세요.',
+  'progress-cloud-corrupt': '이 백업을 읽을 수 없어요. 이 기기의 기록은 그대로 유지됩니다.',
   'progress-cloud-tooLarge': '학습 백업이 지원 용량을 넘었어요. 이 기기의 기록은 유지됩니다.',
   'progress-cloud-storage': '기록을 저장하지 못했어요. 기기 저장 공간을 확인한 뒤 다시 시도해 주세요.',
   'progress-cloud-accountChanged': 'iCloud 계정이 변경되었어요. 다시 확인해 주세요.',
@@ -18,31 +21,99 @@ const errors: Record<string, string> = {
   'local-profile-exists': '이 계정의 기록을 이미 사용 중이에요. 새 학습 기록을 보호하기 위해 다시 덮어쓰지 않아요.',
 };
 export function ICloudBackup() {
-  const c = usePalette();
+  const c = useSettingsColors();
   const sync = getProgressSync();
   const state = useSyncExternalStore(sync.subscribe, sync.getSnapshot);
-  return <Card>
-    <Label size={19} weight="700">iCloud 백업</Label>
-    <Label muted>{state.enabled ? (state.pending ? '이 기기에 저장됨 · 백업 대기 중' : 'iCloud 백업 사용 중') : '학습 기록은 이 기기에 저장됩니다. 백업은 선택해서 사용할 수 있어요.'}</Label>
-    {state.status === 'no-account' && <Label>기기의 설정에서 iCloud에 로그인한 뒤 다시 확인해 주세요.</Label>}
-    {state.status === 'unavailable' && <Label>{errors['progress-cloud-unavailable']}</Label>}
-    {state.status === 'unknown' && <Label>iCloud 계정을 확인하지 못했어요. 저장된 기록으로 계속 학습할 수 있어요.</Label>}
-    {state.error && <Label color={c.red}>{errors[state.error] ?? errors['progress-cloud-storage']}</Label>}
-    {state.busy && <Label muted>iCloud 백업 확인 중…</Label>}
-    {!state.enabled && state.ready && !state.busy && <>
-      {!state.hasProfile && state.backups.length > 0 && <Label muted>복구할 기록을 선택하세요. 이 기기의 기존 기록은 따로 보관됩니다.</Label>}
-      {!state.hasProfile && state.backups.map((backup, index) => <ActionButton key={backup.id} secondary
-        title={`백업 ${index + 1} 복구 · ${Number.isNaN(Date.parse(backup.createdAt)) ? '날짜 확인 불가' : new Date(backup.createdAt).toLocaleDateString('ko-KR')}`}
-        onPress={() => { void sync.restore(backup.id); }} />)}
-      {state.hasProfile ? <ActionButton title="이 기록의 백업 다시 켜기" onPress={() => { void sync.enable(false, state.generation); }} /> : state.backups.length === 0 && <>
-        <ActionButton title="이 기기의 기록을 포함해 백업 켜기" onPress={() => { void sync.enable(true, state.generation); }} />
-        <ActionButton title="기존 기록과 별도로 백업 시작" secondary onPress={() => { void sync.enable(false, state.generation); }} />
-      </>}
-    </>}
-    <View style={{ gap: 12 }}>
-      <ActionButton title="다시 확인 / 백업 재시도" secondary onPress={() => { void sync.retry(); }} />
-      {state.enabled && <ActionButton title="이 기기에서 백업 끄기" secondary onPress={() => sync.disable(state.generation)} />}
+  const acting = useRef(false);
+  function reportError() {
+    const latest = sync.getSnapshot();
+    Alert.alert('iCloud 백업', errors[latest.error ?? ''] ?? (latest.status === 'no-account'
+      ? '기기의 설정에서 iCloud에 로그인해 주세요.' : errors['progress-cloud-unavailable']));
+  }
+  function chooseRecords(enable: boolean, allowLocal = enable) {
+    const latest = sync.getSnapshot(), conflict = latest.conflict;
+    if (!conflict) { Alert.alert('iCloud 백업', '내려받을 백업이 없어요.'); return; }
+    const token = conflict.token;
+    const candidates = conflict.backups;
+    if (candidates.length !== 1 && !candidates.every(backup => backup.legacy)) {
+      Alert.alert('백업 확인 필요', '백업 상태를 확인하지 못했어요. 잠시 뒤 다시 내려받기를 눌러 주세요.'); return;
+    }
+    const cancel = () => sync.cancelDownload(conflict.token);
+    function confirm(choice: 'cloud' | 'local', backupID?: string) {
+      const cloud = choice === 'cloud';
+      Alert.alert(cloud ? 'iCloud 기록을 내려받을까요?' : '이 기기의 기록으로 백업할까요?',
+        (cloud ? '현재 기기 기록을 iCloud 기록으로 교체합니다. 두 기록은 합쳐지지 않아요.'
+          : 'iCloud에만 있는 기록은 새 백업에 포함되지 않아요. 두 기록은 합쳐지지 않습니다.')
+          + (enable && !latest.enabled ? '\n자동 백업도 켜집니다.' : ''), [
+          { text: '취소', style: 'cancel', onPress: cancel },
+          { text: cloud ? '내려받기' : '이 기기 기록 사용', style: 'destructive', onPress: () => {
+            void (async () => {
+              await sync.resolveConflict(choice, token, backupID, enable || latest.enabled);
+              const result = sync.getSnapshot();
+              if (result.generation !== latest.generation) return;
+              if (result.conflict) Alert.alert('기록이 변경되었어요', '최신 기록을 다시 확인한 뒤 내려받기를 눌러 주세요.');
+              else if (result.error) reportError();
+              else Alert.alert('iCloud 백업', cloud ? '기록을 내려받았어요.' : '이 기기의 기록을 백업했어요.');
+            })();
+          } },
+        ]);
+    }
+    if (!allowLocal && candidates.length === 1) { confirm('cloud'); return; }
+    Alert.alert('사용할 기록 선택', '기록은 자동으로 합쳐지지 않아요.', [
+      { text: '취소', style: 'cancel', onPress: cancel },
+      ...candidates.map(backup => ({ text: candidates.length === 1 ? 'iCloud 기록 사용' : `iCloud · ${new Date(backup.createdAt).toLocaleString('ko-KR')}`,
+        onPress: () => confirm('cloud', candidates.length === 1 ? undefined : backup.id) })),
+      ...(allowLocal ? [{ text: '이 기기 기록 사용', onPress: () => confirm('local', candidates.length > 1 ? candidates[0]!.id : undefined) }] : []),
+    ]);
+  }
+  async function run(enable: boolean) {
+    if (acting.current || sync.getSnapshot().busy) return;
+    acting.current = true;
+    try {
+      if (enable) {
+        await sync.refreshAccount(false);
+        const latest = sync.getSnapshot();
+        if (!latest.ready || latest.status !== 'available') { reportError(); return; }
+        if (latest.hasProfile || !latest.backups.length) {
+          await enableAutomaticBackup(sync, () => new Promise(resolve => {
+            Alert.alert('이 기기의 기록을 포함할까요?',
+              '현재 게스트 학습 기록과 설정을 iCloud에 가져올지 선택해 주세요. 별도로 시작해도 기존 게스트 기록은 이 기기에 보관됩니다.', [
+                { text: '취소', style: 'cancel', onPress: () => resolve(null) },
+                { text: '기존 기록과 별도로 시작', onPress: () => resolve(false) },
+                { text: '이 기기의 기록 포함', onPress: () => resolve(true) },
+              ], { cancelable: true, onDismiss: () => resolve(null) });
+          }));
+          if (sync.getSnapshot().conflict) chooseRecords(true);
+          else if (sync.getSnapshot().error) reportError();
+          return;
+        }
+      }
+      const hadConflict = !!sync.getSnapshot().conflict;
+      await sync.prepareDownload();
+      const latest = sync.getSnapshot();
+      if (!latest.ready || latest.status !== 'available' || (latest.error && !latest.conflict)) { reportError(); return; }
+      chooseRecords(enable, enable || (hadConflict && latest.enabled));
+    } finally { acting.current = false; }
+  }
+  return <View style={{ gap: 24 }}>
+    <View style={{ paddingHorizontal: 16, gap: 10 }}>
+      <Label size={15} color={c.secondary}>학습 기록과 설정을 내 iCloud에 자동으로 백업합니다. 다른 기기나 재설치한 앱에서 내려받아 이어서 학습할 수 있어요.</Label>
+      <Label size={13} color={c.secondary}>자동 백업을 꺼도 저장된 기록은 삭제되지 않아요. 아직 백업되지 않은 기록은 앱을 삭제하면 복구할 수 없어요.</Label>
+      {state.busy && <Label size={14} color={c.secondary}>iCloud 확인 중…</Label>}
+      {state.error && <Label size={14} color="#d70015">{state.conflict ? '사용할 기록을 확인해야 해요. 내려받기를 눌러 주세요.' : errors[state.error] ?? errors['progress-cloud-storage']}</Label>}
+      {state.cleanupPending && <Label size={14} color={c.secondary}>최신 백업은 저장됐지만 이전 백업 정리가 남아 있어요. 자동 백업을 켜고 연결을 유지해 주세요.</Label>}
     </View>
-    <Label size={13} muted>백업을 꺼도 기록은 삭제되지 않아요. 아직 전송되지 않은 기록은 앱을 삭제하면 복구할 수 없어요.</Label>
-  </Card>;
+    <SettingsSection paddingVertical={8}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 44 }}>
+        <View style={{ flex: 1 }}><Label color={c.text}>자동 백업</Label></View>
+        <Switch accessibilityLabel="자동 백업" value={state.enabled} disabled={state.busy} style={{ alignSelf: 'center' }}
+          onValueChange={value => { if (value) void run(true); else sync.disable(state.generation); }} trackColor={{ true: '#34c759' }} />
+      </View>
+      <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />
+      <Pressable accessibilityRole="button" accessibilityLabel="내려받기" accessibilityState={{ disabled: state.busy }}
+        disabled={state.busy} onPress={() => void run(false)} style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', opacity: pressed || state.busy ? 0.5 : 1 })}>
+        <Label color="#007aff" align="center">내려받기</Label>
+      </Pressable>
+    </SettingsSection>
+  </View>;
 }

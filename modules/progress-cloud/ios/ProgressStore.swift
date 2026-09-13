@@ -22,9 +22,13 @@ struct BackupRecord: Codable, Equatable, Sendable {
   var current: BackupReference?
   var previous: BackupReference?
   var systemFields: Data?
+  var changeTag: String?
+  var retired: Bool?
+  var cleanupManifest: String?
   func hasSamePayload(as other: Self) -> Bool {
     var lhs = self, rhs = other
     lhs.systemFields = nil; rhs.systemFields = nil
+    lhs.changeTag = nil; rhs.changeTag = nil
     return lhs == rhs
   }
 }
@@ -33,12 +37,58 @@ struct CloudBackup: Sendable {
   let id: String
   let createdAt: String
   let revision: Int
+  let token: String
+  let legacy: Bool
+  var cleanupPending = false
+  var pendingPublication: String?
+}
+
+/// Exact retirement authority travels with the committed head so reinstall or
+/// another installation can finish it. Changed legacy heads are never recaptured.
+struct CleanupManifest: Codable {
+  var heads: [BackupRecord]
+  var assets: [String]
+  private func validate() throws {
+    guard heads.count <= 256, assets.count <= 256 else { throw ProgressCloudError.tooLarge }
+    guard assets.allSatisfy({ UUID(uuidString: $0) != nil }),
+          heads.allSatisfy({
+            $0.kind == "ProgressBackupHead" && UUID(uuidString: $0.writer) != nil
+              && $0.id == "head-" + $0.writer && $0.retired != true
+              && $0.current != nil && $0.cleanupManifest == nil
+          }) else { throw ProgressCloudError.corrupt }
+  }
+  func encoded() throws -> String {
+    // A manifest must be readable before any conditional head publication.
+    try validate()
+    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+    let bytes = try encoder.encode(self)
+    guard bytes.count <= 262_144 else { throw ProgressCloudError.tooLarge }
+    return String(decoding: bytes, as: UTF8.self)
+  }
+  static func decode(_ value: String) throws -> Self {
+    guard value.utf8.count <= 262_144,
+          let manifest = try? JSONDecoder().decode(Self.self, from: Data(value.utf8)),
+          (try? manifest.validate()) != nil else { throw ProgressCloudError.corrupt }
+    return manifest
+  }
+}
+
+struct CloudPublication: Sendable {
+  let id: String
+  let createdAt: String
+  let revision: Int
+  let token: String
+  let legacy = false
+  let cleanupPending: Bool
 }
 
 struct PendingBackup: Codable {
   let backup: BackupRecord
   let head: BackupRecord
   var assetAcknowledged = false
+  var expectedBase: String?
+  var retirements: [BackupRecord]?
+  var superseded: [String]?
 }
 
 struct ProgressState: Codable {
@@ -47,6 +97,8 @@ struct ProgressState: Codable {
   var records: [String: BackupRecord] = [:]
   var cleanup: [String] = []
   var engine: Data?
+  var retirementHeads: [String: BackupRecord]?
+  var acknowledged: PendingBackup?
 }
 
 /// Atomic metadata and owned assets. No CloudKit temporary URLs survive here.

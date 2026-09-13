@@ -19,7 +19,11 @@ public final class ProgressCloudModule: Module {
       do {
         let transport = try await owner.active(scope)
         let values = try await transport.list(scope: scope)
-        return values.map { ["id": $0.id, "createdAt": $0.createdAt, "revision": $0.revision] }
+        return values.map { value in
+          var result: [String: Any] = ["id": value.id, "createdAt": value.createdAt, "revision": value.revision, "token": value.token, "legacy": value.legacy, "cleanupPending": value.cleanupPending]
+          if let pending = value.pendingPublication { result["pendingPublication"] = pending }
+          return result
+        }
       } catch { throw await CloudKitService.sanitize(error) }
     }
     AsyncFunction("read") { (scope: String, id: String) async throws -> String in
@@ -28,11 +32,18 @@ public final class ProgressCloudModule: Module {
         return try await transport.read(scope: scope, id: id)
       } catch { throw await CloudKitService.sanitize(error) }
     }
-    AsyncFunction("publish") { (scope: String, revision: Int, json: String) async throws -> [String: Int] in
+    AsyncFunction("publish") { (scope: String, revision: Int, json: String, base: String) async throws -> [String: Any] in
       do {
         let transport = try await owner.active(scope)
-        let acknowledged = try await transport.publish(scope: scope, revision: revision, json: json)
-        return ["revision": acknowledged]
+        let acknowledged = try await transport.publish(scope: scope, revision: revision, json: json, base: base)
+        return ["id": acknowledged.id, "createdAt": acknowledged.createdAt, "revision": acknowledged.revision,
+          "token": acknowledged.token, "legacy": acknowledged.legacy, "cleanupPending": acknowledged.cleanupPending]
+      } catch { throw await CloudKitService.sanitize(error) }
+    }
+    AsyncFunction("cleanup") { (scope: String, base: String, abandoned: String?) async throws -> Bool in
+      do {
+        let transport = try await owner.active(scope)
+        return try await transport.cleanupAdopted(scope: scope, base: base, abandoned: abandoned)
       } catch { throw await CloudKitService.sanitize(error) }
     }
     AsyncFunction("stop") { () async in await owner.stop() }

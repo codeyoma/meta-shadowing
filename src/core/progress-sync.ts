@@ -5,6 +5,7 @@ type Preference = 'settings' | 'selection';
 export class ProgressProfiles {
   private db: BackupDatabase;
   private stores = new Map<string, ProgressBackupStore>();
+  private guestPreferenceRevision = 0;
   constructor(private open: (id: string) => BackupDatabase, private random: () => string,
     private legacy: (key: Preference) => string | null = () => null,
     private saveLegacy: (key: Preference, value: string) => void = () => {}) {
@@ -12,6 +13,10 @@ export class ProgressProfiles {
     this.db.exec(`CREATE TABLE IF NOT EXISTS profiles(scope TEXT PRIMARY KEY, profile TEXT NOT NULL, enabled INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS active_profile(id INTEGER PRIMARY KEY CHECK(id=1), profile TEXT NOT NULL);
       INSERT OR IGNORE INTO active_profile VALUES(1,'guest');`);
+    const columns = this.db.all<{ name: string }>('PRAGMA table_info(profiles)');
+    if (!columns.some(column => column.name === 'base')) this.db.exec('ALTER TABLE profiles ADD COLUMN base TEXT');
+    if (!columns.some(column => column.name === 'cleanup')) this.db.exec('ALTER TABLE profiles ADD COLUMN cleanup INTEGER NOT NULL DEFAULT 0');
+    if (!columns.some(column => column.name === 'abandoned')) this.db.exec('ALTER TABLE profiles ADD COLUMN abandoned TEXT');
   }
   id(): string { return this.db.first<{ profile: string }>('SELECT profile FROM active_profile WHERE id=1')!.profile; }
   store(id: string): ProgressBackupStore {
@@ -20,20 +25,36 @@ export class ProgressProfiles {
     return store;
   }
   current(): ProgressBackupStore { return this.store(this.id()); }
-  account(scope: string) { return this.db.first<{ profile: string; enabled: number }>('SELECT profile,enabled FROM profiles WHERE scope=?', scope); }
+  account(scope: string) { return this.db.first<{ profile: string; enabled: number; base: string | null; cleanup: number; abandoned: string | null }>('SELECT profile,enabled,base,cleanup,abandoned FROM profiles WHERE scope=?', scope); }
+  cleaned(scope: string, pending: boolean) {
+    this.db.run('UPDATE profiles SET cleanup=?,abandoned=CASE WHEN ?=0 THEN NULL ELSE abandoned END WHERE scope=?', pending ? 1 : 0, pending ? 1 : 0, scope);
+  }
+  acknowledge(scope: string, base: string, cleanup: boolean) {
+    this.db.run('UPDATE profiles SET base=?,cleanup=? WHERE scope=?', base, cleanup ? 1 : 0, scope);
+  }
   create(): string { const id = this.random(); this.store(id); return id; }
-  select(id: string, scope?: string, enabled = true): void {
+  select(id: string, scope?: string, enabled = true, base?: string, cleanup = false, abandoned?: string): void {
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      if (scope) this.db.run('INSERT INTO profiles VALUES(?,?,?) ON CONFLICT(scope) DO UPDATE SET profile=excluded.profile,enabled=excluded.enabled', scope, id, enabled ? 1 : 0);
+      if (scope) {
+        this.db.run('INSERT INTO profiles(scope,profile,enabled) VALUES(?,?,?) ON CONFLICT(scope) DO UPDATE SET profile=excluded.profile,enabled=excluded.enabled', scope, id, enabled ? 1 : 0);
+        if (base !== undefined) this.db.run('UPDATE profiles SET base=?,cleanup=? WHERE scope=?', base, cleanup ? 1 : 0, scope);
+        if (abandoned !== undefined) this.db.run('UPDATE profiles SET abandoned=? WHERE scope=?', abandoned, scope);
+      }
       this.db.run('UPDATE active_profile SET profile=? WHERE id=1', id);
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   readValue(key: Preference, id = this.id()): string | null { return id === 'guest' ? this.legacy(key) : this.store(id).readValue(key); }
   saveValue(key: Preference, value: string, id = this.id()): void {
-    if (id === 'guest') this.saveLegacy(key, value); else this.store(id).saveValue(key, value);
+    if (id === 'guest') {
+      if (this.legacy(key) === value) return;
+      this.saveLegacy(key, value);
+      ++this.guestPreferenceRevision;
+    } else this.store(id).saveValue(key, value);
   }
+  // Consent is process-local; guest preferences live outside the journal DB.
+  preferenceRevision(): number { return this.id() === 'guest' ? this.guestPreferenceRevision : 0; }
   guestBackup(): string {
     const backup = JSON.parse(this.store('guest').exportBackup());
     backup.tables.preferences = (['settings', 'selection'] as const).flatMap(key => {
@@ -43,8 +64,10 @@ export class ProgressProfiles {
   }
 }
 
+export type SyncConflict = { token: string; profile: string; localRevision: number; generation: number; backups: CloudBackup[] };
 export type SyncSnapshot = { profile: string; generation: number; status: CloudAccount['status'];
-  hasProfile: boolean; enabled: boolean; ready: boolean; busy: boolean; pending: boolean; error: string | null; backups: CloudBackup[] };
+  hasProfile: boolean; enabled: boolean; ready: boolean; busy: boolean; pending: boolean; error: string | null; backups: CloudBackup[];
+  conflict: SyncConflict | null; cleanupPending: boolean };
 export class ProgressSync {
   private generation = 0;
   private scope: string | null = null;
@@ -57,9 +80,14 @@ export class ProgressSync {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private lastPublish = -Infinity;
   private candidates = new Map<string, string>();
+  private remote: CloudBackup[] = [];
+  private choiceSequence = 0;
+  private choiceBase: string | null = null;
+  private choiceCapture: ReturnType<ProgressSync['capture']> | null = null;
+  private downloadChoice: string | null = null;
   private snapshot: SyncSnapshot;
   constructor(readonly profiles: ProgressProfiles, private cloud: ProgressCloud, private now = () => Date.now()) {
-    this.snapshot = { profile: profiles.id(), generation: 0, status: 'unknown', hasProfile: false, enabled: false, ready: false, busy: false, pending: false, error: null, backups: [] };
+    this.snapshot = { profile: profiles.id(), generation: 0, status: 'unknown', hasProfile: false, enabled: false, ready: false, busy: false, pending: false, error: null, backups: [], conflict: null, cleanupPending: false };
   }
   getSnapshot = (): SyncSnapshot => this.snapshot;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -71,19 +99,156 @@ export class ProgressSync {
   private valid(generation: number) { return !this.disposed && generation === this.generation; }
   private fail(error: unknown) {
     const message = error instanceof Error ? error.message : '';
-    this.emit({ error: /^progress-cloud-(unavailable|accountChanged|offline|quota|permission|conflict|corrupt|tooLarge|storage|busy)$/.test(message) ? message : 'progress-cloud-storage', busy: false });
+    // Expo wraps Swift LocalizedError descriptions in an exception cause line.
+    // Expose only our exact terminal error code, never the native wrapper or paths.
+    const code = message.match(/(?:^|\n→ Caused by: )(progress-cloud-(?:unavailable|accountChanged|offline|quota|permission|conflict|corrupt|tooLarge|storage|busy))$/)?.[1];
+    this.emit({ error: code ?? 'progress-cloud-storage', busy: false });
     this.changed();
+  }
+  private async operationFailed(error: unknown, generation: number) {
+    if (!this.valid(generation)) return;
+    this.fail(error);
+    if (this.snapshot.error === 'progress-cloud-conflict' && this.scope) {
+      try {
+        const backups = await this.cloud.list(this.scope);
+        if (this.valid(generation)) { this.observe(backups); this.conflict(); }
+      } catch (next) { if (this.valid(generation)) this.fail(next); }
+    }
   }
   private switch(id: string, scope?: string, enabled = true) {
     if (id !== this.profiles.id()) this.guards.forEach(guard => guard());
     this.profiles.select(id, scope, enabled);
   }
-  async refreshAccount() {
+  private observe(backups: CloudBackup[]) {
+    this.remote = backups;
+    this.candidates = new Map(backups.map((backup, index) => [`${this.generation}:${index}`, backup.id]));
+    this.emit({ backups: backups.map((backup, index) => ({ ...backup, id: `${this.generation}:${index}` })),
+      cleanupPending: backups.some(backup => backup.cleanupPending) || !!(this.scope && this.profiles.account(this.scope)?.cleanup) });
+  }
+  private remoteBase(): string {
+    if (!this.remote.length) return '';
+    const token = this.remote[0]!.token;
+    if (typeof token !== 'string' || !token || this.remote.some(backup => backup.token !== token)) throw Error('progress-cloud-corrupt');
+    return token;
+  }
+  private conflict() {
+    this.choiceBase = this.remoteBase();
+    this.choiceCapture = this.capture();
+    this.emit({ conflict: { token: `${this.generation}:choice:${++this.choiceSequence}`, profile: this.profiles.id(),
+      localRevision: this.profiles.current().revision(), generation: this.generation, backups: this.snapshot.backups },
+    error: 'progress-cloud-conflict' });
+  }
+  private capture() { return { generation: this.generation, profile: this.profiles.id(), revision: this.profiles.current().revision(),
+    preferences: this.profiles.preferenceRevision() }; }
+  private unchanged(capture: ReturnType<ProgressSync['capture']>) {
+    return this.valid(capture.generation) && this.profiles.id() === capture.profile && this.profiles.current().revision() === capture.revision
+      && this.profiles.preferenceRevision() === capture.preferences;
+  }
+  private async install(backup: CloudBackup, capture: ReturnType<ProgressSync['capture']>, downloaded?: string, enabled = true) {
+    const scope = this.scope!;
+    const json = downloaded ?? await this.cloud.read(scope, backup.id);
+    if (!this.valid(capture.generation)) return false;
+    let canonical: string;
+    try { canonical = JSON.stringify(validateProgressBackup(json)); } catch { throw Error('progress-cloud-corrupt'); }
+    const latest = await this.cloud.list(scope);
+    if (!this.valid(capture.generation)) return false;
+    this.observe(latest);
+    if (this.remoteBase() !== backup.token || !latest.some(value => value.id === backup.id)) { this.conflict(); return false; }
+    if (!this.unchanged(capture)) { this.conflict(); return false; }
+    // A pause can synchronously checkpoint. Run it exactly once, then check again.
+    this.guards.forEach(guard => guard());
+    if (!this.unchanged(capture)) { this.conflict(); return false; }
+    const profile = this.profiles.create(), store = this.profiles.store(profile);
+    store.restoreBackup(canonical); store.acknowledge(store.revision());
+    // Native identity can refer to an older uploaded revision than the currently
+    // displaced SQLite data. Persist it in the same commit as profile activation.
+    const pending = latest[0]?.pendingPublication;
+    const abandoned = (pending !== backup.token ? pending : undefined) ?? this.profiles.account(scope)?.abandoned ?? undefined;
+    const cleanup = latest.some(value => value.cleanupPending) || !!abandoned;
+    this.profiles.select(profile, scope, enabled, backup.token, cleanup, abandoned);
+    this.emit({ enabled, hasProfile: true, conflict: null, error: null, cleanupPending: cleanup });
+    if (!backup.legacy && cleanup) await this.clean(backup.token, capture.generation);
+    return true;
+  }
+  private async clean(base: string, generation: number) {
+    const scope = this.scope!, profile = this.profiles.id();
+    const pending = await this.cloud.cleanup(scope, base, this.profiles.account(scope)?.abandoned ?? null);
+    if (!this.valid(generation) || this.profiles.id() !== profile) return;
+    this.profiles.cleaned(scope, pending);
+    this.remote = this.remote.map(backup => ({ ...backup, cleanupPending: pending }));
+    this.emit({ cleanupPending: pending, error: null });
+  }
+  private async publish(base: string, generation: number) {
+    const scope = this.scope!, profile = this.profiles.id(), store = this.profiles.current();
+    const revision = store.revision(), json = store.exportBackup();
+    this.lastPublish = this.now();
+    const result = await this.cloud.publish(scope, revision, json, base);
+    if (!this.valid(generation) || this.profiles.id() !== profile) return;
+    if (result.revision !== revision || !result.token || result.legacy) throw Error('progress-cloud-corrupt');
+    // Persist the server identity first. A crash before the revision ack is recovered
+    // by canonical equality; newer local changes retain their pending revision.
+    this.profiles.acknowledge(scope, result.token, result.cleanupPending);
+    store.acknowledge(revision);
+    this.observe([result]);
+    this.emit({ conflict: null, error: null, cleanupPending: result.cleanupPending });
+  }
+  private reconciled() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
+    this.emit({ error: null });
+  }
+  private async reconcile(generation: number) {
+    const capture = this.capture(), scope = this.scope!;
+    const backups = await this.cloud.list(scope);
+    if (!this.valid(generation)) return;
+    this.observe(backups);
+    const base = this.remoteBase(), local = this.profiles.account(scope)!;
+    const cleanup = backups.some(backup => backup.cleanupPending) || !!local.cleanup || !!local.abandoned;
+    const store = this.profiles.current();
+    if (this.profiles.id() !== capture.profile) return;
+    if (this.snapshot.conflict) { this.conflict(); return; }
+    if (local.base === base && !backups.some(backup => backup.legacy)) {
+      // Retire acknowledged assets even with new local edits, so a full native
+      // cache can recover before attempting the next publication.
+      if (cleanup) await this.clean(base, generation);
+      if (!this.valid(generation) || this.profiles.id() !== capture.profile) return;
+      if (store.pending()) await this.publish(base, generation);
+      else this.reconciled();
+      return;
+    }
+    if (!this.unchanged(capture)) { this.conflict(); return; }
+    if (!backups.length) {
+      if (local.base !== null && local.base !== '') { this.conflict(); return; }
+      this.profiles.acknowledge(scope, '', false);
+      if (store.pending()) await this.publish('', generation);
+      else this.reconciled();
+      return;
+    }
+    if (backups.length !== 1) { this.conflict(); return; }
+    const backup = backups[0]!;
+    const json = await this.cloud.read(scope, backup.id);
+    if (!this.valid(generation)) return;
+    let canonical: string;
+    try { canonical = JSON.stringify(validateProgressBackup(json)); } catch { throw Error('progress-cloud-corrupt'); }
+    if (!this.unchanged(capture)) { this.conflict(); return; }
+    if (store.exportBackup() === canonical) {
+      const abandoned = backup.pendingPublication !== base ? backup.pendingPublication : undefined;
+      this.profiles.select(this.profiles.id(), scope, true, base, cleanup || !!abandoned, abandoned);
+      store.acknowledge(capture.revision);
+      if (backup.legacy) await this.publish(base, generation);
+      else if (cleanup || abandoned) await this.clean(base, generation);
+      else this.reconciled();
+      return;
+    }
+    if (local.base === null || store.pending() || backup.legacy) { this.conflict(); return; }
+    await this.install(backup, capture, canonical);
+  }
+  async refreshAccount(reconcile = true) {
     const generation = ++this.generation;
     this.retryIdentity = false;
     this.scope = null; this.flight = null; this.candidates.clear();
     if (this.timer) clearTimeout(this.timer); this.timer = undefined;
-    this.emit({ ready: false, enabled: false, hasProfile: false, busy: true, backups: [], error: null });
+    this.emit({ ready: false, enabled: false, hasProfile: false, busy: true, backups: [], error: null, conflict: null, cleanupPending: false });
     // Native invalidation must not wait behind an older network operation.
     void this.cloud.stop().catch(() => {});
     try {
@@ -98,8 +263,9 @@ export class ProgressSync {
       const local = this.profiles.account(account.scope);
       this.switch(local?.profile ?? 'guest'); this.emit({ enabled: !!local?.enabled, hasProfile: !!local });
       const backups = await this.cloud.list(account.scope); if (!this.valid(generation)) return;
-      this.candidates = new Map(backups.map((backup, index) => [`${generation}:${index}`, backup.id]));
-      this.emit({ ready: true, busy: false, backups: backups.map((backup, index) => ({ ...backup, id: `${generation}:${index}` })) });
+      this.observe(backups);
+      this.emit({ ready: true, busy: false });
+      if (local?.enabled && reconcile) await this.retry();
       this.changed();
     } catch (error) { if (this.valid(generation)) this.fail(error); }
   }
@@ -112,39 +278,95 @@ export class ProgressSync {
       const id = previous?.profile ?? this.profiles.create();
       if (!previous && importGuest) this.profiles.store(id).restoreBackup(this.profiles.guestBackup());
       if (!previous && !this.profiles.store(id).hasData()) this.profiles.store(id).saveValue('settings', '{"mode":"manual","rate":1}');
-      this.switch(id, this.scope); this.emit({ enabled: true, hasProfile: true, error: null });
+      // Guest checkpoint was already captured before preparing the new profile.
+      this.profiles.select(id, this.scope); this.emit({ enabled: true, hasProfile: true, error: null });
       await this.retry();
     } catch (error) { if (this.valid(generation)) this.fail(error); }
   }
   async restore(id: string) {
     const generation = this.generation, scope = this.scope, remote = this.candidates.get(id);
-    if (!scope || !remote || !this.snapshot.ready || this.snapshot.busy) return;
+    if (!scope || !remote || !this.snapshot.ready || this.snapshot.busy || this.flight) return;
     // Recovery is first-use only; later local history must never be replaced.
     if (this.profiles.account(scope)) { this.emit({ error: 'local-profile-exists' }); return; }
+    const flight = {}; this.flight = flight;
     this.emit({ busy: true, error: null });
     try {
-      const json = await this.cloud.read(scope, remote); if (!this.valid(generation)) return;
-      try { validateProgressBackup(json); } catch { throw Error('progress-cloud-corrupt'); }
-      const profile = this.profiles.create(), store = this.profiles.store(profile);
-      store.restoreBackup(json); store.acknowledge(store.revision());
-      this.switch(profile, scope); this.emit({ enabled: true, hasProfile: true, busy: false });
-    } catch (error) { if (this.valid(generation)) this.fail(error); }
+      const backup = this.remote.find(backup => backup.id === remote)!;
+      if (await this.install(backup, this.capture())) {
+        if (backup.legacy) await this.publish(backup.token, generation);
+      }
+    } catch (error) { await this.operationFailed(error, generation); }
+    finally { if (this.valid(generation) && this.flight === flight) { this.flight = null; this.emit({ busy: false }); this.changed(); } }
   }
   async retry() {
     if (!this.snapshot.ready) { await this.refreshAccount(); return; }
     const generation = this.generation, scope = this.scope;
     if (!scope || !this.snapshot.enabled || this.flight || this.snapshot.busy) return;
-    const store = this.profiles.current(); if (!store.pending()) return;
-    const flight = {}; this.flight = flight; this.lastPublish = this.now();
+    const flight = {}; this.flight = flight;
+    this.emit({ busy: true });
     try {
-      // Synchronous capture: no JS mutation can run between revision and export.
-      const revision = store.revision(), json = store.exportBackup();
-      const result = await this.cloud.publish(scope, revision, json);
-      if (!this.valid(generation) || this.flight !== flight) return;
-      if (result.revision !== revision) throw Error('progress-cloud-corrupt');
-      store.acknowledge(revision); this.emit({ error: null });
-    } catch (error) { if (this.valid(generation) && this.flight === flight) this.fail(error); }
-    finally { if (this.valid(generation) && this.flight === flight) { this.flight = null; this.changed(); } }
+      await this.reconcile(generation);
+    } catch (error) { if (this.flight === flight) await this.operationFailed(error, generation); }
+    finally { if (this.valid(generation) && this.flight === flight) { this.flight = null; this.emit({ busy: false }); this.changed(); } }
+  }
+  /** Refresh candidates without uploading or replacing local data; UI asks for consent next. */
+  async prepareDownload() {
+    if (this.snapshot.busy || this.flight) return;
+    if (!this.snapshot.ready) await this.refreshAccount(false);
+    if (!this.scope || !this.snapshot.ready || this.snapshot.busy || this.flight) return;
+    const generation = this.generation, scope = this.scope, flight = {};
+    const hadConflict = !!this.snapshot.conflict;
+    this.flight = flight; this.emit({ busy: true, error: null });
+    try {
+      const backups = await this.cloud.list(scope);
+      if (!this.valid(generation)) return;
+      this.observe(backups);
+      if (backups.length) {
+        this.conflict();
+        this.downloadChoice = hadConflict ? null : this.snapshot.conflict!.token;
+      } else this.emit({ conflict: null });
+    } catch (error) { if (this.valid(generation)) this.fail(error); }
+    finally { if (this.valid(generation) && this.flight === flight) { this.flight = null; this.emit({ busy: false }); this.changed(); } }
+  }
+  cancelDownload(token: string) {
+    if (this.downloadChoice !== token || this.snapshot.conflict?.token !== token) return;
+    this.downloadChoice = null; this.choiceCapture = null; this.choiceBase = null;
+    this.emit({ conflict: null, error: null }); this.changed();
+  }
+  async resolveConflict(choice: 'cloud' | 'local', token: string, backupID?: string, restoreEnabled = true): Promise<void> {
+    const conflict = this.snapshot.conflict, scope = this.scope, generation = this.generation;
+    if (!scope || !conflict || conflict.token !== token || this.flight || this.snapshot.busy) return;
+    const base = this.choiceBase!, capture = this.choiceCapture!;
+    const selected = backupID ? this.candidates.get(backupID) : this.remote.length === 1 ? this.remote[0]!.id : undefined;
+    const flight = {}; this.flight = flight; this.emit({ busy: true });
+    try {
+      const backups = await this.cloud.list(scope);
+      if (!this.valid(generation)) return;
+      this.observe(backups);
+      if (!this.unchanged(capture) || this.remoteBase() !== base) { this.conflict(); return; }
+      if (choice === 'local') {
+        if (!this.profiles.account(scope)) {
+          // First recovery may conflict with a guest checkpoint. The explicit
+          // local choice imports guest history/preferences into an account profile;
+          // publishing must never acknowledge the independent guest store.
+          this.guards.forEach(guard => guard());
+          if (!this.unchanged(capture)) { this.conflict(); return; }
+          const profile = this.profiles.create();
+          this.profiles.store(profile).restoreBackup(this.profiles.guestBackup());
+          this.profiles.select(profile, scope, true, base);
+          this.emit({ enabled: true, hasProfile: true });
+        }
+        await this.publish(base, generation);
+      }
+      else {
+        const backup = backups.find(backup => backup.id === selected);
+        if (!backup) { this.conflict(); return; }
+        if (await this.install(backup, capture, undefined, restoreEnabled)) {
+          if (backup.legacy) await this.publish(base, generation);
+        }
+      }
+    } catch (error) { await this.operationFailed(error, generation); }
+    finally { if (this.valid(generation) && this.flight === flight) { this.flight = null; this.emit({ busy: false }); this.changed(); } }
   }
   disable(generation = this.generation) {
     if (!this.valid(generation)) return;
@@ -154,7 +376,7 @@ export class ProgressSync {
     ++this.generation; this.flight = null;
     this.retryIdentity = false;
     if (this.timer) clearTimeout(this.timer); this.timer = undefined;
-    void this.cloud.stop().catch(() => {}); this.emit({ enabled: false, busy: false, backups: [], error: null });
+    void this.cloud.stop().catch(() => {}); this.emit({ enabled: false, busy: false, backups: [], error: null, conflict: null });
   }
   changed() {
     if (this.disposed) return;

@@ -1,4 +1,9 @@
-export type Settings = { mode: 'manual'; rate: number };
+export type Settings = { mode: 'manual'; rate: number; speechView?: 'bubble' | 'list'; groupSize?: 2 | 3 | 4;
+  crazyWpm?: [number, number, number, number] };
+export const defaultCrazyWpm: [number, number, number, number] = [150, 200, 250, 300];
+export function isSpeakingWpm(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 999;
+}
 export function isPlaybackRate(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0.25 && value <= 3;
 }
@@ -6,5 +11,18 @@ export function decodeSettings(json: string | null): Settings {
   if (json === null) return { mode: 'manual', rate: 1 };
   const value = JSON.parse(json);
   if (!value || !['manual', 'auto'].includes(value.mode) || !isPlaybackRate(value.rate)) throw Error('Invalid settings.');
-  return { mode: 'manual', rate: value.rate };
+  const result: Settings = { mode: 'manual', rate: value.rate };
+  if ('speechView' in value) {
+    if (!['bubble', 'list'].includes(value.speechView)) throw Error('Invalid speech view.');
+    result.speechView = value.speechView;
+  }
+  if ('groupSize' in value) {
+    if (![2, 3, 4].includes(value.groupSize)) throw Error('Invalid group size.');
+    result.groupSize = value.groupSize;
+  }
+  if ('crazyWpm' in value) {
+    if (!Array.isArray(value.crazyWpm) || value.crazyWpm.length !== 4 || !value.crazyWpm.every(isSpeakingWpm)) throw Error('Invalid speaking speed.');
+    result.crazyWpm = [...value.crazyWpm] as Settings['crazyWpm'];
+  }
+  return result;
 }
