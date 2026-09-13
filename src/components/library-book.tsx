@@ -7,8 +7,13 @@ import { useLibrary } from './library-context';
 import { useBookRecords } from './use-book-records';
 import { BookCard } from './book-card';
 import { ProgressTrack } from './ui';
+import { HostedLibraryBook } from './hosted-library-book';
 
 export function LibraryBook({ book }: { book: typeof books[number] }) {
+  return book.delivery === 'appleHosted' ? <HostedLibraryBook book={book} /> : <BundledLibraryBook book={book} />;
+}
+
+function BundledLibraryBook({ book }: { book: Extract<typeof books[number], { delivery: 'bundled' }> }) {
   const { select } = useLibrary();
   const { overview } = useBookRecords(book);
   const [ready, setReady] = useState(false);

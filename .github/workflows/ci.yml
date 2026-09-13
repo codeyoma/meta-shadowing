@@ -68,17 +68,19 @@ jobs:
           xcodebuild -version
           xcodegen generate --spec tests/storekit/project.yml
           xcodegen generate --spec tests/cloudkit/project.yml
-      - name: Test real StoreKit and CloudKit boundaries on iOS Simulator
+          xcodegen generate --spec tests/delivery/project.yml
+      - name: Test native service and installation boundaries on iOS Simulator
         run: |
           ci_simulator=$(xcrun simctl list devices available --json | jq -r --arg runtime "$IOS_TEST_RUNTIME" '[.devices[$runtime][]? | select(.isAvailable and (.name | startswith("iPhone")))][0].udid // empty')
           test -n "$ci_simulator"
           mkdir -p "$RUNNER_TEMP/native-results"
           xcodebuild test -project tests/storekit/PackageStoreTests.xcodeproj -scheme PackageStoreTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/storekit.xcresult" -quiet
           xcodebuild test -project tests/cloudkit/ProgressCloudTests.xcodeproj -scheme ProgressCloudTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/cloudkit.xcresult" -quiet
+          xcodebuild test -project tests/delivery/PackageDeliveryTests.xcodeproj -scheme PackageDeliveryTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/delivery.xcresult" -quiet
       - name: Report fixture test results without account or device metadata
         if: always()
         run: |
-          for ci_suite in storekit cloudkit; do
+          for ci_suite in storekit cloudkit delivery; do
             ci_result="$RUNNER_TEMP/native-results/$ci_suite.xcresult"
             if [ -d "$ci_result" ]; then
               xcrun xcresulttool get test-results summary --path "$ci_result" | jq '{result, totalTestCount, passedTests, failedTests, testFailures}'
@@ -91,6 +93,9 @@ jobs:
     timeout-minutes: 45
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      # Fictional identifiers only: compile extension wiring without signing or delivery.
+      APPLE_ASSET_APP_GROUP: group.example.assetfixture
+      APPLE_SAMPLE_ASSET_PACK_ID: controlled-sample-fixture
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

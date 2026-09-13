@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run test && npm run typecheck",
     "bundle:ios": "expo export --platform ios",
-    "prepare:audio": "node scripts/prepare-test-audio.mjs"
+    "prepare:audio": "node scripts/prepare-test-audio.mjs",
+    "package:apple-sample": "node scripts/package-apple-sample.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",

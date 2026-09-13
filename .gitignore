@@ -6,8 +6,10 @@ ios/
 android/
 !modules/package-store/ios/
 !modules/progress-cloud/ios/
+!modules/package-delivery/ios/
 tests/storekit/*.xcodeproj/
 tests/cloudkit/*.xcodeproj/
+tests/delivery/*.xcodeproj/
 .DS_Store
 *.log
 *.tsbuildinfo

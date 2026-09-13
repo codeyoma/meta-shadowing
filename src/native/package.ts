@@ -4,8 +4,9 @@ import { Directory, File, Paths } from 'expo-file-system';
 import manifest from '../../assets/sample/manifest.json';
 import { installPackage, verifyPackage, type PackageIO } from '../core/package';
 import { packageKeyOf, type LearningPackage } from '../core/learning-context';
+import { hostedSample, hostedStatus } from './hosted-package';
 
-export type BundledPackage = LearningPackage & { modules: Readonly<Record<string, number>> };
+export type BundledPackage = LearningPackage & { delivery: 'bundled'; modules: Readonly<Record<string, number>> };
 const modules: Record<string, number> = {
   'audio/phrase-01.m4a': require('../../assets/sample/audio/phrase-01.m4a'),
   'audio/phrase-02.m4a': require('../../assets/sample/audio/phrase-02.m4a'),
@@ -20,7 +21,7 @@ const modules: Record<string, number> = {
   'audio/phrase-11.m4a': require('../../assets/sample/audio/phrase-11.m4a'),
   'audio/phrase-12.m4a': require('../../assets/sample/audio/phrase-12.m4a'),
 };
-export const samplePackage: BundledPackage = { manifest, language: 'english', modules };
+export const samplePackage: BundledPackage = { manifest, language: 'english', modules, delivery: 'bundled' };
 const directory = (pack: LearningPackage) => new Directory(Paths.document, 'lesson-packages', packageKeyOf(pack));
 const marker = (pack: LearningPackage) => new File(directory(pack), 'ready');
 function packageIO(pack: BundledPackage): PackageIO { return {
@@ -53,8 +54,10 @@ export function installBundledPackage(pack: BundledPackage, onProgress: (done: n
     installPackage(pack.manifest, packageIO(pack), onProgress).finally(() => { installations.delete(key); }));
   return installations.get(key)!;
 }
-export async function isInstalled(pack: BundledPackage): Promise<boolean> {
-  return marker(pack).exists && await verifyPackage(pack.manifest, packageIO(pack));
+export async function isInstalled(pack: LearningPackage): Promise<boolean> {
+  if (packageKeyOf(pack) === packageKeyOf(hostedSample)) return (await hostedStatus()).phase === 'ready';
+  if (!('modules' in pack)) return false;
+  return marker(pack).exists && await verifyPackage(pack.manifest, packageIO(pack as BundledPackage));
 }
 export function audioUri(pack: LearningPackage, phrase: number): string {
   const item = pack.manifest.phrases[phrase];
