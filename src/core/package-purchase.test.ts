@@ -2,17 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { purchasePresentation, restorePresentation } from './package-purchase';
 
-test('store stays empty without a valid offer, including loading and catalog failures', () => {
+test('unavailable and loading products remain discoverable without enabling purchase', () => {
   const base = { revision: 1, busy: false, ownership: 'notOwned', outcome: 'none',
     entitlementIssue: 'none', catalogIssue: 'none' } as const;
   const product = { id: 'test.book', title: 'Book', price: '$29.00' };
   for (const value of [base, { ...base, busy: true },
     { ...base, catalogIssue: 'unavailable' as const }, { ...base, catalogIssue: 'failed' as const },
     { ...base, product, catalogIssue: 'failed' as const },
-    { ...base, product, catalogIssue: 'unavailable' as const },
-    { ...base, product, ownership: 'owned' as const }]) {
-    assert.equal(purchasePresentation(value).showInStore, false);
+    { ...base, product, catalogIssue: 'unavailable' as const }]) {
+    const view = purchasePresentation(value);
+    assert.equal(view.showInStore, true);
+    assert.equal(view.canPurchase, false);
   }
+  assert.equal(purchasePresentation({ ...base, product, ownership: 'owned' }).showInStore, false);
 });
 
 test('a real store offer remains visible during purchase and pending approval', () => {

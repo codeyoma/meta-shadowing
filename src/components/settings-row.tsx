@@ -1,14 +1,16 @@
-import { Pressable, StyleSheet, View, useColorScheme } from 'react-native';
+import { PlatformColor, Pressable, StyleSheet, View, useColorScheme } from 'react-native';
 import type { ComponentProps } from 'react';
 import { Icon, Label } from './ui';
 import { palettes } from './theme';
 
 export function useSettingsColors() {
   const dark = useColorScheme() === 'dark';
+  const palette = palettes[dark ? 'dark' : 'light'];
   return {
-    background: dark ? palettes.dark.background : '#f2f2f7',
-    group: dark ? '#1c1c1e' : '#ffffff',
-    pressed: dark ? '#3a3a3c' : '#e5e5ea',
+    background: dark ? palette.background : '#f2f3f5',
+    sheet: dark ? palette.background : '#f2f3f5',
+    group: dark ? PlatformColor('secondarySystemGroupedBackground') : '#ffffff',
+    pressed: PlatformColor('tertiarySystemFill'),
     text: dark ? '#ffffff' : '#000000',
     secondary: dark ? '#98989d' : '#8e8e93',
     separator: dark ? '#38383a' : '#e5e5ea',

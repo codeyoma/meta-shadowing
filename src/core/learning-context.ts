@@ -34,7 +34,7 @@ export class LearningContext {
   }
   save(state: Session) {
     if (state.phraseCount !== this.pack.manifest.phrases.length) throw Error('Incompatible package checkpoint.');
-    this.journal.save(this.packageKey, state, { book: this.pack.manifest.id, language: this.pack.language });
+    return this.journal.save(this.packageKey, state, { book: this.pack.manifest.id, language: this.pack.language });
   }
   completions(stage: 1 | 2) { return this.journal.completions(this.packageKey, stage); }
 }

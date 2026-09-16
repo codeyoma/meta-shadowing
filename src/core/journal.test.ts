@@ -9,6 +9,7 @@ import { createLearningFeedback } from './learning-feedback';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MAX_XP } from './levels';
 
 function open(db: DatabaseSync) {
   return new Journal({
@@ -17,6 +18,48 @@ function open(db: DatabaseSync) {
     first: <T>(sql: string, ...args: (string | number)[]) => db.prepare(sql).get(...args) as T | null,
   });
 }
+
+test('save reports only newly committed XP, including the two optional cycles', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const journal = open(db);
+    const identity = { book: 'sample', language: 'english' };
+    let state = createSession({ runId: 'xp-receipt', stage: 1, phraseCount: 1, mode: 'manual', rate: 1 });
+    assert.equal(journal.save('sample-v1', state, identity), 0);
+    for (let cycle = 0; cycle < 5; cycle++) {
+      state = transition(state, { type: 'resume' });
+      assert.equal(journal.save('sample-v1', state, identity), 0);
+      state = transition(state, { type: 'audio-ended', durationSeconds: 1 });
+      assert.equal(journal.save('sample-v1', state, identity), 0);
+      state = transition(state, { type: cycle === 2 ? 'repeat' : cycle === 4 ? 'next' : 'confirm' });
+      assert.equal(journal.save('sample-v1', state, identity), 1);
+      assert.equal(journal.save('sample-v1', state, identity), 0);
+    }
+    assert.equal(journal.progress.summary('english').xp, 5);
+  } finally { db.close(); }
+});
+
+test('failed XP writes return no receipt; retry credits once and capped totals advertise zero gain', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const journal = open(db), identity = { book: 'sample', language: 'english' };
+    const speaking = { ...createSession({ runId: 'receipt-retry', stage: 1, phraseCount: 1, mode: 'manual', rate: 1 }),
+      phase: 'speaking' as const, running: true };
+    journal.save('sample-v1', speaking, identity);
+    const confirmed = transition(speaking, { type: 'confirm' });
+    db.exec("CREATE TRIGGER deny_receipt BEFORE UPDATE ON checkpoints BEGIN SELECT RAISE(ABORT, 'disk test'); END;");
+    assert.throws(() => journal.save('sample-v1', confirmed, identity));
+    assert.equal(journal.progress.summary('english').xp, 0);
+    db.exec('DROP TRIGGER deny_receipt');
+    assert.equal(journal.save('sample-v1', confirmed, identity), 1);
+    assert.equal(journal.save('sample-v1', confirmed, identity), 0);
+    db.prepare('UPDATE cycle_credits SET credited=?').run(MAX_XP);
+    const another = { ...speaking, runId: 'above-cap' };
+    journal.save('sample-v1', another, identity);
+    assert.equal(journal.save('sample-v1', transition(another, { type: 'confirm' }), identity), 0);
+    assert.equal(journal.progress.summary('english').xp, MAX_XP);
+  } finally { db.close(); }
+});
 
 test('SQLite persists unfinished audio and preserves unique stage completion history', () => {
   const db = new DatabaseSync(':memory:');

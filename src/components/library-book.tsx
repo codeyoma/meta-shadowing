@@ -1,11 +1,10 @@
 import { useCallback, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { books } from '@/native/catalog';
 import { installBundledPackage, isInstalled } from '@/native/package';
 import { useLibrary } from './library-context';
 import { useBookRecords } from './use-book-records';
-import { ProgressTrack } from './ui';
 import { HostedLibraryBook } from './hosted-library-book';
 import { OwnedLibraryBookCard } from './owned-library-book-card';
 import { usePackageMaterials } from './use-package-materials';
@@ -40,15 +39,11 @@ function BundledLibraryBook({ book, editing }: {
     finally { setProgress(null); }
   }
   const busy = checking || materials.reading || materials.removing || progress !== null;
-  return <View style={{ gap: 10 }}>
-    <OwnedLibraryBookCard title={book.title} sentences={book.sentences} chapters={book.chapters}
+  return <OwnedLibraryBookCard title={book.title} sentences={book.sentences} chapters={book.chapters}
       completed={overview?.completed ?? null} editing={editing} installed={ready} busy={busy}
-      busyLabel={materials.removing ? '삭제 중…' : checking || materials.reading ? undefined
-        : progress !== null ? '설치 중 ' + progress + ' / ' + book.sentences : undefined}
-      storage={materials.storage} storageFailed={materials.readFailed} cacheRetry={materials.cacheRetry} hosted={false}
+      download={progress === null ? null : { progress: progress / Math.max(1, book.sentences), label: '설치 중…', canCancel: false }}
+      storage={materials.storage} storageFailed={materials.readFailed}
       onRetryStorage={() => { void materials.refresh(); }}
       onStudy={() => { if (select({ language: book.language, book: book.id, packageKey: book.packageKey })) router.navigate('/lesson'); }}
       onDownload={() => { void install(); }} onRemove={() => { void materials.remove(); }} />
-    {progress !== null && <ProgressTrack value={progress} total={book.sentences} label="레슨 설치 진행" blue />}
-  </View>;
 }

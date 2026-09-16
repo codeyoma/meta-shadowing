@@ -98,6 +98,31 @@ These are local results, not sandbox purchase, signed-device, upload or TestFlig
 acceptance. The configuration review finding was fixed; a non-blocking suggestion
 to use a native enum for delivery phases remains optional.
 
+## Follow-up verification (2026-09-16)
+
+The original sample implementation is integrated through PR #56. Settings/player
+integration tracked in #54 was merged through PR #55 with all four required CI
+checks passing; #54 is complete independently of this ticket's hosted acceptance.
+
+The follow-up adds one native-progress/cancel footer, neutral download/recheck
+actions, settings drawers and light-mode surfaces, aligned header controls, curved
+stage connectors, tap-position XP feedback, and cycle-specific native haptics.
+The separate [free DUO internal test](free-duo-testing.md) does not grant a paid
+entitlement or satisfy #47's purchase/download acceptance.
+
+Fresh publication checks: 260 core tests, 6 build-settings tests, 3 preparation
+tests and strict TypeScript passed; the iOS JavaScript/Hermes export passed.
+The native delivery suite passed 21 tests with the optional private fixture
+configured (zero failures/skips), including validation and local decoding of all
+560 prepared files. Without that private fixture, its one content-specific test
+is intentionally skipped; no private content is required by public CI.
+Read-only review found no Critical or Important code findings.
+
+Keep #46 open: no actual Apple-hosted TestFlight download or physical-iPhone
+offline cold-launch/playback is established by these tests. Physical haptic feel,
+accessibility and device audio interactions also remain unverified. No asset/app
+upload or public release is included in this publication.
+
 ## References
 
 - [Download Apple-hosted asset packs](https://developer.apple.com/documentation/backgroundassets/downloading-apple-hosted-asset-packs)

@@ -67,13 +67,13 @@ actor PackageDownload {
   }
 
   func storage(_ package: DeliveryPackage) throws -> MaterialStorage {
-    guard package.key == LibraryMaterial.hosted else { throw DeliveryError.invalidPackage }
+    guard package.key == LibraryMaterial.hosted || package.key == LibraryMaterial.freeDuo else { throw DeliveryError.invalidPackage }
     return try MaterialStorage(bytes: installation.materialBytes(package.key),
       installed: !removing && installation.isInstalled(package), busy: running != nil || removing)
   }
 
   func remove(_ package: DeliveryPackage) async throws -> Bool {
-    guard package.key == LibraryMaterial.hosted else { throw DeliveryError.invalidPackage }
+    guard package.key == LibraryMaterial.hosted || package.key == LibraryMaterial.freeDuo else { throw DeliveryError.invalidPackage }
     guard running == nil && !removing else { throw DeliveryError.busy }
     removing = true
     defer { removing = false }

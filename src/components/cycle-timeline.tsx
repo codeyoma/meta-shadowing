@@ -95,7 +95,7 @@ export function CycleTimeline({ state, duration, animate = true }: { state: Sess
     if (model.count > previousCount.current && contentWidth > width) scroll.current?.scrollToEnd({ animated: !reduced });
     previousCount.current = model.count;
   }, [model.count, contentWidth, width, reduced]);
-  return <View onLayout={event => setWidth(event.nativeEvent.layout.width)} style={{ width: '100%', minHeight: SIZE, marginVertical: 8 }}>
+  return <View onLayout={event => setWidth(event.nativeEvent.layout.width)} style={{ width: '100%', minHeight: SIZE }}>
     <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ width: contentWidth, height: SIZE }}>
       <View pointerEvents="none" style={{ position: 'absolute', left: SIZE / 2, right: SIZE / 2, top: SIZE / 2 - 2, height: 4, backgroundColor: c.line }} />
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: SIZE / 2, top: SIZE / 2 - 2,

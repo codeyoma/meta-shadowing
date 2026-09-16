@@ -9,6 +9,13 @@ export type DiagnosticStatus = DeliveryStatus & {
   observedProgress: number;
 };
 interface PackageDelivery {
+  readonly freeDuoManifest?: string | null;
+  freeDuoStatus(): Promise<DeliveryStatus>;
+  freeDuoStart(): Promise<void>;
+  freeDuoCancel(): Promise<void>;
+  freeDuoStorage(): Promise<{ bytes: number; installed: boolean; busy: boolean }>;
+  freeDuoRemove(): Promise<{ cacheCleared: boolean }>;
+  readonly animationPreviewEnabled: boolean;
   readonly diagnosticsEnabled: boolean;
   diagnosticStatus(): Promise<DiagnosticStatus>;
   diagnosticStart(autoCancel: boolean): Promise<void>;
@@ -25,6 +32,13 @@ interface PackageDelivery {
 }
 const unavailable = async (): Promise<never> => { throw new Error('package-delivery-unavailable'); };
 const delivery: PackageDelivery = requireOptionalNativeModule<PackageDelivery>('PackageDelivery') ?? {
+  freeDuoManifest: null,
+  freeDuoStatus: unavailable,
+  freeDuoStart: unavailable,
+  freeDuoCancel: unavailable,
+  freeDuoStorage: unavailable,
+  freeDuoRemove: unavailable,
+  animationPreviewEnabled: false,
   diagnosticsEnabled: false,
   diagnosticStatus: async () => ({ phase: 'unavailable', progress: 0, outcome: 'not-run', observedProgress: 0 }),
   diagnosticStart: unavailable,
@@ -42,3 +56,5 @@ const delivery: PackageDelivery = requireOptionalNativeModule<PackageDelivery>('
   removeBundledMaterials: unavailable,
 };
 export default delivery;
+// Older binaries and unavailable modules must not enable developer routes.
+export const animationPreviewEnabled = delivery.animationPreviewEnabled === true;

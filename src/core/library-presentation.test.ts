@@ -1,8 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { StoreSnapshot } from '../../modules/package-store/src/PackageStore.types';
-import { canRetryStorageRead, formatMaterialBytes, materialActions, paidLibraryEntry,
-  refreshHostedMaterial, sampleLibraryEntry } from './library-presentation';
+import { canRetryStorageRead, formatMaterialBytes, hasLocalMaterials, hostedDownloadPresentation, materialActions, materialCardAction, paidLibraryEntry,
+  refreshHostedMaterial, sampleLibraryEntry, minimumBookXp } from './library-presentation';
+
+test('minimum book XP covers 16 stages with three runs of three cycles, without optional repeats', () => {
+  assert.equal(minimumBookXp(12), 1728);
+  assert.equal(minimumBookXp(500), 72000);
+  assert.equal(minimumBookXp(1), 144);
+});
+
+test('unknown or invalid sentence counts do not advertise fabricated XP', () => {
+  for (const count of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER]) {
+    assert.equal(minimumBookXp(count), null);
+  }
+});
 
 const snapshot = (values: Partial<StoreSnapshot> = {}): StoreSnapshot => ({
   revision: 1, busy: false, ownership: 'notOwned', outcome: 'none',
@@ -72,9 +84,23 @@ test('the single primary action follows installation while busy and read failure
   }
 });
 
-test('incomplete Apple cache cleanup stays retryable after the local copy is gone', () => {
-  assert.deepEqual(materialActions({ installed: false, busy: false, editing: true, cacheRetry: true }),
-    { canStudy: false, canDownload: false, canRemove: true, downloadState: 'download', primaryAction: 'download' });
+test('only local materials can enable the edit removal control', () => {
+  assert.equal(hasLocalMaterials({ installed: false, bytes: 0 }), false);
+  assert.equal(hasLocalMaterials({ installed: false }), false);
+  assert.equal(hasLocalMaterials({ installed: true }), true);
+  assert.equal(hasLocalMaterials({ installed: false, bytes: 1 }), true);
+});
+
+test('the card keeps one action slot including absent material and storage failures', () => {
+  for (const installed of [false, true]) {
+    assert.equal(materialCardAction({ installed, editing: true, readFailed: false }), 'remove');
+    assert.equal(materialActions({ installed, editing: true, busy: false, bytes: 0 }).canRemove, installed);
+    for (const editing of [false, true]) {
+      assert.equal(materialCardAction({ installed, editing, readFailed: true }), 'retry');
+    }
+  }
+  assert.equal(materialCardAction({ installed: true, editing: false, readFailed: false }), 'study');
+  assert.equal(materialCardAction({ installed: false, editing: false, readFailed: false }), 'download');
 });
 
 test('hosted download completion refreshes missing delivery and storage into one ready view', async () => {
@@ -107,11 +133,9 @@ test('damaged and partial measured material can be deleted without becoming play
   }
 });
 
-test('absent hosted material retains safe cache cleanup after failed purge and fresh UI initialization', () => {
-  const absent = { installed: false, busy: false, editing: true, bytes: 0, hosted: true };
-  assert.equal(materialActions({ ...absent, cacheRetry: true }).canRemove, true);
-  assert.equal(materialActions({ ...absent, cacheRetry: false }).canRemove, true);
-  assert.equal(materialActions({ ...absent, hosted: false }).canRemove, false);
+test('absent material never exposes a standalone Apple cache cleanup action', () => {
+  const absent = { installed: false, busy: false, editing: true, bytes: 0 };
+  assert.equal(materialActions(absent).canRemove, false);
   assert.equal(materialActions({ ...absent, busy: true }).canRemove, false);
   assert.equal(materialActions({ ...absent, readFailed: true }).canRemove, false);
   assert.equal(materialActions({ ...absent, bytes: undefined }).canRemove, false);
@@ -121,4 +145,26 @@ test('absent hosted material retains safe cache cleanup after failed purge and f
   const failed = materialActions({ ...absent, editing: false, readFailed: true });
   assert.equal(failed.canDownload, false);
   assert.equal(failed.canStudy, false);
+});
+
+test('download presentation shows actual progress and permits cancellation only during transfer', () => {
+  assert.deepEqual(hostedDownloadPresentation({ phase: 'downloading', progress: 0.378 }),
+    { progress: 0.378, label: '37% 다운로드 중', canCancel: true });
+  assert.deepEqual(hostedDownloadPresentation({ phase: 'installing', progress: 1 }),
+    { progress: 1, label: '검증 중…', canCancel: false });
+  assert.deepEqual(hostedDownloadPresentation({ phase: 'cancelling', progress: 0.37 }),
+    { progress: 0.37, label: '취소 중…', canCancel: false });
+  for (const phase of ['idle', 'ready', 'cancelled', 'failed', 'unavailable'] as const) {
+    assert.equal(hostedDownloadPresentation({ phase, progress: 0 }), null);
+  }
+  assert.equal(hostedDownloadPresentation(null), null);
+});
+
+test('download progress is bounded and never displays non-finite percentages', () => {
+  for (const progress of [NaN, Infinity, -1]) {
+    assert.deepEqual(hostedDownloadPresentation({ phase: 'downloading', progress }),
+      { progress: 0, label: '0% 다운로드 중', canCancel: true });
+  }
+  assert.deepEqual(hostedDownloadPresentation({ phase: 'downloading', progress: 2 }),
+    { progress: 1, label: '100% 다운로드 중', canCancel: true });
 });

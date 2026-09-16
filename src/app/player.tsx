@@ -17,7 +17,7 @@ import { LearningContext } from '@/core/learning-context';
 import { playableStage } from '@/core/catalog';
 import { canOpenStage } from '@/core/stage-overview';
 import { CycleTimeline } from '@/components/cycle-timeline';
-import { PlayerControls } from '@/components/player-controls';
+import { PlayerControls, type ControlPressPoint } from '@/components/player-controls';
 import { canOfferRepeat, mainPlayerAction } from '@/core/player-presentation';
 import { methodNames } from '@/components/method-label';
 import { PlayerHeaderProgress } from '@/components/player-header-progress';
@@ -26,7 +26,9 @@ import { useProgressProfile } from '@/components/progress-profile';
 import { SpeechContent } from '@/components/speech-content';
 import { CompletionConfetti } from '@/components/completion-confetti';
 import { createLearningFeedback } from '@/core/learning-feedback';
-import { learningHaptic, tapFeedback } from '@/native/tap-feedback';
+import { learningHaptic, prepareLearningHaptics, stopLearningHaptics, tapFeedback } from '@/native/tap-feedback';
+import { createCycleHaptics } from '@/core/cycle-haptics';
+import { XpGain, type XpGainEvent } from '@/components/xp-gain';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
@@ -54,10 +56,15 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const [speechView, setSpeechView] = useState<'bubble' | 'list'>('bubble');
   const [celebrating, setCelebrating] = useState(false);
   const [motionActive, setMotionActive] = useState(false);
+  const [xpGain, setXpGain] = useState<XpGainEvent | null>(null);
+  const gainSequence = useRef(0);
+  const gainOrigin = useRef<XpGainEvent['origin'] | null>(null);
+  const finishXpGain = useCallback((id: number) => setXpGain(current => current?.id === id ? null : current), []);
   const finishCelebration = useCallback(() => setCelebrating(false), []);
   const acting = useRef(false);
   useFocusEffect(useCallback(() => {
     let active = true;
+    prepareLearningHaptics();
     setMotionActive(AppState.currentState === 'active');
     let shown: string | null = null;
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -77,16 +84,21 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         const fresh = !saved || (saved.phase === 'complete' && !opened.current);
         const initial = !fresh && saved ? saved : createSession({ runId: randomUUID(), stage, phraseCount: lesson.phrases.length, ...readSettings() });
         const observeFeedback = createLearningFeedback(initial);
+        const observeHaptics = createCycleHaptics(initial);
         const firstEntry = !opened.current;
         opened.current = true;
         const audio = nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause());
         const player = new Player(initial, audio, s => {
-          context.save(s);
+          const earned = context.save(s);
+          if (earned > 0 && gainOrigin.current && active && AppState.currentState === 'active') {
+            setXpGain({ id: ++gainSequence.current, amount: earned, origin: gainOrigin.current });
+          }
           const event = observeFeedback(s);
+          const pulses = observeHaptics(s);
+          if (pulses && active) learningHaptic(pulses);
           if (event && active && AppState.currentState === 'active') {
             // Cosmetic effects are downstream of the durable write, never part of it.
             try {
-              learningHaptic(event);
               if (event === 'complete') setCelebrating(true);
             } catch { /* Optional feedback cannot turn a successful save into failure. */ }
           }
@@ -121,7 +133,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         timer = setInterval(() => { if (AppState.currentState === 'active') player.tick(); }, 100);
         appState = AppState.addEventListener('change', next => {
           setMotionActive(next === 'active');
-          if (next !== 'active') { setCelebrating(false); player.pause(); }
+          if (next !== 'active') { stopLearningHaptics(); setCelebrating(false); setXpGain(null); player.pause(); }
+          else prepareLearningHaptics();
         });
         if (firstEntry && !profile.suppressEntry && AppState.currentState === 'active') {
           setBusy(true);
@@ -131,24 +144,25 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       } catch { if (active) { setUnavailable(true); Alert.alert('학습을 열 수 없어요', '기록을 초기화하지 않았어요. 저장 공간과 레슨 설치 상태를 확인해 주세요.'); } }
     };
     void initialize();
-    return () => { active = false; setMotionActive(false); setCelebrating(false); removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
+    return () => { active = false; stopLearningHaptics(); setMotionActive(false); setCelebrating(false); setXpGain(null); gainOrigin.current = null; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
   }, [stage, pack, lesson, profile.id, profile.suppressEntry]));
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = (option?: 'rate') => {
     engine.current?.pause();
     if (stage && engine.current && engine.current.error !== 'save') router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, ...(option ? { option } : {}) } });
   };
-  const openGuide = () => {
+  const openInfo = (kind: 'guide' | 'analysis') => {
     engine.current?.pause();
     if (!stage || !engine.current || engine.current.error === 'save') return;
-    const level = Math.ceil(stage / 2);
-    // Guidance content is intentionally empty until supplied by the owner.
-    Alert.alert(`메타쉐도잉 Lv ${level} · 학습 가이드`, methodNames[level - 1], [{ text: '닫기', style: 'cancel' }]);
+    router.push({ pathname: '/player-info', params: { kind, stage, package: pack.packageKey, phrase: engine.current.state.phrase } });
   };
-  async function act(repeat = false) {
+  async function act(point: ControlPressPoint, repeat = false) {
     const player = engine.current;
     if (!player || acting.current) return;
     acting.current = true; setBusy(true);
+    const action = mainPlayerAction(player.state, player.error);
+    gainOrigin.current = action === 'confirm' || action === 'next'
+      ? point : null;
     try {
       if (repeat) {
         if (canOfferRepeat(player.state, player.error)) await player.choose('repeat');
@@ -164,17 +178,17 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         case 'recover': player.retrySave(); if (!player.error) await player.resume(); break;
         case 'wait': break;
       }
-    } finally { acting.current = false; setBusy(false); }
+    } finally { gainOrigin.current = null; acting.current = false; setBusy(false); }
   }
   return <View style={{ flex: 1 }}>
     <Stack.Screen options={{ title: '학습', headerBackVisible: false,
       header: () => <PlayerHeaderProgress onOptions={() => openOptions()} current={state ? state.phrase + 1 : 1}
         total={state?.phraseCount ?? lesson.phrases.length}
         completed={state ? state.phase === 'complete' ? state.phraseCount : state.phrase : 0} /> }} />
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, padding: 24, gap: 20 }}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingBottom: 24, gap: 20 }}>
       {unavailable ? <Card><Label>학습을 시작할 수 없어요.</Label><ActionButton title="레슨으로" onPress={leave} /></Card> : !state ? <Label muted>레슨을 여는 중…</Label> : <>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`메타쉐도잉 레벨 ${Math.ceil(state.stage / 2)}, 학습 가이드 열기`} onPress={openGuide}
+          <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={`메타쉐도잉 레벨 ${Math.ceil(state.stage / 2)}, 학습 가이드 열기`} onPress={() => openInfo('guide')}
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
             <Icon name="graduationcap.fill" /><Label size={14} weight="700">Lv {Math.ceil(state.stage / 2)}</Label>
           </Pressable>
@@ -182,8 +196,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
             <Icon name="speedometer" /><Label size={14} weight="700">{state.rate}×</Label>
           </Pressable>
-          <Pressable disabled accessibilityRole="button" accessibilityLabel="문장 분석, 아직 사용할 수 없음" accessibilityState={{ disabled: true }}
-            style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', opacity: 0.4 }}>
+          <Pressable feedback={false} accessibilityRole="button" accessibilityLabel="문장 분석 열기" onPress={() => openInfo('analysis')}
+            style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="text.magnifyingglass" />
           </Pressable>
         </View>
@@ -199,13 +213,16 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
             : <SpeechContent phrases={lesson.phrases} active={state.phrase} view={speechView} />}
           </Animated.View>
         </View>
-        {state.phase !== 'complete' && <CycleTimeline key={`${state.runId}:${state.phrase}`} state={state} duration={duration} animate={motionActive && !error} />}
       </>}
     </ScrollView>
     {state && <View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 12,
       backgroundColor: c.background, paddingBottom: Math.max(insets.bottom, 14) }}>
-      <PlayerControls action={mainPlayerAction(state, error)} repeat={canOfferRepeat(state, error)} busy={busy}
-        onMain={() => void act()} onRepeat={() => void act(true)} />
+      {!unavailable && state.phase !== 'complete' && <CycleTimeline key={`${state.runId}:${state.phrase}`} state={state} duration={duration} animate={motionActive && !error} />}
+      <View>
+        <PlayerControls action={mainPlayerAction(state, error)} repeat={canOfferRepeat(state, error)} busy={busy}
+          onMain={point => void act(point)} onRepeat={point => void act(point, true)} />
+        {xpGain && motionActive && <XpGain key={xpGain.id} event={xpGain} onFinish={finishXpGain} />}
+      </View>
     </View>}
     {celebrating && motionActive && <CompletionConfetti onFinish={finishCelebration} />}
   </View>;

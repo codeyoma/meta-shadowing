@@ -7,6 +7,7 @@ android/
 !modules/package-store/ios/
 !modules/progress-cloud/ios/
 !modules/package-delivery/ios/
+!modules/learning-haptics/ios/
 tests/storekit/*.xcodeproj/
 tests/cloudkit/*.xcodeproj/
 tests/delivery/*.xcodeproj/
