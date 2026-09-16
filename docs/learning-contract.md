@@ -10,6 +10,8 @@ M1 implements subtitle shadowing (method 1, stages 1 and 2), a controlled spoken
 lesson, local package installation, and durable progress/resume on iPhone.
 The full product retains eight methods and sixteen stages. Other methods,
 dictionary, and sentence analysis are M2, clearly marked unavailable in M1.
+Owner-approved UI refinement in #57 exposes a sentence-analysis placeholder
+drawer, not the analysis engine; the drawer explicitly says it is not ready.
 
 ## Eight methods / sixteen stages
 
@@ -32,10 +34,13 @@ unavailable even after their predecessor is complete.
 
 ## Audio cycle contract (M1)
 
-- Normal enabled button taps provide a light native haptic and the owner-supplied
-  soft tick. All three browsing tabs, including Settings, use this sound. Player
-  footer buttons are haptic-only; options/settings/language controls and the
-  decorative mascot remain quiet. Feedback never
+- Normal enabled button taps provide a light native haptic. The owner-approved
+  #57 refinement adds this feedback to all three browsing tabs, including Settings,
+  and to the header flag that opens the native language menu. The flag trigger is
+  an explicit exception to quiet language controls; picker selection retains only
+  the system control's behavior. Player footer feedback is cycle-specific and
+  haptic-only; options/settings editors, the separate language route and the
+  decorative mascot remain quiet. No app-level tap sound is played. Feedback never
   waits before the actual action, counts as learning, or changes speech speed;
   unavailable feedback fails silently. Rapid taps cannot stack sound players,
   and pending feedback is cancelled on app interruption.
@@ -93,9 +98,12 @@ unavailable even after their predecessor is complete.
   to the right content margin; native text measurement reserves both digit slots
   from the total phrase count with tabular numerals, so the track stays the same
   width when the current phrase crosses a digit boundary. The row below shows
-  method level, speed, and a disabled sentence-analysis icon (analysis remains
-  deferred). The level action pauses and opens a native learning-guide dialog
-  identified by level and method; guidance content is intentionally empty for now.
+  method level, speed, and a sentence-analysis placeholder action. As requested
+  in the #57 UI refinement, the level and analysis actions pause/checkpoint and
+  open native drawers. The guide identifies the level and method; detailed
+  guidance is intentionally empty for now. The analysis drawer shows the current
+  phrase/translation and an explicit not-ready message; analysis remains deferred.
+  Closing either drawer never resumes playback or confirms a cycle.
   Tapping the speed indicator pauses/checkpoints and opens the drawer directly at
   the speed editor; the options icon still opens the complete options menu.
 - Bubble display groups each target-language utterance and its Korean translation
