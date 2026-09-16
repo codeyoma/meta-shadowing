@@ -1,0 +1,57 @@
+name: LearningAudioTests
+options:
+  deploymentTarget:
+    iOS: '26.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: '26.0'
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  MacLearningAudioTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: '15.0'
+    sources:
+      - Tests
+      - path: ../../modules/learning-audio/ios
+        excludes: ['*Module.swift', '*.podspec']
+    dependencies:
+      - sdk: AVFoundation.framework
+      - sdk: StoreKit.framework
+  AudioTestHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.learningaudio.tests
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  LearningAudioTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - path: ../../modules/learning-audio/ios
+        excludes: ['*Module.swift', '*.podspec']
+    dependencies:
+      - target: AudioTestHost
+      - sdk: AVFoundation.framework
+      - sdk: StoreKit.framework
+schemes:
+  MacLearningAudioTests:
+    build:
+      targets:
+        MacLearningAudioTests: [test]
+    test:
+      targets: [MacLearningAudioTests]
+  LearningAudioTests:
+    build:
+      targets:
+        AudioTestHost: all
+        LearningAudioTests: [test]
+    test:
+      targets: [LearningAudioTests]

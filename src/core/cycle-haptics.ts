@@ -14,9 +14,10 @@ export function createCycleHaptics(initial: Session) {
     previous = { ...saved };
     if (saved.runId !== before.runId || saved.stage !== before.stage || before.phase === 'complete') return null;
     if (saved.phrase === before.phrase && before.planned === 3 && saved.planned === 5) return rhythm([medium]);
-    const advanced = saved.phrase > before.phrase;
-    const cycle = advanced ? before.confirmed + 1 : saved.confirmed;
-    if (advanced ? before.confirmed >= before.planned : saved.confirmed <= before.confirmed) return null;
+    const advanced = saved.phrase !== before.phrase;
+    const cycle = advanced ? saved.unitProgress?.[before.phrase]?.confirmed
+      ?? (before.phase === 'speaking' ? before.confirmed + 1 : before.confirmed) : saved.confirmed;
+    if (cycle <= before.confirmed) return null;
     if (cycle === 1 || cycle === 4) return rhythm([medium, strong]);
     if (cycle === 2) return rhythm([medium, medium, strong]);
     if (cycle === 3 || cycle === 5) return rhythm([medium, medium, strong, weak]);

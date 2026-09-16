@@ -1,9 +1,11 @@
 import { restoreSession } from './session';
 import { decodeSettings } from './settings';
-import { languages } from './catalog';
+import { languages, type PlayableStage } from './catalog';
 import { dailyLimit } from './progression';
 import { validCycleIdentity } from './cycle-credit';
 import { MAX_XP } from './levels';
+import { validUnitCredit, type UnitCredit } from './unit-credit';
+import { unitProgress } from './session-navigation';
 
 export const columns = {
   checkpoints: ['package', 'stage', 'state'],
@@ -13,15 +15,17 @@ export const columns = {
   study_days: ['language', 'day'],
   preferences: ['key', 'value'],
   cycle_credits: ['package', 'stage', 'run', 'language', 'book', 'phrase_count', 'phrase', 'confirmed', 'credited', 'day'],
+  unit_credits: ['package', 'stage', 'run', 'state'],
 } as const;
 export type Table = keyof typeof columns;
 export type Row = Record<string, string | number>;
-export type ProgressBackup = { version: 2; tables: Record<Table, Row[]> };
+export type ProgressBackup = { version: 3; tables: Record<Table, Row[]> };
 const keys: Record<Table, readonly string[]> = {
   checkpoints: ['package', 'stage'], completions: ['package', 'stage', 'run'],
   daily_stages: ['language', 'book', 'day'], stage_awards: ['language', 'book', 'run'],
   study_days: ['language', 'day'], preferences: ['key'],
   cycle_credits: ['package', 'stage', 'run'],
+  unit_credits: ['package', 'stage', 'run'],
 };
 const limit = 16 * 1024 * 1024;
 function reject(): never { throw Error('Progress backup is incompatible or damaged.'); }
@@ -76,12 +80,12 @@ const compound = (row: Row, fields: readonly string[]) => JSON.stringify(fields.
 export function validateProgressBackup(json: string): ProgressBackup {
   checkBackupSize(json);
   const root = object(JSON.parse(json), ['version', 'tables']);
-  if (root.version !== 1 && root.version !== 2) reject();
-  const tableNames = Object.keys(columns).filter(table => root.version === 2 || table !== 'cycle_credits');
+  if (root.version !== 1 && root.version !== 2 && root.version !== 3) reject();
+  const tableNames = Object.keys(columns).filter(table => (root.version !== 1 || table !== 'cycle_credits') && (root.version === 3 || table !== 'unit_credits'));
   const tables = object(root.tables, tableNames);
-  const result = { version: 2, tables: {} } as ProgressBackup;
+  const result = { version: 3, tables: {} } as ProgressBackup;
   for (const table of Object.keys(columns) as Table[]) {
-    const input = root.version === 1 && table === 'cycle_credits' ? [] : tables[table];
+    const input = !tableNames.includes(table) ? [] : tables[table];
     if (!Array.isArray(input) || input.length > 100000) return reject();
     const seen = new Set<string>();
     result.tables[table] = input.map(value => {
@@ -89,7 +93,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
       const row: Row = {};
       for (const column of columns[table]) {
         const cell = original[column];
-        if (column === 'stage') row[column] = integer(cell, 1, table === 'checkpoints' ? 2 : 16);
+        if (column === 'stage') row[column] = integer(cell, 1, table === 'checkpoints' ? 10 : 16);
         else if (column === 'xp') { if (cell !== 0 && cell !== 10) reject(); row[column] = cell as number; }
         else if (column === 'day') row[column] = table === 'cycle_credits' && cell === '' ? '' : day(cell);
         else if (column === 'phrase_count') row[column] = integer(cell, 1, 100000);
@@ -103,11 +107,17 @@ export function validateProgressBackup(json: string): ProgressBackup {
           if (!Number.isFinite(Date.parse(timestamp)) || Number(timestamp.slice(11, 13)) > 23 || Number(timestamp.slice(14, 16)) > 59 || Number(timestamp.slice(17, 19)) > 59) reject();
           row[column] = cell as string;
         } else if (column === 'state') {
-          if (typeof cell !== 'string' || cell.length > 4096) reject();
-          const s = object(JSON.parse(cell as string), ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs']);
+          if (typeof cell !== 'string' || cell.length > 4 * 1024 * 1024) reject();
+          const parsed = JSON.parse(cell as string);
+          if (table === 'unit_credits') {
+            if (!validUnitCredit(parsed)) reject();
+            row[column] = JSON.stringify(parsed); continue;
+          }
+          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(root.version === 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : [])]);
           integer(s.phraseCount, 1, 100000); integer(s.planned, 3, 100000); integer(s.confirmed, 0, 100000);
+          if (s.version === 2) integer(s.sourcePhraseCount, 1, 100000);
           identity(s.runId);
-          const restored = restoreSession(cell as string, s.phraseCount as number, original.stage as 1 | 2);
+          const restored = restoreSession(cell as string, (s.version === 2 ? s.sourcePhraseCount : s.phraseCount) as number, original.stage as PlayableStage);
           row[column] = JSON.stringify(Object.fromEntries(Object.entries(restored).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)));
         } else if (column === 'value') row[column] = validateValue(original.key, cell);
         else row[column] = identity(cell);
@@ -146,10 +156,18 @@ export function validateProgressBackup(json: string): ProgressBackup {
   }
   const bindings = new Map<string, string>();
   const frontiers = new Map(cycle_credits.map(row => [compound(row, ['package', 'stage', 'run']), row]));
+  const unitCredits = new Map(result.tables.unit_credits.map(row => [compound(row, ['package', 'stage', 'run']), JSON.parse(String(row.state)) as UnitCredit]));
+  for (const [key, ledger] of unitCredits) {
+    const row = frontiers.get(key);
+    if (!row || row.phrase_count !== ledger.counts.length || row.credited !== ledger.baseline + ledger.earned
+      || ledger.counts[Number(row.phrase)]! < Number(row.confirmed)) reject();
+    if (history.has(key) && ledger.counts.some(count => count < 3)) reject();
+  }
   for (const row of cycle_credits) {
+    const ledger = unitCredits.get(compound(row, ['package', 'stage', 'run']));
     if (!validCycleIdentity(String(row.package), { language: String(row.language), book: String(row.book) })
       || String(row.run).length > 100 || Number(row.phrase) >= Number(row.phrase_count)
-      || Number(row.credited) > Number(row.phrase) * 100000 + Number(row.confirmed)) reject();
+      || (!ledger && Number(row.credited) > (Number(row.phrase) * 100000 + Number(row.confirmed)) * (Number(row.stage) >= 7 && Number(row.stage) <= 10 ? 4 : 1))) reject();
     const binding = compound(row, ['language', 'book']);
     const existing = bindings.get(String(row.package));
     if (existing && existing !== binding) reject();
@@ -165,7 +183,12 @@ export function validateProgressBackup(json: string): ProgressBackup {
   for (const checkpoint of checkpoints) {
     const s = JSON.parse(String(checkpoint.state));
     const row = frontiers.get(JSON.stringify([checkpoint.package, checkpoint.stage, s.runId]));
-    if (row && (row.phrase_count !== s.phraseCount || Number(row.phrase) < s.phrase
+    const ledger = unitCredits.get(JSON.stringify([checkpoint.package, checkpoint.stage, s.runId]));
+    if (ledger && (ledger.sourceCount !== (s.version === 2 ? s.sourcePhraseCount : s.phraseCount)
+      || ledger.groupSize !== (s.version === 2 ? s.groupSize : 1)
+      || unitProgress(s).some((unit, i) => unit.confirmed > ledger.counts[i]!))) reject();
+    if (s.unitProgress && row && !ledger) reject();
+    if (!ledger && row && (row.phrase_count !== s.phraseCount || Number(row.phrase) < s.phrase
       || (row.phrase === s.phrase && Number(row.confirmed) < s.confirmed))) reject();
     if (row?.day && s.phase === 'complete' && (row.phrase !== s.phrase || row.confirmed !== s.confirmed)) reject();
   }

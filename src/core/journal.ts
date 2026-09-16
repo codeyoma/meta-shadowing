@@ -1,6 +1,7 @@
 import { restoreSession, type Session } from './session';
 import { Progression, localDay, type BookIdentity } from './progression';
 import { createCycleTable, recordCycles } from './cycle-credit';
+import type { PlayableStage } from './catalog';
 
 export interface Database {
   exec(sql: string): void;
@@ -23,17 +24,24 @@ export class Journal {
     this.progress = new Progression(db, now);
     createCycleTable(db);
   }
-  load(packageKey: string, stage: 1 | 2, phraseCount: number): Session | null {
+  load(packageKey: string, stage: PlayableStage, phraseCount: number): Session | null {
     const row = this.db.first<{ state: string }>(
       'SELECT state FROM checkpoints WHERE package = ? AND stage = ?', packageKey, stage);
     return row ? restoreSession(row.state, phraseCount, stage) : null;
   }
   save(packageKey: string, state: Session, identity?: BookIdentity): number {
-    state = { ...restoreSession(JSON.stringify(state), state.phraseCount, state.stage), running: state.running };
+    state = { ...restoreSession(JSON.stringify(state), state.version === 2 ? state.sourcePhraseCount : state.phraseCount, state.stage), running: state.running };
     const json = JSON.stringify(state);
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const prior = this.db.first<{ state: string }>('SELECT state FROM checkpoints WHERE package=? AND stage=?', packageKey, state.stage);
+      if (prior) {
+        const old = JSON.parse(prior.state);
+        if (old.runId === state.runId && (old.version !== state.version || old.phraseCount !== state.phraseCount
+          || (state.version === 2 && (old.sourcePhraseCount !== state.sourcePhraseCount || old.groupSize !== state.groupSize)))) {
+          throw Error('Cannot change an existing run plan.');
+        }
+      }
       const existing = this.db.first('SELECT run FROM completions WHERE package=? AND stage=? AND run=?', packageKey, state.stage, state.runId);
       const earned = recordCycles(this.db, packageKey, state, prior ? JSON.parse(prior.state) : null, identity, !!existing, localDay(this.now()));
       this.db.run('INSERT INTO checkpoints (package,stage,state) VALUES (?,?,?) ON CONFLICT(package,stage) DO UPDATE SET state=excluded.state',
@@ -49,7 +57,7 @@ export class Journal {
       throw error;
     }
   }
-  completions(packageKey: string, stage: 1 | 2): number {
+  completions(packageKey: string, stage: PlayableStage): number {
     return this.db.first<{ count: number }>(
       'SELECT COUNT(*) AS count FROM completions WHERE package = ? AND stage = ?', packageKey, stage)?.count ?? 0;
   }

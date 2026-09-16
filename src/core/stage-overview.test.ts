@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import { stageOverview, bookAction, canOpenStage, stageStars, stageComplete } from './stage-overview';
 import { createSession } from './session';
 
+test('implemented stages require three predecessor runs unless explicitly bypassed', () => {
+  for (let stage = 2; stage <= 10; stage++) {
+    assert.equal(canOpenStage(stage, [{ stage: stage - 1, count: 2, session: null }]), false);
+    assert.equal(canOpenStage(stage, [{ stage: stage - 1, count: 3, session: null }]), true);
+    assert.equal(canOpenStage(stage, [], true), true);
+  }
+  for (const stage of [0, 11, 16, 1.5]) assert.equal(canOpenStage(stage, [], true), false);
+});
+
 test('book progress counts completed stages once, not repeated runs or partial checkpoints', () => {
   const session = createSession({ runId: 'unfinished', stage: 2, phraseCount: 12, mode: 'manual', rate: 1 });
   assert.deepEqual(stageOverview([{ stage: 1, count: 9, session: null }, { stage: 2, count: 0, session }]),

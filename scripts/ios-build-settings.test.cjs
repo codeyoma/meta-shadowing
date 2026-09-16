@@ -84,3 +84,44 @@ test('prebuild preserves explicit fullscreen and tablet policy', async t => {
     assert.equal(compiled._internal.modResults.ios.infoPlist.UIRequiresFullScreen, !!policy.requireFullScreen);
   }
 });
+
+test('iPhone prebuild registers a window scene so SDK 27 builds can launch', async t => {
+  const { getPrebuildConfigAsync } = require('@expo/prebuild-config');
+  const { compileModsAsync } = require('@expo/config-plugins');
+  const { exp } = await getPrebuildConfigAsync(process.cwd(), { platforms: ['ios'] });
+  const root = mkdtempSync(path.join(tmpdir(), 'ios-scene-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const compiled = await compileModsAsync(exp, { projectRoot: root, platforms: ['ios'], introspect: true });
+  const scenes = compiled._internal.modResults.ios.infoPlist.UIApplicationSceneManifest;
+  assert.ok(scenes, 'iOS 27 rejects this app without a scene manifest');
+  const windows = scenes.UISceneConfigurations?.UIWindowSceneSessionRoleApplication;
+  assert.equal(scenes.UIApplicationSupportsMultipleScenes, false);
+  assert.equal(windows?.length, 1, 'The app needs exactly one window scene configuration');
+  assert.equal(windows[0].UISceneDelegateClassName, 'EXExpoAppSceneDelegate');
+});
+
+test('scene migration delegates window creation to Expo and is repeatable', () => {
+  const { adoptSceneLifecycle } = require('../plugins/with-ios-build-settings');
+  const legacy = `class AppDelegate: ExpoAppDelegate {
+  var window: UIWindow?
+  var reactNativeFactory: RCTReactNativeFactory?
+  func start() {
+    reactNativeFactory = factory
+#if os(iOS) || os(tvOS)
+    window = UIWindow(frame: UIScreen.main.bounds)
+    factory.startReactNative(
+      withModuleName: "main",
+      in: window,
+      launchOptions: launchOptions)
+#endif
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}`;
+  const migrated = adoptSceneLifecycle(legacy);
+  assert.match(migrated, /class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider/);
+  assert.doesNotMatch(migrated, /UIWindow\(frame:|factory.startReactNative/);
+  assert.match(migrated, /reactNativeFactory = factory/);
+  assert.match(migrated, /super.application/);
+  assert.equal(adoptSceneLifecycle(migrated), migrated);
+  assert.throws(() => adoptSceneLifecycle('class DifferentDelegate {}'), /AppDelegate/);
+});

@@ -69,6 +69,7 @@ jobs:
           xcodegen generate --spec tests/storekit/project.yml
           xcodegen generate --spec tests/cloudkit/project.yml
           xcodegen generate --spec tests/delivery/project.yml
+          xcodegen generate --spec tests/learning-audio/project.yml
       - name: Test native service and installation boundaries on iOS Simulator
         run: |
           ci_simulator=$(xcrun simctl list devices available --json | jq -r --arg runtime "$IOS_TEST_RUNTIME" '[.devices[$runtime][]? | select(.isAvailable and (.name | startswith("iPhone")))][0].udid // empty')
@@ -77,10 +78,11 @@ jobs:
           xcodebuild test -project tests/storekit/PackageStoreTests.xcodeproj -scheme PackageStoreTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/storekit.xcresult" -quiet
           xcodebuild test -project tests/cloudkit/ProgressCloudTests.xcodeproj -scheme ProgressCloudTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/cloudkit.xcresult" -quiet
           xcodebuild test -project tests/delivery/PackageDeliveryTests.xcodeproj -scheme PackageDeliveryTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/delivery.xcresult" -quiet
+          xcodebuild test -project tests/learning-audio/LearningAudioTests.xcodeproj -scheme LearningAudioTests -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-results/learning-audio.xcresult" -quiet
       - name: Report fixture test results without account or device metadata
         if: always()
         run: |
-          for ci_suite in storekit cloudkit delivery; do
+          for ci_suite in storekit cloudkit delivery learning-audio; do
             ci_result="$RUNNER_TEMP/native-results/$ci_suite.xcresult"
             if [ -d "$ci_result" ]; then
               xcrun xcresulttool get test-results summary --path "$ci_result" | jq '{result, totalTestCount, passedTests, failedTests, testFailures}'

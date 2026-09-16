@@ -1,6 +1,8 @@
 import type { PackageManifest } from './package';
 import type { Journal } from './journal';
-import type { Session } from './session';
+import { restoreSession, type Session } from './session';
+import type { PlayableStage } from './catalog';
+import { learningUnits } from './learning-units';
 
 export type LearningPackage = {
   language: string;
@@ -29,12 +31,21 @@ export class LearningContext {
   constructor(readonly pack: LearningPackage, private journal: Journal) {
     this.packageKey = packageKeyOf(pack);
   }
-  load(stage: 1 | 2) {
+  load(stage: PlayableStage) {
     return this.journal.load(this.packageKey, stage, this.pack.manifest.phrases.length);
   }
   save(state: Session) {
-    if (state.phraseCount !== this.pack.manifest.phrases.length) throw Error('Incompatible package checkpoint.');
+    this.validate(state);
     return this.journal.save(this.packageKey, state, { book: this.pack.manifest.id, language: this.pack.language });
   }
-  completions(stage: 1 | 2) { return this.journal.completions(this.packageKey, stage); }
+  units(state: Session) {
+    const saved = this.validate(state);
+    return learningUnits(this.pack.manifest.phrases, saved.stage, saved.version === 2 ? saved.groupSize : 2);
+  }
+  private validate(state: Session) {
+    try {
+      return restoreSession(JSON.stringify(state), this.pack.manifest.phrases.length, state.stage);
+    } catch { throw Error('Incompatible package checkpoint.'); }
+  }
+  completions(stage: PlayableStage) { return this.journal.completions(this.packageKey, stage); }
 }

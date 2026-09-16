@@ -12,12 +12,13 @@ import { selectedPackage, languages } from '@/native/catalog';
 import { canOpenStage } from '@/core/stage-overview';
 import { MethodLabel } from '@/components/method-label';
 import { BookTags } from '@/components/book-tags';
+import { isGroupedStage } from '@/core/catalog';
 
 export default function Lesson() {
   const c = usePalette();
   const { selection } = useLibrary();
   const selectedBook = selectedPackage(selection.packageKey);
-  const { records, overview } = useBookRecords(selectedBook ?? null);
+  const { records, overview, bypass } = useBookRecords(selectedBook ?? null);
   const [ready, setReady] = useState<boolean | null>(null);
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -28,7 +29,7 @@ export default function Lesson() {
     return () => { active = false; };
   }, [selectedBook]));
   function open(stage: number) {
-    if (ready && selectedBook?.owned && records && canOpenStage(stage, records)) router.push({ pathname: '/player', params: { stage, package: selectedBook.packageKey } });
+    if (ready && selectedBook?.owned && records && canOpenStage(stage, records, bypass)) router.push({ pathname: '/player', params: { stage, package: selectedBook.packageKey } });
   }
   if (!selectedBook) return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 40 }}>
     <Label size={27} weight="800" color={c.heading}>{languages.find(l => l.id === selection.language)?.name} 스테이지</Label>
@@ -65,7 +66,7 @@ export default function Lesson() {
         <View style={{ flex: 1, gap: 2 }}>
           <Label size={11} weight="800" color={c.onAccent}>STAGE {String(overview?.current ?? 1).padStart(2, '0')}</Label>
           <View style={{ alignSelf: 'flex-start' }}><MethodLabel stage={overview?.current ?? 1} onAccent /></View>
-          {resumed && <Label size={12} color={c.onAccent}>{current!.session!.phrase + 1}번 문장 · {current!.session!.confirmed}/{current!.session!.planned}회</Label>}
+          {resumed && <Label size={12} color={c.onAccent}>{current!.session!.phrase + 1}/{current!.session!.phraseCount} {isGroupedStage(current!.session!.stage) ? '학습 묶음' : '학습 구간'} · {current!.session!.confirmed}/{current!.session!.planned}회</Label>}
         </View>
         <View style={{ alignItems: 'center', justifyContent: 'center', gap: 4, maxWidth: '40%' }}>
           <Icon name="play.circle" size={27} color={c.onAccent} />
@@ -74,6 +75,6 @@ export default function Lesson() {
       </Pressable>
     </View>
     {ready === false && <Card><Label>레슨 설치가 필요해요.</Label><ActionButton title="도서 선택으로" onPress={() => router.navigate('/')} /></Card>}
-    {records && overview && <StagePath records={records} current={overview.current} ready={ready === true} onSelect={open} />}
+    {records && overview && <StagePath records={records} current={overview.current} ready={ready === true} bypass={bypass} onSelect={open} />}
   </ScrollView>;
 }

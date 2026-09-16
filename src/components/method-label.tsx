@@ -2,7 +2,7 @@ import { View } from 'react-native';
 import { Label, usePalette } from './ui';
 import { levelColors } from './level-colors';
 
-const names = ['자막 쉐도잉', '순간 암기', '첫 단어 힌트', '다문장 암기', '다문장 첫 단어', '속사포 영한', '속사포 한영', '속사포 한글'];
+const names = ['자막 쉐도잉', '자막 쉐도잉', '무자막 쉐도잉', '다구간 쉐도잉', '다구간 무자막', '속사포 영한', '속사포 한영', '속사포 한글'];
 
 export function MethodLabel({ stage, onAccent = false }: { stage: number; onAccent?: boolean }) {
   const c = usePalette();

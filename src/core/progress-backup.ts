@@ -62,9 +62,9 @@ export class ProgressBackupStore {
     // v1/v2 payloads still pass the codec's exact field-set validation first.
     tables.checkpoints = tables.checkpoints.map(row => {
       const state = JSON.parse(String(row.state));
-      return { ...row, state: JSON.stringify(restoreSession(String(row.state), state.phraseCount, Number(row.stage) as 1 | 2)) };
+      return { ...row, state: JSON.stringify(restoreSession(String(row.state), state.version === 2 ? state.sourcePhraseCount : state.phraseCount, state.stage)) };
     });
-    return JSON.stringify(validateProgressBackup(JSON.stringify({ version: 2, tables })));
+    return JSON.stringify(validateProgressBackup(JSON.stringify({ version: 3, tables })));
   }
   restoreBackup(json: string): void {
     const backup = validateProgressBackup(json);

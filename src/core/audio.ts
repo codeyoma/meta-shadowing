@@ -1,7 +1,7 @@
 import type { AudioPort } from './player';
 
 export type NativeStatus = { isLoaded: boolean; playing: boolean; duration: number;
-  didJustFinish: boolean; error: string | null; mediaServicesDidReset?: boolean };
+  didJustFinish: boolean; error: string | null; mediaServicesDidReset?: boolean; interrupted?: boolean };
 export interface NativeHandle {
   currentTime: number; duration: number; currentStatus: NativeStatus;
   setPlaybackRate(rate: number): void;
@@ -11,7 +11,7 @@ export interface NativeHandle {
 }
 
 /** Releasing a paused native handle prevents the SDK's automatic interruption resume. */
-export function audioPort(configure: () => Promise<void>, create: (phrase: number) => NativeHandle,
+export function audioPort(configure: () => Promise<void>, create: (phrase: number) => NativeHandle | Promise<NativeHandle>,
   ended: (duration: number) => void, failed: () => void, interrupted: () => void): AudioPort {
   let player: NativeHandle | undefined;
   let subscription: { remove(): void } | undefined;
@@ -32,7 +32,20 @@ export function audioPort(configure: () => Promise<void>, create: (phrase: numbe
       const epoch = generation;
       await configure();
       if (epoch !== generation) throw Error('Audio preparation cancelled.');
-      const current = create(phrase);
+      const created = create(phrase);
+      // Keep synchronous adapters synchronous; asynchronous composition may outlive navigation.
+      const current = created instanceof Promise ? await new Promise<NativeHandle>((resolve, reject) => {
+        cancel = () => reject(Error('Audio preparation cancelled.'));
+        created.then(handle => {
+          if (epoch !== generation) { handle.remove(); return; }
+          cancel = undefined;
+          resolve(handle);
+        }, error => {
+          if (epoch === generation) cancel = undefined;
+          reject(error);
+        });
+      }) : created;
+      if (epoch !== generation) { current.remove(); throw Error('Audio preparation cancelled.'); }
       player = current; hasPlayed = false;
       await new Promise<void>((resolve, reject) => {
         let ready = false, settled = false;
@@ -64,7 +77,7 @@ export function audioPort(configure: () => Promise<void>, create: (phrase: numbe
           if (!active) return;
           if (s.didJustFinish) { active = false; ended(s.duration); }
           else if (s.playing) hasPlayed = true;
-          else if (hasPlayed) { active = false; interrupted(); }
+          else if (hasPlayed || s.interrupted) { active = false; interrupted(); }
         }
         subscription = current.onStatus(s => { void status(s); });
         void status(current.currentStatus);

@@ -8,6 +8,8 @@ android/
 !modules/progress-cloud/ios/
 !modules/package-delivery/ios/
 !modules/learning-haptics/ios/
+!modules/learning-audio/ios/
+tests/learning-audio/*.xcodeproj/
 tests/storekit/*.xcodeproj/
 tests/cloudkit/*.xcodeproj/
 tests/delivery/*.xcodeproj/
@@ -25,3 +27,4 @@ private/
 test-results/
 expo-env.d.ts
 .impeccable/review/
+.superpowers/

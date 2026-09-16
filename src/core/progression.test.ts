@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Journal } from './journal';
 import { Player } from './player';
-import { createSession } from './session';
+
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { levelProgress, localDay } from './progression';
 import { decodeSettings } from './settings';
 

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, transition, restoreSession } from './session';
+import { transition, restoreSession } from './session';
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { cycleTimeline, mainPlayerAction, canOfferRepeat, completedConnections, phraseCounterText, canPulseCycle } from './player-presentation';
 
 const initial = () => createSession({ runId: 'presentation', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });

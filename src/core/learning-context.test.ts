@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import sample from '../../assets/sample/manifest.json';
 import { Journal } from './journal';
-import { createSession } from './session';
+
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { Player } from './player';
 import { LearningContext, resolvePackage, type LearningPackage } from './learning-context';
 

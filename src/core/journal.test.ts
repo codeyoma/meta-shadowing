@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { createSession, transition } from './session';
+import { transition } from './session';
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { Journal } from './journal';
 import { Player } from './player';
 import { canOpenStage } from './stage-overview';

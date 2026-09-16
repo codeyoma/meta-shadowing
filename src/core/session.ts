@@ -1,12 +1,16 @@
 import { isPlaybackRate } from './settings';
+import { isGroupedStage, isPlayableStage, type PlayableStage } from './catalog';
+import { isGroupSize, type GroupSize } from './learning-units';
+import { selectUnit, unitProgress, type UnitProgress } from './unit-progress';
 // 'auto' is accepted only to migrate previously persisted version-1 checkpoints.
 export type Mode = 'manual' | 'auto';
 export type Phase = 'ready' | 'listening' | 'speaking' | 'decision' | 'complete';
 export type Session = {
-  version: 1; runId: string; stage: 1 | 2; phraseCount: number; phrase: number;
+  runId: string; stage: PlayableStage; phraseCount: number; phrase: number;
   mode: Mode; rate: number; confirmed: number; planned: number;
   phase: Phase; running: boolean; audioSeconds: number; remainingMs: number;
-};
+  unitProgress?: UnitProgress[];
+} & ({ version: 1 } | { version: 2; sourcePhraseCount: number; groupSize: GroupSize });
 export type Action =
   | { type: 'resume' | 'pause' | 'confirm' | 'repeat' | 'next' }
   | { type: 'audio-position'; seconds: number }
@@ -20,9 +24,18 @@ export function changeSessionRate(state: Session, rate: number): Session {
 
 export function createSession(input: Pick<Session, 'runId' | 'stage' | 'phraseCount' | 'mode' | 'rate'>): Session {
   if (!isPlaybackRate(input.rate)) throw Error('Invalid playback rate.');
+  if (!isPlayableStage(input.stage) || isGroupedStage(input.stage) || !Number.isSafeInteger(input.phraseCount) || input.phraseCount < 1) throw Error('Invalid session plan.');
   return { runId: input.runId, stage: input.stage, phraseCount: input.phraseCount, rate: input.rate,
     mode: 'manual', version: 1, phrase: 0, confirmed: 0, planned: 3, phase: 'ready',
+    unitProgress: Array.from({ length: input.phraseCount }, () => ({ confirmed: 0, planned: 3 })),
     running: false, audioSeconds: 0, remainingMs: 0 };
+}
+
+export function createGroupedSession(input: Pick<Session, 'runId' | 'stage' | 'mode' | 'rate'> & { sourcePhraseCount: number; groupSize: GroupSize }): Session {
+  if (!isGroupedStage(input.stage) || !isGroupSize(input.groupSize) || !Number.isSafeInteger(input.sourcePhraseCount) || input.sourcePhraseCount < 1) throw Error('Invalid grouped session plan.');
+  const state = { ...createSession({ ...input, stage: 1, phraseCount: Math.ceil(input.sourcePhraseCount / input.groupSize) }),
+    version: 2 as const, stage: input.stage, sourcePhraseCount: input.sourcePhraseCount, groupSize: input.groupSize };
+  return restoreSession(JSON.stringify(state), input.sourcePhraseCount, input.stage);
 }
 
 function confirm(s: Session): Session {
@@ -51,6 +64,10 @@ export function canChooseNext(s: Session): boolean {
 }
 
 export function transition(s: Session, action: Action): Session {
+  const next = transitionCurrent(s, action);
+  return next.unitProgress ? { ...next, unitProgress: unitProgress(next) } : next;
+}
+function transitionCurrent(s: Session, action: Action): Session {
   if (action.type === 'repeat' && !canChooseRepeat(s)) return s;
   if (action.type === 'next' && !canChooseNext(s)) return s;
   if (s.mode !== 'manual') s = { ...s, mode: 'manual' };
@@ -73,6 +90,12 @@ export function transition(s: Session, action: Action): Session {
       ? { ...s, planned: s.planned + 2, phase: 'ready', running: false } : s;
     case 'next':
       if (s.phase !== 'decision') return s;
+      if (s.unitProgress) {
+        const units = unitProgress(s);
+        const gap = units.findIndex(unit => unit.confirmed < unit.planned);
+        if (gap < 0) return { ...selectUnit(s, s.phraseCount - 1), phase: 'complete' };
+        return selectUnit(s, s.phrase + 1 < s.phraseCount ? s.phrase + 1 : gap);
+      }
       return s.phrase + 1 === s.phraseCount
         ? { ...s, phase: 'complete', running: false }
         : { ...s, phrase: s.phrase + 1, confirmed: 0, planned: 3, phase: 'ready',
@@ -80,10 +103,16 @@ export function transition(s: Session, action: Action): Session {
   }
 }
 
-export function restoreSession(json: string, phraseCount: number, stage: 1 | 2): Session {
+export function restoreSession(json: string, sourcePhraseCount: number, stage: PlayableStage): Session {
   const s: Session = JSON.parse(json);
+  const grouped = isGroupedStage(stage);
+  if (!s || !isPlayableStage(stage) || !Number.isSafeInteger(sourcePhraseCount) || sourcePhraseCount < 1
+    || (grouped ? s.version !== 2 || !isGroupSize(s.groupSize) || s.sourcePhraseCount !== sourcePhraseCount : s.version !== 1)) {
+    throw new Error('Saved learning state is incompatible or damaged.');
+  }
+  const phraseCount = s.version === 2 ? Math.ceil(sourcePhraseCount / s.groupSize) : sourcePhraseCount;
   const nonnegative = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0;
-  if (!s || s.version !== 1 || typeof s.runId !== 'string' || !s.runId || s.runId.length > 100
+  if (typeof s.runId !== 'string' || !s.runId || s.runId.length > 100
     || s.stage !== stage || s.phraseCount !== phraseCount || !Number.isInteger(s.phrase)
     || s.phrase < 0 || s.phrase >= phraseCount || !['manual', 'auto'].includes(s.mode)
     || !isPlaybackRate(s.rate) || !Number.isInteger(s.confirmed) || s.confirmed < 0
@@ -92,12 +121,25 @@ export function restoreSession(json: string, phraseCount: number, stage: 1 | 2):
     || !['ready', 'listening', 'speaking', 'decision', 'complete'].includes(s.phase)
     || !nonnegative(s.audioSeconds) || !nonnegative(s.remainingMs)
     || (['decision', 'complete'].includes(s.phase) !== (s.confirmed === s.planned))
-    || (s.phase === 'complete' && s.phrase !== phraseCount - 1)) {
+    || (s.phase === 'complete' && s.phrase !== phraseCount - 1)
+    || phraseCount > 100000 || s.planned > 100000) {
     throw new Error('Saved learning state is incompatible or damaged.');
+  }
+  if (s.unitProgress !== undefined) {
+    if (!Array.isArray(s.unitProgress) || s.unitProgress.length !== phraseCount
+      || s.unitProgress.some(unit => !unit || Object.keys(unit).sort().join(',') !== 'confirmed,planned'
+        || !Number.isSafeInteger(unit.confirmed) || !Number.isSafeInteger(unit.planned)
+        || unit.confirmed < 0 || unit.planned < 3 || unit.planned > 100000
+        || unit.planned % 2 !== 1 || unit.confirmed > unit.planned)
+      || s.unitProgress[s.phrase]!.confirmed !== s.confirmed || s.unitProgress[s.phrase]!.planned !== s.planned
+      || (s.phase === 'complete' && s.unitProgress.some(unit => unit.confirmed !== unit.planned))) {
+      throw Error('Saved unit progress is incompatible or damaged.');
+    }
   }
   // Old native callers spread full preferences into sessions. Keep only the
   // learning checkpoint contract; settings remain in their own persistence.
-  return { version: 1, runId: s.runId, stage: s.stage, phraseCount: s.phraseCount, phrase: s.phrase,
+  const metadata = s.version === 2 ? { version: 2 as const, sourcePhraseCount: s.sourcePhraseCount, groupSize: s.groupSize } : { version: 1 as const };
+  return { ...metadata, ...(s.unitProgress ? { unitProgress: s.unitProgress } : {}), runId: s.runId, stage: s.stage, phraseCount: s.phraseCount, phrase: s.phrase,
     mode: 'manual', rate: s.rate, confirmed: s.confirmed, planned: s.planned, phase: s.phase,
     running: false, audioSeconds: s.audioSeconds, remainingMs: s.remainingMs };
 }

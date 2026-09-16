@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { ProgressBackupStore, validateProgressBackup, type BackupDatabase } from './progress-backup';
-import { createSession, transition } from './session';
+import { transition } from './session';
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { Journal } from './journal';
 import { Player } from './player';
 
@@ -16,7 +17,7 @@ test('version two round-trips partial cycle credit and the next confirmation ear
   player.audioEnded(1); await player.confirm();
   player.audioEnded(1); await player.choose('repeat');
   const payload = source.exportBackup();
-  assert.equal(JSON.parse(payload).version, 2);
+  assert.equal(JSON.parse(payload).version, 3);
   target.restoreBackup(payload); target.restoreBackup(payload);
   assert.equal(target.journal.progress.summary('english').xp, 3);
   const restored = new Player(target.journal.load('sample-v1', 1, 1)!, audio,
@@ -106,7 +107,7 @@ test('backup rejects malformed schemas, duplicates, oversized input and inconsis
     corrupt(b => { b.tables.preferences = [{ key: 'purchase', value: '{}' }]; }),
     corrupt(b => { b.tables.preferences = [{ key: 'settings', value: '{"mode":"manual","rate":1,"owned":true}' }]; }),
   ]) assert.throws(() => validateProgressBackup(payload));
-  assert.equal(validateProgressBackup(valid).version, 2);
+  assert.equal(validateProgressBackup(valid).version, 3);
 });
 
 test('durable revisions include preferences and journal saves; old acknowledgements leave newer work pending', t => {
@@ -210,7 +211,7 @@ test('version one preserves legacy twenty XP and baselines partial history befor
   legacyCompletion(source, a.db, 'old-a'); legacyCompletion(source, a.db, 'old-b');
   for (const table of ['stage_awards', 'daily_stages', 'study_days']) a.db.run(`UPDATE ${table} SET language='english'`);
   source.journal.save('sample-v1', { ...session(), runId: 'partial', confirmed: 1, phase: 'speaking', running: true });
-  const legacy = JSON.parse(source.exportBackup()); legacy.version = 1; delete legacy.tables.cycle_credits;
+  const legacy = JSON.parse(source.exportBackup()); legacy.version = 1; delete legacy.tables.cycle_credits; delete legacy.tables.unit_credits;
   target.restoreBackup(JSON.stringify(legacy));
   assert.equal(target.journal.progress.summary('english').xp, 20);
   const player = new Player(target.journal.load('sample-v1', 1, 1)!,
@@ -219,7 +220,7 @@ test('version one preserves legacy twenty XP and baselines partial history befor
   await player.resume(); await player.confirm();
   assert.equal(target.journal.progress.summary('english').xp, 21);
   assert.equal(target.journal.completions('sample-v1', 1), 2);
-  assert.equal(JSON.parse(target.exportBackup()).version, 2);
+  assert.equal(JSON.parse(target.exportBackup()).version, 3);
   legacy.tables.stage_awards[0].xp = 11;
   assert.throws(() => validateProgressBackup(JSON.stringify(legacy)));
 });
@@ -234,7 +235,7 @@ test('version two rejects corrupt credits and missing completion links before re
   player.audioEnded(1); await player.choose('next');
   const valid = source.exportBackup(), before = target.exportBackup();
   const changes = [
-    (b: any) => { b.version = 3; },
+    (b: any) => { b.version = 4; },
     (b: any) => { b.tables.cycle_credits[0].credited = 4; },
     (b: any) => { b.tables.cycle_credits[0].credited = -1; },
     (b: any) => { b.tables.cycle_credits[0].confirmed = 4; b.tables.checkpoints = []; },

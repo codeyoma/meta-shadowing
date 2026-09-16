@@ -2,6 +2,55 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { audioPort, type NativeHandle, type NativeStatus } from './audio';
 
+test('disposing during async chunk preparation rejects immediately and removes a late handle without playback', async () => {
+  let deliver!: (h: NativeHandle) => void;
+  let removes = 0, plays = 0, ended = 0;
+  const port = audioPort(async () => {}, () => new Promise<NativeHandle>(resolve => { deliver = resolve; }),
+    () => { ended++; }, () => {}, () => {});
+  const preparing = port.prepare(0, 0, 1);
+  const rejected = assert.rejects(preparing, /cancelled/);
+  await Promise.resolve();
+  port.dispose();
+  await rejected;
+  deliver({ currentTime: 0, duration: 8,
+    currentStatus: { isLoaded: true, playing: false, duration: 8, didJustFinish: true, error: null },
+    setPlaybackRate: () => {}, seekTo: async () => {}, play: () => { plays++; },
+    remove: () => { removes++; }, onStatus: () => ({ remove: () => {} }),
+  });
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(removes, 1); assert.equal(plays, 0); assert.equal(ended, 0);
+  assert.throws(() => port.play(), /No audio/);
+});
+
+test('async combined audio pauses and resumes on the same timeline and reports a playback error once', async () => {
+  let current!: NativeHandle, emit!: (s: NativeStatus) => void;
+  let failures = 0;
+  const port = audioPort(async () => {}, async () => {
+    current = { currentTime: 0, duration: 9,
+      currentStatus: { isLoaded: true, playing: false, duration: 9, didJustFinish: false, error: null },
+      setPlaybackRate: () => {}, seekTo: async seconds => { current.currentTime = seconds; },
+      play: () => {}, remove: () => {}, onStatus: cb => { emit = cb; return { remove: () => {} }; },
+    }; return current;
+  }, () => {}, () => { failures++; }, () => {});
+  await port.prepare(2, 0, 1); port.play();
+  current.currentTime = 6.75; port.pause();
+  assert.equal(port.position(), 6.75);
+  await port.prepare(2, port.position(), 1);
+  assert.equal(current.currentTime, 6.75); assert.equal(port.duration?.(), 9);
+  port.play();
+  emit({ ...current.currentStatus, error: 'audio failed' });
+  emit({ ...current.currentStatus, error: 'audio failed' });
+  assert.equal(failures, 1); port.dispose();
+});
+
+test('async preparation failure rejects once without a second failure event', async () => {
+  let failures = 0;
+  const port = audioPort(async () => {}, async () => { throw Error('Missing chunk'); },
+    () => {}, () => { failures++; }, () => {});
+  await assert.rejects(port.prepare(0, 0, 1), /Missing chunk/);
+  assert.equal(failures, 0); port.dispose();
+});
+
 test('the selected playback rate reaches each newly prepared native handle unchanged', async () => {
   const rates: number[] = [];
   const port = audioPort(async () => {}, () => ({
