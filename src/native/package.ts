@@ -7,6 +7,7 @@ import { packageKeyOf, type LearningPackage } from '../core/learning-context';
 import { hostedSample, hostedStatus } from './hosted-package';
 import delivery from '../../modules/package-delivery';
 import { knownMaterialKey, packageOperations } from '../core/package-storage';
+import { isFreeDuo, freeDuoActions } from './free-duo';
 
 export type BundledPackage = LearningPackage & { delivery: 'bundled'; modules: Readonly<Record<string, number>> };
 const modules: Record<string, number> = {
@@ -61,6 +62,7 @@ export function installBundledPackage(pack: BundledPackage, onProgress: (done: n
   return installations.get(key)!;
 }
 export async function isInstalled(pack: LearningPackage): Promise<boolean> {
+  if (isFreeDuo(pack)) return (await freeDuoActions.status()).phase === 'ready';
   const key = knownMaterialKey(pack);
   if (key === packageKeyOf(hostedSample)) return (await hostedStatus()).phase === 'ready';
   if (packageOperations.busy(key)) return false;

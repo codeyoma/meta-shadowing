@@ -5,7 +5,7 @@ export default function SettingsLayout() {
   const c = useSettingsColors();
   return <Stack screenOptions={{ contentStyle: { backgroundColor: c.background },
     headerTransparent: true, headerBlurEffect: 'none',
-    headerStyle: { backgroundColor: `${c.background}33` }, headerTintColor: c.text,
+    headerStyle: { backgroundColor: 'transparent' }, headerTintColor: c.text,
     headerShadowVisible: false, headerTitleStyle: { fontWeight: '700' } }}>
     <Stack.Screen name="index" options={{ title: '설정' }} />
     <Stack.Screen name="learning" options={{ title: '학습 설정', headerBackButtonDisplayMode: 'minimal' }} />

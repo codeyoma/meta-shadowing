@@ -36,7 +36,7 @@ export function recordCycles(db: Database, key: string, next: Session, prior: Se
     if (identity || row.phrase_count !== next.phraseCount) throw Error('Conflicting cycle identity.');
     identity = { book: row.book, language: row.language };
   }
-  if (!identity) return;
+  if (!identity) return 0;
   if (!validCycleIdentity(key, identity)) throw Error('Invalid cycle identity.');
   const bound = db.first<{ language: string; book: string }>('SELECT language,book FROM cycle_credits WHERE package=? LIMIT 1', key);
   if (bound && (bound.language !== identity.language || bound.book !== identity.book)) throw Error('Conflicting package identity.');
@@ -66,4 +66,11 @@ export function recordCycles(db: Database, key: string, next: Session, prior: Se
     phrase=excluded.phrase,confirmed=excluded.confirmed,credited=excluded.credited,day=excluded.day`,
   key, next.stage, next.runId, identity.language, identity.book, next.phraseCount, phrase, confirmed, credited, day);
   if (day) db.run('INSERT OR IGNORE INTO study_days(language,day) VALUES (?,?)', identity.language, day);
+  const earned = credited - (row?.credited ?? 0);
+  if (!earned) return 0;
+  const total = db.first<{ total: number }>(`SELECT
+    (SELECT TOTAL(xp) FROM stage_awards WHERE language=?) +
+    (SELECT TOTAL(credited) FROM cycle_credits WHERE language=?) AS total`, identity.language, identity.language)!.total;
+  // The receipt describes the visible total's increase, including its integer cap.
+  return Math.max(0, Math.min(earned, MAX_XP - (total - earned)));
 }

@@ -1,26 +1,20 @@
-import { Pressable, Text, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { languages } from '@/native/catalog';
 import { useLibrary } from './library-context';
 import { Icon, Label, ProgressTrack, usePalette } from './ui';
+import { LanguageMenu } from './language-menu';
 
 export function StudyHeader() {
   const c = usePalette();
   const insets = useSafeAreaInsets();
-  const { fontScale } = useWindowDimensions();
   const { selection, progress: snapshot } = useLibrary();
   const language = languages.find(l => l.id === selection.language) ?? languages[0];
   const progress = snapshot?.summary;
   return <View style={{ backgroundColor: c.background, paddingTop: insets.top, borderBottomWidth: 2, borderBottomColor: c.line }}>
-    <View style={{ paddingHorizontal: 24, paddingVertical: 12, flexDirection: 'row', gap: 20, alignItems: 'flex-end' }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`학습 언어 선택, 현재 ${language.name}`}
-        onPress={() => router.push('/languages')} style={({ pressed }) => ({ minWidth: 48, minHeight: 48,
-          paddingHorizontal: 6, paddingTop: 6, justifyContent: 'flex-end', alignItems: 'center', opacity: pressed ? 0.6 : 1 })}>
-        <Text accessible={false} allowFontScaling={false} style={{ fontSize: 28 * fontScale, lineHeight: 28 * fontScale }}>{language.flag}</Text>
-        <Label size={12} weight="700" color={c.heading} align="center">{language.displayCode}</Label>
-      </Pressable>
-      <View style={{ flex: 1, gap: 4 }}>
+    <View style={{ paddingHorizontal: 24, paddingVertical: 12, flexDirection: 'row', gap: 20, alignItems: 'center' }}>
+      <LanguageMenu />
+      <View style={{ flex: 1, alignSelf: 'stretch', justifyContent: 'space-between', paddingTop: 8.5 }}>
         <ProgressTrack height={8} value={progress?.current ?? 0} total={progress?.required ?? 100} label={`${language.name} 다음 레벨 경험치`} />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
           <Label size={19} display color={c.heading}>Lv. {progress?.level ?? '—'}</Label>

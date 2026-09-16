@@ -2,6 +2,7 @@ const { withInfoPlist, withEntitlementsPlist, withDangerousMod, withXcodeProject
 const fs = require('node:fs');
 const path = require('node:path');
 const plist = require('@expo/plist');
+const { configureFreeDuo } = require('../../scripts/free-duo.cjs');
 
 const targetName = 'SampleDownloader';
 
@@ -13,6 +14,7 @@ module.exports = function withPackageDelivery(config) {
     throw new Error('Diagnostics require separate configured sample delivery.');
   }
   config = withInfoPlist(config, mod => {
+    configureFreeDuo(mod.modResults, process.env, mod.modRequest.projectRoot);
     const manifest = require('../../assets/sample/manifest.json');
     const specification = require('../../assets/sample/delivery.json');
     mod.modResults.SampleDescriptor = JSON.stringify({ key: specification.key, files: [specification.metadata,

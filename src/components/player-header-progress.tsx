@@ -10,7 +10,7 @@ export function PlayerHeaderProgress({ current, total, completed, onOptions }: {
   const counter = phraseCounterText(current, total);
   const text: TextStyle = { fontSize: 15 * fontScale, lineHeight: 22 * fontScale,
     fontWeight: '700', fontVariant: ['tabular-nums'], color: c.text, textAlign: 'right' };
-  return <View style={{ paddingTop: insets.top, paddingBottom: 10, backgroundColor: c.background }}>
+  return <View style={{ paddingTop: insets.top, backgroundColor: c.background }}>
     <View style={{ paddingLeft: 24 + insets.left, paddingRight: 24 + insets.right,
       minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
     <HeaderButton feedback={false} title="학습 옵션 열기" icon="slider.horizontal.3" onPress={onOptions} />

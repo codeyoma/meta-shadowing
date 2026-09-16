@@ -43,6 +43,22 @@ public final class PackageDeliveryModule: Module {
 
   private static let installation = PackageInstallation(root: URL.documentsDirectory.appendingPathComponent("lesson-packages"))
 
+  private static let freeDuoDownload = PackageDownload(installation: installation,
+    transport: AppleAssetDelivery(assetPackID: LibraryMaterial.freeDuo), purgeCache: {
+      try await AssetPackManager.shared.remove(assetPackWithID: LibraryMaterial.freeDuo)
+    })
+
+  private static func freeDuoDescriptor() throws -> DeliveryPackage {
+    let info = Bundle.main.infoDictionary ?? [:]
+    guard FreeDuoPolicy.current,
+      info["FreeDuoAssetPackID"] as? String == LibraryMaterial.freeDuo,
+      let group = info["BAAppGroupID"] as? String, !group.isEmpty,
+      let json = info["FreeDuoDescriptor"] as? String,
+      let package = try? JSONDecoder().decode(DeliveryPackage.self, from: Data(json.utf8)),
+      package.key == LibraryMaterial.freeDuo else { throw DeliveryError.unavailable }
+    return package
+  }
+
   private static func sampleDescriptor(_ json: String) throws -> DeliveryPackage {
     let package = try JSONDecoder().decode(DeliveryPackage.self, from: Data(json.utf8))
     guard package.key == LibraryMaterial.hosted,
@@ -55,6 +71,41 @@ public final class PackageDeliveryModule: Module {
   public func definition() -> ModuleDefinition {
     let download = Self.sharedDownload
     Name("PackageDelivery")
+    Constant("freeDuoManifest") { () -> String? in
+      guard (try? Self.freeDuoDescriptor()) != nil else { return nil }
+      return Bundle.main.object(forInfoDictionaryKey: "FreeDuoManifest") as? String
+    }
+    AsyncFunction("freeDuoStatus") { () async throws -> [String: Any] in
+      do {
+        let value = try await Self.freeDuoDownload.status(Self.freeDuoDescriptor())
+        return ["phase": value.phase, "progress": value.progress]
+      } catch { throw Self.sanitize(error) }
+    }
+    AsyncFunction("freeDuoStart") { () async throws in
+      do { try await Self.freeDuoDownload.start(Self.freeDuoDescriptor()) }
+      catch { throw Self.sanitize(error) }
+    }
+    AsyncFunction("freeDuoCancel") { () async throws in
+      do { _ = try Self.freeDuoDescriptor(); await Self.freeDuoDownload.cancel() }
+      catch { throw Self.sanitize(error) }
+    }
+    AsyncFunction("freeDuoStorage") { () async throws -> [String: Any] in
+      do {
+        let value = try await Self.freeDuoDownload.storage(Self.freeDuoDescriptor())
+        return ["bytes": value.bytes, "installed": value.installed, "busy": value.busy]
+      } catch { throw Self.sanitize(error) }
+    }
+    AsyncFunction("freeDuoRemove") { () async throws -> [String: Bool] in
+      do { return ["cacheCleared": try await Self.freeDuoDownload.remove(Self.freeDuoDescriptor())] }
+      catch { throw Self.sanitize(error) }
+    }
+    Constant("animationPreviewEnabled") {
+      #if DEBUG || targetEnvironment(simulator)
+      return true
+      #else
+      return false
+      #endif
+    }
     Constant("diagnosticsEnabled") { Self.diagnostics != nil }
     AsyncFunction("diagnosticStatus") { () async throws -> [String: Any] in
       do {

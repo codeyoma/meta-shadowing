@@ -66,7 +66,7 @@ struct PackageInstallation: Sendable {
 
   private func validate(_ package: DeliveryPackage) throws {
     guard package.key.range(of: "^[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$", options: .regularExpression) != nil,
-      package.files.count > 1, package.files.count <= 100,
+      package.files.count > 1, package.files.count <= 1001,
       Set(package.files.map(\.file)).count == package.files.count,
       package.files.contains(where: { $0.file == "manifest.json" }),
       package.files.allSatisfy({ entry in

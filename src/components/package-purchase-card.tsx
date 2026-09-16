@@ -12,7 +12,7 @@ export function PackagePurchaseCard({ section }: { section: 'owned' | 'store' })
   const view = purchasePresentation(snapshot);
   const entry = paidLibraryEntry(snapshot);
   if (entry.section !== section) return null;
-  if (section === 'store' && (!view.showInStore || !packagePurchases.available || bridgeError)) return null;
+  if (section === 'store' && !view.showInStore) return null;
   const issue = snapshot.entitlementIssue !== 'none' || snapshot.outcome === 'unverified';
   const failed = snapshot.catalogIssue === 'failed' || snapshot.outcome === 'failed' || bridgeError;
   const unavailable = !packagePurchases.available || snapshot.catalogIssue === 'unavailable';

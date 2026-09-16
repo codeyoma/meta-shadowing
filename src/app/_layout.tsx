@@ -27,6 +27,8 @@ export default function Layout() {
     <Stack.Screen name="player" options={{ title: '자막 쉐도잉', headerBackTitle: '레슨', gestureEnabled: false }} />
     <Stack.Screen name="player-options" options={{ title: '학습 옵션', presentation: 'formSheet',
       sheetAllowedDetents: [0.65, 1], sheetGrabberVisible: true }} />
+    <Stack.Screen name="player-info" options={{ title: '학습 가이드', presentation: 'formSheet',
+      sheetAllowedDetents: [0.5, 0.85], sheetGrabberVisible: true }} />
     <Stack.Screen name="languages" options={{ title: '학습 언어', presentation: 'formSheet', sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true }} />
   </Stack></LibraryProvider></ProgressProfile>;
 }

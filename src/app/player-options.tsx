@@ -58,11 +58,12 @@ export default function PlayerOptionsScreen() {
       Alert.alert('재생 속도를 저장하지 못했어요', '학습 위치는 유지됩니다. 저장 공간을 확인하고 다시 시도해 주세요.');
     }
   }
-  return <View style={{ flex: 1, backgroundColor: c.background }}>
+  return <View style={{ flex: 1, backgroundColor: c.sheet }}>
     <Stack.Screen options={{ title: learningPreferenceMenus.find(menu => menu.option === selected)?.title ?? '학습 옵션',
       headerLeft: selected ? () => <HeaderButton title="학습 옵션으로 돌아가기" icon="chevron.left" onPress={() => setSelected(null)} /> : undefined,
-      headerStyle: { backgroundColor: c.background }, headerTintColor: c.text,
-      contentStyle: { backgroundColor: c.background },
+      headerTransparent: true, headerBlurEffect: 'none',
+      headerStyle: { backgroundColor: 'transparent' }, headerTintColor: c.text,
+      contentStyle: { backgroundColor: c.sheet },
       headerRight: () => <HeaderButton title="옵션 닫기" icon="xmark" onPress={() => router.back()} /> }} />
     {/* Keep the sheet's native scroll-frame correction separate from the fixed footer. */}
     <View collapsable={false} style={{ flex: 1 }}>
@@ -73,7 +74,7 @@ export default function PlayerOptionsScreen() {
       </ScrollView>
     </View>
     <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: Math.max(16, insets.bottom), gap: 16 }}>
-      <ActionButton title="스테이지로 돌아가기" icon="rectangle.portrait.and.arrow.right" tone="cardinal" secondary onPress={() => router.dismissTo('/lesson')} />
+      <ActionButton title="스테이지로 돌아가기" icon="rectangle.portrait.and.arrow.right" iconMirrored tone="cardinal" secondary onPress={() => router.dismissTo('/lesson')} />
       <ActionButton title="학습 이어하기" icon="play.fill" onPress={() => router.back()} />
     </View>
   </View>;

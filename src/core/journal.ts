@@ -28,14 +28,14 @@ export class Journal {
       'SELECT state FROM checkpoints WHERE package = ? AND stage = ?', packageKey, stage);
     return row ? restoreSession(row.state, phraseCount, stage) : null;
   }
-  save(packageKey: string, state: Session, identity?: BookIdentity): void {
+  save(packageKey: string, state: Session, identity?: BookIdentity): number {
     state = { ...restoreSession(JSON.stringify(state), state.phraseCount, state.stage), running: state.running };
     const json = JSON.stringify(state);
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const prior = this.db.first<{ state: string }>('SELECT state FROM checkpoints WHERE package=? AND stage=?', packageKey, state.stage);
       const existing = this.db.first('SELECT run FROM completions WHERE package=? AND stage=? AND run=?', packageKey, state.stage, state.runId);
-      recordCycles(this.db, packageKey, state, prior ? JSON.parse(prior.state) : null, identity, !!existing, localDay(this.now()));
+      const earned = recordCycles(this.db, packageKey, state, prior ? JSON.parse(prior.state) : null, identity, !!existing, localDay(this.now()));
       this.db.run('INSERT INTO checkpoints (package,stage,state) VALUES (?,?,?) ON CONFLICT(package,stage) DO UPDATE SET state=excluded.state',
         packageKey, state.stage, json);
       if (state.phase === 'complete') {
@@ -43,6 +43,7 @@ export class Journal {
       }
       this.onSaved?.();
       this.db.exec('COMMIT');
+      return earned;
     } catch (error) {
       this.db.exec('ROLLBACK');
       throw error;

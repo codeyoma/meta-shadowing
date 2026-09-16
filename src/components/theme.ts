@@ -1,6 +1,7 @@
 // Owner-approved role swaps: Primary ↔ Bee; Primary Pressed ↔ Fox.
 export const brandColors = {
   primary: '#ffc800', primaryPressed: '#ff9600', bee: '#58cc02', fox: '#58a700',
+  primaryMint: '#a5ed6e', primarySoft: '#d7ffb8',
 };
 const light = {
   background: '#ffffff', card: '#ffffff', soft: '#f7f7f7', text: '#3c3c3c',

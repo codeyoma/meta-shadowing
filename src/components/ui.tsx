@@ -38,9 +38,9 @@ export function Card({ children, style }: PropsWithChildren<{ style?: ViewStyle 
     borderColor: c.line, padding: 20, gap: 16, borderCurve: 'continuous' }, style]}>{children}</View>;
 }
 
-export function ActionButton({ title, onPress, secondary = false, disabled = false, accessibilityLabel, icon, tone = 'default' }: {
+export function ActionButton({ title, onPress, secondary = false, disabled = false, accessibilityLabel, icon, iconMirrored = false, tone = 'default' }: {
   title: string; onPress(): void; secondary?: boolean; disabled?: boolean; accessibilityLabel?: string; icon?: SFSymbol;
-  tone?: 'default' | 'cardinal';
+  tone?: 'default' | 'cardinal'; iconMirrored?: boolean;
 }) {
   const c = usePalette();
   const { fontScale } = useWindowDimensions();
@@ -54,7 +54,7 @@ export function ActionButton({ title, onPress, secondary = false, disabled = fal
         backgroundColor: disabled ? c.disabled : tone === 'cardinal' ? '#ffffff' : secondary ? c.card : c.accent,
         borderWidth: secondary ? 2 : 0, borderColor: c.line,
         boxShadow: pressed || disabled ? 'none' : `0 4px 0 ${secondary || tone === 'cardinal' ? c.line : c.accentPressed}` })}>
-      {icon && <Icon name={icon} color={ink} />}
+      {icon && <View style={iconMirrored ? { transform: [{ scaleX: -1 }] } : undefined}><Icon name={icon} color={ink} /></View>}
       <Text allowFontScaling={false} style={{ flexShrink: 1, color: ink, fontWeight: '700', fontSize: 17 * fontScale,
         lineHeight: 24 * fontScale, textAlign: 'center', letterSpacing: 0.2 }}>{title}</Text>
     </Pressable>

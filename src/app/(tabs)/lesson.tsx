@@ -11,6 +11,7 @@ import { isInstalled } from '@/native/package';
 import { selectedPackage, languages } from '@/native/catalog';
 import { canOpenStage } from '@/core/stage-overview';
 import { MethodLabel } from '@/components/method-label';
+import { BookTags } from '@/components/book-tags';
 
 export default function Lesson() {
   const c = usePalette();
@@ -42,6 +43,7 @@ export default function Lesson() {
         <Image source={require('../../../assets/illustrations/morning-notes.png')} accessible={false}
           style={{ width: 52, height: 62, borderRadius: 12 }} contentFit="cover" />
         <View style={{ flex: 1, gap: 3 }}>
+          <BookTags sentences={selectedBook.sentences} />
           <Label size={11} weight="700" color="#b8c7d8">{selectedBook.sentences}문장 · 챕터 {selectedBook.chapters ?? '—'}</Label>
           <Label size={22} display color="#ffffff">{selectedBook.title}</Label>
         </View>

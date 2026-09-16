@@ -7,6 +7,7 @@ import { Icon, Label, usePalette } from './ui';
 import { MethodLabel, methodNames } from './method-label';
 import { levelColors } from './level-colors';
 import { StageStartPopover, type StageAnchor } from './stage-start-popover';
+import { stageConnectionPoints } from '@/core/stage-connection';
 
 const offsets = [0.22, 0.5, 0.78, 0.5];
 const coinSize = 76;
@@ -36,16 +37,16 @@ export function StagePath({ records, current, ready, onSelect }: {
       const stars = stageStars(record);
       const x = width * offsets[i % 4]!;
       const nextX = width * offsets[(i + 1) % 4]!;
-      const dx = nextX - x;
-      const length = Math.hypot(dx, rowHeight);
       const label = !available ? record.stage <= 2 ? '이전 스테이지 완료 후 열림' : '준비 중' : record.session && record.session.phase !== 'complete' ? '이어하기' : complete ? '다시 학습' : '학습 시작';
       const fill = !available ? c.card : active ? c.accent : complete ? c.bee : c.card;
       const edge = !available ? c.outline : active ? c.accentPressed : complete ? c.fox : c.accentPressed;
       return <View key={record.stage} pointerEvents="box-none" style={{ height: rowHeight }}>
-        {i < records.length - 1 && width > 0 && <View pointerEvents="none" style={{ position: 'absolute',
-          left: (x + nextX) / 2 - length / 2, top: coinHeight / 2 + rowHeight / 2 - 4, width: length, height: 8,
-          borderRadius: 4, backgroundColor: complete ? c.bee : c.line,
-          transform: [{ rotate: `${Math.atan2(rowHeight, dx)}rad` }] }} />}
+        {i < records.length - 1 && width > 0 && <View pointerEvents="none" accessible={false}
+          style={{ position: 'absolute', inset: 0 }}>
+          {stageConnectionPoints(width, x, nextX, rowHeight).map((point, index) => <View key={index}
+            style={{ position: 'absolute', left: point.x - 4, top: coinHeight / 2 + point.y - 4,
+              width: 8, height: 8, borderRadius: 4, backgroundColor: complete ? c.bee : c.line }} />)}
+        </View>}
         <View pointerEvents="box-none" style={{ position: 'absolute', left: x - 70, width: 140, alignItems: 'center', gap: 10 }}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Stage ${record.stage}, Lv ${Math.ceil(record.stage / 2)}, ${methodNames[Math.floor((record.stage - 1) / 2)]}, ${record.count}회 완료, ${label}`}
             accessibilityState={{ disabled: !available || !ready, selected: active }} disabled={!available || !ready}
@@ -59,13 +60,13 @@ export function StagePath({ records, current, ready, onSelect }: {
               transform: [{ scaleY: coinRatio }], boxShadow: pressed ? `0 3px 0 ${edge}` : `0 7px 0 ${edge}` }}>
             <View style={{ position: 'absolute', inset: 3, borderRadius: 34, overflow: 'hidden' }}>
               <View style={{ position: 'absolute', width: 15, height: 80, left: 10, top: -24,
-                transform: [{ rotate: '38deg' }], backgroundColor: '#ffffff', opacity: available ? 0.32 : 0.12 }} />
+                transform: [{ rotate: '38deg' }], backgroundColor: '#ffffff', opacity: available && !active ? 0.32 : 0.12 }} />
               <View style={{ position: 'absolute', width: 7, height: 80, left: 34, top: -18,
-                transform: [{ rotate: '38deg' }], backgroundColor: '#ffffff', opacity: available ? 0.18 : 0.07 }} />
+                transform: [{ rotate: '38deg' }], backgroundColor: '#ffffff', opacity: available && !active ? 0.18 : 0.07 }} />
             </View>
             </View>
             <Icon name={!available ? 'lock.fill' : active ? 'play.fill' : complete ? 'checkmark' : 'speaker.wave.2.fill'}
-              size={25} color={!available ? c.secondary : active || complete ? c.onAccent : c.heading} />
+              size={25} color={!available ? c.secondary : active ? '#000000' : complete ? c.onAccent : c.heading} />
             <View style={{ position: 'absolute', right: -7, top: -7, minWidth: 26, minHeight: 26, paddingHorizontal: 5,
               borderRadius: 13, backgroundColor: '#042c60', alignItems: 'center', justifyContent: 'center' }}>
               <Label size={12} weight="800" color="#ffffff">{record.stage}</Label>
