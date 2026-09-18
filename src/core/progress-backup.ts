@@ -45,9 +45,9 @@ export class ProgressBackupStore {
     try {
       if (this.readValue(key) === value) { this.db.exec('COMMIT'); return; }
       this.db.run('INSERT INTO preferences(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, value);
-      const ledger = readSync(this.db);
+      const ledger = readSync(this.db, '');
       ledger.clocks[preferenceKey(key)] = nextStamp(this.db, ledger, this.now().getTime());
-      saveSync(this.db, ledger);
+      saveSync(this.db, ledger, true);
       this.markChanged();
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }

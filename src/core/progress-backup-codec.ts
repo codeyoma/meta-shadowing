@@ -6,7 +6,7 @@ import { validCycleIdentity } from './cycle-credit';
 import { MAX_XP } from './levels';
 import { validUnitCredit, type UnitCredit } from './unit-credit';
 import { unitProgress } from './session-navigation';
-import { canonicalLedger, creditTotal, runKey, seedLedger, type SyncLedger, type SyncRun } from './sync-ledger';
+import { canonicalLedger, creditTotal, runKey, seedLedger, stringifyCounts, type SyncLedger, type SyncRun } from './sync-ledger';
 
 export const columns = {
   checkpoints: ['package', 'stage', 'state'],
@@ -23,17 +23,7 @@ export type Row = Record<string, string | number>;
 export type ProgressBackup = { version: 4; tables: Record<Table, Row[]>; sync: SyncLedger };
 /** Dense legacy fences repeat for every old unit; bound and compress on wire. */
 export function encodeProgressBackup(backup: ProgressBackup): string {
-  const json = JSON.stringify(backup, (key, value) => {
-    if ((key !== 'counts' && key !== 'observed') || !Array.isArray(value)) return value;
-    const groups: string[] = [];
-    for (let i = 0; i < value.length;) {
-      let end = i + 1;
-      while (end < value.length && value[end] === value[i]) end++;
-      groups.push(`${end - i}*${value[i]}`); i = end;
-    }
-    const encoded = groups.join(',');
-    return encoded.length + 2 < JSON.stringify(value).length ? encoded : value;
-  });
+  const json = stringifyCounts(backup);
   checkBackupSize(json); return json;
 }
 const keys: Record<Table, readonly string[]> = {
@@ -210,7 +200,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
       || (row.phrase === s.phrase && Number(row.confirmed) < s.confirmed))) reject();
     if (!modern && row?.day && s.phase === 'complete' && (row.phrase !== s.phrase || row.confirmed !== s.confirmed)) reject();
   }
-  if (usedDaily.size !== daily.size || (!modern && usedStudy.size !== study.size)) reject();
+  if (!modern && (usedDaily.size !== daily.size || usedStudy.size !== study.size)) reject();
   result.sync = modern ? validateSync(root.sync, result.tables) : seedLedger(result.tables);
   result.sync = canonicalLedger(result.sync);
   // Validation above still checks the original version's accounting invariants.
@@ -252,7 +242,9 @@ function validateSync(value: unknown, tables: Record<Table, Row[]>): SyncLedger 
         let length = 0;
         for (const [n, count] of groups) { integer(n, 1, 100000); integer(count, 0, 100000); length += n!; }
         if (length > 100000 || length > remainingCells) return reject();
-        value = groups.flatMap(([n, count]) => Array.from({ length: n! }, () => count!));
+        const expanded = new Array<number>(length); let offset = 0;
+        for (const [n, count] of groups) { expanded.fill(count!, offset, offset + n!); offset += n!; }
+        value = expanded;
       }
       if (!Array.isArray(value) || value.length < 1 || value.length > 100000) return reject();
       remainingCells -= value.length;

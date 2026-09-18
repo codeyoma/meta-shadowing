@@ -2,7 +2,7 @@ import { restoreSession, transition, type Session } from './session';
 import { Progression, localDay, type BookIdentity } from './progression';
 import { createCycleTable, recordCycles, validCycleIdentity } from './cycle-credit';
 import type { PlayableStage } from './catalog';
-import { bindRun, checkpointKey, createSyncTable, creditTotal, nextStamp, preferenceKey, readSync, saveSync, type SyncRun } from './sync-ledger';
+import { bindRun, checkpointKey, createSyncTable, creditTotal, nextStamp, readSync, saveSync, type SyncRun } from './sync-ledger';
 import { unitProgress } from './unit-progress';
 
 export interface Database {
@@ -46,11 +46,25 @@ export class Journal {
     };
   }
   latestStage(packageKey: string): number | null {
-    const candidates = Object.entries(readSync(this.db).clocks).flatMap(([key, stamp]) => {
+    const candidates = Object.entries(readSync(this.db, '').clocks).flatMap(([key, stamp]) => {
       const [kind, book, stage] = JSON.parse(key);
       return kind === 'checkpoint' && book === packageKey && stamp ? [{ stage: Number(stage), stamp }] : [];
     }).sort((a, b) => a.stamp === b.stamp ? b.stage - a.stage : a.stamp > b.stamp ? -1 : 1);
     return candidates[0]?.stage ?? null;
+  }
+  latestLearning(): { packageKey: string; stage: number; language: string; book: string; stamp: string } | null {
+    const candidates = Object.entries(readSync(this.db, '').clocks).flatMap(([key, stamp]) => {
+      const [kind, packageKey, stage] = JSON.parse(key);
+      return kind === 'checkpoint' && stamp ? [{ packageKey: String(packageKey), stage: Number(stage), stamp }] : [];
+    }).sort((a, b) => a.stamp === b.stamp ? a.packageKey < b.packageKey ? -1 : a.packageKey > b.packageKey ? 1 : b.stage - a.stage : a.stamp > b.stamp ? -1 : 1);
+    for (const candidate of candidates) {
+      const checkpoint = this.db.first<{ state: string }>('SELECT state FROM checkpoints WHERE package=? AND stage=?', candidate.packageKey, candidate.stage);
+      if (!checkpoint) continue;
+      const identity = this.db.first<{ language: string; book: string }>('SELECT language,book FROM cycle_credits WHERE package=? AND stage=? AND run=?',
+        candidate.packageKey, candidate.stage, JSON.parse(checkpoint.state).runId);
+      if (identity) return { ...candidate, ...identity };
+    }
+    return null;
   }
   private savePinned(packageKey: string, input: Session, prior: Session, identity?: BookIdentity): number {
     const state = { ...restoreSession(JSON.stringify(input), input.version === 2 ? input.sourcePhraseCount : input.phraseCount, input.stage), running: input.running };
@@ -60,7 +74,7 @@ export class Journal {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const before = identity ? this.progress.summary(identity.language).xp : 0;
-      const ledger = readSync(this.db), day = localDay(this.now());
+      const ledger = readSync(this.db, JSON.stringify([packageKey, state.stage, state.runId])), day = localDay(this.now());
       let run: SyncRun | undefined;
       if (identity) {
         if (!validCycleIdentity(packageKey, identity)) throw Error('Invalid cycle identity.');
@@ -68,15 +82,16 @@ export class Journal {
         if (bound && (bound.language !== identity.language || bound.book !== identity.book)) throw Error('Conflicting package identity.');
         run = bindRun(this.db, ledger, packageKey, prior.runId === state.runId ? prior : state, identity);
         bindRun(this.db, ledger, packageKey, state, identity);
+        const observed = unitProgress(state);
         const accepted = prior.runId === state.runId && prior.phase === 'speaking'
-          && unitProgress(state)[prior.phrase]!.confirmed === prior.confirmed + 1
+          && observed[prior.phrase]!.confirmed === prior.confirmed + 1
           && (['confirm', 'repeat', 'next'] as const).some(type => equal(transition(prior, { type }), state));
         if (accepted) {
           const existing = run.events.find(event => event.unit === prior.phrase && event.ordinal === prior.confirmed + 1);
           if (!existing) run.events.push({ unit: prior.phrase, ordinal: prior.confirmed + 1, day });
           else existing.day = existing.day < day ? existing.day : day;
         }
-        run.observed = run.observed.map((count, i) => Math.max(count, unitProgress(state)[i]!.confirmed));
+        run.observed = run.observed.map((count, i) => Math.max(count, observed[i]!.confirmed));
         const old = this.db.first<{ phrase: number; confirmed: number; day: string }>('SELECT phrase,confirmed,day FROM cycle_credits WHERE package=? AND stage=? AND run=?', packageKey, state.stage, state.runId);
         let phrase = old && (old.phrase > state.phrase || (old.phrase === state.phrase && old.confirmed > state.confirmed)) ? old.phrase : state.phrase;
         let confirmed = run.observed[phrase]!;
@@ -92,14 +107,9 @@ export class Journal {
       }
       const stamp = nextStamp(this.db, ledger, this.now().getTime());
       ledger.clocks[checkpointKey(packageKey, state.stage)] = stamp;
-      if (identity && this.db.first("SELECT 1 FROM sqlite_master WHERE type='table' AND name='preferences'")) {
-        this.db.run('INSERT INTO preferences(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', 'selection',
-          JSON.stringify({ language: identity.language, book: identity.book, packageKey }));
-        ledger.clocks[preferenceKey('selection')] = stamp;
-      }
       this.db.run('INSERT INTO checkpoints VALUES (?,?,?) ON CONFLICT(package,stage) DO UPDATE SET state=excluded.state', packageKey, state.stage, JSON.stringify(state));
       if (state.phase === 'complete') this.db.run('INSERT OR IGNORE INTO completions(package,stage,run,completed_at) VALUES (?,?,?,?)', packageKey, state.stage, state.runId, this.now().toISOString());
-      saveSync(this.db, ledger); this.onSaved?.();
+      saveSync(this.db, ledger, true); this.onSaved?.();
       const earned = identity ? this.progress.summary(identity.language).xp - before : 0;
       this.db.exec('COMMIT'); return earned;
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
@@ -110,7 +120,7 @@ export class Journal {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const prior = this.db.first<{ state: string }>('SELECT state FROM checkpoints WHERE package=? AND stage=?', packageKey, state.stage);
-      const ledger = readSync(this.db);
+      const ledger = readSync(this.db, JSON.stringify([packageKey, state.stage, state.runId]));
       const boundRun = identity ? bindRun(this.db, ledger, packageKey, prior && JSON.parse(prior.state).runId === state.runId ? JSON.parse(prior.state) : state, identity) : undefined;
       const creditedBefore = boundRun ? creditTotal(boundRun) : 0;
       if (prior) {
@@ -131,12 +141,13 @@ export class Journal {
             boundRun.events.push({ unit: predecessor.phrase, ordinal: predecessor.confirmed + 1, day });
           }
         }
-        boundRun.observed = unit ? JSON.parse(unit.state).counts : boundRun.observed.map((count, i) => Math.max(count, unitProgress(state)[i]!.confirmed));
+        const observed = unitProgress(state);
+        boundRun.observed = unit ? JSON.parse(unit.state).counts : boundRun.observed.map((count, i) => Math.max(count, observed[i]!.confirmed));
       }
       if (!prior || JSON.stringify({ ...JSON.parse(prior.state), running: false }) !== JSON.stringify({ ...state, running: false })) {
         ledger.clocks[checkpointKey(packageKey, state.stage)] = nextStamp(this.db, ledger, this.now().getTime());
       }
-      saveSync(this.db, ledger);
+      saveSync(this.db, ledger, true);
       this.db.run('INSERT INTO checkpoints (package,stage,state) VALUES (?,?,?) ON CONFLICT(package,stage) DO UPDATE SET state=excluded.state',
         packageKey, state.stage, json);
       if (state.phase === 'complete') {

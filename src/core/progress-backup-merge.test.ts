@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { ProgressBackupStore, type BackupDatabase } from './progress-backup';
+import { ProgressBackupStore, validateProgressBackup, type BackupDatabase } from './progress-backup';
 import { createSession, transition, type Session } from './session';
 import { jumpToSourcePhrase } from './session-navigation';
 
@@ -163,4 +163,70 @@ test('ordinary journal confirmations self-merge without changing the acknowledge
   assert.equal(a.value.revision(), revision);
   assert.equal(a.value.pending(), false);
   assert.equal(a.value.exportBackup(), snapshot);
+});
+
+test('latest learning is independent of browsing selection and unchanged saves cannot promote it', t => {
+  const a = store(); t.after(() => a.native.close());
+  a.value.saveValue('selection', JSON.stringify({ language: 'english', book: 'browse', packageKey: 'browse-v1' }));
+  const original = a.value.readValue('selection');
+  const s = initial('learn'); const write = a.value.journal.createWriter('sample-v1', s, identity);
+  const next = confirm(s, write);
+  assert.equal(a.value.readValue('selection'), original);
+  const learning = a.value.journal.latestLearning();
+  assert.equal(learning?.packageKey, 'sample-v1'); assert.equal(learning?.stage, 1);
+  assert.equal(learning?.language, 'english'); assert.equal(learning?.book, 'sample');
+  a.value.saveValue('selection', JSON.stringify({ language: 'english', book: 'other', packageKey: 'other-v1' }));
+  write(next); assert.deepEqual(a.value.journal.latestLearning(), learning);
+});
+
+test('study A then browse B retains learning A through merge orders and reopen until actual study B', t => {
+  const a = store(), b = store(); t.after(() => [a, b].forEach(s => s.native.close()));
+  const first = initial('book-a'); confirm(first, a.value.journal.createWriter('sample-v1', first, identity));
+  a.value.saveValue('selection', JSON.stringify({ language: 'english', book: 'other', packageKey: 'other-v1' }));
+  b.value.saveValue('settings', JSON.stringify({ mode: 'manual', rate: 1.25 }));
+  const left = a.value.exportBackup(), right = b.value.exportBackup();
+  a.value.mergeBackup(right); b.value.mergeBackup(left);
+  assert.equal(a.value.exportBackup(), b.value.exportBackup());
+  const reopened = new ProgressBackupStore(b.db);
+  assert.equal(reopened.journal.latestLearning()?.packageKey, 'sample-v1');
+  assert.equal(JSON.parse(reopened.readValue('selection')!).packageKey, 'other-v1');
+  const second = initial('book-b'); confirm(second, reopened.journal.createWriter('other-v1', second, { ...identity, book: 'other' }));
+  a.value.mergeBackup(reopened.exportBackup());
+  assert.equal(a.value.journal.latestLearning()?.packageKey, 'other-v1');
+  assert.equal(a.value.journal.progress.summary('english').xp, 2);
+});
+
+test('local monolithic-ledger migration is atomic and preserves evidence after a failed startup retry', t => {
+  const a = store(); t.after(() => a.native.close());
+  const first = initial('migration'); confirm(first, a.value.journal.createWriter('sample-v1', first, identity));
+  const before = a.value.exportBackup(), revision = a.value.revision();
+  // Previous local-storage layout fixture; the public backup format is unchanged.
+  const legacyLedger = validateProgressBackup(before).sync;
+  a.native.exec('DELETE FROM progress_sync_runs');
+  a.db.run('UPDATE progress_sync_ledger SET state=?', JSON.stringify(legacyLedger));
+  a.native.exec("CREATE TRIGGER fail_migration BEFORE INSERT ON progress_sync_runs BEGIN SELECT RAISE(ABORT,'migration unavailable'); END;");
+  assert.throws(() => new ProgressBackupStore(a.db), /migration unavailable/);
+  a.native.exec('DROP TRIGGER fail_migration');
+  const migrated = new ProgressBackupStore(a.db);
+  assert.equal(migrated.exportBackup(), before); assert.equal(migrated.revision(), revision);
+  assert.equal(migrated.journal.progress.summary('english').xp, 1);
+  migrated.mergeBackup(before); assert.equal(migrated.revision(), revision);
+});
+
+test('same historical receipt on different days keeps max awarded XP once and both completed study days', t => {
+  const a = store(), b = store(); t.after(() => [a, b].forEach(s => s.native.close()));
+  const receipt = (day: string, xp: number) => {
+    const value = JSON.parse(a.value.exportBackup()); value.version = 3; delete value.sync;
+    value.tables.completions = [{ package: 'sample-v1', stage: 1, run: 'old-shared', completed_at: `${day} 12:00:00` }];
+    value.tables.daily_stages = [{ ...identity, day, stage: 1 }];
+    value.tables.study_days = [{ language: identity.language, day }];
+    value.tables.stage_awards = [{ ...identity, day, stage: 1, run: 'old-shared', xp }];
+    return JSON.stringify(value);
+  };
+  const first = receipt('2026-09-17', 0), second = receipt('2026-09-18', 10);
+  a.value.mergeBackups([first, second]); b.value.mergeBackups([second, first]);
+  assert.equal(a.value.journal.progress.summary('english').xp, 10);
+  assert.equal(a.value.journal.progress.summary('english').streak, 2);
+  assert.equal(a.value.journal.completions('sample-v1', 1), 1);
+  assert.equal(a.value.exportBackup(), b.value.exportBackup());
 });

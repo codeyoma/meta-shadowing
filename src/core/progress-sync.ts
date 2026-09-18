@@ -1,5 +1,6 @@
 import { ProgressBackupStore, ProgressMergeError, validateProgressBackup, type BackupDatabase } from './progress-backup';
 import type { CloudAccount, CloudBackup, ProgressCloud } from '../../modules/progress-cloud';
+import { encodeProgressBackup } from './progress-backup-codec';
 
 type Preference = 'settings' | 'selection';
 export class ProgressProfiles {
@@ -94,7 +95,7 @@ function remotePayload(json: string): string {
   try { value = JSON.parse(json); } catch { throw Error('progress-cloud-corrupt'); }
   if (value && typeof value === 'object' && 'version' in value
     && typeof value.version === 'number' && value.version > 4) throw Error('progress-cloud-updateRequired');
-  try { return JSON.stringify(validateProgressBackup(json)); }
+  try { return encodeProgressBackup(validateProgressBackup(json)); }
   catch { throw Error('progress-cloud-corrupt'); }
 }
 function headToken(backups: readonly CloudBackup[]): string {

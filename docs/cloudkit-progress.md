@@ -15,6 +15,8 @@ the current UI or proof of #50 physical acceptance.
   even if another device changes the selected checkpoint. An unchanged pause or
   dispose cannot overwrite the newer selection. Library selection is refreshed
   outside the player; next safe entry chooses the latest available learning point.
+  Browsing a different book does not replace that independently ordered learning
+  selection. An unavailable package version is not silently replaced with another.
 - `지금 동기화` uses the same safe two-way merge while leaving automatic sync off.
   Nonempty guest history still requires account-ownership consent; an empty guest
   does not. Disabling sync or changing accounts never deletes local history.
@@ -34,6 +36,24 @@ conservative legacy credit candidates. It imports v1–v3 without inventing earn
 XP. Opaque historical credits use candidate maxima, not summed duplicated totals.
 The 16 MiB transport bound still applies. This is private progress only: no
 StoreKit ownership or commercial package payload is synchronized.
+
+Local synchronization metadata stores each run separately in SQLite. Ordinary
+checkpoints update only their run; export/merge still validates the complete
+ledger. Migration from the earlier single-row ledger is atomic and retryable.
+Wire encoding is shared by local export and remote validation, so equivalent
+compressed payloads do not cause repeated publications.
+
+### Local verification — 2026-09-18
+
+- TypeScript typecheck and all 297 tests passed, including independent SQLite
+  installations, offline merge orders, duplicate delivery, live-player writes,
+  interrupted local migration and latest-learning versus browsing selection.
+- Native CloudKit transport/lifecycle tests: 37 passed on an iOS 27 simulator.
+- Build-settings (8), free-package (3), and native-header (7) checks passed.
+- iOS production JavaScript export and unsigned Release simulator build passed.
+- Local in-memory SQLite timing for ordinary checkpoint writes with 2,400
+  historical runs improved from 76–121 ms to 0–1 ms. This is not an iPhone
+  performance measurement or a real CloudKit acceptance result.
 
 ### Remaining physical acceptance
 

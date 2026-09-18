@@ -14,6 +14,19 @@ export type SyncRun = {
   candidates: CreditCandidate[]; events: Confirmation[];
 };
 export type SyncLedger = { clocks: Record<string, Stamp>; runs: SyncRun[] };
+export function stringifyCounts(value: unknown): string {
+  return JSON.stringify(value, (key, value) => {
+    if ((key !== 'counts' && key !== 'observed') || !Array.isArray(value)) return value;
+    const groups: string[] = [];
+    for (let i = 0; i < value.length;) {
+      let end = i + 1;
+      while (end < value.length && value[end] === value[i]) end++;
+      groups.push(`${end - i}*${value[i]}`); i = end;
+    }
+    const encoded = groups.join(',');
+    return encoded.length + 2 < JSON.stringify(value).length ? encoded : value;
+  });
+}
 export const runKey = (row: Pick<SyncRun, 'package' | 'stage' | 'run'> | Row) => JSON.stringify([row.package, row.stage, row.run]);
 export const checkpointKey = (key: string, stage: number) => JSON.stringify(['checkpoint', key, stage]);
 export const preferenceKey = (key: string) => JSON.stringify(['preference', key]);
@@ -28,15 +41,38 @@ export function canonicalLedger(ledger: SyncLedger): SyncLedger {
 }
 
 export function createSyncTable(db: Database) {
-  db.exec('CREATE TABLE IF NOT EXISTS progress_sync_ledger (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL); CREATE TABLE IF NOT EXISTS progress_sync_clock (id INTEGER PRIMARY KEY CHECK(id=1), writer TEXT NOT NULL, last TEXT NOT NULL);');
+  db.exec('CREATE TABLE IF NOT EXISTS progress_sync_ledger (id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL); CREATE TABLE IF NOT EXISTS progress_sync_clock (id INTEGER PRIMARY KEY CHECK(id=1), writer TEXT NOT NULL, last TEXT NOT NULL); CREATE TABLE IF NOT EXISTS progress_sync_runs (key TEXT PRIMARY KEY, state TEXT NOT NULL);');
   db.run('INSERT OR IGNORE INTO progress_sync_ledger(id,state) VALUES (1,?)', JSON.stringify({ clocks: {}, runs: [] }));
   db.run('INSERT OR IGNORE INTO progress_sync_clock(id,writer,last) VALUES (1,?,?)', `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`, '');
+  // This is a local persistence migration, not a learning action or a new backup
+  // version. A failed move leaves the original blob intact for the next startup.
+  db.exec('SAVEPOINT migrate_progress_sync_runs');
+  try {
+    const previous = JSON.parse(db.first<{ state: string }>('SELECT state FROM progress_sync_ledger WHERE id=1')!.state) as SyncLedger;
+    if (previous.runs.length) {
+      for (const run of previous.runs) db.run('INSERT INTO progress_sync_runs(key,state) VALUES (?,?)', runKey(run), JSON.stringify(run));
+      db.run('UPDATE progress_sync_ledger SET state=? WHERE id=1', JSON.stringify({ clocks: previous.clocks, runs: [] }));
+    }
+    db.exec('RELEASE migrate_progress_sync_runs');
+  } catch (error) { db.exec('ROLLBACK TO migrate_progress_sync_runs'); db.exec('RELEASE migrate_progress_sync_runs'); throw error; }
 }
-export function readSync(db: Database): SyncLedger {
-  return JSON.parse(db.first<{ state: string }>('SELECT state FROM progress_sync_ledger WHERE id=1')!.state);
+/** With a key, loads only that run. Empty key reads only ordering metadata. */
+export function readSync(db: Database, key?: string): SyncLedger {
+  const ledger = JSON.parse(db.first<{ state: string }>('SELECT state FROM progress_sync_ledger WHERE id=1')!.state) as SyncLedger;
+  if (key !== undefined) {
+    const row = key ? db.first<{ state: string }>('SELECT state FROM progress_sync_runs WHERE key=?', key) : null;
+    ledger.runs = row ? [JSON.parse(row.state)] : [];
+  } else {
+    const rows = db.first<{ states: string }>("SELECT '[' || COALESCE(group_concat(state, ','), '') || ']' AS states FROM progress_sync_runs")!;
+    ledger.runs = JSON.parse(rows.states);
+  }
+  return ledger;
 }
-export function saveSync(db: Database, ledger: SyncLedger) {
-  db.run('UPDATE progress_sync_ledger SET state=? WHERE id=1', JSON.stringify(canonicalLedger(ledger)));
+export function saveSync(db: Database, ledger: SyncLedger, partial = false) {
+  const canonical = canonicalLedger(ledger);
+  if (!partial) db.run('DELETE FROM progress_sync_runs');
+  for (const run of canonical.runs) db.run('INSERT INTO progress_sync_runs(key,state) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET state=excluded.state', runKey(run), JSON.stringify(run));
+  db.run('UPDATE progress_sync_ledger SET state=? WHERE id=1', JSON.stringify({ clocks: canonical.clocks, runs: [] }));
 }
 export function nextStamp(db: Database, ledger: SyncLedger, now: number): Stamp {
   const clock = db.first<{ writer: string; last: string }>('SELECT writer,last FROM progress_sync_clock WHERE id=1')!;

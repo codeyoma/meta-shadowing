@@ -316,6 +316,19 @@ test('head disappearance during read retries as contention rather than stopping 
   assert.equal(profiles.current().pending(), false);
 });
 
+test('compressed confirmation counts remain canonical across repeated clean polls', async t => {
+  const { sync, profiles, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const initial = createSession({ runId: 'long-run', stage: 1, phraseCount: 200, mode: 'manual', rate: 1 });
+  const save = profiles.current().journal.createWriter('sample-v1', initial, { language: 'english', book: 'sample' });
+  const player = new Player(initial, { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} }, save, () => 0, () => {});
+  await player.resume(); player.audioEnded(1); await player.confirm(); player.dispose();
+  await sync.retry();
+  const before = published.length, revision = profiles.current().revision();
+  await sync.retry(); await sync.retry();
+  assert.equal(published.length, before); assert.equal(profiles.current().revision(), revision);
+});
+
 test('merge disk failure rolls back and reports storage, then retries without losing either history', async t => {
   const { sync, profiles, heads, payloads, open, published } = fixture(t);
   await sync.refreshAccount(); await sync.enable(false);
