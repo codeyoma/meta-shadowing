@@ -3,6 +3,18 @@ import Testing
 
 @MainActor
 struct SingletonTests {
+  @Test func candidateReplacedBeforeReadRetriesInsteadOfReportingCorruption() async throws {
+    let a = directory(), b = directory()
+    defer { for url in [a, b] { try? FileManager.default.removeItem(at: url) } }
+    let cloud = TestCloud()
+    let writer = try ProgressTransport(directory: a, scope: "test-scope", cloud: cloud)
+    let reader = try ProgressTransport(directory: b, scope: "test-scope", cloud: cloud)
+    let first = try await writer.publish(scope: "test-scope", revision: 1, json: "{\"first\":true}", base: "")
+    #expect(try await reader.list(scope: "test-scope").map(\.id) == [first.id])
+    let second = try await writer.publish(scope: "test-scope", revision: 2, json: "{\"second\":true}", base: first.token)
+    await #expect(throws: ProgressCloudError.conflict) { try await reader.read(scope: "test-scope", id: first.id) }
+    #expect(try await reader.read(scope: "test-scope", id: second.id) == "{\"second\":true}")
+  }
   @Test func cleanupManifestEncodingRemainsReadableAtItsBoundary() throws {
     let assets = (0..<257).map { _ in UUID().uuidString }
     let valid = CleanupManifest(heads: [], assets: Array(assets.prefix(256)))
@@ -329,7 +341,7 @@ struct SingletonTests {
     #expect(retry.id == acknowledged.id)
     #expect(!retry.cleanupPending)
     #expect(cloud.assets.count == 1)
-    await #expect(throws: ProgressCloudError.corrupt) { try await reopened.read(scope: "test-scope", id: initial.id) }
+    await #expect(throws: ProgressCloudError.conflict) { try await reopened.read(scope: "test-scope", id: initial.id) }
   }
 
   @Test(arguments: [false, true])

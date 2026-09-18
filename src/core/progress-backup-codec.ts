@@ -6,6 +6,7 @@ import { validCycleIdentity } from './cycle-credit';
 import { MAX_XP } from './levels';
 import { validUnitCredit, type UnitCredit } from './unit-credit';
 import { unitProgress } from './session-navigation';
+import { canonicalLedger, creditTotal, runKey, seedLedger, type SyncLedger, type SyncRun } from './sync-ledger';
 
 export const columns = {
   checkpoints: ['package', 'stage', 'state'],
@@ -19,7 +20,22 @@ export const columns = {
 } as const;
 export type Table = keyof typeof columns;
 export type Row = Record<string, string | number>;
-export type ProgressBackup = { version: 3; tables: Record<Table, Row[]> };
+export type ProgressBackup = { version: 4; tables: Record<Table, Row[]>; sync: SyncLedger };
+/** Dense legacy fences repeat for every old unit; bound and compress on wire. */
+export function encodeProgressBackup(backup: ProgressBackup): string {
+  const json = JSON.stringify(backup, (key, value) => {
+    if ((key !== 'counts' && key !== 'observed') || !Array.isArray(value)) return value;
+    const groups: string[] = [];
+    for (let i = 0; i < value.length;) {
+      let end = i + 1;
+      while (end < value.length && value[end] === value[i]) end++;
+      groups.push(`${end - i}*${value[i]}`); i = end;
+    }
+    const encoded = groups.join(',');
+    return encoded.length + 2 < JSON.stringify(value).length ? encoded : value;
+  });
+  checkBackupSize(json); return json;
+}
 const keys: Record<Table, readonly string[]> = {
   checkpoints: ['package', 'stage'], completions: ['package', 'stage', 'run'],
   daily_stages: ['language', 'book', 'day'], stage_awards: ['language', 'book', 'run'],
@@ -79,11 +95,13 @@ const compound = (row: Row, fields: readonly string[]) => JSON.stringify(fields.
 
 export function validateProgressBackup(json: string): ProgressBackup {
   checkBackupSize(json);
-  const root = object(JSON.parse(json), ['version', 'tables']);
-  if (root.version !== 1 && root.version !== 2 && root.version !== 3) reject();
-  const tableNames = Object.keys(columns).filter(table => (root.version !== 1 || table !== 'cycle_credits') && (root.version === 3 || table !== 'unit_credits'));
+  const parsedRoot = JSON.parse(json);
+  const root = object(parsedRoot, parsedRoot?.version === 4 ? ['version', 'tables', 'sync'] : ['version', 'tables']);
+  if (root.version !== 1 && root.version !== 2 && root.version !== 3 && root.version !== 4) reject();
+  const modern = root.version === 4;
+  const tableNames = Object.keys(columns).filter(table => (root.version !== 1 || table !== 'cycle_credits') && (Number(root.version) >= 3 || table !== 'unit_credits'));
   const tables = object(root.tables, tableNames);
-  const result = { version: 3, tables: {} } as ProgressBackup;
+  const result = { version: 4, tables: {} } as ProgressBackup;
   for (const table of Object.keys(columns) as Table[]) {
     const input = !tableNames.includes(table) ? [] : tables[table];
     if (!Array.isArray(input) || input.length > 100000) return reject();
@@ -113,7 +131,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
             if (!validUnitCredit(parsed)) reject();
             row[column] = JSON.stringify(parsed); continue;
           }
-          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(root.version === 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : [])]);
+          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(Number(root.version) >= 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : [])]);
           integer(s.phraseCount, 1, 100000); integer(s.planned, 3, 100000); integer(s.confirmed, 0, 100000);
           if (s.version === 2) integer(s.sourcePhraseCount, 1, 100000);
           identity(s.runId);
@@ -150,7 +168,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
     usedDaily.add(dailyKey); usedStudy.add(studyKey);
     if (award.xp === 10) {
       const count = (counts.get(dailyKey) ?? 0) + 1;
-      if (chosen.stage !== award.stage || count > dailyLimit(Number(chosen.stage))) reject();
+      if (!modern && (chosen.stage !== award.stage || count > dailyLimit(Number(chosen.stage)))) reject();
       counts.set(dailyKey, count);
     }
   }
@@ -173,7 +191,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
     if (existing && existing !== binding) reject();
     bindings.set(String(row.package), binding);
     const isComplete = history.has(compound(row, ['package', 'stage', 'run']));
-    if (isComplete && (row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < 3 || Number(row.confirmed) % 2 !== 1)) reject();
+    if (isComplete && (row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < 3 || (!modern && Number(row.confirmed) % 2 !== 1))) reject();
     if (row.day) {
       const studyKey = compound(row, ['language', 'day']);
       if (!isComplete || !study.has(studyKey) || row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < 3) reject();
@@ -190,8 +208,87 @@ export function validateProgressBackup(json: string): ProgressBackup {
     if (s.unitProgress && row && !ledger) reject();
     if (!ledger && row && (row.phrase_count !== s.phraseCount || Number(row.phrase) < s.phrase
       || (row.phrase === s.phrase && Number(row.confirmed) < s.confirmed))) reject();
-    if (row?.day && s.phase === 'complete' && (row.phrase !== s.phrase || row.confirmed !== s.confirmed)) reject();
+    if (!modern && row?.day && s.phase === 'complete' && (row.phrase !== s.phrase || row.confirmed !== s.confirmed)) reject();
   }
-  if (usedDaily.size !== daily.size || usedStudy.size !== study.size) reject();
+  if (usedDaily.size !== daily.size || (!modern && usedStudy.size !== study.size)) reject();
+  result.sync = modern ? validateSync(root.sync, result.tables) : seedLedger(result.tables);
+  result.sync = canonicalLedger(result.sync);
+  // Validation above still checks the original version's accounting invariants.
+  // The v4 projection has one canonical split; provenance lives in sync.runs.
+  const totals = new Map(result.sync.runs.map(run => [runKey(run), creditTotal(run)]));
+  for (const row of result.tables.unit_credits) {
+    const ledger = JSON.parse(String(row.state)) as UnitCredit;
+    row.state = JSON.stringify({ counts: ledger.counts, sourceCount: ledger.sourceCount, groupSize: ledger.groupSize,
+      baseline: totals.get(runKey(row))!, earned: 0 });
+  }
   return result;
+}
+
+function validateSync(value: unknown, tables: Record<Table, Row[]>): SyncLedger {
+  const raw = object(value, ['clocks', 'runs']);
+  if (!raw.clocks || typeof raw.clocks !== 'object' || Array.isArray(raw.clocks)) reject();
+  const clocks: Record<string, string> = {};
+  const permitted = new Set([...tables.checkpoints.map(row => JSON.stringify(['checkpoint', row.package, row.stage])),
+    ...tables.preferences.map(row => JSON.stringify(['preference', row.key]))]);
+  for (const [key, stamp] of Object.entries(raw.clocks)) {
+    if (!permitted.has(key) || typeof stamp !== 'string' || (stamp !== '' && !/^\d{16}:\d{10}:[a-z0-9]{1,100}$/.test(stamp))
+      || (stamp && !Number.isSafeInteger(Number(stamp.split(':')[0])))) reject();
+    clocks[key] = stamp;
+  }
+  if (Object.keys(clocks).length !== permitted.size || !Array.isArray(raw.runs) || raw.runs.length > 100000) reject();
+  const seen = new Set<string>();
+  let remainingCells = 4_000_000;
+  const cyclesByKey = new Map(tables.cycle_credits.map(row => [runKey(row), row]));
+  const unitsByKey = new Map(tables.unit_credits.map(row => [runKey(row), row]));
+  const runs: SyncRun[] = raw.runs.map(value => {
+    const run = object(value, ['package', 'stage', 'run', 'language', 'book', 'sourceCount', 'groupSize', 'observed', 'candidates', 'events']);
+    for (const key of ['package', 'run', 'language', 'book']) identity(run[key]);
+    integer(run.stage, 1, 16); integer(run.sourceCount, 0, 100000); integer(run.groupSize, 0, 4);
+    if ((run.sourceCount === 0) !== (run.groupSize === 0)) reject();
+    const counts = (value: unknown): number[] => {
+      if (typeof value === 'string') {
+        if (!value || value.length > 1_500_000 || !/^[1-9][0-9]*\*[0-9]+(?:,[1-9][0-9]*\*[0-9]+)*$/.test(value)) return reject();
+        const groups = value.split(',').map(group => group.split('*').map(Number));
+        let length = 0;
+        for (const [n, count] of groups) { integer(n, 1, 100000); integer(count, 0, 100000); length += n!; }
+        if (length > 100000 || length > remainingCells) return reject();
+        value = groups.flatMap(([n, count]) => Array.from({ length: n! }, () => count!));
+      }
+      if (!Array.isArray(value) || value.length < 1 || value.length > 100000) return reject();
+      remainingCells -= value.length;
+      if (remainingCells < 0) return reject();
+      return value.map(count => integer(count, 0, 100000));
+    };
+    const observed = counts(run.observed);
+    if (run.sourceCount && observed.length !== Math.ceil(Number(run.sourceCount) / Number(run.groupSize))) reject();
+    if (!Array.isArray(run.candidates) || !run.candidates.length || run.candidates.length > 100000 || !Array.isArray(run.events) || run.events.length > 100000) reject();
+    const candidates = run.candidates.map(value => {
+      const candidate = object(value, ['credited', 'counts']);
+      const fence = counts(candidate.counts);
+      if (fence.length !== observed.length || fence.some((count, i) => count > observed[i]!)) reject();
+      return { credited: integer(candidate.credited, 0, MAX_XP), counts: fence };
+    });
+    const eventsSeen = new Set<string>();
+    const events = run.events.map(value => {
+      const event = object(value, ['unit', 'ordinal', 'day']);
+      const unit = integer(event.unit, 0, observed.length - 1), ordinal = integer(event.ordinal, 1, 100000);
+      const key = JSON.stringify([unit, ordinal]);
+      if (!run.sourceCount || ordinal > observed[unit]! || eventsSeen.has(key)) reject();
+      eventsSeen.add(key);
+      return { unit, ordinal, day: day(event.day) };
+    });
+    const result: SyncRun = { package: String(run.package), stage: Number(run.stage), run: String(run.run), language: String(run.language), book: String(run.book),
+      sourceCount: Number(run.sourceCount), groupSize: Number(run.groupSize), observed, candidates, events };
+    const key = runKey(result), row = cyclesByKey.get(key);
+    if (seen.has(key) || !row || row.language !== result.language || row.book !== result.book || row.phrase_count !== observed.length || row.credited !== creditTotal(result)
+      || observed[Number(row.phrase)]! < Number(row.confirmed)) reject();
+    const unit = unitsByKey.get(key);
+    if (unit) {
+      const plan = JSON.parse(String(unit.state)) as UnitCredit;
+      if (result.sourceCount !== plan.sourceCount || result.groupSize !== plan.groupSize || plan.counts.some((count, i) => count !== observed[i])) reject();
+    }
+    seen.add(key); return result;
+  });
+  if (seen.size !== tables.cycle_credits.length) reject();
+  return { clocks, runs };
 }

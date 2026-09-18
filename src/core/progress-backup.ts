@@ -1,7 +1,12 @@
 import { Journal, type Database } from './journal';
 import { restoreSession } from './session';
-import { columns, validateProgressBackup, validateValue, type Table, type Row, type ProgressBackup } from './progress-backup-codec';
+import { columns, encodeProgressBackup, validateProgressBackup, validateValue, type Table, type Row, type ProgressBackup } from './progress-backup-codec';
+import { createSyncTable, nextStamp, preferenceKey, readSync, saveSync, seedLedger } from './sync-ledger';
+import { mergeProgress } from './progress-merge';
 export { validateProgressBackup, type ProgressBackup } from './progress-backup-codec';
+export class ProgressMergeError extends Error {
+  constructor(message: string) { super(message); this.name = 'ProgressMergeError'; }
+}
 
 export interface BackupDatabase extends Database {
   all<T>(sql: string, ...args: (string | number)[]): T[];
@@ -9,13 +14,14 @@ export interface BackupDatabase extends Database {
 
 export class ProgressBackupStore {
   readonly journal: Journal;
-  constructor(private db: BackupDatabase, now: () => Date = () => new Date()) {
+  constructor(private db: BackupDatabase, private now: () => Date = () => new Date()) {
     db.exec(`CREATE TABLE IF NOT EXISTS preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS backup_state (
         id INTEGER PRIMARY KEY CHECK(id=1),
         revision INTEGER NOT NULL CHECK(revision BETWEEN 0 AND 9007199254740991),
         acknowledged INTEGER NOT NULL CHECK(acknowledged BETWEEN 0 AND revision));
       INSERT OR IGNORE INTO backup_state(id,revision,acknowledged) VALUES (1,0,0);`);
+    createSyncTable(db);
     this.journal = new Journal(db, now, () => this.markChanged());
     // Existing guest history predates backup metadata and still needs publication.
     if (this.hasData()) db.run('UPDATE backup_state SET revision=1 WHERE id=1 AND revision=0');
@@ -37,7 +43,11 @@ export class ProgressBackupStore {
     validateValue(key, value);
     this.db.exec('BEGIN IMMEDIATE');
     try {
+      if (this.readValue(key) === value) { this.db.exec('COMMIT'); return; }
       this.db.run('INSERT INTO preferences(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, value);
+      const ledger = readSync(this.db);
+      ledger.clocks[preferenceKey(key)] = nextStamp(this.db, ledger, this.now().getTime());
+      saveSync(this.db, ledger);
       this.markChanged();
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
@@ -64,21 +74,56 @@ export class ProgressBackupStore {
       const state = JSON.parse(String(row.state));
       return { ...row, state: JSON.stringify(restoreSession(String(row.state), state.version === 2 ? state.sourcePhraseCount : state.phraseCount, state.stage)) };
     });
-    return JSON.stringify(validateProgressBackup(JSON.stringify({ version: 3, tables })));
+    return encodeProgressBackup(validateProgressBackup(encodeProgressBackup({ version: 4, tables, sync: seedLedger(tables, readSync(this.db)) })));
   }
   restoreBackup(json: string): void {
     const backup = validateProgressBackup(json);
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      if (this.snapshot() === JSON.stringify(backup)) { this.db.exec('COMMIT'); return; }
+      if (this.snapshot() === encodeProgressBackup(backup)) { this.db.exec('COMMIT'); return; }
       if (this.hasData()) throw Error('Cannot replace a different nonempty progress profile.');
       for (const table of Object.keys(columns) as Table[]) {
         for (const row of backup.tables[table]) this.db.run(
           `INSERT INTO ${table} (${columns[table].join(',')}) VALUES (${columns[table].map(() => '?').join(',')})`,
           ...columns[table].map(column => row[column]!));
       }
+      saveSync(this.db, backup.sync);
       this.markChanged();
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  mergeBackup(json: string): void { this.mergeBackups([json]); }
+  mergeBackups(jsons: readonly string[]): void {
+    let incoming: ProgressBackup[];
+    try { incoming = jsons.map(validateProgressBackup); }
+    catch { throw new ProgressMergeError('Progress backup is incompatible or damaged.'); }
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const before = this.snapshot();
+      let canonical: ProgressBackup;
+      try { canonical = validateProgressBackup(encodeProgressBackup(incoming.reduce(mergeProgress, validateProgressBackup(before)))); }
+      catch { throw new ProgressMergeError('Progress backup is incompatible or damaged.'); }
+      if (encodeProgressBackup(canonical) === before) { this.db.exec('COMMIT'); return; }
+      for (const table of Object.keys(columns) as Table[]) {
+        this.db.run(`DELETE FROM ${table}`);
+        for (const row of canonical.tables[table]) this.db.run(
+          `INSERT INTO ${table} (${columns[table].join(',')}) VALUES (${columns[table].map(() => '?').join(',')})`,
+          ...columns[table].map(column => row[column]!));
+      }
+      saveSync(this.db, canonical.sync);
+      this.markChanged();
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  exportWithPreferences(values: Partial<Record<'settings' | 'selection', string>>): string {
+    const backup = validateProgressBackup(this.exportBackup());
+    for (const key of ['settings', 'selection'] as const) if (values[key] !== undefined) {
+      if (backup.sync.clocks[preferenceKey(key)]) continue;
+      const value = validateValue(key, values[key]);
+      backup.tables.preferences = backup.tables.preferences.filter(row => row.key !== key);
+      backup.tables.preferences.push({ key, value });
+      backup.sync.clocks[preferenceKey(key)] ??= '';
+    }
+    return encodeProgressBackup(validateProgressBackup(encodeProgressBackup(backup)));
   }
 }

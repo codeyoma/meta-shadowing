@@ -37,6 +37,7 @@ export function getProgressSync(): ProgressSync {
 export function startProgressSync() {
   const coordinator = getProgressSync();
   const account = progressCloud.addListener('accountChanged', () => { void coordinator.refreshAccount(); });
+  const network = progressCloud.addListener('networkAvailable', () => { void coordinator.networkAvailable(); });
   const lifecycle = AppState.addEventListener('change', state => {
     coordinator.setActive(state === 'active');
     if (state === 'active') void coordinator.refreshAccount();
@@ -45,5 +46,5 @@ export function startProgressSync() {
   });
   coordinator.setActive(AppState.currentState === 'active');
   void coordinator.refreshAccount();
-  return () => { account.remove(); lifecycle.remove(); coordinator.dispose(); sync = undefined; };
+  return () => { account.remove(); network.remove(); lifecycle.remove(); coordinator.dispose(); sync = undefined; };
 }

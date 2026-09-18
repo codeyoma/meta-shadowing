@@ -17,7 +17,7 @@ test('version two round-trips partial cycle credit and the next confirmation ear
   player.audioEnded(1); await player.confirm();
   player.audioEnded(1); await player.choose('repeat');
   const payload = source.exportBackup();
-  assert.equal(JSON.parse(payload).version, 3);
+  assert.equal(JSON.parse(payload).version, 4);
   target.restoreBackup(payload); target.restoreBackup(payload);
   assert.equal(target.journal.progress.summary('english').xp, 3);
   const restored = new Player(target.journal.load('sample-v1', 1, 1)!, audio,
@@ -95,7 +95,7 @@ test('backup rejects malformed schemas, duplicates, oversized input and inconsis
     corrupt(b => { b.tables.stage_awards[0].day = '2026-02-30'; }),
     corrupt(b => { b.tables.stage_awards[0].xp = 20; }),
     corrupt(b => { b.tables.study_days = []; }),
-    corrupt(b => { b.tables.daily_stages[0].stage = 2; }),
+    corrupt(b => { b.version = 3; delete b.sync; b.tables.daily_stages[0].stage = 2; }),
     corrupt(b => { b.tables.stage_awards[0].run = 'invented'; }),
     corrupt(b => { const s = JSON.parse(b.tables.checkpoints[0].state); s.phraseCount = 0; b.tables.checkpoints[0].state = JSON.stringify(s); }),
     corrupt(b => { const s = JSON.parse(b.tables.checkpoints[0].state); s.extra = true; b.tables.checkpoints[0].state = JSON.stringify(s); }),
@@ -107,7 +107,7 @@ test('backup rejects malformed schemas, duplicates, oversized input and inconsis
     corrupt(b => { b.tables.preferences = [{ key: 'purchase', value: '{}' }]; }),
     corrupt(b => { b.tables.preferences = [{ key: 'settings', value: '{"mode":"manual","rate":1,"owned":true}' }]; }),
   ]) assert.throws(() => validateProgressBackup(payload));
-  assert.equal(validateProgressBackup(valid).version, 3);
+  assert.equal(validateProgressBackup(valid).version, 4);
 });
 
 test('durable revisions include preferences and journal saves; old acknowledgements leave newer work pending', t => {
@@ -211,7 +211,7 @@ test('version one preserves legacy twenty XP and baselines partial history befor
   legacyCompletion(source, a.db, 'old-a'); legacyCompletion(source, a.db, 'old-b');
   for (const table of ['stage_awards', 'daily_stages', 'study_days']) a.db.run(`UPDATE ${table} SET language='english'`);
   source.journal.save('sample-v1', { ...session(), runId: 'partial', confirmed: 1, phase: 'speaking', running: true });
-  const legacy = JSON.parse(source.exportBackup()); legacy.version = 1; delete legacy.tables.cycle_credits; delete legacy.tables.unit_credits;
+  const legacy = JSON.parse(source.exportBackup()); legacy.version = 1; delete legacy.sync; delete legacy.tables.cycle_credits; delete legacy.tables.unit_credits;
   target.restoreBackup(JSON.stringify(legacy));
   assert.equal(target.journal.progress.summary('english').xp, 20);
   const player = new Player(target.journal.load('sample-v1', 1, 1)!,
@@ -220,7 +220,7 @@ test('version one preserves legacy twenty XP and baselines partial history befor
   await player.resume(); await player.confirm();
   assert.equal(target.journal.progress.summary('english').xp, 21);
   assert.equal(target.journal.completions('sample-v1', 1), 2);
-  assert.equal(JSON.parse(target.exportBackup()).version, 3);
+  assert.equal(JSON.parse(target.exportBackup()).version, 4);
   legacy.tables.stage_awards[0].xp = 11;
   assert.throws(() => validateProgressBackup(JSON.stringify(legacy)));
 });
@@ -235,7 +235,7 @@ test('version two rejects corrupt credits and missing completion links before re
   player.audioEnded(1); await player.choose('next');
   const valid = source.exportBackup(), before = target.exportBackup();
   const changes = [
-    (b: any) => { b.version = 4; },
+    (b: any) => { b.version = 5; },
     (b: any) => { b.tables.cycle_credits[0].credited = 4; },
     (b: any) => { b.tables.cycle_credits[0].credited = -1; },
     (b: any) => { b.tables.cycle_credits[0].confirmed = 4; b.tables.checkpoints = []; },
@@ -263,6 +263,7 @@ test('compact fifty-book forty-eight-run history fits backup bounds and round-tr
   const a = sqlite(), b = sqlite(); t.after(() => { a.native.close(); b.native.close(); });
   const source = new ProgressBackupStore(a.db, now), target = new ProgressBackupStore(b.db, now);
   const payload = JSON.parse(source.exportBackup());
+  payload.version = 3; delete payload.sync;
   payload.tables.study_days.push({ language: 'english', day: '2026-09-12' });
   for (let book = 0; book < 50; book++) for (let stage = 1; stage <= 16; stage++) for (let run = 0; run < 3; run++) {
     const key = `book-${book}-v1`, id = `run-${book}-${stage}-${run}`;
@@ -283,6 +284,7 @@ test('bounded ledger totals saturate at int32 while later confirmations and comp
   const a = sqlite(); t.after(() => a.native.close());
   const store = new ProgressBackupStore(a.db, now);
   const payload = JSON.parse(store.exportBackup());
+  payload.version = 3; delete payload.sync;
   payload.tables.study_days.push({ language: 'english', day: '2026-09-12' });
   for (const run of ['large-a', 'large-b']) {
     payload.tables.completions.push({ package: 'sample-v1', stage: 1, run, completed_at: '2026-09-12 12:00:00' });
@@ -392,9 +394,9 @@ test('a stale three-cycle completion cannot replace the durable five-cycle compl
     assert.equal(store.revision(), revision); assert.equal(store.exportBackup(), before);
     assert.equal(store.journal.progress.summary('english').xp, 5);
   }
-  // Non-complete rewinds retain their existing replay policy and credit frontier.
+  // Stale unfinished copies retain credit history but cannot reopen a completed run.
   store.journal.save('sample-v1', thirdSpeaking, identity);
-  assert.equal(store.journal.load('sample-v1', 1, 1)?.confirmed, 2);
+  assert.equal(store.journal.load('sample-v1', 1, 1), null);
   assert.equal(store.journal.progress.summary('english').xp, 5);
   assert.equal(validateProgressBackup(store.exportBackup()).tables.cycle_credits[0]?.confirmed, 5);
 });

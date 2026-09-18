@@ -70,9 +70,9 @@ final class ProgressTransport {
     try await cloud.fetch(into: store)
     try await verify(scope, ticket)
     try importCleanupAuthority()
-    return try candidates(allowPartialRecovery: true)
+    return try candidates()
   }
-  private func candidates(allowPartialRecovery: Bool = false) throws -> [CloudBackup] {
+  private func candidates() throws -> [CloudBackup] {
     let singleton = store.state.records[Self.sharedHead]
     let selected = singleton.map { [$0] } ?? heads
     let token = try currentToken()
@@ -91,12 +91,15 @@ final class ProgressTransport {
           pendingPublication: store.state.pending?.backup.id)
       }
     }.sorted { $0.id < $1.id }
-    if corrupt && (singleton != nil || !allowPartialRecovery || backups.isEmpty) { throw ProgressCloudError.corrupt }
+    if corrupt { throw ProgressCloudError.corrupt }
     return backups
   }
   func read(scope: String, id: String) async throws -> String {
     let choices = try await list(scope: scope)
-    guard choices.contains(where: { $0.id == id }), let record = store.state.records[id] else { throw ProgressCloudError.corrupt }
+    // Another device may replace a valid candidate between list and read. The
+    // coordinator must refetch/merge that new head, not report damaged data.
+    guard choices.contains(where: { $0.id == id }) else { throw ProgressCloudError.conflict }
+    guard let record = store.state.records[id] else { throw ProgressCloudError.corrupt }
     return String(decoding: try store.asset(record), as: UTF8.self)
   }
   func publish(scope: String, revision: Int, json: String, base: String) async throws -> CloudPublication {

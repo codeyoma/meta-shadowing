@@ -1,6 +1,6 @@
 # Automatic multi-device progress sync — #50
 
-Status: owner-approved behavior recorded; written-spec review pending.
+Status: owner-approved; three independent document reviews incorporated.
 Base: `origin/dev` at `09a4782` (merged #58).
 
 ## 사용자 경험
@@ -71,6 +71,8 @@ expand deployment and migration scope unnecessarily. Neither is selected.
   separately ordered latest learning selection for which book/stage to offer.
   Completion history may fence a stale unfinished snapshot of an already completed
   run; it must not reopen that run or earn its rewards again.
+  A player already active on a copied run may still contribute real confirmations;
+  completion is a resume fence, not a reason to discard that player's evidence.
 - Settings and browsing selection have their own mutation ordering; opening the
   app or receiving remote settings must not make an old checkpoint newer.
 - Device clocks cannot prove the real-world ordering of independent offline
@@ -86,13 +88,21 @@ Copies of the same historical run must not add their opaque credited totals;
 retain the existing credit once, with a conservative maximum when provenance is
 incomplete. Distinct historical runs remain distinct. New confirmation evidence
 must remain distinguishable from that already-accounted baseline.
+Retain alternative legacy credit/fence candidates rather than collapsing them
+pairwise: derive the maximum of each candidate's credited amount plus new events
+beyond its fence. Candidate and event sets union independently. Validate each old
+payload under its original rules first; the v4 union must not reapply obsolete
+per-device daily caps. Original study dates are independent durable evidence.
 
 Migration itself earns zero XP and does not make an old checkpoint the latest
 learning action. Historical snapshots without mutation timestamps use a stable
 fallback below newly stamped learning; their real learning time cannot be inferred.
 Test unequal independently migrated copies and mixed-version redelivery, not just
-identical imports. Old clients must not silently strip new synchronization history:
-unsupported formats fail safely and require updating, while local study survives.
+identical imports. Unsupported formats fail safely while local study survives.
+Rollout limitation: an already installed v3 client has an explicit overwrite path
+that this patch cannot disable remotely. All participating devices must update
+before enabling multi-device sync; mixed old/new writers are not a supported
+acceptance scenario. A transport namespace migration is not silently introduced.
 
 Keep different package versions separate. Do not apply a foreign run plan to
 installed audio; an unavailable package remains unavailable without deleting its
@@ -110,12 +120,16 @@ update requirement may be actionable errors, never a local/cloud overwrite choic
 3. Fetch the current account-scoped cloud head, validate its payload, merge it with
    the latest local records, and persist the union atomically. Recheck account and
    profile generation after every asynchronous boundary.
+   Legacy candidates must be read completely and revalidated under one head token;
+   never publish a partial recovery that could erase another candidate.
 4. Publish the merged state against the observed head. On CAS loss, refetch and
    merge again, with at most three immediate attempts per pass. Further contention
    stays pending for a later quiet retry; no spinning or conflict alert.
 5. Acknowledge only the exact published revision. A lost reply, newer local edit,
    process restart, stale token, partial fetch, or cleanup failure cannot erase
    pending work or reset local history. Retain the existing native cleanup protocol.
+   Adoption of an identical union atomically stores the observed head and exact
+   displaced pending-publication identity. No-op merges do not revise local data.
 6. Stop active timers when inactive. Do not promise fixed-interval execution while
    suspended/terminated. Foreground and reconnect catch-up provide the baseline.
 
@@ -144,6 +158,8 @@ other devices using the same iCloud account and that unsynced uninstall loss is
 still possible. Remove cloud/local conflict selection and destructive overwrite
 confirmation from routine synchronization. A manual refresh must invoke the same
 safe merge, not replace the account's records.
+`지금 동기화` deliberately performs one two-way pass when automatic sync is off,
+without enabling the toggle. First-use guest ownership consent still applies.
 
 Routine success, offline operation, and CAS retries stay quiet. Settings may show
 pending/last-confirmed-sync information. Quota, permission, unsupported format, and
@@ -175,3 +191,15 @@ account, with controlled sample learning. Record both reconnection orders,
 nondecreasing XP, identical merged completions, latest resume selection, and
 repeated sync/relaunch. Simulator fixtures, a compiled build, and #49's earlier
 empty-reward restore do not establish this gate. No device reset is authorized.
+
+## Review findings incorporated
+
+- Pin each live player's predecessor separately from the selected checkpoint so
+  remote selection cannot erase the next local confirmation. Unchanged passive
+  pause/dispose/retry saves must not win the latest-learning clock.
+- Preserve overlapping completed-run evidence, unequal legacy copies, retired
+  reward rules, and dates spanning midnight with real-SQLite regression tests.
+- Add native network-return observation and quiet foreground polling, including
+  no-change, in-flight, disabled, disposal, and account-generation cases.
+- Merge in place without changing the active profile; keep exact cleanup authority
+  and first-use guest isolation. Physical CloudKit acceptance remains separate.

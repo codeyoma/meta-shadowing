@@ -50,6 +50,17 @@ test('ownership and local installation have separate purchase, download and resu
   assert.equal(bookAction(true, true), 'resume');
 });
 
+test('latest unfinished learning is offered without reducing completion stars or bypassing release locks', () => {
+  const state = createSession({ runId: 'recent', stage: 1, phraseCount: 12, mode: 'manual', rate: 1 });
+  const records = [{ stage: 1, count: 3, session: state }, { stage: 2, count: 1, session: { ...state, stage: 2 as const } }];
+  assert.equal(stageOverview(records, 1).current, 1);
+  assert.equal(stageOverview(records, 1).completed, 1);
+  assert.equal(stageOverview(records, 11, true).current, 2);
+  records[0]!.count = 0;
+  assert.equal(stageOverview(records, 2).current, 1);
+  assert.equal(stageOverview(records, 2, true).current, 2);
+});
+
 test('stars fill once per completed full run, cap at the requirement, and ignore partial cycles', () => {
   const session = createSession({ runId: 'partial', stage: 1, phraseCount: 12, mode: 'manual', rate: 1 });
   session.confirmed = 2;

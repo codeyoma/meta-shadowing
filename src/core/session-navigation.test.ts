@@ -139,7 +139,7 @@ test('historical v2 XP stays unchanged and earlier legacy optional counts cannot
   const save = () => a.store.journal.save('sample-v1', s, identity);
   save();
   for (let i = 0; i < 3; i++) { s = speaking(s); save(); s = transition(s, { type: i === 2 ? 'next' : 'confirm' }); save(); }
-  const legacy = JSON.parse(a.store.exportBackup()); legacy.version = 2; delete legacy.tables.unit_credits;
+  const legacy = JSON.parse(a.store.exportBackup()); legacy.version = 2; delete legacy.sync; delete legacy.tables.unit_credits;
   legacy.tables.cycle_credits[0].credited = 3; // Historical one-XP group confirmations.
   b.store.restoreBackup(JSON.stringify(legacy));
   s = jumpToSourcePhrase(b.store.journal.load('sample-v1', 7, 5)!, 0);

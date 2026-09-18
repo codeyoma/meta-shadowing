@@ -38,6 +38,12 @@ export class LearningContext {
     this.validate(state);
     return this.journal.save(this.packageKey, state, { book: this.pack.manifest.id, language: this.pack.language });
   }
+  createWriter(initial: Session) {
+    this.validate(initial);
+    const write = this.journal.createWriter(this.packageKey, initial, { book: this.pack.manifest.id, language: this.pack.language });
+    return (state: Session) => { this.validate(state); return write(state); };
+  }
+  latestStage() { return this.journal.latestStage(this.packageKey); }
   units(state: Session) {
     const saved = this.validate(state);
     return learningUnits(this.pack.manifest.phrases, saved.stage, saved.version === 2 ? saved.groupSize : 2);
