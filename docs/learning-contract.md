@@ -228,10 +228,15 @@ confirmation. The current owner-approved behavior requires explicit confirmation
   missing an entire day breaks it. Restoring an old run creates no study day.
 - XP, completion history, streak day, checkpoint and backup revision commit
   atomically to SQLite. Failed saves roll back together; retry awards once.
-  Version-3 backups include per-unit navigation and credit provenance. Version-1
-  and version-2 backups remain importable without retrospective credit. Bounded
+  Version-4 backups include ordered resume selection and durable confirmation
+  identities, with conservative provenance for historical opaque credits.
+  Version-1 through version-3 backups remain importable without retrospective credit. Bounded
   checkpoint arrays support up to 100,000 learning units within the 16 MiB backup
   envelope; oversize or inconsistent payloads are rejected before mutation.
+  Same-account synchronization unions confirmed learning independently from the
+  latest resume snapshot; an older location must not lower XP. Imported and
+  retransmitted confirmations do not earn again. The active player's predecessor
+  remains pinned until its next safe entry, even when a remote checkpoint wins.
 - The day is captured at successful local save. Midnight/foreground refresh the
   browsing display without erasing history. Device-clock manipulation is not
   protected by an online authority in this local-only prototype.

@@ -10,7 +10,7 @@ export interface ProgressCloud {
   publish(scope: string, revision: number, json: string, base: string): Promise<CloudPublication>;
   cleanup(scope: string, base: string, abandoned: string | null): Promise<boolean>;
   stop(): Promise<void>;
-  addListener(event: 'accountChanged', listener: () => void): { remove(): void };
+  addListener(event: 'accountChanged' | 'networkAvailable', listener: () => void): { remove(): void };
 }
 
 const unavailable = async (): Promise<never> => { throw new Error('progress-cloud-unavailable'); };

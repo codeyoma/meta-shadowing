@@ -11,7 +11,7 @@ export default function SettingsScreen() {
     <View style={{ backgroundColor: c.group, borderRadius: 24, borderCurve: 'continuous', overflow: 'hidden' }}>
       <SettingsRow title="학습 설정" icon="slider.horizontal.3" iconColor="#8e8e93" disclosure separator
         onPress={() => router.push('/settings/learning')} />
-      <SettingsRow title="iCloud 백업" icon="icloud.fill" iconColor="#007aff" disclosure separator
+      <SettingsRow title="iCloud 동기화" icon="icloud.fill" iconColor="#007aff" disclosure separator
         onPress={() => router.push('/settings/icloud')} />
       <RestorePurchases />
     </View>

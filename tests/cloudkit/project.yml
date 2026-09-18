@@ -28,6 +28,7 @@ targets:
     dependencies:
       - target: CloudTestHost
       - sdk: CloudKit.framework
+      - sdk: Network.framework
 schemes:
   ProgressCloudTests:
     build:

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, AppState } from 'react-native';
 import { usePathname } from 'expo-router';
 import { getJournal } from '@/native/journal';
+import { getProgressSync } from '@/native/progress-sync';
 import type { Progression } from '@/core/progression';
 
 type Snapshot = { summary: ReturnType<Progression['summary']> };
@@ -24,8 +25,9 @@ export function useStudyProgress(language: string, book: string | null) {
       timer = setTimeout(refresh, Math.max(50, midnight.getTime() - Date.now()));
     }
     refresh();
+    const unsubscribe = getProgressSync().subscribe(refresh);
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') refresh(); });
-    return () => { clearTimeout(timer); subscription.remove(); };
+    return () => { clearTimeout(timer); subscription.remove(); unsubscribe(); };
   }, [language, book, path]);
   return snapshot?.language === language && snapshot.book === book ? snapshot.data : null;
 }

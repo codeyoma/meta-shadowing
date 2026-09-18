@@ -44,6 +44,23 @@ test('ambiguous package versions are unavailable instead of choosing arbitrary c
   assert.equal(resolvePackage([first, { ...first, manifest: { ...sample, title: 'Conflicting release' } }], 'morning-notes-v1'), null);
 });
 
+test('a package-bound player writer validates every state and reports only its confirmations', async () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const storage = journal(db);
+    const pack = { ...second, manifest: { ...second.manifest, phrases: sample.phrases.slice(0, 1) } };
+    const context = new LearningContext(pack, storage);
+    const initial = createSession({ runId: 'live', stage: 1, phraseCount: 1, mode: 'manual', rate: 1 });
+    const save = context.createWriter(initial);
+    const player = new Player(initial, { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} }, save, () => 0, () => {});
+    await player.resume(); player.audioEnded(1); await player.confirm(); player.dispose();
+    assert.equal(storage.progress.summary('english').xp, 1);
+    assert.throws(() => save({ ...initial, phraseCount: 2 }), /Incompatible/);
+    assert.equal(context.latestStage(), 1);
+    assert.equal(new LearningContext(first, storage).latestStage(), null);
+  } finally { db.close(); }
+});
+
 test('player confirmation and option saves remain scoped to the selected book with idempotent rewards', async () => {
   const db = new DatabaseSync(':memory:');
   try {

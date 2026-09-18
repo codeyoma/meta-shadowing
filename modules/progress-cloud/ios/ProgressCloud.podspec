@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   }
   s.source         = { git: '' }
   s.static_framework = true
-  s.frameworks = 'CloudKit', 'CryptoKit'
+  s.frameworks = 'CloudKit', 'CryptoKit', 'Network'
   s.swift_version = '6.0'
 
   s.dependency 'ExpoModulesCore'

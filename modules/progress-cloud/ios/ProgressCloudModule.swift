@@ -4,16 +4,18 @@ import Foundation
 
 public final class ProgressCloudModule: Module {
   private let owner = ProgressCloudOwner()
+  private let network = ProgressNetworkAvailability()
 
   public func definition() -> ModuleDefinition {
     let owner = owner
+    let network = network
     // Expo's EventEmitter uses this same narrow weak-identity bridge. emit schedules
     // onto JavaScriptActor; the callback never touches this module's mutable state.
     // Remove this boundary annotation when Expo exposes a Sendable emitter handle.
     nonisolated(unsafe) weak let emitter = self
     let changed: @Sendable () -> Void = { emitter?.emit(event: "accountChanged") }
     Name("ProgressCloud")
-    Events("accountChanged")
+    Events("accountChanged", "networkAvailable")
     AsyncFunction("account") { () async -> [String: String] in await owner.account() }
     AsyncFunction("list") { (scope: String) async throws -> [[String: Any]] in
       do {
@@ -48,10 +50,13 @@ public final class ProgressCloudModule: Module {
     }
     AsyncFunction("stop") { () async in await owner.stop() }
     OnCreate {
-      Task { await owner.observe(changed) }
+      Task { @MainActor in
+        owner.observe(changed)
+        network.observe { emitter?.emit(event: "networkAvailable") }
+      }
     }
     OnDestroy {
-      Task { await owner.destroy() }
+      Task { @MainActor in network.stop(); await owner.destroy() }
     }
   }
 }

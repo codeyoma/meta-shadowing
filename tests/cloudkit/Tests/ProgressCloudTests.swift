@@ -24,7 +24,7 @@ struct ProgressCloudTests {
     await #expect(throws: ProgressCloudError.corrupt) { try await reader.publish(scope: "test-scope", revision: 1, json: "{}") }
     #expect(cloud.records == before)
   }
-  @Test func validOtherHeadRemainsRecoverableAlongsideDamagedHead() async throws {
+  @Test func damagedLegacyHeadBlocksPartialAutomaticMerge() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let freshDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: freshDirectory) }
@@ -36,14 +36,14 @@ struct ProgressCloudTests {
     cloud.records["head-damaged"] = BackupRecord(id: "head-damaged", kind: "ProgressBackupHead", writer: "damaged",
       revision: 1, createdAt: "2026-01-01T00:00:00Z", current: BackupReference(id: "missing", hash: String(repeating: "a", count: 64)))
     let reader = try ProgressTransport(directory: freshDirectory, scope: "test-scope", cloud: cloud)
-    #expect(try await reader.list(scope: "test-scope").map(\.id) == [current.id])
-    #expect(try await reader.read(scope: "test-scope", id: current.id) == "{\"valid\":true}")
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.list(scope: "test-scope") }
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.read(scope: "test-scope", id: current.id) }
     let before = cloud.records
     await #expect(throws: ProgressCloudError.corrupt) { try await reader.publish(scope: "test-scope", revision: 1, json: "{}") }
     #expect(cloud.records == before)
   }
   @Test(arguments: ["missing", "hash", "revision", "date"])
-  func brokenCurrentMetadataPreservesPreviousRecovery(damage: String) async throws {
+  func brokenCurrentMetadataBlocksAutomaticMergeAndPreservesAssets(damage: String) async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let freshDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: freshDirectory) }
@@ -62,8 +62,8 @@ struct ProgressCloudTests {
         hash: damage == "hash" ? String(repeating: "a", count: 64) : record.hash, bytes: record.bytes)
     }
     let reader = try ProgressTransport(directory: freshDirectory, scope: "test-scope", cloud: cloud)
-    #expect(try await reader.list(scope: "test-scope").map(\.id) == [previous.id])
-    #expect(try await reader.read(scope: "test-scope", id: previous.id) == "{\"value\":1}")
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.list(scope: "test-scope") }
+    await #expect(throws: ProgressCloudError.corrupt) { try await reader.read(scope: "test-scope", id: previous.id) }
     await #expect(throws: ProgressCloudError.corrupt) { try await reader.read(scope: "test-scope", id: current.id) }
     let before = cloud.records
     await #expect(throws: ProgressCloudError.corrupt) { try await reader.publish(scope: "test-scope", revision: 1, json: "{}") }

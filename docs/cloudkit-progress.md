@@ -1,5 +1,77 @@
 # Private progress backup — verification and setup
 
+## Current automatic synchronization — #50, 2026-09-18
+
+The automatic-sync design supersedes the older manual local/cloud winner flow
+recorded below. Those dated verification entries remain historical evidence, not
+the current UI or proof of #50 physical acceptance.
+
+- `자동 동기화` checks at startup/foreground, network return and every 60 seconds
+  while active. There is no fixed background/terminated execution promise.
+- SQLite merges confirmed learning and completion identities independently of
+  the latest ordered resume checkpoint. Duplicate delivery earns nothing; older
+  resume locations can win only by learning order, never by download order.
+- Current player state stays pinned. A private writer preserves its predecessor
+  even if another device changes the selected checkpoint. An unchanged pause or
+  dispose cannot overwrite the newer selection. Library selection is refreshed
+  outside the player; next safe entry chooses the latest available learning point.
+  Browsing a different book does not replace that independently ordered learning
+  selection. An unavailable package version is not silently replaced with another.
+- `지금 동기화` uses the same safe two-way merge while leaving automatic sync off.
+  Nonempty guest history still requires account-ownership consent; an empty guest
+  does not. Disabling sync or changing accounts never deletes local history.
+- All legacy candidates must validate before their union is written. Head races
+  retry up to three times per pass, then wait quietly. A missing old candidate
+  after a competing publication is contention, not corruption. Actual corruption,
+  incompatible versions and storage failures do not trigger an overwrite path.
+- Equal-content adoption retains exact native pending-asset cleanup authority.
+  Publication acknowledges only its captured SQLite revision. Lost responses and
+  later edits remain recoverable through the next equality/merge pass.
+- **Update every participating device before using automatic sync.** An older
+  installed client can still use its old overwrite path; mixed v3/v4 writers and
+  app downgrades are unsupported. The CloudKit namespace was not changed.
+
+Backup v4 retains confirmation identities, original dates, mutation clocks and
+conservative legacy credit candidates. It imports v1–v3 without inventing earned
+XP. Opaque historical credits use candidate maxima, not summed duplicated totals.
+The 16 MiB transport bound still applies. This is private progress only: no
+StoreKit ownership or commercial package payload is synchronized.
+
+Local synchronization metadata stores each run separately in SQLite. Ordinary
+checkpoints update only their run; export/merge still validates the complete
+ledger. Migration from the earlier single-row ledger is atomic and retryable.
+Wire encoding is shared by local export and remote validation, so equivalent
+compressed payloads do not cause repeated publications.
+
+### Local verification — 2026-09-18
+
+- TypeScript typecheck and all 297 tests passed, including independent SQLite
+  installations, offline merge orders, duplicate delivery, live-player writes,
+  interrupted local migration and latest-learning versus browsing selection.
+- Native CloudKit transport/lifecycle tests: 37 passed on an iOS 27 simulator.
+- Build-settings (8), free-package (3), and native-header (7) checks passed.
+- iOS production JavaScript export and unsigned Release simulator build passed.
+- Local in-memory SQLite timing for ordinary checkpoint writes with 2,400
+  historical runs improved from 76–121 ms to 0–1 ms. This is not an iPhone
+  performance measurement or a real CloudKit acceptance result.
+
+### Remaining physical acceptance
+
+Two-device physical testing is deferred because a second device is unavailable.
+The owner approved publishing the implementation PR with this limitation on
+2026-09-18. This records an untested boundary, not a passed acceptance check.
+
+On two authorized devices running this version under the same designated iCloud
+account: enable sync, learn distinct and overlapping runs offline, reconnect in
+both orders, compare XP/completions/latest resume, and repeat sync plus relaunch.
+Also check a live player during remote updates, airplane-mode return, account
+switching and toggle-off behavior. Do not uninstall or reset either device.
+Local SQLite tests, native transport fixtures and successful builds do not close
+this real-service gate or the pre-existing #49 gates.
+
+See the [approved design](superpowers/specs/2026-09-18-automatic-progress-sync-design.md)
+and [implementation plan](superpowers/plans/2026-09-18-automatic-progress-sync.md).
+
 Ticket #49 remains open. A physical-device fresh CloudKit download, isolated
 SQLite restore and normal clean-install UI recovery matched the captured learning
 records on 2026-09-13. The tested baseline has no completed runs or XP awards;

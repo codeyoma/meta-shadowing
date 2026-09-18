@@ -107,8 +107,9 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         const firstEntry = !opened.current;
         opened.current = true;
         const audio = nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), runUnits.map(unit => unit.sourceIndices));
+        const save = context.createWriter(initial);
         const player = new Player(initial, audio, s => {
-          const earned = context.save(s);
+          const earned = save(s);
           if (earned > 0 && gainOrigin.current && active && AppState.currentState === 'active') {
             setXpGain({ id: ++gainSequence.current, amount: earned, origin: gainOrigin.current });
           }
