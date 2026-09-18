@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLearningFeedback } from './learning-feedback';
-import { createSession } from './session';
+
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { Player } from './player';
 
 const initial = () => createSession({ runId: 'feedback-run', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });

@@ -8,14 +8,15 @@ import { MethodLabel, methodNames } from './method-label';
 import { levelColors } from './level-colors';
 import { StageStartPopover, type StageAnchor } from './stage-start-popover';
 import { stageConnectionPoints } from '@/core/stage-connection';
+import { isPlayableStage } from '@/core/catalog';
 
 const offsets = [0.22, 0.5, 0.78, 0.5];
 const coinSize = 76;
 const coinRatio = 0.8;
 const coinHeight = coinSize * coinRatio;
 
-export function StagePath({ records, current, ready, onSelect }: {
-  records: readonly StageRecord[]; current: number; ready: boolean; onSelect(stage: number): void;
+export function StagePath({ records, current, ready, onSelect, bypass = false }: {
+  records: readonly StageRecord[]; current: number; ready: boolean; onSelect(stage: number): void; bypass?: boolean;
 }) {
   const c = usePalette();
   const [width, setWidth] = useState(0);
@@ -31,13 +32,13 @@ export function StagePath({ records, current, ready, onSelect }: {
     {selected && <Pressable feedback={false} accessible={false} onPress={() => setSelected(null)}
       style={{ position: 'absolute', inset: 0 }} />}
     {records.map((record, i) => {
-      const available = canOpenStage(record.stage, records);
+      const available = canOpenStage(record.stage, records, bypass);
       const complete = stageComplete(record);
       const active = record.stage === current;
       const stars = stageStars(record);
       const x = width * offsets[i % 4]!;
       const nextX = width * offsets[(i + 1) % 4]!;
-      const label = !available ? record.stage <= 2 ? '이전 스테이지 완료 후 열림' : '준비 중' : record.session && record.session.phase !== 'complete' ? '이어하기' : complete ? '다시 학습' : '학습 시작';
+      const label = !available ? isPlayableStage(record.stage) ? '이전 스테이지 완료 후 열림' : '준비 중' : record.session && record.session.phase !== 'complete' ? '이어하기' : complete ? '다시 학습' : '학습 시작';
       const fill = !available ? c.card : active ? c.accent : complete ? c.bee : c.card;
       const edge = !available ? c.outline : active ? c.accentPressed : complete ? c.fox : c.accentPressed;
       return <View key={record.stage} pointerEvents="box-none" style={{ height: rowHeight }}>

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, type Session } from './session';
+import { type Session } from './session';
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { Player, type AudioPort } from './player';
 import { audioPort, type NativeHandle, type NativeStatus } from './audio';
 

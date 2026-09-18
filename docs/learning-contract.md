@@ -4,7 +4,53 @@ Fresh specification, not reused implementation. The approved reference is the
 latest legacy behavior at be3761f, including its amended confirmation rules;
 earlier planning documents can contain superseded behavior.
 
-## Milestone boundary
+## Current stage expansion — 2026-09-16
+
+The owner-approved implementation now enables stages 1–10. Stages 1–4 share
+the same manual subtitle-shadowing flow. Stages 5–6 retain full original audio
+but show only each sentence's first word while always displaying translations. Stages 7–8
+continuously play groups of original source files; stages 9–10 combine grouping
+with first-word hints. Stages 11–16 remain unavailable.
+
+A learning unit is one original source block for stages 1–6 and a group of
+2, 3, or 4 blocks for stages 7–10 (default 2). Source blocks can contain dialogue
+or multiple sentences. Counters, cycles, XP, audio position, and resume all use
+the same unit. Group audio uses an ordered native queue of unchanged original
+files, never merged/exported audio. Member transitions require no confirmation,
+phase change, or artificial delay. The final short remainder is a separate unit;
+the current flat package format has no section boundaries. This supersedes the
+historical remainder/timing reference below.
+
+Fresh grouped runs save their source count and group size. Restored runs derive
+their units from that saved plan, even after changing settings. A changed source
+count or incompatible checkpoint is rejected. Settings explain that group-size
+changes apply only to the next fresh run. Existing stage 1/2 progress is preserved.
+
+The accessible “자막 보기” toggle above playback reveals only the current unit.
+Hidden target text retains all characters and layout:
+non-hint text uses the actual card background color, then fades to normal ink when
+revealed. Translations remain visible in both states. The right-aligned toggle has
+a minimum 44pt touch area; Reduce Motion disables its text fade. Hidden text is not
+selectable and its accessibility label exposes hints only.
+Both bubble and list modes place each source member's translation immediately
+below that member, before the next source member. The large display previews and
+the segmented picker both select the same saved display preference.
+List mode renders only the current saved learning unit, with all its paired
+utterances in one left-aligned vertical list. It is not a scrollable lesson index;
+the separate all-sentences option remains the navigation surface. Long current
+content scrolls using the outer player screen, without an inner fixed-height list.
+Revealing never plays, pauses, confirms, or changes
+cycles. Reveal state resets when the unit/run changes and on player re-entry.
+Analysis derives the current saved unit and always retains hints in hint stages;
+it cannot expose full subtitles through a direct route. Analysis remains a placeholder.
+
+App Store stage access still requires three real predecessor completions.
+Development and verified TestFlight builds may select any implemented stage;
+unverified, unavailable, failed, or timed-out distribution checks remain locked.
+The map and direct player route use the same policy. Ownership and verified local
+installation remain required. Test access never writes completion records.
+
+## Original milestone boundary (historical)
 
 M1 implements subtitle shadowing (method 1, stages 1 and 2), a controlled spoken
 lesson, local package installation, and durable progress/resume on iPhone.
@@ -98,7 +144,9 @@ unavailable even after their predecessor is complete.
   to the right content margin; native text measurement reserves both digit slots
   from the total phrase count with tabular numerals, so the track stays the same
   width when the current phrase crosses a digit boundary. The row below shows
-  method level, speed, and a sentence-analysis placeholder action. As requested
+  method level, speed, and a sentence-analysis placeholder action. Both rows,
+  including the three controls' full touch areas, belong to the fixed navigation
+  header and never move with the scrolling phrase content. As requested
   in the #57 UI refinement, the level and analysis actions pause/checkpoint and
   open native drawers. The guide identifies the level and method; detailed
   guidance is intentionally empty for now. The analysis drawer shows the current
@@ -154,16 +202,20 @@ confirmation. The current owner-approved behavior requires explicit confirmation
 
 ## Language XP and streaks
 
-- Each explicitly confirmed sentence cycle earns 1 XP: three ordinary cycles
-  earn 3 XP; Repeat plus the two extra cycles earn 5 XP. A final Next that confirms
-  a speaking cycle earns that cycle once, including when it advances the phrase.
+- Each explicitly confirmed cycle earns its original source-member count: 1 XP
+  for single units, 2/3/4 XP for full groups, and the actual count for a short
+  remainder. Final Next and Repeat credit the originating unit once.
 - Audio ending, opening a screen, pausing, elapsed time and restoring practice
   earn no XP. New runs, stages and books continue earning without a daily limit;
   full-run completion no longer grants the former 10-XP bonus.
 - Historical 0/10-XP awards and completion records remain unchanged. Existing
   checkpoints establish a zero-credit baseline; only subsequent confirmations
-  earn new XP. A compact frontier per package version, stage and run prevents
-  duplicate or stale saves from re-awarding observed cycles.
+  earn new XP. A frontier per package version, stage and run prevents duplicate
+  or stale saves from re-awarding observed cycles. Navigation adds independent
+  per-unit observed counts while preserving the existing aggregate credit.
+  Legacy lower units have lost their optional-cycle detail: they display a
+  completed three-cycle baseline and their old credit remains conservatively
+  fenced within that run. Fresh runs and unobserved units earn normally.
 - Totals and levels are separate for each language. Sixteen stages still require
   three full runs each. Partial cycles do not add stage stars or unlock stages.
 - Level 1 starts at zero XP. Levels 1–998 require
@@ -176,14 +228,28 @@ confirmation. The current owner-approved behavior requires explicit confirmation
   missing an entire day breaks it. Restoring an old run creates no study day.
 - XP, completion history, streak day, checkpoint and backup revision commit
   atomically to SQLite. Failed saves roll back together; retry awards once.
-  Version-2 backups include compact cycle frontiers. Version-1 backups preserve
-  historical rewards and baseline checkpoints without retrospective credit.
+  Version-3 backups include per-unit navigation and credit provenance. Version-1
+  and version-2 backups remain importable without retrospective credit. Bounded
+  checkpoint arrays support up to 100,000 learning units within the 16 MiB backup
+  envelope; oversize or inconsistent payloads are rejected before mutation.
 - The day is captured at successful local save. Midnight/foreground refresh the
   browsing display without erasing history. Device-clock manipulation is not
   protected by an online authority in this local-only prototype.
 - Normal awards and persistence are quiet: update the header and stage status,
   with no routine alerts. Only genuine storage/recovery failures need alerts.
 - Reward rules cover all sixteen stages; M1 playback still implements only 1–2.
+
+## Source navigation
+
+Selecting a source block targets its saved unit using the run's saved group
+size. It pauses, resets the target audio to zero, and retains every visited
+unit's confirmed and planned cycles. A jump, save retry or restored speaking
+checkpoint never confirms a cycle. Options closing alone remains paused.
+Unvisited units remain unfinished even when a later index has been selected.
+Next at the end returns to an unfinished unit; completion requires all planned
+cycles, including any opted-in extra practice. Progress counts completed units,
+not all indices preceding the current cursor. Original v1/v2 checkpoint plan
+versions remain valid; optional unitProgress records navigation state.
 
 ## Test seams approved by the milestone plan
 

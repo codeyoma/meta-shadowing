@@ -295,3 +295,67 @@ external distribution. The prototype imports no hosted credentials or auth code.
 
 M1 closes only after the real-device acceptance evidence is recorded. No remote
 CI, deployment, hosted data mutation, commit, or push was performed for this check.
+
+## Stage 3–10 integration — 2026-09-16
+
+Translation-visibility wording corrected on 2026-09-18 against the current
+learning contract and presentation tests. The device observations below are
+historical integration checks, not a new physical-device acceptance run.
+
+- `npx tsx --test src/core/learning-presentation.test.ts`: 4/4 passed on 2026-09-18.
+  Covers stages 1–10, grouped hints, translations retained in both hidden and
+  revealed states, only-current-unit reveal, invalid reveal positions, and
+  unchanged source/layout text. Only target-language subtitles are masked;
+  translations remain visible. The same projection feeds bubble and list views.
+- `npm run check`: passed: 278 core tests, 8 iOS build-settings tests, 3 free-content
+  preparation tests, and TypeScript. Includes grouping/resume, SQLite rewards and
+  backups, native queue adapter, bounded stage policy, and old stage 1/2 behavior.
+- `npm run bundle:ios`: passed, 1,809 modules, 40 assets, one 4.1 MB Hermes bundle.
+  Export is local only; no upload or distribution performed.
+- `git diff --check`: passed. Follow-up `npm run typecheck` after final route guards
+  also passed.
+- Native fixture results are carried from Task 2 rather than rerun: four macOS
+  learning-audio tests passed with generated neutral original files and real
+  AVQueuePlayer. Controller reports the full physical-iPhone iOS 27 Debug build
+  succeeded with LearningAudio linked; Release iOS fixture build-for-testing
+  succeeded, including compilation of the verified-transaction access branch.
+  These are compile/fixture facts, not physical playback acceptance.
+
+### Controller integration checks
+
+- Debug builds succeeded for the connected iOS 27 iPhone and the existing iOS 26.5
+  Simulator. The phone app was updated in place after a local backup; existing
+  installed books and prior progress remained available. No uninstall or reset.
+- On the twelve-source sample, Stage 3 opened from the path despite its unfinished
+  predecessor and displayed full subtitles. Stage 5 showed first-word hints and
+  toggled the current subtitle without confirming a cycle. The current contract
+  retains translations in both states; the earlier hidden-translation wording
+  is not an accepted behavior.
+  Its analysis sheet remained hinted rather than revealing the hidden sentence.
+- Stage 7 displayed six learning units. Native playback reached the speaking phase;
+  at 0.25×, opening options during the second original file saved a paused listening
+  checkpoint at about 4.36 cumulative media seconds, after the first file's end.
+  Explicit resume completed the remainder and retained the same confirmation count.
+  Re-entering at 3× also reached speaking. The test run speed was restored to 1×.
+- Stage 10 opened directly, displayed the first word of both member sentences, and
+  toggled the whole current unit. The earlier all-units list observation predates
+  the current-unit-only list refinement and is not current acceptance evidence.
+  The current list shows only the active unit, with each translation immediately
+  below its source sentence and visible regardless of subtitle reveal state.
+- One explicit confirmation in the sample Stage 7 test added one XP. No complete
+  stage was manufactured and private-book learning records were not reset.
+- Final copied SQLite integrity check passed. All three pre-existing checkpoints
+  matched the pre-install backup exactly. Temporary list-view preference was
+  restored to bubble view; the phone and live preview were left on Stage 10 hints.
+  Stage 11 was visibly rejected in the Simulator.
+- Controller reran `npm run check`: 278 core, 8 build-settings, 3 preparation tests
+  and TypeScript passed. Independent task and whole-feature code reviews found no
+  blocking issues. These checks involved no commit, push, or upload.
+
+Physical evidence is native UI state plus copied checkpoint observations, not a
+human assessment of audio quality or a sample-exact timing guarantee. Actual phone
+call/headphone interruption, VoiceOver, and a newly distributed TestFlight/App Store
+build remain unverified. Frozen grouping after preference changes is covered by
+domain/SQLite/backup tests, not a new physical-device settings-change experiment.
+Minor follow-ups are uncommon-abbreviation hint segmentation and handling the native
+seek callback's unsuccessful-completion flag; neither blocks the reviewed feature.

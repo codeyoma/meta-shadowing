@@ -26,7 +26,8 @@ test('selection never leaks a book from another language and falls back safely a
 test('unimplemented and malformed stage links never silently start a different stage', () => {
   assert.equal(playableStage('1'), 1);
   assert.equal(playableStage('2'), 2);
-  for (const param of ['3', '16', '0', '', undefined, ['1'], '01']) assert.equal(playableStage(param), null);
+  for (let stage = 1; stage <= 10; stage++) assert.equal(playableStage(String(stage)), stage);
+  for (const param of ['11', '16', '0', '', undefined, ['1'], '01', '1.0', 1]) assert.equal(playableStage(param), null);
 });
 test('library selection retains an exact version and migrates legacy book-only choices without fallback from stale versions', () => {
   const versions = [

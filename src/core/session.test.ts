@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, transition, restoreSession, changeSessionRate } from './session';
+import { transition, restoreSession, changeSessionRate } from './session';
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 
 test('drawer speed changes preserve the paused phrase, cycle and audio position', () => {
   const saved = { ...createSession({ runId: 'options', stage: 1, phraseCount: 12, mode: 'manual', rate: 1 }),

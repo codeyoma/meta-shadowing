@@ -5,7 +5,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { ProgressProfiles, ProgressSync } from './progress-sync';
 import type { BackupDatabase } from './progress-backup';
 import type { ProgressCloud, CloudBackup, CloudPublication } from '../../modules/progress-cloud';
-import { createSession } from './session';
+
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { enableAutomaticBackup } from './enable-backup';
 
 function fixture(t: TestContext) {
@@ -821,7 +822,7 @@ test('a future-version cloud backup never replaces local progress or gets overwr
   const { sync, cloud, profiles, published } = fixture(t);
   profiles.current().journal.save('sample-v1', session());
   const original = profiles.current().exportBackup();
-  const future = JSON.parse(original); future.version = 3;
+  const future = JSON.parse(original); future.version = 4;
   const payload = JSON.stringify(future);
   cloud.list = async () => [backup()]; cloud.read = async () => payload;
   await sync.refreshAccount();

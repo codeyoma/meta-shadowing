@@ -238,13 +238,29 @@ struct PackagePurchasesTests {
     #expect(store.snapshot.outcome == .unverified)
     #expect(store.snapshot.entitlementIssue == .unverified)
     #expect(store.snapshot.ownership == .notOwned)
-    var unfinished = 0
-    try await waitUntil("Unverified purchase did not remain unfinished") {
-      unfinished = 0
-      for await _ in Transaction.unfinished { unfinished += 1 }
-      return unfinished == 1
+    let purchases = session.allTransactions().filter { $0.productIdentifier == productID }
+    #expect(purchases.count == 1)
+    let purchase = try #require(purchases.first)
+
+    // Fault injection is process-wide: stop the app observer before removing it,
+    // then inspect persistence without also injecting a failure into that query.
+    // Clearing the verification error must not clear or finish the transaction.
+    store.stopObserving()
+    try await session.setSimulatedError(nil, forAPI: StoreKitVerificationAPI())
+    var unfinishedIDs = Set<UInt64>()
+    do {
+      try await waitUntil("Unverified purchase did not remain unfinished") {
+        unfinishedIDs = []
+        for await result in Transaction.unfinished {
+          unfinishedIDs.insert(result.unsafePayloadValue.id)
+        }
+        return unfinishedIDs.contains(UInt64(purchase.identifier))
+      }
+    } catch {
+      Issue.record("Unfinished fixture transactions: \(unfinishedIDs.count); expected purchase present: \(unfinishedIDs.contains(UInt64(purchase.identifier)))")
+      throw error
     }
-    #expect(unfinished == 1)
+    #expect(unfinishedIDs == [UInt64(purchase.identifier)])
     #expect(store.snapshot.outcome == .unverified)
     #expect(store.snapshot.ownership == .notOwned)
   }

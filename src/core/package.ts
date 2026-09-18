@@ -1,4 +1,4 @@
-export type PackageManifest = { phrases: { file: string; bytes: number; sha256: string }[] };
+export type PackageManifest = { phrases: { file: string; bytes: number; sha256: string; section?: number }[] };
 export interface PackageIO {
   source(file: string): Promise<Uint8Array>;
   read(file: string): Promise<Uint8Array | null>;

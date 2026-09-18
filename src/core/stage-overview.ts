@@ -1,4 +1,5 @@
 import type { Session } from './session';
+import { isPlayableStage } from './catalog';
 
 export type StageRecord = { stage: number; count: number; session: Session | null };
 const requiredRuns = 3;
@@ -8,9 +9,9 @@ export function stageStars(record: StageRecord): boolean[] {
 export function stageComplete(record: StageRecord) {
   return record.count >= requiredRuns;
 }
-export function canOpenStage(stage: number, records: readonly StageRecord[]) {
-  if (stage !== 1 && stage !== 2) return false;
-  return stage === 1 || records.some(r => r.stage === 1 && stageComplete(r));
+export function canOpenStage(stage: number, records: readonly StageRecord[], bypass = false) {
+  if (!isPlayableStage(stage)) return false;
+  return bypass || stage === 1 || records.some(r => r.stage === stage - 1 && stageComplete(r));
 }
 export function stageOverview(records: readonly StageRecord[]) {
   const completed = new Set(records.filter(r => r.stage >= 1 && r.stage <= 16 && stageComplete(r)).map(r => r.stage)).size;

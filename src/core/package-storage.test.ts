@@ -10,7 +10,8 @@ import { PackageMaterialStorage, PackageOperations, knownMaterialKey } from './p
 import { installPackage, verifyPackage, type PackageIO } from './package';
 import { Journal } from './journal';
 import { LearningContext } from './learning-context';
-import { createSession } from './session';
+
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { Player } from './player';
 
 const bundled = { language: 'english', manifest };

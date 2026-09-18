@@ -1,8 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCycleHaptics } from './cycle-haptics';
-import { createSession, transition, type Action } from './session';
+import { transition, type Action } from './session';
+import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { Player } from './player';
+import { jumpToSourcePhrase } from './session-navigation';
+
+test('jumps stay silent while final Next returning to an earlier gap emits the originating rhythm', () => {
+  let state = initial();
+  const observe = createCycleHaptics(state);
+  state = jumpToSourcePhrase(state, 1);
+  assert.equal(observe(state), null);
+  for (let cycle = 0; cycle < 2; cycle++) {
+    state = transition(transition(state, { type: 'resume' }), { type: 'audio-ended', durationSeconds: 1 });
+    observe(state);
+    state = transition(state, { type: 'confirm' }); observe(state);
+  }
+  state = transition(transition(state, { type: 'resume' }), { type: 'audio-ended', durationSeconds: 1 }); observe(state);
+  state = transition(state, { type: 'next' });
+  assert.equal(state.phrase, 0);
+  assert.equal(observe(state)?.length, 4);
+  assert.equal(observe(jumpToSourcePhrase(state, 1)), null);
+});
 
 const initial = () => createSession({ runId: 'haptics', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
 

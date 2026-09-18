@@ -3,6 +3,7 @@ import { languages } from './catalog';
 import { transition, type Session } from './session';
 import type { BookIdentity } from './progression';
 import { MAX_XP } from './levels';
+import { recordUnitCredit, unitWeight } from './unit-credit';
 
 export type CycleCredit = {
   package: string; stage: number; run: string; language: string; book: string;
@@ -15,6 +16,9 @@ export function validCycleIdentity(key: string, identity: BookIdentity): boolean
     && languages.some(language => language.id === identity.language);
 }
 export function createCycleTable(db: Database) {
+  db.exec(`CREATE TABLE IF NOT EXISTS unit_credits (
+    package TEXT NOT NULL, stage INTEGER NOT NULL, run TEXT NOT NULL, state TEXT NOT NULL,
+    PRIMARY KEY(package,stage,run));`);
   db.exec(`CREATE TABLE IF NOT EXISTS cycle_credits (
     package TEXT NOT NULL, stage INTEGER NOT NULL, run TEXT NOT NULL,
     language TEXT NOT NULL, book TEXT NOT NULL, phrase_count INTEGER NOT NULL,
@@ -42,21 +46,25 @@ export function recordCycles(db: Database, key: string, next: Session, prior: Se
   if (bound && (bound.language !== identity.language || bound.book !== identity.book)) throw Error('Conflicting package identity.');
   if (prior?.runId === next.runId && prior.phraseCount !== next.phraseCount) throw Error('Conflicting run size.');
   const predecessor = prior?.runId === next.runId ? prior : null;
-  if (row && (completed || row.day) && next.phase === 'complete' && position(next, row) !== 0) throw Error('Conflicting completed cycle frontier.');
-  if ((row && (completed || row.day || !predecessor) && position(next, row) > 0)
-    || (completed && predecessor && position(next, predecessor) > 0)) throw Error('Conflicting cycle frontier.');
+  const navigable = !!next.unitProgress || !!db.first('SELECT 1 FROM unit_credits WHERE package=? AND stage=? AND run=?', key, next.stage, next.runId);
+  if (!navigable && row && (completed || row.day) && next.phase === 'complete' && position(next, row) !== 0) throw Error('Conflicting completed cycle frontier.');
+  if (!navigable && ((row && (completed || row.day || !predecessor) && position(next, row) > 0)
+    || (completed && predecessor && position(next, predecessor) > 0))) throw Error('Conflicting cycle frontier.');
   const baseline = predecessor ?? next;
   // A completion row alone cannot reconstruct a displaced legacy frontier.
   if (completed && !row && baseline.phase !== 'complete') throw Error('Unproven completed cycle frontier.');
   let phrase = row?.phrase ?? baseline.phrase, confirmed = row?.confirmed ?? baseline.confirmed;
   let credited = row?.credited ?? 0;
   // Completed histories and rewinds are immutable credit frontiers.
-  if (!completed && !row?.day && predecessor && position(next, { phrase, confirmed }) > 0) {
+  if (navigable) {
+    credited = recordUnitCredit(db, key, next, predecessor, credited, completed || !!row?.day, mayCredit, row ?? undefined);
+    if (position(next, { phrase, confirmed }) > 0) { phrase = next.phrase; confirmed = next.confirmed; }
+  } else if (!completed && !row?.day && predecessor && position(next, { phrase, confirmed }) > 0) {
     const accepted = (['confirm', 'repeat', 'next'] as const).some(type => {
       const result = transition(predecessor, { type });
       return result !== predecessor && same(result, next);
     });
-    if (mayCredit && accepted && predecessor.phase === 'speaking' && position(predecessor, { phrase, confirmed }) === 0) credited = Math.min(MAX_XP, credited + 1);
+    if (mayCredit && accepted && predecessor.phase === 'speaking' && position(predecessor, { phrase, confirmed }) === 0) credited = Math.min(MAX_XP, credited + unitWeight(predecessor, predecessor.phrase));
     // Unsupported snapshot jumps baseline their observed position, never catch up XP.
     phrase = next.phrase; confirmed = next.confirmed;
   }

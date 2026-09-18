@@ -1,8 +1,36 @@
-const { withInfoPlist, withXcodeProject, withPodfile } = require('expo/config-plugins');
+const { withInfoPlist, withXcodeProject, withPodfile, withAppDelegate } = require('expo/config-plugins');
 const { mergeContents } = require('@expo/config-plugins/build/utils/generateCode');
 
+// Expo 57.0.23 supplies the scene delegate, but its SDK 57 bare template still
+// starts RN from AppDelegate. Keep this migration in prebuild, not ignored ios/.
+function adoptSceneLifecycle(source) {
+  const legacyDeclaration = 'class AppDelegate: ExpoAppDelegate {';
+  const sceneDeclaration = 'class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {';
+  const legacyWindow = /#if os\(iOS\) \|\| os\(tvOS\)\s+window = UIWindow\(frame: UIScreen.main.bounds\)\s+factory.startReactNative\(\s+withModuleName: "main",\s+in: window,\s+launchOptions: launchOptions\)\s+#endif/;
+  if (source.includes(sceneDeclaration) && !source.includes('factory.startReactNative(')) return source;
+  if (!source.includes(legacyDeclaration) || !legacyWindow.test(source)) {
+    throw new Error('AppDelegate template changed; review the Expo scene lifecycle migration.');
+  }
+  return source.replace(legacyDeclaration, sceneDeclaration).replace(legacyWindow,
+    '// ExpoAppSceneDelegate creates the scene window and starts React Native.');
+}
+
 module.exports = function withIosBuildSettings(config) {
+  config = withAppDelegate(config, mod => {
+    if (mod.modResults.language !== 'swift') throw new Error('Scene lifecycle requires the Swift AppDelegate.');
+    mod.modResults.contents = adoptSceneLifecycle(mod.modResults.contents);
+    return mod;
+  });
   config = withInfoPlist(config, mod => {
+    mod.modResults.UIApplicationSceneManifest = {
+      UIApplicationSupportsMultipleScenes: false,
+      UISceneConfigurations: {
+        UIWindowSceneSessionRoleApplication: [{
+          UISceneConfigurationName: 'Default Configuration',
+          UISceneDelegateClassName: 'EXExpoAppSceneDelegate',
+        }],
+      },
+    };
     // iOS 26 deprecates this iPad-only key. Absence preserves the default false
     // behavior on our iPhone-only target; do not override explicit iPad policy.
     if (!mod.ios?.supportsTablet && !mod.ios?.isTabletOnly &&
@@ -49,3 +77,5 @@ module.exports = function withIosBuildSettings(config) {
     return mod;
   });
 };
+
+module.exports.adoptSceneLifecycle = adoptSceneLifecycle;
