@@ -22,11 +22,12 @@ export function ICloudBackup() {
       ], { cancelable: true, onDismiss: () => resolve(null) });
   });
   async function run(enable: boolean) {
-    if (acting.current || sync.getSnapshot().busy) return;
+    if (acting.current || buildICloudSyncUI(sync.getSnapshot()).controlsDisabled) return;
     acting.current = true;
     try {
       await sync.refreshAccount(false);
       const latest = sync.getSnapshot();
+      if (latest.deletion) return;
       if (!latest.ready || latest.status !== 'available') {
         const error = buildICloudSyncUI(latest).error;
         if (latest.status === 'no-account') Alert.alert('iCloud 동기화', '기기의 설정에서 iCloud에 로그인해 주세요.');
@@ -54,7 +55,8 @@ export function ICloudBackup() {
     <SettingsSection paddingVertical={8}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 44 }}>
         <View style={{ flex: 1 }}><Label color={c.text}>{ui.title}</Label></View>
-        <Switch accessibilityLabel={ui.title} value={state.enabled} disabled={state.busy} style={{ alignSelf: 'center' }}
+        <Switch accessibilityLabel={ui.title} accessibilityState={{ disabled: ui.controlsDisabled }}
+          value={state.enabled} disabled={ui.controlsDisabled} style={{ alignSelf: 'center' }}
           onValueChange={value => { if (value) void run(true); else sync.disable(state.generation); }} trackColor={{ true: '#34c759' }} />
       </View>
       <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.separator }} />

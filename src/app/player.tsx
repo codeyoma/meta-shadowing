@@ -38,10 +38,11 @@ import { sentenceEntry } from '@/core/sentence-entry';
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
 export default function PlayerRoute() {
+  const profile = useProgressProfile();
   const { stage: param, package: key } = useLocalSearchParams<{ stage: string; package: string }>();
   const stage = playableStage(param);
   const pack = selectedPackage(key);
-  if (!pack || !stage) return <View style={{ padding: 24 }}><Label>학습을 시작할 수 없어요.</Label>
+  if (!pack || !stage || !profile.available) return <View style={{ padding: 24 }}><Label>학습을 시작할 수 없어요.</Label>
     <ActionButton title="레슨으로" onPress={() => router.replace('/lesson')} /></View>;
   return <PlayerScreen key={`${pack.packageKey}:${stage}`} pack={pack} stage={stage} />;
 }
@@ -85,7 +86,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       try {
         if (!pack.owned || !await isInstalled(pack)) { if (active) setUnavailable(true); return; }
         const bypass = await testStageAccess();
-        if (!active || getProgressSync().profiles.id() !== profile.id) return;
+        if (!active || !getProgressSync().authorized(profile.authority, profile.id)) return;
         const context = new LearningContext(pack, getJournal());
         const predecessor = stage - 1;
         const records = isPlayableStage(predecessor) ? [{ stage: predecessor, count: context.completions(predecessor), session: null }] : [];
@@ -158,7 +159,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
           if (next !== 'active') { stopLearningHaptics(); setCelebrating(false); setXpGain(null); player.pause(); }
           else prepareLearningHaptics();
         });
-        const selectedEntry = sentenceEntry.consume({ profile: profile.id, packageKey: pack.packageKey, stage, runId: initial.runId, phrase: initial.phrase });
+        const selectedEntry = sentenceEntry.consume({ profile: `${profile.id}:${profile.authority}`, packageKey: pack.packageKey, stage, runId: initial.runId, phrase: initial.phrase });
         if (!interrupted && (selectedEntry || (firstEntry && !profile.suppressEntry)) && AppState.currentState === 'active') {
           setBusy(true);
           await player.enter();
@@ -168,20 +169,20 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     };
     void initialize();
     return () => { active = false; interruption.remove(); sentenceEntry.cancel(); stopLearningHaptics(); setMotionActive(false); setCelebrating(false); setXpGain(null); gainOrigin.current = null; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
-  }, [stage, pack, lesson, profile.id, profile.suppressEntry]));
+  }, [stage, pack, lesson, profile.id, profile.authority, profile.suppressEntry]));
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = (option?: 'rate') => {
     engine.current?.pause();
-    if (stage && engine.current && engine.current.error !== 'save') router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, run: engine.current.state.runId, profile: profile.id, ...(option ? { option } : {}) } });
+    if (stage && engine.current && engine.current.error !== 'save' && getProgressSync().authorized(profile.authority, profile.id)) router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, run: engine.current.state.runId, profile: profile.id, authority: profile.authority, ...(option ? { option } : {}) } });
   };
   const openInfo = (kind: 'guide' | 'analysis') => {
     engine.current?.pause();
-    if (!stage || !engine.current || engine.current.error === 'save') return;
-    router.push({ pathname: '/player-info', params: { kind, stage, package: pack.packageKey, phrase: engine.current.state.phrase } });
+    if (!stage || !engine.current || engine.current.error === 'save' || !getProgressSync().authorized(profile.authority, profile.id)) return;
+    router.push({ pathname: '/player-info', params: { kind, stage, package: pack.packageKey, phrase: engine.current.state.phrase, authority: profile.authority } });
   };
   async function act(point: ControlPressPoint, repeat = false) {
     const player = engine.current;
-    if (!player || acting.current) return;
+    if (!player || acting.current || !getProgressSync().authorized(profile.authority, profile.id)) return;
     acting.current = true; setBusy(true);
     const action = mainPlayerAction(player.state, player.error);
     gainOrigin.current = action === 'confirm' || action === 'next'

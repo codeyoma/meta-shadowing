@@ -8,6 +8,7 @@ import type { ProgressCloud, CloudBackup, CloudPublication } from '../../modules
 
 import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { enableAutomaticBackup } from './enable-backup';
+import { encodeEnvelope, emptyProgress } from './progress-envelope';
 
 function fixture(t: TestContext) {
   const databases = new Map<string, DatabaseSync>();
@@ -29,7 +30,7 @@ function fixture(t: TestContext) {
   const cloud: ProgressCloud = { account: async () => ({ status: 'available', scope: 'account-a' }), list: async scope => heads.has(scope) ? [heads.get(scope)!] : [],
     read: async (_, id) => { const json = payloads.get(id); if (!json) throw Error('progress-cloud-conflict'); return json; }, publish: async (scope, revision, json, base) => {
       if ((heads.get(scope)?.token ?? '') !== base) throw Error('progress-cloud-conflict');
-      published.push(json); const result = publication(revision, `published-${published.length}`);
+      published.push(json); const result = { ...publication(revision, `published-${published.length}`), resetGeneration: JSON.parse(json).generation };
       heads.set(scope, result); payloads.set(result.id, json); return result;
     },
     cleanup: async (scope, base) => {
@@ -38,6 +39,12 @@ function fixture(t: TestContext) {
       if (head) heads.set(scope, { ...head, cleanupPending: false });
       return false;
     },
+    reset: async (scope, request, expected, json) => {
+      const current = heads.get(scope);
+      if (current && (current.resetGeneration ?? '') !== expected) return current;
+      const result = { ...publication(0, request), resetGeneration: request };
+      heads.set(scope, result); payloads.set(result.id, json); return result;
+    }, discardLocal: async () => {},
     stop: async () => {}, addListener: () => ({ remove() {} }) };
   const sync = new ProgressSync(profiles, cloud);
   t.after(() => sync.dispose());
@@ -636,4 +643,392 @@ test('a delayed identity retry cannot replace a newer confirmed account generati
   delayed.resolve({ status: 'available', scope: 'account-a' }); await Promise.resolve(); await Promise.resolve();
   assert.equal(profiles.id(), 'guest'); assert.equal(sync.getSnapshot().hasProfile, false);
   assert.equal(published.length, 1);
+});
+
+test('account notification hides private state before identity and calls every pause guard despite storage failure', async t => {
+  const { sync, profiles, cloud } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const original = profiles.current(); original.saveValue('settings', '{"mode":"manual","rate":2}');
+  const identity = deferred<{ status: 'available'; scope: string }>(); cloud.account = () => identity.promise;
+  let stopped = false;
+  sync.beforeSwitch(() => { throw Error('disk'); }); sync.beforeSwitch(() => { stopped = true; });
+  const change = sync.accountChanged();
+  assert.equal(stopped, true); assert.equal(profiles.id(), 'guest');
+  assert.equal(sync.getSnapshot().learningAvailable, false);
+  assert.equal(sync.getSnapshot().error, 'progress-cloud-storage');
+  identity.resolve({ status: 'available', scope: 'account-b' }); await change;
+  assert.equal(original.readValue('settings'), '{"mode":"manual","rate":2}');
+});
+
+test('local removal clears real records, revisions and guest fallback and revokes an old player writer', async t => {
+  const { sync, profiles } = fixture(t);
+  profiles.saveValue('settings', '{"mode":"manual","rate":2}');
+  const original = profiles.current(), write = original.journal.createWriter('sample-v1', session());
+  original.journal.save('sample-v1', session());
+  const other = profiles.store('other'); other.journal.save('sample-v1', session());
+  await sync.removeLocal();
+  assert.equal(profiles.readValue('settings'), null);
+  assert.equal(profiles.current().journal.load('sample-v1', 1, 1), null);
+  assert.equal(profiles.current().revision(), 0);
+  assert.throws(() => write({ ...session(), audioSeconds: 1 }), /revoked/);
+  assert.throws(() => original.saveValue('settings', '{"mode":"manual","rate":3}'), /revoked/);
+  assert.equal(other.journal.load('sample-v1', 1, 1)?.runId, 'finished');
+  assert.equal(sync.getSnapshot().deletion, null);
+});
+
+const resetID = '11111111-1111-4111-8111-111111111111';
+test('verified remote reset discards stale local learning and settings before any merge or publication', async t => {
+  const { sync, profiles, heads, payloads, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  profiles.current().journal.save('sample-v1', session());
+  const old = profiles.current(), authority = sync.getSnapshot().authority;
+  heads.set('account-a', { ...publication(0, 'reset'), resetGeneration: resetID });
+  payloads.set('reset', encodeEnvelope(emptyProgress(), resetID));
+  await sync.retry();
+  assert.equal(profiles.current().journal.load('sample-v1', 1, 1), null);
+  assert.equal(profiles.current().resetGeneration(), resetID);
+  assert.equal(profiles.current().revision(), 0);
+  assert.equal(published.length, 1);
+  assert.notEqual(sync.getSnapshot().authority, authority);
+  assert.throws(() => old.saveValue('settings', '{"mode":"manual","rate":3}'), /revoked/);
+});
+
+test('offline cloud deletion persists one request and resumes with automatic sync off after restart', async t => {
+  const { sync, profiles, cloud, open, heads, payloads, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  profiles.current().journal.save('sample-v1', session());
+  const reset = cloud.reset; cloud.reset = async () => { throw Error('progress-cloud-offline'); };
+  await sync.deleteCloud();
+  const intent = profiles.deletions.cloud('account-a')!;
+  assert.ok(intent.request); assert.equal(intent.expected, '');
+  assert.equal(sync.getSnapshot().learningAvailable, false);
+  assert.equal(sync.getSnapshot().enabled, false);
+  await sync.deleteCloud(); assert.equal(profiles.deletions.cloud('account-a')!.request, intent.request);
+  sync.dispose(); cloud.reset = reset;
+  const reopened = new ProgressProfiles(open, () => 'unused'), next = new ProgressSync(reopened, cloud); t.after(() => next.dispose());
+  await next.refreshAccount();
+  assert.equal(next.getSnapshot().deletion, null); assert.equal(next.getSnapshot().enabled, false);
+  assert.equal(reopened.current().journal.load('sample-v1', 1, 1), null);
+  assert.equal(heads.get('account-a')?.resetGeneration, intent.request);
+  assert.equal(JSON.parse(payloads.get(heads.get('account-a')!.id)!).progress.tables.checkpoints.length, 0);
+  assert.equal(published.length, 1);
+});
+
+test('local SQLite failure rolls back and survives relaunch; native discard failure keeps learning blocked until retry', async t => {
+  const { sync, profiles, cloud, open } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const profile = profiles.id(); profiles.current().journal.save('sample-v1', session());
+  const before = profiles.current().exportBackup(), revision = profiles.current().revision();
+  open(profile).exec("CREATE TRIGGER deny_wipe BEFORE DELETE ON checkpoints BEGIN SELECT RAISE(ABORT, 'disk'); END");
+  await sync.removeLocal();
+  assert.equal(profiles.current().exportBackup(), before); assert.equal(profiles.current().revision(), revision);
+  assert.equal(sync.getSnapshot().deletion?.kind, 'local'); assert.equal(sync.getSnapshot().learningAvailable, false);
+  sync.dispose(); open(profile).exec('DROP TRIGGER deny_wipe');
+  cloud.discardLocal = async () => { throw Error('progress-cloud-storage'); };
+  const reopened = new ProgressProfiles(open, () => 'unused'), next = new ProgressSync(reopened, cloud); t.after(() => next.dispose());
+  await next.refreshAccount();
+  assert.equal(reopened.current().hasData(), false); assert.equal(next.getSnapshot().deletion?.kind, 'local');
+  cloud.discardLocal = async () => {}; await next.retryDeletion();
+  assert.equal(next.getSnapshot().deletion, null); assert.equal(next.getSnapshot().learningAvailable, true);
+});
+
+test('startup cached account stays hidden until verification and unchanged refresh preserves session authority', async t => {
+  const { sync, profiles, cloud, open } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const id = profiles.id(); profiles.saveValue('settings', '{"mode":"manual","rate":2}'); sync.dispose();
+  const next = new ProgressSync(new ProgressProfiles(open, () => 'unused'), cloud); t.after(() => next.dispose());
+  assert.equal(next.getSnapshot().profile, 'guest'); assert.equal(next.getSnapshot().learningAvailable, false);
+  await next.refreshAccount(); assert.equal(next.getSnapshot().profile, id);
+  const authority = next.getSnapshot().authority;
+  await next.refreshAccount(); assert.equal(next.getSnapshot().authority, authority);
+  cloud.account = async () => ({ status: 'available', scope: 'account-b' }); await next.accountChanged();
+  cloud.account = async () => ({ status: 'available', scope: 'account-a' }); await next.accountChanged();
+  assert.equal(next.profiles.readValue('settings'), '{"mode":"manual","rate":2}');
+  assert.equal(next.authorized(authority, id), false);
+});
+
+test('cloud reset lost response adopts later new-generation learning and keeps original request through cleanup', async t => {
+  const { sync, profiles, cloud, heads, payloads } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  profiles.current().journal.save('sample-v1', session());
+  const reset = cloud.reset;
+  cloud.reset = async (...args) => { await reset(...args); throw Error('progress-cloud-offline'); };
+  await sync.deleteCloud();
+  const intent = profiles.deletions.cloud('account-a')!;
+  const source = profiles.store('fresh'); source.journal.save('sample-v1', { ...session(), runId: 'new-learning', confirmed: 3, phase: 'complete' });
+  const fresh = { ...publication(7, 'fresh'), resetGeneration: intent.request, cleanupPending: true };
+  heads.set('account-a', fresh); payloads.set('fresh', encodeEnvelope(source.exportBackup(), intent.request));
+  cloud.reset = reset; await sync.retryDeletion();
+  assert.equal(profiles.current().journal.completions('sample-v1', 1), 1);
+  assert.equal(profiles.current().resetGeneration(), intent.request);
+  assert.equal(sync.getSnapshot().deletion?.kind, 'cloud'); assert.equal(sync.getSnapshot().learningAvailable, false);
+  assert.equal(profiles.deletions.cloud('account-a')!.request, intent.request);
+  heads.set('account-a', { ...fresh, cleanupPending: false }); await sync.retryDeletion();
+  assert.equal(profiles.current().journal.completions('sample-v1', 1), 1);
+  assert.equal(sync.getSnapshot().deletion, null); assert.equal(sync.getSnapshot().learningAvailable, true);
+});
+
+test('concurrent reset adopts its generation and a reset head/read race never imports discarded payload', async t => {
+  const { sync, profiles, cloud, heads, payloads } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const reset = cloud.reset;
+  cloud.reset = async (...args) => {
+    heads.set('account-a', { ...publication(0, 'winner'), resetGeneration: resetID });
+    payloads.set('winner', encodeEnvelope(emptyProgress(), resetID));
+    return reset(...args);
+  };
+  await sync.deleteCloud();
+  assert.equal(profiles.current().resetGeneration(), resetID); assert.equal(sync.getSnapshot().deletion, null);
+  const source = profiles.store('source'); source.journal.save('sample-v1', session());
+  const nextID = '22222222-2222-4222-8222-222222222222';
+  heads.set('account-a', { ...publication(1, 'stale'), resetGeneration: nextID });
+  payloads.set('stale', encodeEnvelope(source.exportBackup(), nextID));
+  const read = cloud.read;
+  cloud.read = async (...args) => {
+    const json = await read(...args);
+    if (args[1] === 'stale') {
+      heads.set('account-a', { ...publication(2, 'latest'), resetGeneration: nextID });
+      payloads.set('latest', encodeEnvelope(emptyProgress(), nextID));
+    }
+    return json;
+  };
+  await sync.refresh();
+  assert.equal(profiles.current().hasData(), false); assert.equal(profiles.current().resetGeneration(), nextID);
+});
+
+test('known reset generation refuses absent head and legacy rollback without publishing', async t => {
+  const { sync, profiles, heads, payloads, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false); await sync.deleteCloud();
+  const marker = profiles.current().resetGeneration();
+  heads.delete('account-a'); await sync.refresh();
+  assert.equal(sync.getSnapshot().error, 'progress-cloud-corrupt'); assert.equal(published.length, 1);
+  heads.set('account-a', publication(1, 'legacy')); payloads.set('legacy', emptyProgress());
+  await sync.refresh();
+  assert.equal(sync.getSnapshot().error, 'progress-cloud-corrupt'); assert.equal(published.length, 1);
+  assert.equal(profiles.current().resetGeneration(), marker);
+});
+
+test('pending account deletion survives account switch and cannot be cancelled by guest local removal', async t => {
+  const { sync, profiles, cloud } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const original = profiles.id(), reset = cloud.reset, waiting = deferred<CloudPublication>();
+  cloud.reset = () => waiting.promise;
+  const deletion = sync.deleteCloud(); await drain();
+  const intent = profiles.deletions.cloud('account-a')!;
+  cloud.account = async () => ({ status: 'no-account' }); await sync.accountChanged();
+  await sync.removeLocal();
+  waiting.resolve({ ...publication(0), resetGeneration: intent.request }); await deletion;
+  assert.equal(profiles.id(), 'guest'); assert.equal(profiles.deletions.cloud('account-a')!.request, intent.request);
+  cloud.reset = reset; cloud.account = async () => ({ status: 'available', scope: 'account-a' }); await sync.accountChanged();
+  assert.equal(profiles.id(), original); assert.equal(sync.getSnapshot().deletion, null);
+});
+
+test('offline identity refresh preserves local deletion authority and network return retries deletion while automatic sync is off', async t => {
+  const { sync, profiles, cloud } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false); sync.disable();
+  cloud.account = async () => ({ status: 'unknown' }); await sync.refreshAccount();
+  const reset = cloud.reset; cloud.reset = async () => { throw Error('progress-cloud-offline'); };
+  await sync.deleteCloud();
+  assert.ok(profiles.deletions.cloud('account-a'));
+  cloud.reset = reset; sync.networkAvailable(); await drain();
+  assert.equal(sync.getSnapshot().deletion, null); assert.equal(sync.getSnapshot().enabled, false);
+  assert.equal(profiles.current().hasData(), false);
+});
+
+test('captured settings callback never regains authority after A to B to A or same-profile deletion', async t => {
+  const { sync, profiles, cloud } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const id = profiles.id(), authority = sync.getSnapshot().authority;
+  const edit = () => sync.savePreference('settings', '{"mode":"manual","rate":3}', authority, id);
+  assert.equal(edit(), true);
+  cloud.account = async () => ({ status: 'available', scope: 'account-b' }); await sync.accountChanged();
+  cloud.account = async () => ({ status: 'available', scope: 'account-a' }); await sync.accountChanged();
+  assert.equal(edit(), false);
+  const current = sync.getSnapshot().authority;
+  await sync.removeLocal();
+  assert.equal(sync.savePreference('settings', '{"mode":"manual","rate":2}', current, id), false);
+  assert.equal(profiles.current().hasData(), false);
+});
+
+test('confirmation from before a remote reset cannot delete fresh same-profile learning', async t => {
+  const { sync, profiles, heads, payloads } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const confirmation = sync.getSnapshot().generation;
+  heads.set('account-a', { ...publication(0, 'reset'), resetGeneration: resetID });
+  payloads.set('reset', encodeEnvelope(emptyProgress(), resetID)); await sync.retry();
+  profiles.current().journal.save('sample-v1', { ...session(), runId: 'fresh' });
+  await sync.removeLocal(confirmation);
+  assert.equal(profiles.current().journal.load('sample-v1', 1, 1)?.runId, 'fresh');
+});
+
+test('local removal fences an already downloading backup before its late payload can repopulate rows', async t => {
+  const { sync, profiles, cloud, heads, payloads } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  profiles.current().journal.save('sample-v1', session());
+  const read = deferred<string>(); cloud.read = () => read.promise;
+  const work = sync.retry(); await drain();
+  await sync.removeLocal();
+  read.resolve(payloads.get(heads.get('account-a')!.id)!); await work;
+  assert.equal(profiles.current().hasData(), false); assert.equal(profiles.current().revision(), 0);
+  assert.equal(sync.getSnapshot().enabled, false);
+});
+
+test('native identity invalidation during a routine pass hides private learning without waiting for another notification', async t => {
+  const { sync, profiles, cloud } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  profiles.current().journal.save('sample-v1', session()); const id = profiles.id();
+  cloud.list = async () => { throw Error('progress-cloud-accountChanged'); };
+  await sync.retry();
+  assert.equal(profiles.id(), 'guest'); assert.equal(sync.getSnapshot().learningAvailable, false);
+  assert.equal(profiles.store(id).journal.load('sample-v1', 1, 1)?.runId, 'finished');
+});
+
+test('cloud reset transaction failure preserves all old records and the boundary marker until safe retry', async t => {
+  const { sync, profiles, open } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  profiles.current().journal.save('sample-v1', session());
+  const db = open(profiles.id()), before = profiles.current().exportBackup(), revision = profiles.current().revision();
+  db.exec("CREATE TRIGGER deny_reset BEFORE UPDATE ON progress_reset BEGIN SELECT RAISE(ABORT, 'disk'); END");
+  await sync.deleteCloud();
+  assert.equal(profiles.current().exportBackup(), before); assert.equal(profiles.current().revision(), revision);
+  assert.equal(profiles.current().resetGeneration(), ''); assert.equal(sync.getSnapshot().learningAvailable, false);
+  db.exec('DROP TRIGGER deny_reset'); await sync.retryDeletion();
+  assert.equal(profiles.current().hasData(), false); assert.equal(sync.getSnapshot().deletion, null);
+});
+
+test('reset envelope rejects malformed and future payloads without any local mutation', async t => {
+  const { sync, profiles, heads, payloads, published } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  profiles.current().journal.save('sample-v1', session()); const before = profiles.current().exportBackup();
+  heads.set('account-a', { ...publication(0, 'bad'), resetGeneration: resetID });
+  for (const json of [JSON.stringify({ version: 6, generation: resetID, progress: JSON.parse(emptyProgress()) }),
+    JSON.stringify({ version: 5, generation: resetID, progress: { version: 4, tables: {}, sync: {} } }),
+    encodeEnvelope(emptyProgress(), '22222222-2222-4222-8222-222222222222')]) {
+    payloads.set('bad', json); await sync.retry();
+    assert.equal(profiles.current().exportBackup(), before); assert.equal(profiles.current().resetGeneration(), '');
+    assert.equal(published.length, 1);
+    assert.ok(['progress-cloud-corrupt', 'progress-cloud-updateRequired'].includes(sync.getSnapshot().error!));
+  }
+});
+
+test('reset-generation learning stays compressed and canonical across clean polls and a second installation', async t => {
+  const a = fixture(t), b = fixture(t); b.sync.dispose();
+  const second = new ProgressSync(b.profiles, a.cloud); t.after(() => second.dispose());
+  await a.sync.refreshAccount(); await a.sync.enable(false); await a.sync.deleteCloud();
+  const initial = createSession({ runId: 'long-reset-run', stage: 1, phraseCount: 200, mode: 'manual', rate: 1 });
+  const save = a.profiles.current().journal.createWriter('sample-v1', initial, { language: 'english', book: 'sample' });
+  const player = new Player(initial, { prepare: async () => {}, play() {}, pause() {}, position: () => 0, dispose() {} }, save, () => 0, () => {});
+  await player.resume(); player.audioEnded(1); await player.confirm(); player.dispose();
+  await a.sync.refresh();
+  assert.equal(typeof JSON.parse(a.published.at(-1)!).progress.sync.runs[0].observed, 'string');
+  await second.refreshAccount(); await second.enable(false);
+  const count = a.published.length;
+  await second.retry(); await a.sync.refresh();
+  assert.equal(a.published.length, count);
+  assert.equal(b.profiles.current().journal.progress.summary('english').xp, 1);
+  assert.equal(b.profiles.current().exportBackup(), a.profiles.current().exportBackup());
+});
+
+test('guest local removal never retires an unselected account cache', async t => {
+  const { sync, profiles, cloud } = fixture(t);
+  await sync.refreshAccount();
+  cloud.discardLocal = async () => { throw Error('wrong account cache'); };
+  profiles.current().journal.save('sample-v1', session());
+  await sync.removeLocal();
+  assert.equal(sync.getSnapshot().deletion, null); assert.equal(sync.getSnapshot().error, null);
+  assert.equal(profiles.current().hasData(), false);
+});
+
+test('late failed deletion for A cannot change B status or hide its newly verified learning', async t => {
+  const { sync, cloud } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  let reject!: (error: Error) => void;
+  cloud.reset = () => new Promise((_, fail) => { reject = fail; });
+  const deletion = sync.deleteCloud(); await drain();
+  cloud.account = async () => ({ status: 'available', scope: 'account-b' }); await sync.accountChanged(); await sync.enable(false);
+  reject(Error('progress-cloud-accountChanged')); await deletion;
+  assert.equal(sync.getSnapshot().hasProfile, true); assert.equal(sync.getSnapshot().learningAvailable, true);
+  assert.equal(sync.getSnapshot().error, null);
+});
+
+test('pending deletion stays visible through unknown identity refresh and retries independently of sync', async t => {
+  const { sync, cloud } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const reset = cloud.reset; cloud.reset = async () => { throw Error('progress-cloud-offline'); };
+  await sync.deleteCloud();
+  cloud.account = async () => ({ status: 'unknown' }); await sync.refreshAccount();
+  assert.equal(sync.getSnapshot().deletion?.kind, 'cloud'); assert.equal(sync.getSnapshot().learningAvailable, false);
+  cloud.reset = reset; await sync.retryDeletion();
+  assert.equal(sync.getSnapshot().deletion, null); assert.equal(sync.getSnapshot().enabled, false);
+});
+
+for (const publishFirst of [true, false]) test(`two real SQLite installations discard stale learning when reset ${publishFirst ? 'follows' : 'precedes'} reconnect`, async t => {
+  const a = fixture(t), b = fixture(t); b.sync.dispose();
+  const second = new ProgressSync(b.profiles, a.cloud); t.after(() => second.dispose());
+  await a.sync.refreshAccount(); await a.sync.enable(false); await second.refreshAccount(); await second.enable(false);
+  b.profiles.current().journal.save('sample-v1', { ...session(), runId: 'old-offline-run', confirmed: 3, phase: 'complete' });
+  if (publishFirst) await second.retry();
+  await a.sync.deleteCloud(); await second.retry();
+  assert.equal(a.profiles.current().hasData(), false); assert.equal(b.profiles.current().hasData(), false);
+  assert.equal(a.profiles.current().resetGeneration(), b.profiles.current().resetGeneration());
+  const head = a.heads.get('account-a')!;
+  assert.equal(JSON.parse(a.payloads.get(head.id)!).progress.tables.completions.length, 0);
+});
+
+test('restricted native identity hides the outgoing account while ordinary offline identity keeps verified local learning', async t => {
+  const { sync, profiles, cloud } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const id = profiles.id(); profiles.current().journal.save('sample-v1', session());
+  cloud.account = async () => ({ status: 'unknown' }); await sync.refreshAccount();
+  assert.equal(sync.getSnapshot().learningAvailable, true); assert.equal(profiles.id(), id);
+  cloud.account = async () => ({ status: 'unavailable' }); await sync.refreshAccount();
+  assert.equal(profiles.id(), 'guest'); assert.equal(profiles.store(id).journal.load('sample-v1', 1, 1)?.runId, 'finished');
+});
+
+test('account notification hides private UI even when the registry cannot persist guest selection', async t => {
+  const { sync, profiles, open } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const old = profiles.current(); old.journal.save('sample-v1', session());
+  open('progress-profiles-v1').exec("CREATE TRIGGER deny_selection BEFORE UPDATE ON active_profile BEGIN SELECT RAISE(ABORT, 'disk'); END");
+  await sync.accountChanged();
+  assert.equal(sync.getSnapshot().profile, 'guest'); assert.equal(sync.getSnapshot().learningAvailable, false);
+  assert.equal(sync.getSnapshot().error, 'progress-cloud-storage');
+  assert.equal(old.journal.load('sample-v1', 1, 1)?.runId, 'finished');
+});
+
+for (const target of ['account-b', 'no-account'] as const) test(`foreground identity refresh fails closed when selecting ${target} cannot commit`, async t => {
+  const { sync, profiles, cloud, open } = fixture(t);
+  await sync.refreshAccount(); await sync.enable(false);
+  const a = profiles.id(); profiles.saveValue('settings', '{"mode":"manual","rate":2}');
+  cloud.account = async () => ({ status: 'available', scope: 'account-b' });
+  await sync.refreshAccount(); await sync.enable(false);
+  const b = profiles.id(); profiles.saveValue('settings', '{"mode":"manual","rate":3}');
+  cloud.account = async () => ({ status: 'available', scope: 'account-a' });
+  await sync.refreshAccount(false);
+  const beforeA = profiles.store(a).exportBackup(), beforeB = profiles.store(b).exportBackup();
+  const oldAuthority = sync.getSnapshot().authority;
+  // Both destinations are controlled fixture IDs. Blocking all selection also
+  // proves that the privacy fallback works without a successful guest write.
+  open('progress-profiles-v1').exec("CREATE TRIGGER deny_refresh_selection BEFORE UPDATE ON active_profile BEGIN SELECT RAISE(ABORT, 'disk'); END");
+  cloud.account = async () => target === 'no-account' ? { status: 'no-account' } : { status: 'available', scope: target };
+  await sync.refreshAccount(false);
+  const state = sync.getSnapshot();
+  assert.equal(state.profile, 'guest'); assert.equal(profiles.id(), 'guest');
+  assert.equal(state.learningAvailable, false); assert.equal(state.error, 'progress-cloud-storage');
+  assert.equal(state.ready, false); assert.equal(state.hasProfile, false); assert.equal(state.enabled, false); assert.equal(state.busy, false);
+  assert.deepEqual(state.backups, []);
+  assert.equal(sync.authorized(oldAuthority, a), false);
+  assert.equal(sync.authorized(state.authority, a), false);
+  assert.equal(sync.authorized(state.authority, 'guest'), false);
+  assert.equal(sync.savePreference('settings', '{"mode":"manual","rate":1}', state.authority, a), false);
+  await sync.deleteCloud();
+  assert.equal(profiles.deletions.cloud('account-a'), undefined);
+  assert.equal(profiles.deletions.cloud('account-b'), undefined);
+  assert.equal(profiles.store(a).exportBackup(), beforeA);
+  assert.equal(profiles.store(b).exportBackup(), beforeB);
+  open('progress-profiles-v1').exec('DROP TRIGGER deny_refresh_selection');
+  cloud.account = async () => ({ status: 'available', scope: 'account-a' });
+  await sync.refreshAccount(false);
+  assert.equal(sync.getSnapshot().profile, a); assert.equal(sync.getSnapshot().learningAvailable, true);
+  assert.equal(profiles.current().exportBackup(), beforeA);
 });

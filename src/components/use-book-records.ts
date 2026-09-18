@@ -19,6 +19,7 @@ export function useBookRecords(pack: LearningPackage | null) {
     if (!pack || !key) { setResult(null); return () => { active = false; }; }
     let shownError = false;
     function refresh() { try {
+      if (!getProgressSync().getSnapshot().learningAvailable) { setResult(null); return; }
       const context = new LearningContext(pack!, getJournal());
       setResult({ key: key!, latestStage: context.latestStage(), records: Array.from({ length: 16 }, (_, i) => {
         const stage = i + 1;

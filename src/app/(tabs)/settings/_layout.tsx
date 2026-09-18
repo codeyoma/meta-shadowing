@@ -11,5 +11,6 @@ export default function SettingsLayout() {
     <Stack.Screen name="learning" options={{ title: '학습 설정', headerBackButtonDisplayMode: 'minimal' }} />
     <Stack.Screen name="learning-detail" options={{ title: '학습 설정', headerBackButtonDisplayMode: 'minimal' }} />
     <Stack.Screen name="icloud" options={{ title: 'iCloud 동기화', headerBackButtonDisplayMode: 'minimal' }} />
+    <Stack.Screen name="data-management" options={{ title: '데이터 관리', headerBackButtonDisplayMode: 'minimal' }} />
   </Stack>;
 }

@@ -13,9 +13,9 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
   private var store: ProgressStore?
   private var epoch = UUID()
   private var authorized = false
-  private var outgoing: CKRecord?
+  private var outgoing: [CKRecord] = []
   private var deleting: CKRecord.ID?
-  private var saved: BackupRecord?
+  private var saved: [CKRecord.ID: BackupRecord] = [:]
   private var deleted = false
   private var failure: ProgressCloudError?
 
@@ -67,18 +67,36 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     }
   }
   func save(_ record: BackupRecord, asset: URL?, store: ProgressStore) async throws -> BackupRecord {
+    let result = try await saveRecords([Self.encode(record, asset: asset)], store: store)
+    guard let saved = result.values.first else { throw ProgressCloudError.offline }
+    return saved
+  }
+  func savePublication(_ backup: BackupRecord, head: BackupRecord, asset: URL, store: ProgressStore) async throws -> BackupRecord {
+    guard head.id == ProgressTransport.sharedHead,
+      head.current == BackupReference(id: backup.id, hash: backup.hash),
+      head.resetGeneration == backup.resetGeneration else { throw ProgressCloudError.corrupt }
+    let records = try [Self.encode(backup, asset: asset), Self.encode(head, asset: nil)]
+    let result = try await saveRecords(records, store: store)
+    guard let savedBackup = result[records[0].recordID], savedBackup.hasSamePayload(as: backup),
+      let savedHead = result[records[1].recordID], savedHead.hasSamePayload(as: head)
+      else { throw ProgressCloudError.conflict }
+    return savedHead
+  }
+  private func saveRecords(_ records: [CKRecord], store: ProgressStore) async throws -> [CKRecord.ID: BackupRecord] {
     let ticket = epoch
     try await check(ticket)
     let engine = try engine(for: store)
-    let ckRecord = try Self.encode(record, asset: asset)
-    outgoing = ckRecord; deleting = nil; saved = nil; failure = nil; authorized = true
-    defer { authorized = false; outgoing = nil }
+    outgoing = records; deleting = nil; saved = [:]; failure = nil; authorized = true
+    defer { authorized = false; outgoing = [] }
+    // Retire engine-local leftovers only; logical intent remains durable in the
+    // store. A previous failed atomic batch must never send an isolated asset.
+    engine.state.remove(pendingRecordZoneChanges: engine.state.pendingRecordZoneChanges)
     engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zone))])
-    engine.state.add(pendingRecordZoneChanges: [.saveRecord(ckRecord.recordID)])
+    engine.state.add(pendingRecordZoneChanges: records.map { .saveRecord($0.recordID) })
     do { try await engine.sendChanges() } catch { throw Self.sanitize(error) }
     try await check(ticket)
     if let failure { throw failure }
-    guard let saved, saved.id == record.id else { throw ProgressCloudError.offline }
+    guard records.allSatisfy({ saved[$0.recordID] != nil }) else { throw ProgressCloudError.offline }
     return saved
   }
   func delete(_ id: String, store: ProgressStore) async throws {
@@ -91,7 +109,7 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
           !store.state.records.values.contains(where: { $0.current?.id == id || $0.previous?.id == id })
     else { throw ProgressCloudError.conflict }
     let recordID = CKRecord.ID(recordName: id, zoneID: Self.zone)
-    outgoing = nil; deleting = recordID; deleted = false; failure = nil; authorized = true
+    outgoing = []; deleting = recordID; deleted = false; failure = nil; authorized = true
     defer { authorized = false; deleting = nil }
     engine.state.add(pendingRecordZoneChanges: [.deleteRecord(recordID)])
     do { try await engine.sendChanges() } catch { throw Self.sanitize(error) }
@@ -100,7 +118,7 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     guard deleted else { throw ProgressCloudError.offline }
   }
   func suspend() -> CloudCancellation {
-    epoch = UUID(); authorized = false; outgoing = nil; deleting = nil
+    epoch = UUID(); authorized = false; outgoing = []; deleting = nil
     let old = engine
     engine = nil; store = nil
     return { await old?.cancelOperations() }
@@ -118,10 +136,10 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     engine: CKSyncEngine) async -> CKSyncEngine.RecordZoneChangeBatch? {
     let ticket = epoch
     do { try await check(ticket) } catch { failure = Self.sanitize(error); return nil }
-    guard engine === self.engine, authorized else { return nil }
+    guard engine === self.engine, authorized, failure == nil else { return nil }
     // No await separates identity verification from delivery of the authorized bytes.
-    if let outgoing, context.options.scope.contains(outgoing.recordID) {
-      return CKSyncEngine.RecordZoneChangeBatch(recordsToSave: [outgoing], atomicByZone: true)
+    if !outgoing.isEmpty {
+      return Self.savingBatch(outgoing, scope: context.options.scope)
     }
     if let deleting, context.options.scope.contains(deleting) {
       guard let store, store.state.cleanup.contains(deleting.recordName),
@@ -134,6 +152,13 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
       return CKSyncEngine.RecordZoneChangeBatch(recordIDsToDelete: [deleting], atomicByZone: true)
     }
     return nil
+  }
+
+  static func savingBatch(_ records: [CKRecord], scope: CKSyncEngine.SendChangesOptions.Scope) -> CKSyncEngine.RecordZoneChangeBatch? {
+    // Do not filter a publication down to the portion requested by the engine.
+    // Both its CAS guard and its asset must be present in the same atomic batch.
+    guard !records.isEmpty, records.allSatisfy({ scope.contains($0.recordID) }) else { return nil }
+    return CKSyncEngine.RecordZoneChangeBatch(recordsToSave: records, atomicByZone: true)
   }
 
   nonisolated func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
@@ -167,21 +192,21 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
       case .sentRecordZoneChanges(let result):
         guard authorized else { return }
         for record in result.savedRecords {
-          guard record.recordID == outgoing?.recordID else { continue }
+          guard outgoing.contains(where: { record.recordID == $0.recordID }) else { continue }
           try stage(record, into: store)
-          saved = try Self.decode(record)
-          outgoing = nil
+          saved[record.recordID] = try Self.decode(record)
         }
         for item in result.failedRecordSaves {
           // Retry after process death can encounter an already-acknowledged generation.
           // Only identical application fields qualify; never overwrite a changed head.
-          if item.error.code == .serverRecordChanged,
-             let server = item.error.serverRecord, let proposed = outgoing,
+          if outgoing.count == 1, item.error.code == .serverRecordChanged,
+             let server = item.error.serverRecord, let proposed = outgoing.first,
              try Self.samePayload(server, proposed) {
-            try stage(server, into: store); saved = try Self.decode(server); outgoing = nil
+            try stage(server, into: store); saved[server.recordID] = try Self.decode(server)
             engine.state.remove(pendingRecordZoneChanges: [.saveRecord(server.recordID)])
-          } else { failure = Self.sanitize(item.error); outgoing = nil }
+          } else if failure == nil || item.error.code == .serverRecordChanged { failure = Self.sanitize(item.error) }
         }
+        if !outgoing.isEmpty, outgoing.allSatisfy({ saved[$0.recordID] != nil }) { outgoing = [] }
         if let deleting, result.deletedRecordIDs.contains(deleting) { deleted = true; self.deleting = nil }
         for (id, error) in result.failedRecordDeletes {
           guard id == deleting else { continue }
@@ -205,12 +230,12 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
       let ticket = epoch
       do { try await check(ticket); return }
       catch {
-        epoch = UUID(); authorized = false; outgoing = nil; deleting = nil
+        epoch = UUID(); authorized = false; outgoing = []; deleting = nil
         failure = Self.sanitize(error)
         return
       }
     }
-    epoch = UUID(); authorized = false; outgoing = nil; deleting = nil
+    epoch = UUID(); authorized = false; outgoing = []; deleting = nil
     failure = .accountChanged
   }
 
@@ -268,6 +293,7 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     record["writer"] = value.writer as NSString
     record["revision"] = value.revision as NSNumber
     record["createdAt"] = value.createdAt as NSString
+    record["resetGeneration"] = value.resetGeneration as NSString?
     if value.kind == "ProgressBackup" {
       record["generation"] = value.id as NSString
       record["hash"] = value.hash as NSString
@@ -294,6 +320,12 @@ final class CloudKitService: ProgressCloudService, CKSyncEngineDelegate {
     record.encodeSystemFields(with: coder); coder.finishEncoding()
     var value = BackupRecord(id: record.recordID.recordName, kind: record.recordType, writer: writer,
       revision: revision, createdAt: createdAt, systemFields: coder.encodedData, changeTag: record.recordChangeTag)
+    if let raw = record["resetGeneration"] {
+      guard let generation = raw as? String, UUID(uuidString: generation) != nil,
+        record.recordType == "ProgressBackup" || value.id == ProgressTransport.sharedHead
+      else { throw ProgressCloudError.corrupt }
+      value.resetGeneration = generation
+    }
     if record.recordType == "ProgressBackup" {
       guard let hash = record["hash"] as? String, validHash(hash), let bytes = record["bytes"] as? Int,
             bytes > 0, bytes <= ProgressStore.maxBytes,

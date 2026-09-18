@@ -1,5 +1,65 @@
 # Private progress backup — verification and setup
 
+## Account data management — #51, 2026-09-18
+
+Settings now includes `데이터 관리` with two separately confirmed
+operations. `학습 기록 삭제` removes the current displayed profile's
+learning progress, XP, settings and queued local progress payloads while leaving
+iCloud records, downloaded books and purchases intact. Automatic sync stays off;
+a later explicit enable or manual sync can restore surviving cloud history.
+
+`iCloud 학습 기록 삭제` is available only for the currently authorized
+account profile. It removes that account's learning data and superseded app-owned
+backup payloads while preserving downloaded books, purchases, other accounts and
+the minimal reset marker required to reject stale history. An offline or partial
+request remains visibly pending and blocks that account's learning until reset and
+required cleanup are acknowledged. Retry remains available with automatic sync
+off. Guest profiles can use only local removal.
+
+Confirmation captures the displayed profile and coordinator generation, then
+rechecks both after the dialog. Account/profile changes, busy work and an existing
+destructive intent cannot reuse or overlap that consent. An ordinary offline
+identity refresh may retain the already verified non-guest profile's deletion
+authority; startup and account-change hiding expose guest with learning unavailable
+and cannot target remembered account data. Existing automatic/manual sync controls
+are disabled while a deletion intent is pending.
+
+### Local verification — 2026-09-18
+
+- Nine focused deletion-helper tests and four iCloud presentation tests passed.
+  They exercise cancellation, stale profile/generation consent, guest scope,
+  retained offline account authority, account-change hiding, overlap prevention,
+  offline pending/retry and cleanup acknowledgement.
+- The complete TypeScript suite passed: 335 tests, 0 failed, 0 skipped. TypeScript
+  typechecking and `git diff --check` passed with no diagnostics.
+- `EXPO_NO_DOTENV=1 npm run bundle:ios` exported the production iOS JavaScript
+  bundle successfully (1,826 modules). Metro emitted only the existing environment
+  warning that `NO_COLOR` is ignored when `FORCE_COLOR` is set.
+- Task 2 privacy gates were inspected in player, player-options, library and
+  settings paths. No additional Task 3 source change was required: entry/writes
+  remain authority-scoped, profile identity remounts clear mounted library state,
+  and settings writes reject unavailable authority.
+
+Controller verification on the final source also passed all 335 TypeScript tests,
+53 native CloudKit fixtures on iOS 26.5, and 18 build-settings, package and native
+header checks. Typechecking, iOS export and compile-only Release Simulator build
+passed using Xcode 27 / iOS 27 SDK. Independent task and whole-branch reviews
+approved the code; a final test-only refinement isolates profile-only stale
+consent from generation-only invalidation. Earlier fixture and generated Expo
+build warnings remain known tooling diagnostics; the clean incremental build
+does not establish a warning-free clean rebuild.
+
+The follow-up simulator preview was rebuilt, installed and launched to inspect
+the Settings screen and shortened deletion copy. The existing learning records
+were preserved; no deletion action was executed. The publishing check reran all
+335 TypeScript tests, 18 supplementary checks and typechecking successfully.
+
+These are controlled local tests, simulator UI and compilation evidence.
+No real CloudKit deletion was attempted, and no physical-device,
+two-device, offline-device or live cleanup acceptance was performed. In particular,
+this does not establish real iOS 27 device acceptance. Keep #51 open until its
+remaining acceptance gates are explicitly resolved; no release approval is implied.
+
 ## Current automatic synchronization — #50, 2026-09-18
 
 The automatic-sync design supersedes the older manual local/cloud winner flow

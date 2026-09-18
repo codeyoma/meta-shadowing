@@ -14,6 +14,9 @@ export interface BackupDatabase extends Database {
 
 export class ProgressBackupStore {
   readonly journal: Journal;
+  private revoked = false;
+  revoke() { this.revoked = true; }
+  private authorize = () => { if (this.revoked) throw Error('Progress writer revoked.'); };
   constructor(private db: BackupDatabase, private now: () => Date = () => new Date()) {
     db.exec(`CREATE TABLE IF NOT EXISTS preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS backup_state (
@@ -22,7 +25,8 @@ export class ProgressBackupStore {
         acknowledged INTEGER NOT NULL CHECK(acknowledged BETWEEN 0 AND revision));
       INSERT OR IGNORE INTO backup_state(id,revision,acknowledged) VALUES (1,0,0);`);
     createSyncTable(db);
-    this.journal = new Journal(db, now, () => this.markChanged());
+    this.journal = new Journal(db, now, () => this.markChanged(), this.authorize);
+    db.exec("CREATE TABLE IF NOT EXISTS progress_reset (id INTEGER PRIMARY KEY CHECK(id=1), generation TEXT NOT NULL); INSERT OR IGNORE INTO progress_reset VALUES(1,'');");
     // Existing guest history predates backup metadata and still needs publication.
     if (this.hasData()) db.run('UPDATE backup_state SET revision=1 WHERE id=1 AND revision=0');
   }
@@ -33,6 +37,7 @@ export class ProgressBackupStore {
     return row.revision > row.acknowledged;
   }
   acknowledge(revision: number): void {
+    this.authorize();
     if (!Number.isSafeInteger(revision) || revision < 0 || revision > this.revision()) throw Error('Invalid backup acknowledgement.');
     this.db.run('UPDATE backup_state SET acknowledged=MAX(acknowledged,?) WHERE id=1', revision);
   }
@@ -40,6 +45,7 @@ export class ProgressBackupStore {
     return this.db.first<{ value: string }>('SELECT value FROM preferences WHERE key=?', key)?.value ?? null;
   }
   saveValue(key: 'settings' | 'selection', value: string): void {
+    this.authorize();
     validateValue(key, value);
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -77,6 +83,7 @@ export class ProgressBackupStore {
     return encodeProgressBackup(validateProgressBackup(encodeProgressBackup({ version: 4, tables, sync: seedLedger(tables, readSync(this.db)) })));
   }
   restoreBackup(json: string): void {
+    this.authorize();
     const backup = validateProgressBackup(json);
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -94,6 +101,7 @@ export class ProgressBackupStore {
   }
   mergeBackup(json: string): void { this.mergeBackups([json]); }
   mergeBackups(jsons: readonly string[]): void {
+    this.authorize();
     let incoming: ProgressBackup[];
     try { incoming = jsons.map(validateProgressBackup); }
     catch { throw new ProgressMergeError('Progress backup is incompatible or damaged.'); }
@@ -125,5 +133,25 @@ export class ProgressBackupStore {
       backup.sync.clocks[preferenceKey(key)] ??= '';
     }
     return encodeProgressBackup(validateProgressBackup(encodeProgressBackup(backup)));
+  }
+  resetGeneration(): string { return this.db.first<{ generation: string }>('SELECT generation FROM progress_reset WHERE id=1')!.generation; }
+  /** Reset and its boundary marker commit together, unlike a normal merge. */
+  reset(json: string, generation: string): void {
+    this.authorize();
+    const backup = validateProgressBackup(json);
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const table of Object.keys(columns) as Table[]) {
+        this.db.run(`DELETE FROM ${table}`);
+        for (const row of backup.tables[table]) this.db.run(
+          `INSERT INTO ${table} (${columns[table].join(',')}) VALUES (${columns[table].map(() => '?').join(',')})`,
+          ...columns[table].map(column => row[column]!));
+      }
+      saveSync(this.db, backup.sync);
+      this.db.run("UPDATE progress_sync_clock SET last='' WHERE id=1");
+      this.db.run('UPDATE backup_state SET revision=0,acknowledged=0 WHERE id=1');
+      this.db.run('UPDATE progress_reset SET generation=? WHERE id=1', generation);
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
 }

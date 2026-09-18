@@ -16,14 +16,14 @@ import { methodNames } from '@/components/method-label';
 
 export default function PlayerInfo() {
   const profile = useProgressProfile();
-  const { kind, stage: rawStage, package: key, phrase: rawPhrase } = useLocalSearchParams<{
-    kind: string; stage: string; package: string; phrase: string;
+  const { kind, stage: rawStage, package: key, phrase: rawPhrase, authority } = useLocalSearchParams<{
+    kind: string; stage: string; package: string; phrase: string; authority?: string;
   }>();
   const stage = playableStage(rawStage), pack = selectedPackage(key);
   const index = Number(rawPhrase);
-  const contentKey = `${profile.id}:${key}:${stage}:${rawPhrase}`;
+  const contentKey = `${profile.id}:${profile.authority}:${key}:${stage}:${rawPhrase}`;
   const [result, setResult] = useState<{ key: string; text: string; translation: string } | null>(null);
-  const content = result?.key === contentKey ? result : null;
+  const content = profile.available && Number(authority) === profile.authority && result?.key === contentKey ? result : null;
   useEffect(() => {
     let active = true;
     setResult(null);
@@ -31,7 +31,7 @@ export default function PlayerInfo() {
       try {
         if (!pack?.owned || !stage || !await isInstalled(pack)) return;
         const bypass = await testStageAccess();
-        if (!active || getProgressSync().profiles.id() !== profile.id) return;
+        if (!active || Number(authority) !== profile.authority || !getProgressSync().authorized(profile.authority, profile.id)) return;
         const context = new LearningContext(pack, getJournal());
         const predecessor = stage - 1;
         if (!canOpenStage(stage, isPlayableStage(predecessor)
@@ -44,7 +44,7 @@ export default function PlayerInfo() {
       } catch { /* Missing or incompatible content stays hidden. */ }
     })();
     return () => { active = false; };
-  }, [pack, stage, index, profile.id, contentKey]);
+  }, [pack, stage, index, profile.id, profile.authority, profile.available, contentKey, authority]);
   const analysis = kind === 'analysis';
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 20 }}>
     <Stack.Screen options={{ title: analysis ? '문장 분석' : '학습 가이드',

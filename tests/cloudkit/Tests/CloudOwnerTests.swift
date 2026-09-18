@@ -19,6 +19,93 @@ final class TestGate {
 
 @MainActor
 struct CloudOwnerTests {
+  @Test func offlineDiscardRetiresOnlySelectedCacheAndLateStoreCallbacks() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let cloud = TestCloud()
+    let local: @MainActor @Sendable (String) throws -> URL = { root.appendingPathComponent(ProgressStore.hash(Data($0.utf8))) }
+    let other = try ProgressStore(directory: local("other-scope"))
+    try other.update { $0.engine = Data("preserved".utf8) }
+    let owner = ProgressCloudOwner(cacheDirectory: local) {
+      .init(identity: { "test-scope" }, makeTransport: { try ProgressTransport(directory: local($0), scope: $0, cloud: cloud) })
+    }
+    let active = try await owner.active("test-scope")
+    let initial = try await active.publish(scope: "test-scope", revision: 1, json: "{}", base: "")
+    let bytes = try active.store.asset(try #require(active.store.state.records[initial.id]))
+    let record = try #require(active.store.state.records[initial.id])
+    let earlierInstance = try ProgressStore(directory: local("test-scope"))
+    cloud.failFetch = true; cloud.account = "offline-account"
+    try await owner.discardLocal("test-scope")
+    #expect(throws: ProgressCloudError.accountChanged) { try active.store.receive(record, asset: bytes) }
+    #expect(throws: ProgressCloudError.accountChanged) { try earlierInstance.receive(record, asset: bytes) }
+    #expect(throws: ProgressCloudError.accountChanged) { try active.store.update { $0.engine = Data() } }
+    #expect(!FileManager.default.fileExists(atPath: active.store.assetURL(initial.id).path))
+    #expect(try ProgressStore(directory: local("test-scope")).state.records.isEmpty)
+    #expect(try ProgressStore(directory: local("other-scope")).state.engine == Data("preserved".utf8))
+    #expect(cloud.assets[initial.id] != nil)
+    await owner.destroy()
+  }
+
+  @Test func discardingOtherScopeDoesNotInvalidateCurrentTransport() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let cloud = TestCloud()
+    let local: @MainActor @Sendable (String) throws -> URL = { root.appendingPathComponent(ProgressStore.hash(Data($0.utf8))) }
+    let owner = ProgressCloudOwner(cacheDirectory: local) {
+      .init(identity: { "test-scope" }, makeTransport: { try ProgressTransport(directory: local($0), scope: $0, cloud: cloud) })
+    }
+    let active = try await owner.active("test-scope")
+    try await owner.discardLocal("other-scope")
+    #expect(try await owner.active("test-scope") === active)
+    #expect(try await active.publish(scope: "test-scope", revision: 1, json: "{}") == 1)
+    await owner.destroy()
+  }
+
+  @Test func localDiscardFailureRemainsRetryableAndPreservesResetIntent() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let cloud = TestCloud()
+    let local: @MainActor @Sendable (String) throws -> URL = { root.appendingPathComponent(ProgressStore.hash(Data($0.utf8))) }
+    let owner = ProgressCloudOwner(cacheDirectory: local) {
+      .init(identity: { "test-scope" }, makeTransport: { try ProgressTransport(directory: local($0), scope: $0, cloud: cloud) })
+    }
+    let active = try await owner.active("test-scope"), request = UUID().uuidString
+    cloud.failFetch = true
+    await #expect(throws: ProgressCloudError.offline) {
+      try await active.reset(scope: "test-scope", requestId: request, expectedGeneration: "", json: resetEnvelope(request))
+    }
+    let target = try local("test-scope")
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: target.path)
+    await #expect(throws: ProgressCloudError.storage) { try await owner.discardLocal("test-scope") }
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: target.path)
+    try await owner.discardLocal("test-scope")
+    let reopened = try ProgressStore(directory: target)
+    #expect(reopened.state.resetIntent?.requestId == request)
+    #expect(reopened.state.pending == nil && reopened.state.records.isEmpty)
+    await owner.destroy()
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func discardFinishesBeforeNetworkCancellationAndRejectsLateFetch() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let cloud = TestCloud(), entered = TestGate(), release = TestGate()
+    cloud.onStop = { await release.wait() }
+    let local: @MainActor @Sendable (String) throws -> URL = { root.appendingPathComponent(ProgressStore.hash(Data($0.utf8))) }
+    let owner = ProgressCloudOwner(cacheDirectory: local) {
+      .init(identity: { "test-scope" }, makeTransport: { try ProgressTransport(directory: local($0), scope: $0, cloud: cloud) })
+    }
+    let active = try await owner.active("test-scope")
+    _ = try await active.publish(scope: "test-scope", revision: 1, json: "{}", base: "")
+    cloud.onFetch = { entered.open(); await release.wait() }
+    let fetching = Task { try await active.list(scope: "test-scope") }
+    await entered.wait()
+    try await owner.discardLocal("test-scope")
+    #expect(try ProgressStore(directory: local("test-scope")).state.records.isEmpty)
+    release.open()
+    await #expect(throws: ProgressCloudError.accountChanged) { try await fetching.value }
+    await owner.destroy()
+  }
   @Test(.timeLimit(.minutes(1)))
   func accountChangeIsDeliveredBeforeExternalCancellationCompletes() async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

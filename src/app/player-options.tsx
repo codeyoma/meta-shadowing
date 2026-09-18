@@ -27,7 +27,7 @@ export default function PlayerOptionsScreen() {
   const profile = useProgressProfile();
   const c = useSettingsColors();
   const insets = useSafeAreaInsets();
-  const { stage: param, package: key, option, run, profile: boundProfile } = useLocalSearchParams<{ stage: string; package: string; option?: string; run?: string; profile?: string }>();
+  const { stage: param, package: key, option, run, profile: boundProfile, authority } = useLocalSearchParams<{ stage: string; package: string; option?: string; run?: string; profile?: string; authority?: string }>();
   const stage = playableStage(param);
   const pack = selectedPackage(key);
   const [rate, setRate] = useState<number | null>(null);
@@ -39,13 +39,13 @@ export default function PlayerOptionsScreen() {
   const generation = useRef(0), pending = useRef(false);
   const sections = useMemo(() => pack && checkpoint
     ? sentenceSections(pack.manifest.phrases, new LearningContext(pack, getJournal()).units(checkpoint)) : [], [pack, checkpoint]);
-  const scopeValid = () => boundProfile === profile.id && profile.id === getProgressSync().profiles.id();
+  const scopeValid = () => boundProfile === profile.id && Number(authority) === profile.authority && getProgressSync().authorized(profile.authority, profile.id);
   useEffect(() => {
     const listener = AppState.addEventListener('change', next => {
       if (next !== 'active') { generation.current++; sentenceEntry.cancel(); }
     });
     return () => { generation.current++; listener.remove(); };
-  }, [profile.id, run, key, param]);
+  }, [profile.id, profile.authority, run, key, param]);
   useEffect(() => {
     try {
       setSettings(readSettings());
@@ -53,7 +53,7 @@ export default function PlayerOptionsScreen() {
       const valid = saved?.runId === run ? saved : null;
       setCheckpoint(valid); setRate(valid?.rate ?? null);
     } catch { Alert.alert('학습 옵션을 열 수 없어요', '저장된 학습 기록을 확인해 주세요. 기록은 초기화하지 않았어요.'); }
-  }, [stage, pack, run, boundProfile, profile.id]);
+  }, [stage, pack, run, boundProfile, profile.id, profile.authority, profile.available, authority]);
   async function selectSentence(sourceIndex: number) {
     if (!stage || !pack || !pack.owned || !scopeValid() || pending.current) return;
     const currentGeneration = generation.current;
@@ -71,7 +71,7 @@ export default function PlayerOptionsScreen() {
       if (!saved || saved.runId !== run || saved.phase === 'complete') throw Error('Stale run.');
       const next = jumpToSourcePhrase(saved, sourceIndex);
       context.save(next);
-      sentenceEntry.request({ profile: profile.id, packageKey: pack.packageKey, stage, runId: next.runId, phrase: next.phrase });
+      sentenceEntry.request({ profile: `${profile.id}:${profile.authority}`, packageKey: pack.packageKey, stage, runId: next.runId, phrase: next.phrase });
       router.back();
     } catch {
       sentenceEntry.cancel();
@@ -83,7 +83,7 @@ export default function PlayerOptionsScreen() {
     if (!settings || !scopeValid()) return;
     try {
       const next = { ...readSettings(), ...patch };
-      saveSettings(next, profile.id);
+      if (!saveSettings(next, profile.id, profile.authority)) return;
       setSettings(next);
     } catch {
       setRevision(value => value + 1);

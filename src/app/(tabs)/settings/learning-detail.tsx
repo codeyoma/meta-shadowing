@@ -21,7 +21,7 @@ export default function LearningPreferenceScreen() {
     if (!settings) return;
     try {
       const next = { ...readSettings(), ...patch };
-      saveSettings(next, profile.id); setSettings(next);
+      if (saveSettings(next, profile.id, profile.authority)) setSettings(next);
     }
     catch {
       setSliderRevision(value => value + 1);

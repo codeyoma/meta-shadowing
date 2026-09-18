@@ -20,7 +20,7 @@ export function LibraryProvider({ children }: PropsWithChildren) {
     let shownError = false;
     function refresh(allowResume = false) {
       // Apply remote library selection on return, never in the active player.
-      if (path.startsWith('/player') || profile.id !== sync.profiles.id()) return;
+      if (path.startsWith('/player') || !sync.authorized(profile.authority, profile.id)) return;
       try {
         const raw = sync.profiles.readValue('selection', profile.id);
         const next = librarySnapshot(books, observed.current, raw, sync.profiles.current().journal.latestLearning(), allowResume);
@@ -32,13 +32,12 @@ export function LibraryProvider({ children }: PropsWithChildren) {
     }
     refresh(true);
     return sync.subscribe(refresh);
-  }, [path, profile.id]);
+  }, [path, profile.id, profile.authority, profile.available]);
   function select(value: Selection) {
     const next = resolveSelection(books, value);
     try {
       const sync = getProgressSync();
-      if (profile.id !== sync.profiles.id()) return false;
-      sync.profiles.saveValue('selection', JSON.stringify(next), profile.id);
+      if (!sync.savePreference('selection', JSON.stringify(next), profile.authority, profile.id)) return false;
       observed.current = browsedLibrarySnapshot(observed.current, next);
       sync.changed(); setSelection(next); return true;
     }

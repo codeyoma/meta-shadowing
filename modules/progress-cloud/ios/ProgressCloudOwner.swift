@@ -7,15 +7,45 @@ final class ProgressCloudOwner {
   private var epoch = UUID()
   private var observer: NSObjectProtocol?
   private var destroyed = false
+  private var discardedScopes: [String: UUID] = [:]
   struct ActivationAccess: Sendable {
     let identity: @MainActor @Sendable () async throws -> String
     let makeTransport: @MainActor @Sendable (String) throws -> ProgressTransport
   }
   private let activationAccess: @MainActor @Sendable () throws -> ActivationAccess
+  private let cacheDirectory: @MainActor @Sendable (String) throws -> URL
   nonisolated init(activationAccess: @escaping @MainActor @Sendable () throws -> ActivationAccess = {
     try ProgressCloudOwner.nativeActivationAccess()
   }) {
     self.activationAccess = activationAccess
+    self.cacheDirectory = { try ProgressCloudOwner.nativeCacheDirectory($0) }
+  }
+  nonisolated init(cacheDirectory: @escaping @MainActor @Sendable (String) throws -> URL,
+    activationAccess: @escaping @MainActor @Sendable () throws -> ActivationAccess) {
+    self.activationAccess = activationAccess
+    self.cacheDirectory = cacheDirectory
+  }
+  func discardLocal(_ scope: String) async throws {
+    guard !destroyed, !scope.isEmpty, scope.utf8.count <= 256 else { throw ProgressCloudError.unavailable }
+    discardedScopes[scope] = UUID()
+    if let active = transport, active.scope == scope {
+      transport = nil
+      let cancel = active.suspend()
+      // Cache retirement must finish offline even when external cancellation is
+      // waiting indefinitely for the network. Invalidation above is synchronous.
+      Task { await cancel() }
+      try active.store.discardLocal()
+      return
+    }
+    let directory = try cacheDirectory(scope)
+    guard FileManager.default.fileExists(atPath: directory.path) else { return }
+    try ProgressStore(directory: directory).discardLocal()
+  }
+  private static func nativeCacheDirectory(_ scope: String) throws -> URL {
+    try FileManager.default.url(for: .applicationSupportDirectory,
+      in: .userDomainMask, appropriateFor: nil, create: true)
+      .appendingPathComponent("ProgressCloud", isDirectory: true)
+      .appendingPathComponent(ProgressStore.hash(Data(scope.utf8)), isDirectory: true)
   }
   func observe(_ changed: @escaping @MainActor @Sendable () -> Void) {
     guard !destroyed, observer == nil else { return }
@@ -62,15 +92,16 @@ final class ProgressCloudOwner {
   func active(_ scope: String) async throws -> ProgressTransport {
     guard !destroyed else { throw ProgressCloudError.unavailable }
     let ticket = epoch
+    let discardTicket = discardedScopes[scope]
     let access = try activationAccess()
     let current = try await access.identity()
-    guard current == scope, ticket == epoch else { throw ProgressCloudError.accountChanged }
+    guard current == scope, ticket == epoch, discardedScopes[scope] == discardTicket else { throw ProgressCloudError.accountChanged }
     if let transport, transport.scope == scope { return transport }
     while let previous = transport, previous.scope != scope {
       await previous.stop()
-      guard ticket == epoch else { throw ProgressCloudError.accountChanged }
+      guard ticket == epoch, discardedScopes[scope] == discardTicket else { throw ProgressCloudError.accountChanged }
       let confirmed = try await access.identity()
-      guard confirmed == scope, ticket == epoch else { throw ProgressCloudError.accountChanged }
+      guard confirmed == scope, ticket == epoch, discardedScopes[scope] == discardTicket else { throw ProgressCloudError.accountChanged }
       // An overlapping activation can install this scope during either await.
       // Retire only the instance we stopped, then reconsider the current owner.
       if transport === previous { transport = nil }
@@ -99,10 +130,7 @@ final class ProgressCloudOwner {
     let container = CKContainer(identifier: configuration.container)
     return ActivationAccess(identity: { try await identity(container, configuration) }, makeTransport: { scope in
       let cloud = CloudKitService(container: container, scope: scope) { try await identity(container, configuration) }
-      let root = try FileManager.default.url(for: .applicationSupportDirectory,
-        in: .userDomainMask, appropriateFor: nil, create: true)
-        .appendingPathComponent("ProgressCloud", isDirectory: true)
-        .appendingPathComponent(ProgressStore.hash(Data(scope.utf8)), isDirectory: true)
+      let root = try nativeCacheDirectory(scope)
       return try ProgressTransport(directory: root, scope: scope, cloud: cloud)
     })
   }
