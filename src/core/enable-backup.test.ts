@@ -31,6 +31,7 @@ function fixture(t: TestContext) {
       return head = { id: `head-${++sequence}`, token: `token-${sequence}`, revision, legacy: false, createdAt: '', cleanupPending: false };
     },
     cleanup: async () => false, stop: async () => {}, addListener: () => ({ remove() {} }),
+    reset: async () => { throw Error('progress-cloud-unavailable'); }, discardLocal: async () => {},
   };
   const sync = new ProgressSync(profiles, cloud);
   t.after(() => sync.dispose());

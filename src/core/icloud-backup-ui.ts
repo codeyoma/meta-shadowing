@@ -14,6 +14,7 @@ const errors: Record<string, string> = {
 /** Quiet settings presentation; automatic synchronization never offers a winner. */
 export function buildICloudSyncUI(state: SyncSnapshot) {
   const quiet = !state.error || ['progress-cloud-offline', 'progress-cloud-busy', 'progress-cloud-conflict'].includes(state.error);
-  return { title: '자동 동기화', refreshLabel: '지금 동기화', refreshDisabled: state.busy,
+  const controlsDisabled = state.busy || !!state.deletion;
+  return { title: '자동 동기화', refreshLabel: '지금 동기화', controlsDisabled, refreshDisabled: controlsDisabled,
     error: quiet ? null : errors[state.error!] ?? errors['progress-cloud-storage']!, pending: state.pending };
 }

@@ -6,6 +6,7 @@ import { buildICloudSyncUI } from './icloud-backup-ui';
 const snapshot = (patch: Partial<SyncSnapshot> = {}): SyncSnapshot => ({
   profile: 'guest', generation: 7, status: 'available', hasProfile: false,
   enabled: false, ready: true, busy: false, pending: false, error: null,
+  authority: 0, learningAvailable: true, deletion: null,
   backups: [], cleanupPending: false, conflict: null, ...patch,
 });
 
@@ -30,4 +31,16 @@ test('automatic sync offers refresh without choosing or overwriting a device rec
   assert.equal(ui.refreshLabel, '지금 동기화');
   assert.equal(ui.refreshDisabled, false);
   assert.equal(ui.error, null);
+});
+
+test('pending destructive work disables ordinary sync controls even while automatic sync is off', () => {
+  const ui = buildICloudSyncUI(snapshot({
+    enabled: false,
+    busy: false,
+    deletion: { kind: 'cloud', pending: true },
+    learningAvailable: false,
+  }));
+
+  assert.equal(ui.controlsDisabled, true);
+  assert.equal(ui.refreshDisabled, true);
 });

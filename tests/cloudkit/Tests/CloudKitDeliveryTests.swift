@@ -4,6 +4,30 @@ import Testing
 
 @MainActor
 struct CloudKitDeliveryTests {
+  @Test func publicationBatchKeepsAssetAndHeadAtomicAndRejectsPartialScope() throws {
+    let asset = CKRecord(recordType: "ProgressBackup", recordID: .init(recordName: UUID().uuidString, zoneID: CloudKitService.zone))
+    let head = CKRecord(recordType: "ProgressBackupHead", recordID: .init(recordName: ProgressTransport.sharedHead, zoneID: CloudKitService.zone))
+    let batch = try #require(CloudKitService.savingBatch([asset, head], scope: .all))
+    #expect(batch.atomicByZone)
+    #expect(Set(batch.recordsToSave.map(\.recordID)) == [asset.recordID, head.recordID])
+    #expect(batch.recordIDsToDelete.isEmpty)
+    #expect(CloudKitService.savingBatch([asset, head], scope: .recordIDs([asset.recordID])) == nil)
+    #expect(CloudKitService.savingBatch([asset, head], scope: .recordIDs([head.recordID])) == nil)
+  }
+  @Test func resetGenerationRoundTripsAndRejectsInvalidCloudMetadata() throws {
+    let request = UUID().uuidString, writer = UUID().uuidString, asset = UUID().uuidString
+    let head = BackupRecord(id: ProgressTransport.sharedHead, kind: "ProgressBackupHead", writer: writer,
+      revision: 0, createdAt: "2026-09-18T00:00:00Z",
+      current: BackupReference(id: asset, hash: String(repeating: "a", count: 64)), resetGeneration: request)
+    let encoded = try CloudKitService.encode(head, asset: nil)
+    #expect(try CloudKitService.decode(encoded).resetGeneration == request)
+    encoded["resetGeneration"] = "" as NSString
+    #expect(throws: ProgressCloudError.corrupt) { try CloudKitService.decode(encoded) }
+    encoded["resetGeneration"] = 42 as NSNumber
+    #expect(throws: ProgressCloudError.corrupt) { try CloudKitService.decode(encoded) }
+    encoded["resetGeneration"] = nil
+    #expect(try CloudKitService.decode(encoded).resetGeneration == nil)
+  }
   @Test func sharedHeadAndRetiredLegacyMetadataRoundTripThroughCloudKit() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

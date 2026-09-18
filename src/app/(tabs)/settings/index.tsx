@@ -1,5 +1,5 @@
 import { ScrollView, View } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, type Href } from 'expo-router';
 import { RestorePurchases } from '@/components/restore-purchases';
 import { SettingsRow, useSettingsColors } from '@/components/settings-row';
 
@@ -13,6 +13,8 @@ export default function SettingsScreen() {
         onPress={() => router.push('/settings/learning')} />
       <SettingsRow title="iCloud 동기화" icon="icloud.fill" iconColor="#007aff" disclosure separator
         onPress={() => router.push('/settings/icloud')} />
+      <SettingsRow title="데이터 관리" icon="trash.fill" iconColor="#ff3b30" disclosure separator
+        onPress={() => router.push('/settings/data-management' as Href)} />
       <RestorePurchases />
     </View>
   </ScrollView>;

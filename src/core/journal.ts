@@ -13,7 +13,8 @@ export interface Database {
 
 export class Journal {
   readonly progress: Progression;
-  constructor(private db: Database, private now: () => Date = () => new Date(), private onSaved?: () => void) {
+  constructor(private db: Database, private now: () => Date = () => new Date(), private onSaved?: () => void,
+    private authorize: () => void = () => {}) {
     db.exec(`PRAGMA journal_mode = WAL;
       PRAGMA synchronous = FULL;
       CREATE TABLE IF NOT EXISTS checkpoints (
@@ -67,6 +68,7 @@ export class Journal {
     return null;
   }
   private savePinned(packageKey: string, input: Session, prior: Session, identity?: BookIdentity): number {
+    this.authorize();
     const state = { ...restoreSession(JSON.stringify(input), input.version === 2 ? input.sourcePhraseCount : input.phraseCount, input.stage), running: input.running };
     const equal = (a: Session, b: Session, ignoreRunning = false) => Object.keys(b).every(key => (ignoreRunning && key === 'running')
       || JSON.stringify(a[key as keyof Session]) === JSON.stringify(b[key as keyof Session]));
@@ -115,6 +117,7 @@ export class Journal {
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
   save(packageKey: string, state: Session, identity?: BookIdentity): number {
+    this.authorize();
     state = { ...restoreSession(JSON.stringify(state), state.version === 2 ? state.sourcePhraseCount : state.phraseCount, state.stage), running: state.running };
     const json = JSON.stringify(state);
     this.db.exec('BEGIN IMMEDIATE');

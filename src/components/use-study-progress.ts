@@ -14,6 +14,7 @@ export function useStudyProgress(language: string, book: string | null) {
     let shownError = false;
     function refresh() {
       clearTimeout(timer);
+      if (!getProgressSync().getSnapshot().learningAvailable) { setSnapshot(null); return; }
       try {
         const progress = getJournal().progress;
         setSnapshot({ language, book, data: { summary: progress.summary(language) } });

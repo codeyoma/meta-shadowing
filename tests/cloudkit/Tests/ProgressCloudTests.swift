@@ -70,7 +70,7 @@ struct ProgressCloudTests {
     #expect(cloud.records == before)
     #expect(cloud.assets[previous.id] == Data("{\"value\":1}".utf8))
   }
-  @Test func mismatchedAcknowledgementNeverAdvancesHead() async throws {
+  @Test func mismatchedAcknowledgementNeverAdvancesLocalAcknowledgement() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let cloud = TestCloud()
@@ -80,7 +80,9 @@ struct ProgressCloudTests {
     }
     let transport = try ProgressTransport(directory: directory, scope: "test-scope", cloud: cloud)
     await #expect(throws: ProgressCloudError.conflict) { try await transport.publish(scope: "test-scope", revision: 1, json: "{}") }
-    #expect(cloud.records.values.allSatisfy { $0.kind != "ProgressBackupHead" })
+    // Server commit is atomic and may have succeeded before a malformed reply.
+    // It must not be treated as locally acknowledged until verified by refetch.
+    #expect(transport.store.state.acknowledged == nil)
     #expect(transport.pendingRevision == 1)
   }
   @Test func unavailableOwnerDoesNotInitializeCloudKit() async {

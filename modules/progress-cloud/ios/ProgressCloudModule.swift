@@ -24,6 +24,7 @@ public final class ProgressCloudModule: Module {
         return values.map { value in
           var result: [String: Any] = ["id": value.id, "createdAt": value.createdAt, "revision": value.revision, "token": value.token, "legacy": value.legacy, "cleanupPending": value.cleanupPending]
           if let pending = value.pendingPublication { result["pendingPublication"] = pending }
+          if let generation = value.resetGeneration { result["resetGeneration"] = generation }
           return result
         }
       } catch { throw await CloudKitService.sanitize(error) }
@@ -38,9 +39,25 @@ public final class ProgressCloudModule: Module {
       do {
         let transport = try await owner.active(scope)
         let acknowledged = try await transport.publish(scope: scope, revision: revision, json: json, base: base)
-        return ["id": acknowledged.id, "createdAt": acknowledged.createdAt, "revision": acknowledged.revision,
+        var result: [String: Any] = ["id": acknowledged.id, "createdAt": acknowledged.createdAt, "revision": acknowledged.revision,
           "token": acknowledged.token, "legacy": acknowledged.legacy, "cleanupPending": acknowledged.cleanupPending]
+        if let generation = acknowledged.resetGeneration { result["resetGeneration"] = generation }
+        return result
       } catch { throw await CloudKitService.sanitize(error) }
+    }
+    AsyncFunction("reset") { (scope: String, requestId: String, expectedGeneration: String, json: String) async throws -> [String: Any] in
+      do {
+        let transport = try await owner.active(scope)
+        let value = try await transport.reset(scope: scope, requestId: requestId, expectedGeneration: expectedGeneration, json: json)
+        var result: [String: Any] = ["id": value.id, "createdAt": value.createdAt, "revision": value.revision,
+          "token": value.token, "legacy": value.legacy, "cleanupPending": value.cleanupPending]
+        if let generation = value.resetGeneration { result["resetGeneration"] = generation }
+        return result
+      } catch { throw await CloudKitService.sanitize(error) }
+    }
+    AsyncFunction("discardLocal") { (scope: String) async throws in
+      do { try await owner.discardLocal(scope) }
+      catch { throw await CloudKitService.sanitize(error) }
     }
     AsyncFunction("cleanup") { (scope: String, base: String, abandoned: String?) async throws -> Bool in
       do {

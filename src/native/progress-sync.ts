@@ -29,14 +29,14 @@ export function getProgressSync(): ProgressSync {
       const raw = Storage.getItemSync(keys[key]);
       if (raw === null) return null;
       return JSON.stringify(key === 'settings' ? decodeSettings(raw) : resolveSelection(books, JSON.parse(raw)));
-    }, (key, value) => { Storage.setItemSync(keys[key], value); });
-    sync = new ProgressSync(profiles, progressCloud);
+    }, (key, value) => { Storage.setItemSync(keys[key], value); }, key => { Storage.removeItemSync(keys[key]); });
+    sync = new ProgressSync(profiles, progressCloud, undefined, randomUUID);
   }
   return sync;
 }
 export function startProgressSync() {
   const coordinator = getProgressSync();
-  const account = progressCloud.addListener('accountChanged', () => { void coordinator.refreshAccount(); });
+  const account = progressCloud.addListener('accountChanged', () => { void coordinator.accountChanged(); });
   const network = progressCloud.addListener('networkAvailable', () => { void coordinator.networkAvailable(); });
   const lifecycle = AppState.addEventListener('change', state => {
     coordinator.setActive(state === 'active');

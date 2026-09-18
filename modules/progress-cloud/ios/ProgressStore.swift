@@ -25,6 +25,7 @@ struct BackupRecord: Codable, Equatable, Sendable {
   var changeTag: String?
   var retired: Bool?
   var cleanupManifest: String?
+  var resetGeneration: String?
   func hasSamePayload(as other: Self) -> Bool {
     var lhs = self, rhs = other
     lhs.systemFields = nil; rhs.systemFields = nil
@@ -41,6 +42,7 @@ struct CloudBackup: Sendable {
   let legacy: Bool
   var cleanupPending = false
   var pendingPublication: String?
+  var resetGeneration: String?
 }
 
 /// Exact retirement authority travels with the committed head so reinstall or
@@ -80,6 +82,14 @@ struct CloudPublication: Sendable {
   let token: String
   let legacy = false
   let cleanupPending: Bool
+  var resetGeneration: String?
+}
+
+struct ResetIntent: Codable {
+  let requestId: String
+  let expectedGeneration: String
+  var acceptedGeneration: String?
+  var completed = false
 }
 
 struct PendingBackup: Codable {
@@ -89,6 +99,7 @@ struct PendingBackup: Codable {
   var expectedBase: String?
   var retirements: [BackupRecord]?
   var superseded: [String]?
+  var resetRequestId: String?
 }
 
 struct ProgressState: Codable {
@@ -99,15 +110,53 @@ struct ProgressState: Codable {
   var engine: Data?
   var retirementHeads: [String: BackupRecord]?
   var acknowledged: PendingBackup?
+  var resetIntent: ResetIntent?
+  var observedResetGeneration: String?
+  var discardPending: Bool?
+}
+
+/// Native validates protocol identity and the destructive empty shape. TypeScript
+/// remains responsible for validating ordinary learning rows and sync semantics.
+@MainActor
+enum ProgressEnvelope {
+  static func generation(_ data: Data) throws -> String {
+    guard !data.isEmpty, data.count <= ProgressStore.maxBytes else { throw ProgressCloudError.tooLarge }
+    guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ProgressCloudError.corrupt }
+    guard let version = root["version"] as? Int, version >= 5 else { return "" }
+    guard version == 5, Set(root.keys) == ["version", "generation", "progress"],
+          let generation = root["generation"] as? String, UUID(uuidString: generation) != nil,
+          let progress = root["progress"] as? [String: Any], progress["version"] as? Int == 4,
+          Set(progress.keys) == ["version", "tables", "sync"],
+          progress["tables"] is [String: Any], progress["sync"] is [String: Any]
+    else { throw ProgressCloudError.corrupt }
+    return generation
+  }
+  static func validateReset(_ data: Data, requestId: String) throws {
+    guard UUID(uuidString: requestId) != nil, try generation(data) == requestId,
+          let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let progress = root["progress"] as? [String: Any],
+          let tables = progress["tables"] as? [String: Any],
+          Set(tables.keys) == ["checkpoints", "completions", "daily_stages", "stage_awards", "study_days", "preferences", "cycle_credits", "unit_credits"],
+          tables.values.allSatisfy({ ($0 as? [Any])?.isEmpty == true }),
+          let sync = progress["sync"] as? [String: Any], Set(sync.keys) == ["clocks", "runs"],
+          (sync["clocks"] as? [String: Any])?.isEmpty == true,
+          (sync["runs"] as? [Any])?.isEmpty == true else { throw ProgressCloudError.corrupt }
+  }
 }
 
 /// Atomic metadata and owned assets. No CloudKit temporary URLs survive here.
 @MainActor
 final class ProgressStore {
+  private final class Reference {
+    weak var store: ProgressStore?
+    init(_ store: ProgressStore) { self.store = store }
+  }
+  private static var liveStores: [String: [Reference]] = [:]
   static let maxBytes = 16 * 1024 * 1024
   static let maxCacheBytes = 128 * 1024 * 1024
   let directory: URL
   private(set) var state: ProgressState
+  private var retired = false
 
   init(directory: URL) throws {
     self.directory = directory
@@ -116,11 +165,15 @@ final class ProgressStore {
       let file = directory.appendingPathComponent("state.json")
       state = FileManager.default.fileExists(atPath: file.path)
         ? try JSONDecoder().decode(ProgressState.self, from: Data(contentsOf: file)) : ProgressState()
+      if state.discardPending == true { try finishDiscard() }
       try update { _ in }
+      let key = directory.standardizedFileURL.path
+      Self.liveStores[key] = (Self.liveStores[key] ?? []).filter { $0.store != nil } + [Reference(self)]
     } catch { throw ProgressCloudError.storage }
   }
 
   func update(_ change: (inout ProgressState) throws -> Void) throws {
+    guard !retired else { throw ProgressCloudError.accountChanged }
     var next = state
     try change(&next)
     do {
@@ -134,6 +187,7 @@ final class ProgressStore {
     directory.appendingPathComponent(Self.hash(Data(id.utf8)) + ".jsonasset")
   }
   func asset(_ record: BackupRecord) throws -> Data {
+    guard !retired else { throw ProgressCloudError.accountChanged }
     let url = assetURL(record.id)
     guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
           size == record.bytes, size <= Self.maxBytes else { throw ProgressCloudError.corrupt }
@@ -142,6 +196,8 @@ final class ProgressStore {
     return data
   }
   func stage(_ record: BackupRecord, asset data: Data? = nil) throws {
+    guard !retired else { throw ProgressCloudError.accountChanged }
+    if let generation = record.resetGeneration, UUID(uuidString: generation) == nil { throw ProgressCloudError.corrupt }
     guard record.id.count <= 128, record.writer.count <= 128, record.revision >= 0,
           record.createdAt.count <= 40, ["ProgressBackup", "ProgressBackupHead"].contains(record.kind)
     else { throw ProgressCloudError.corrupt }
@@ -170,5 +226,35 @@ final class ProgressStore {
     try update { $0.records.removeValue(forKey: id); $0.cleanup.removeAll { $0 == id } }
     let url = assetURL(id)
     if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+  }
+
+  /// Retire the actual store object before touching disk; captured delegate/store
+  /// references cannot recreate files after the owner's transport is detached.
+  func discardLocal() throws {
+    let key = directory.standardizedFileURL.path
+    for reference in Self.liveStores.removeValue(forKey: key) ?? [] { reference.store?.retired = true }
+    retired = true
+    var minimal = ProgressState()
+    minimal.writer = state.writer
+    minimal.resetIntent = state.resetIntent
+    minimal.observedResetGeneration = state.observedResetGeneration
+    minimal.discardPending = true
+    do {
+      try JSONEncoder().encode(minimal).write(to: directory.appendingPathComponent("state.json"), options: .atomic)
+      state = minimal
+      try finishDiscard()
+    } catch { throw ProgressCloudError.storage }
+  }
+  private func finishDiscard() throws {
+    // Only files with the owned hashed-asset naming contract are removed. A
+    // durable marker makes an interrupted filesystem sweep finish on reopen.
+    for url in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+      if url.lastPathComponent.range(of: #"^[0-9a-f]{64}\.jsonasset$"#, options: .regularExpression) != nil {
+        try FileManager.default.removeItem(at: url)
+      }
+    }
+    var finished = state; finished.discardPending = nil
+    try JSONEncoder().encode(finished).write(to: directory.appendingPathComponent("state.json"), options: .atomic)
+    state = finished
   }
 }

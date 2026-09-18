@@ -42,6 +42,7 @@ struct SingletonTests {
       try await loser.publish(scope: "test-scope", revision: 2, json: "{\"loser\":true}", base: initial.token)
     }
     let abandoned = try #require(loser.store.state.pending?.backup.id)
+    try cloud.seedHistoricalPendingAsset(loser)
     cloud.failHead = false
     cloud.savedResponse = { record in
       if record.id == ProgressTransport.sharedHead { var lost = record; lost.current = nil; return lost }
@@ -99,7 +100,11 @@ struct SingletonTests {
       try await first.publish(scope: "test-scope", revision: 2, json: "{\"new\":true}", base: initial.token)
     }
     #expect(cloud.assets[initial.id] == Data("{\"good\":true}".utf8))
-    if boundary != "lost-head-reply" { #expect(cloud.records[ProgressTransport.sharedHead]?.current?.id == initial.id) }
+    if boundary != "lost-head-reply" {
+      #expect(cloud.records[ProgressTransport.sharedHead]?.current?.id == initial.id)
+      #expect(Set(cloud.assets.keys) == [initial.id])
+      #expect(first.store.state.pending?.backup.revision == 2)
+    }
     let before = cloud.records[ProgressTransport.sharedHead]?.current?.id
     cloud.onSave = nil; cloud.saveFailure = nil; cloud.savedResponse = nil
     let reopened = try ProgressTransport(directory: url, scope: "test-scope", cloud: cloud)
@@ -154,6 +159,7 @@ struct SingletonTests {
       try await loser.publish(scope: "test-scope", revision: 2, json: "{\"loser\":true}", base: initial.token)
     }
     let abandoned = try #require(loser.store.state.pending?.backup.id)
+    try cloud.seedHistoricalPendingAsset(loser)
     cloud.failHead = false
     let chosen = try await writer.publish(scope: "test-scope", revision: 3, json: "{\"winner\":true}", base: initial.token)
     cloud.failHead = true
@@ -216,6 +222,7 @@ struct SingletonTests {
       try await loser.publish(scope: "test-scope", revision: 2, json: "{\"loser\":true}", base: initial.token)
     }
     let id = try #require(loser.store.state.pending?.backup.id)
+    try cloud.seedHistoricalPendingAsset(loser)
     cloud.failHead = false
     let chosen = try await winner.publish(scope: "test-scope", revision: 5, json: "{\"winner\":true}", base: initial.token)
     let before = try #require(cloud.records[ProgressTransport.sharedHead])
@@ -267,6 +274,7 @@ struct SingletonTests {
     }
     cloud.failHead = false
     let pending = try #require(first.store.state.pending)
+    try cloud.seedHistoricalPendingAsset(first)
     if boundary == "account" { cloud.account = "other-scope" }
     if boundary == "head-cas" {
       cloud.onSave = { record in
