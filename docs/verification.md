@@ -298,10 +298,15 @@ CI, deployment, hosted data mutation, commit, or push was performed for this che
 
 ## Stage 3–10 integration — 2026-09-16
 
-- `npx tsx --test src/core/learning-presentation.test.ts`: 3/3 passed after the
-  controller observed the missing-helper RED. Covers stages 1–10, grouped hints,
-  translations hidden by default, only-current-unit reveal, invalid reveal positions,
-  and unchanged source units. The same projection feeds bubble and list views.
+Translation-visibility wording corrected on 2026-09-18 against the current
+learning contract and presentation tests. The device observations below are
+historical integration checks, not a new physical-device acceptance run.
+
+- `npx tsx --test src/core/learning-presentation.test.ts`: 4/4 passed on 2026-09-18.
+  Covers stages 1–10, grouped hints, translations retained in both hidden and
+  revealed states, only-current-unit reveal, invalid reveal positions, and
+  unchanged source/layout text. Only target-language subtitles are masked;
+  translations remain visible. The same projection feeds bubble and list views.
 - `npm run check`: passed: 278 core tests, 8 iOS build-settings tests, 3 free-content
   preparation tests, and TypeScript. Includes grouping/resume, SQLite rewards and
   backups, native queue adapter, bounded stage policy, and old stage 1/2 behavior.
@@ -322,8 +327,10 @@ CI, deployment, hosted data mutation, commit, or push was performed for this che
   Simulator. The phone app was updated in place after a local backup; existing
   installed books and prior progress remained available. No uninstall or reset.
 - On the twelve-source sample, Stage 3 opened from the path despite its unfinished
-  predecessor and displayed full subtitles. Stage 5 showed first-word hints, hid
-  translations, and toggled the current subtitle without confirming a cycle.
+  predecessor and displayed full subtitles. Stage 5 showed first-word hints and
+  toggled the current subtitle without confirming a cycle. The current contract
+  retains translations in both states; the earlier hidden-translation wording
+  is not an accepted behavior.
   Its analysis sheet remained hinted rather than revealing the hidden sentence.
 - Stage 7 displayed six learning units. Native playback reached the speaking phase;
   at 0.25×, opening options during the second original file saved a paused listening
@@ -331,8 +338,10 @@ CI, deployment, hosted data mutation, commit, or push was performed for this che
   Explicit resume completed the remainder and retained the same confirmation count.
   Re-entering at 3× also reached speaking. The test run speed was restored to 1×.
 - Stage 10 opened directly, displayed the first word of both member sentences, and
-  toggled the whole current unit. In list mode, every other unit stayed hinted and
-  untranslated even while the current unit was revealed.
+  toggled the whole current unit. The earlier all-units list observation predates
+  the current-unit-only list refinement and is not current acceptance evidence.
+  The current list shows only the active unit, with each translation immediately
+  below its source sentence and visible regardless of subtitle reveal state.
 - One explicit confirmation in the sample Stage 7 test added one XP. No complete
   stage was manufactured and private-book learning records were not reset.
 - Final copied SQLite integrity check passed. All three pre-existing checkpoints
