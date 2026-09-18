@@ -57,6 +57,10 @@ compressed payloads do not cause repeated publications.
 
 ### Remaining physical acceptance
 
+Two-device physical testing is deferred because a second device is unavailable.
+The owner approved publishing the implementation PR with this limitation on
+2026-09-18. This records an untested boundary, not a passed acceptance check.
+
 On two authorized devices running this version under the same designated iCloud
 account: enable sync, learn distinct and overlapping runs offline, reconnect in
 both orders, compare XP/completions/latest resume, and repeat sync plus relaunch.

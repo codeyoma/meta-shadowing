@@ -47,8 +47,10 @@ and reviewed the follow-up changes to implementation commit `4034944`.
 
 #50 stays open until two authorized physical devices under the designated iCloud
 account pass offline/reconnect, duplicate delivery, relaunch, live-player,
-account-isolation and automatic-sync-off scenarios. No device reset, cloud schema
-deployment, public distribution, push, or pull request was part of this work.
+account-isolation and automatic-sync-off scenarios. Two-device testing is deferred
+because a second device is unavailable; the owner approved committing, pushing
+and opening a PR with this limitation on 2026-09-18. No device reset, cloud schema
+deployment or public app distribution is authorized by this integration step.
 All participating clients must update together; older overwrite clients and
 downgrades are unsupported. Background/terminated periodic execution is not
 promised by the foreground 60-second polling behavior.
