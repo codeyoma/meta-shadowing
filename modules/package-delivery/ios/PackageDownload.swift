@@ -17,6 +17,7 @@ actor PackageDownload {
   private var running: Task<Void, Error>?
   private var state = DeliveryStatus(phase: "idle", progress: 0)
   private var removing = false
+  private var needsCacheReset = false
   private let purgeCache: @Sendable () async throws -> Void
 
   init(installation: PackageInstallation, transport: (any AssetDelivery)?,
@@ -43,6 +44,13 @@ actor PackageDownload {
     state = DeliveryStatus(phase: "downloading", progress: 0)
     // Lifetime belongs to the download action, not to a React component's mount.
     let task = Task {
+      // Only an explicit retry may discard the identified managed cache. Local
+      // verified installations and learning records are never part of this purge.
+      if self.needsCacheReset {
+        try await self.purgeCache()
+        self.needsCacheReset = false
+      }
+      try Task.checkCancellation()
       try await transport.download { value in await self.progress(value) }
       try Task.checkCancellation()
       self.state = DeliveryStatus(phase: "installing", progress: 1)
@@ -54,6 +62,9 @@ actor PackageDownload {
       try await task.value
       state = DeliveryStatus(phase: "ready", progress: 1)
     } catch {
+      if error as? DeliveryError == .damagedFiles || (error as? CocoaError)?.code == .fileReadNoSuchFile {
+        needsCacheReset = true
+      }
       state = DeliveryStatus(phase: task.isCancelled ? "cancelled" : "failed", progress: 0)
       if task.isCancelled { throw CancellationError() }
       throw error
@@ -81,8 +92,8 @@ actor PackageDownload {
     state = DeliveryStatus(phase: "idle", progress: 0)
     // Actor reentrancy must not permit start() during this service operation.
     // A failed purge cannot put an already removed installation back in ready.
-    do { try await purgeCache(); return true }
-    catch { return false }
+    do { try await purgeCache(); needsCacheReset = false; return true }
+    catch { needsCacheReset = true; return false }
   }
 
   private func progress(_ value: Double) {

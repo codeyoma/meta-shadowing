@@ -80,6 +80,28 @@ export function hostedDownloadPresentation(status: DeliveryStatus | null) {
 
 export type DownloadPresentation = NonNullable<ReturnType<typeof hostedDownloadPresentation>>;
 
+export function materialRemovalNotice(result: { cacheCleared: boolean }): string | null {
+  return result.cacheCleared ? null
+    : '학습 자료는 삭제했지만 Apple 임시 파일을 정리하지 못했어요. 다음 다운로드 때 다시 시도해요. 학습 기록은 유지돼요.';
+}
+
+/** Cancellation is a successful user decision, not a download failure alert. */
+export function hostedDownloadError(error: unknown, status: DeliveryStatus | null, kind: 'paid' | 'free' | 'sample'): string | null {
+  const message = String(error);
+  if (status?.phase === 'cancelled' || message.includes('package-delivery-cancelled')) return null;
+  if (message.includes('incompatibleVersion')) return '같은 버전의 자료 구성이 달라요. 학습 기록은 유지돼요. 호환되는 앱·자료 버전으로 업데이트해 주세요.';
+  if (kind === 'paid') {
+    return message.includes('unauthorized') ? '구매 내역을 다시 확인하거나 복원해 주세요.'
+      : message.includes('storageFull') ? '저장 공간이 부족해요. 공간을 확보한 뒤 다시 시도해 주세요.'
+      : message.includes('damagedFiles') ? '자료 검증에 실패했어요. 다시 다운로드해 주세요.'
+      : message.includes('writeDenied') ? '자료를 저장할 수 없어요. 앱을 다시 열고 시도해 주세요.'
+      : '연결과 배포 설정을 확인하고 다시 시도해 주세요. 구매 내역과 학습 기록은 유지돼요.';
+  }
+  return kind === 'free'
+    ? '내부 TestFlight에서는 DUO 테스트 자산 업로드가, Xcode 실행에서는 Background Assets 테스트 서버 설정이 필요해요. 설정과 연결·저장 공간을 확인해 주세요. 검증 전에는 학습할 수 없어요.'
+    : '연결과 저장 공간을 확인하고 다시 다운로드해 주세요. 검증을 마치기 전에는 학습을 시작할 수 없어요.';
+}
+
 /** Keep the delivery phase and measured installation view in one refresh boundary. */
 export async function refreshHostedMaterial(refreshDelivery: () => Promise<void>, refreshStorage: () => Promise<void>) {
   await Promise.all([refreshDelivery(), refreshStorage()]);

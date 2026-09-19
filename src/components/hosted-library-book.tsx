@@ -8,7 +8,7 @@ import { useLibrary } from './library-context';
 import { useBookRecords } from './use-book-records';
 import { OwnedLibraryBookCard } from './owned-library-book-card';
 import { usePackageMaterials } from './use-package-materials';
-import { hostedDownloadPresentation, refreshHostedMaterial } from '@/core/library-presentation';
+import { hostedDownloadError, hostedDownloadPresentation, refreshHostedMaterial } from '@/core/library-presentation';
 import { observeHostedMaterial } from '@/core/hosted-material-observer';
 import { isFreeDuo, freeDuoActions } from '@/native/free-duo';
 import { isPaidDuo, paidDuoActions, authorizePackage, mayUsePackage } from '@/native/paid-package';
@@ -41,18 +41,8 @@ export function HostedLibraryBook({ book, editing, accessBlocked = false, title 
     try { const pending = actions.start(); void refresh(); await pending; }
     catch (error) {
       const current = await actions.status().catch(() => null);
-      if (isPaidDuo(book)) {
-        const message = String(error);
-        Alert.alert('다운로드하지 못했어요', message.includes('unauthorized') ? '구매 내역을 다시 확인하거나 복원해 주세요.'
-          : message.includes('storageFull') ? '저장 공간이 부족해요. 공간을 확보한 뒤 다시 시도해 주세요.'
-          : message.includes('damagedFiles') ? '자료 검증에 실패했어요. 다시 다운로드해 주세요.'
-          : message.includes('writeDenied') ? '자료를 저장할 수 없어요. 앱을 다시 열고 시도해 주세요.'
-          : '연결과 배포 설정을 확인하고 다시 시도해 주세요. 구매 내역과 학습 기록은 유지돼요.');
-        return;
-      }
-      if (current?.phase !== 'cancelled') Alert.alert('다운로드하지 못했어요', isFreeDuo(book)
-        ? '내부 TestFlight에서는 DUO 테스트 자산 업로드가, Xcode 실행에서는 Background Assets 테스트 서버 설정이 필요해요. 설정과 연결·저장 공간을 확인해 주세요. 검증 전에는 학습할 수 없어요.'
-        : '연결과 저장 공간을 확인하고 다시 다운로드해 주세요. 검증을 마치기 전에는 학습을 시작할 수 없어요.');
+      const message = hostedDownloadError(error, current, isPaidDuo(book) ? 'paid' : isFreeDuo(book) ? 'free' : 'sample');
+      if (message) Alert.alert('다운로드하지 못했어요', message);
     } finally { await refreshHostedMaterial(refresh, async () => { await materials.refresh(); }); }
   }
   async function cancel() {

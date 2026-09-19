@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import type { LearningPackage } from '@/core/learning-context';
 import { readPackageStorage, removePackageMaterials } from '@/native/package-storage';
+import { materialRemovalNotice } from '@/core/library-presentation';
 
 export function usePackageMaterials(pack: LearningPackage, editing: boolean, onLocallyRemoved: () => void) {
   const [storage, setStorage] = useState<{ bytes: number; installed: boolean; busy: boolean } | null>(null);
@@ -28,10 +29,12 @@ export function usePackageMaterials(pack: LearningPackage, editing: boolean, onL
     try {
       // Native removal still attempts Apple's cache purge after deleting local materials.
       // A cache-purge failure does not undo successful local removal.
-      await removePackageMaterials(pack);
+      const result = await removePackageMaterials(pack);
       onLocallyRemoved();
       setStorage({ bytes: 0, installed: false, busy: false });
       setReadFailed(false);
+      const notice = materialRemovalNotice(result);
+      if (notice) Alert.alert('임시 파일 정리 필요', notice);
     } catch {
       setReadFailed(true);
       await refresh();
