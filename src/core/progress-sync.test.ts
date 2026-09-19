@@ -58,6 +58,9 @@ const drain = () => new Promise<void>(resolve => setImmediate(resolve));
 // #52 journeys use real player/journal/SQLite boundaries. Only Apple transport
 // and audio are fixtures; these are not TestFlight or physical-device evidence.
 test('recovery journey: reinstall restores uploaded cycles only, then reconnect converges without duplicate XP', async t => {
+  const players: Player[] = [];
+  // Node after hooks are FIFO: checkpoint/dispose before fixture databases close.
+  t.after(() => players.forEach(player => player.dispose()));
   const original = fixture(t);
   await original.sync.refreshAccount(); await original.sync.enable(false);
   const initial = createFreshSession({ runId: 'journey-run', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
@@ -65,7 +68,7 @@ test('recovery journey: reinstall restores uploaded cycles only, then reconnect 
   const player = new Player(initial, {
     prepare: async () => {}, play() {}, pause() {}, position: () => 2.5, dispose() {},
   }, journal.createWriter('sample-v1', initial, { language: 'english', book: 'sample' }), () => 0, () => {});
-  t.after(() => player.dispose());
+  players.push(player);
   await player.resume(); player.audioEnded(4); await player.confirm(); player.pause();
   await original.sync.retry();
   assert.equal(journal.progress.summary('english').xp, 1);
@@ -108,6 +111,8 @@ test('recovery journey: reinstall restores uploaded cycles only, then reconnect 
 });
 
 test('recovery journey: cloud deletion fences offline learning while new learning survives reinstall and account switches', async t => {
+  const players: Player[] = [];
+  t.after(() => players.forEach(player => player.dispose()));
   const owner = fixture(t);
   await owner.sync.refreshAccount(); await owner.sync.enable(false);
   const practice = async (profiles: ProgressProfiles, runId: string) => {
@@ -115,7 +120,7 @@ test('recovery journey: cloud deletion fences offline learning while new learnin
     const player = new Player(initial, {
       prepare: async () => {}, play() {}, pause() {}, position: () => 1, dispose() {},
     }, profiles.current().journal.createWriter('sample-v1', initial, { language: 'english', book: 'sample' }), () => 0, () => {});
-    t.after(() => player.dispose());
+    players.push(player);
     await player.resume(); player.audioEnded(3); await player.confirm(); player.pause();
     return player;
   };

@@ -44,6 +44,34 @@ npm run typecheck
 npm run check
 ```
 
+Native reproduction requires Xcode, XcodeGen, an installed iOS 26.5 simulator and
+the generated Expo iOS workspace with pods installed (see `docs/native-ci.md`).
+Select the ID of a disposable simulator; never substitute a physical device for
+these fixture destinations. For each pair below, generate and run its scheme:
+
+| Fixture directory | Project / scheme |
+| --- | --- |
+| `tests/storekit` | `PackageStoreTests` |
+| `tests/cloudkit` | `ProgressCloudTests` |
+| `tests/delivery` | `PackageDeliveryTests` |
+| `tests/learning-audio` | `LearningAudioTests` |
+
+```sh
+xcodegen generate --spec tests/storekit/project.yml
+xcodebuild test -project tests/storekit/PackageStoreTests.xcodeproj \
+  -scheme PackageStoreTests \
+  -destination 'platform=iOS Simulator,id=<TEST_SIMULATOR_ID>,arch=arm64' \
+  -parallel-testing-enabled NO -quiet
+EXPO_NO_DOTENV=1 EXPO_NO_TELEMETRY=1 npm run bundle:ios
+EXPO_NO_DOTENV=1 EXPO_NO_TELEMETRY=1 xcodebuild \
+  -workspace ios/app.xcworkspace -scheme app -configuration Release \
+  -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+  CODE_SIGNING_ALLOWED=NO -quiet
+```
+
+The app build here reuses the local generated workspace. It is not a clean
+prebuild/CI reproduction or proof of TestFlight signing/configuration.
+
 ## Acceptance matrix
 
 | #52 requirement | Local evidence / coverage | Remaining gate |
@@ -73,7 +101,12 @@ npm run check
   simulator service/transport fixtures, not live sandbox/CloudKit acceptance.
   The skipped delivery case requires `DUO_PREPARED_PATH` and private content;
   this run intentionally did not supply it.
-- Release build: result recorded below after completion.
+- Release Simulator build: **exit 0**, with a newly generated arm64/x86_64
+  executable verified. The initial build printed dependency warnings and
+  contradictory `SwiftCompile` diagnostics saying a command "failed with exit
+  code 0". An unchanged incremental rerun exited **0 with no output**. This is
+  not a warning-free clean build claim; the initial diagnostics' root cause was
+  not established. No dependency/compiler settings were changed to silence them.
 
 ### Static service and accessibility inspection
 
@@ -109,3 +142,13 @@ UI was added. This is not a VoiceOver or large-text interaction pass.
 6. Observe representative network activity and perform VoiceOver/large-text
    checks on purchase, progress, retry, restore and deletion controls. Keep #52
    open until these results exist. None of this authorizes a public release.
+
+## Review
+
+- **Standards:** no hard violations or actionable design smells. One cleanup-order
+  finding was fixed: both journeys register player disposal before fixture
+  database closure, including on early assertion failure. The reviewer verified
+  the fix; focused tests and the full `npm run check` passed again afterward.
+- **Spec:** no blocking findings against the owner-approved local-automation
+  scope. Native reproduction commands were added. Full #52 physical-device and
+  real-service acceptance remains pending as shown in the matrix.
