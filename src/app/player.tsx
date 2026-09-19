@@ -61,6 +61,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const [units, setUnits] = useState<LearningUnit[]>([]);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [accessReady, setAccessReady] = useState(!isPaidDuo(pack));
   const [error, setError] = useState<'save' | 'audio' | null>(null);
   const [duration, setDuration] = useState(0);
@@ -80,8 +81,10 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     setAccessReady(!isPaidDuo(pack));
     const access = isPaidDuo(pack) ? new PaidLearningAccess(paidAccessSource, () => {
       sentenceEntry.cancel(); engine.current?.pause();
-      if (active) { setUnavailable(true); setCelebrating(false); setXpGain(null); }
-    }, allowed => { if (active) setAccessReady(allowed); }) : null;
+      if (active) { setAccessDenied(true); setCelebrating(false); setXpGain(null); }
+    }, allowed => {
+      if (active) { setAccessReady(allowed); if (allowed) setAccessDenied(false); }
+    }) : null;
     paidGuard.current = access;
     const permitted = () => active && mayUsePackage(pack) && (!access || access.allowed());
     prepareLearningHaptics();
@@ -228,7 +231,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       header: () => <PlayerHeaderProgress onOptions={() => openOptions()} current={state ? state.phrase + 1 : 0}
         total={state?.phraseCount ?? 0} unitLabel={unitLabel}
         completed={state ? completedUnitCount(state) : 0}>
-      {state && accessReady && !unavailable &&
+      {state && accessReady && !unavailable && !accessDenied &&
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={`메타쉐도잉 레벨 ${Math.ceil(state.stage / 2)}, 학습 가이드 열기`} onPress={() => openInfo('guide')}
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
@@ -245,7 +248,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         </View>}
       </PlayerHeaderProgress> }} />
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, gap: 20 }}>
-      {unavailable ? <Card><Label>구매 내역과 레슨 설치 상태를 확인해 주세요. 학습 기록은 유지돼요.</Label>
+      {unavailable || accessDenied ? <Card><Label>구매 내역과 레슨 설치 상태를 확인해 주세요. 학습 기록은 유지돼요.</Label>
         {error === 'save' && <ActionButton title="기록 저장 다시 시도" onPress={() => engine.current?.retrySave()} />}
         <ActionButton title="레슨으로" onPress={leave} /></Card> : !state || !accessReady ? <Label muted>레슨을 여는 중…</Label> : <>
         <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 16 }}>
@@ -262,7 +265,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         </View>
       </>}
     </ScrollView>
-    {state && accessReady && !unavailable && <View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 12,
+    {state && accessReady && !unavailable && !accessDenied && <View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 12,
       backgroundColor: c.background, paddingBottom: Math.max(insets.bottom, 14) }}>
       {isFirstWordStage(stage) && state.phase !== 'complete' && <Pressable feedback={false}
         accessibilityRole="button" accessibilityLabel={revealed ? '자막 숨기기' : '자막 보기'} accessibilityState={{ selected: revealed, expanded: revealed }}

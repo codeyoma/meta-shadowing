@@ -26,6 +26,7 @@ final class PackagePurchases {
   private let productID: String
   private let currentEntitlements: @MainActor () async -> [VerificationResult<Transaction>]
   private let synchronize: @MainActor () async throws -> Void
+  private let finishTransaction: @MainActor (Transaction) async -> Void
   private var product: Product?
   private var observer: Task<Void, Never>?
   private var entitlementRevision = 0
@@ -40,11 +41,13 @@ final class PackagePurchases {
       for await result in Transaction.currentEntitlements { results.append(result) }
       return results
     },
-    synchronize: @escaping @MainActor () async throws -> Void = { try await AppStore.sync() }
+    synchronize: @escaping @MainActor () async throws -> Void = { try await AppStore.sync() },
+    finishTransaction: @escaping @MainActor (Transaction) async -> Void = { await $0.finish() }
   ) {
     self.productID = productID
     self.currentEntitlements = currentEntitlements
     self.synchronize = synchronize
+    self.finishTransaction = finishTransaction
   }
 
   func startObserving() {
@@ -87,7 +90,7 @@ final class PackagePurchases {
     snapshot.outcome = transaction.revocationDate == nil ? .purchased : .none
     // Setting ownership is idempotent; no XP, history or download side effects.
     publish()
-    await transaction.finish()
+    await finishTransaction(transaction)
   }
 
   func purchase() async {

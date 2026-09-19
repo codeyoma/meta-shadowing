@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import React from 'react';
 import ts from 'typescript';
+import { PaidLearningAccess } from './paid-learning-access';
 
 // Evaluate the actual screen's returned JSX with a ready-session fixture.
 // Native hosts remain named elements so we can inspect which controls belong
@@ -18,7 +19,7 @@ const compiled = ts.transpileModule(`module.exports = (${returned.getText(source
 type Element = React.ReactElement<Record<string, unknown>>;
 const require = createRequire(import.meta.url);
 
-function layout(accessReady = true) {
+function layout(accessReady = true, unavailable = false, accessDenied = false) {
   const actions: string[] = [];
   const module = { exports: {} as Element };
   runInNewContext(compiled, {
@@ -28,7 +29,7 @@ function layout(accessReady = true) {
     Animated: { View: 'AnimatedView' }, SpeechContent: 'SpeechContent',
     CycleTimeline: 'CycleTimeline', PlayerControls: 'PlayerControls',
     state: { stage: 9, rate: 1.5, phrase: 1, phraseCount: 6, phase: 'listening', runId: 'test' },
-    stage: 9, unavailable: false, accessReady, unitLabel: '학습 묶음', presented: [], speechView: 'list',
+    stage: 9, unavailable, accessReady, accessDenied, leave() {}, unitLabel: '학습 묶음', presented: [], speechView: 'list',
     c: {}, insets: { bottom: 0 }, duration: 0, motionActive: false, error: null,
     busy: false, xpGain: null, celebrating: false, CONTENT_ENTER: undefined,
     isFirstWordStage: () => false, completedUnitCount: () => 0,
@@ -59,6 +60,33 @@ test('all three learning navigation controls stay in the fixed header, outside t
     (button.props.onPress as () => void)();
   }
   assert.deepEqual(actions, ['guide', 'rate', 'analysis']);
+});
+
+test('reauthorization restores paused player content without clearing unrelated unavailability', async () => {
+  let construction: ts.NewExpression | undefined;
+  function find(node: ts.Node) {
+    if (ts.isNewExpression(node) && node.expression.getText(source) === 'PaidLearningAccess') construction = node;
+    ts.forEachChild(node, find);
+  }
+  find(screen);
+  const code = ts.transpileModule(`module.exports = (${construction!.getText(source)});`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  let allowed = false, accessReady = false, unavailable = false, accessDenied = false, pauses = 0;
+  const module = {exports: undefined as unknown as PaidLearningAccess};
+  runInNewContext(code, {module, PaidLearningAccess, active:true,
+    paidAccessSource: {refresh:async()=>({revision:1,allowed}),subscribe:()=>()=>{}},
+    sentenceEntry:{cancel(){}},engine:{current:{pause(){pauses++;}}},
+    setUnavailable(value:boolean){unavailable=value;},setAccessReady(value:boolean){accessReady=value;},
+    setAccessDenied(value:boolean){accessDenied=value;},setCelebrating(){},setXpGain(){},
+  });
+  await module.exports.enter();
+  assert.ok(pauses > 0);
+  allowed=true; await module.exports.enter();
+  assert.ok(descendants(layout(accessReady,unavailable,accessDenied).root).some(node=>node.type==='SpeechContent'));
+  unavailable=true; await module.exports.enter();
+  assert.equal(descendants(layout(accessReady,unavailable,accessDenied).root).some(node=>node.type==='SpeechContent'),false);
+  module.exports.dispose();
 });
 
 test('pending paid reauthorization hides existing sentences, playback and navigation controls', () => {

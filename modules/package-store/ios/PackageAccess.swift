@@ -28,6 +28,7 @@ public final class PackageAccessLease: Sendable {
   let store: PackagePurchases
   public let lease = PackageAccessLease()
   private var listeners: [UUID: @MainActor (PackageAccessSnapshot) -> Void] = [:]
+  private var refreshTask: Task<Void, Never>?
   public var snapshot: PackageAccessSnapshot { lease.snapshot }
 
   init(store: PackagePurchases) {
@@ -41,7 +42,15 @@ public final class PackageAccessLease: Sendable {
     store.startObserving()
   }
   public func refresh() async -> PackageAccessSnapshot {
-    await store.refreshAccess()
+    if let refreshTask {
+      await refreshTask.value
+      return snapshot
+    }
+    // Library, delivery and player share one query instead of invalidating each other.
+    let task = Task { await store.refreshAccess() }
+    refreshTask = task
+    await task.value
+    refreshTask = nil
     return snapshot
   }
   public func subscribe(_ callback: @escaping @MainActor (PackageAccessSnapshot) -> Void) -> UUID {
