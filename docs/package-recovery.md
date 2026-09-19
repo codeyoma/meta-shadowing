@@ -2,9 +2,9 @@
 
 ## Scope
 
-This follow-up is based on #47 at `bd09c9d`. The owner approved proceeding while
-its PR is still open. No PR was merged as part of this work; integrate the latest
-`dev` after #47 lands before publishing this dependent branch.
+This follow-up was developed on #47 at `bd09c9d`. PR #62 has since merged into
+`dev`; the updated base was pulled before publishing this recovery follow-up.
+No remote PR was merged by this task.
 
 The implementation reuses the existing StoreKit authorization, native installer,
 scoped removal, and local-first learning journal. It does not introduce another
@@ -68,9 +68,10 @@ xcodebuild test -project tests/delivery/PackageDeliveryTests.xcodeproj \
 
 ## Remaining acceptance and limits
 
-- #48 remains open for actual Apple-hosted, TestFlight, offline cold-launch and
-  reinstall recovery on a designated iPhone. Live paid testing also requires #45
-  and #47 readiness. Coordinate shared device evidence with #61.
+- All remaining actual Apple-hosted, TestFlight, offline cold-launch and reinstall
+  recovery checks are tracked in #61, following the owner's consolidation request.
+  #48 tracks implementation review/merge; transfer does not mean device checks
+  passed. Live paid testing also requires #45 readiness and an integrated build.
 - Simulator fixtures model corruption, insufficient storage, rejected writes,
   cancellation and authorization changes; they do not fill a real device or
   claim live OS-managed eviction/download acceptance. No destructive owner-device
