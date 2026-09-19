@@ -18,4 +18,3 @@ function makeZip(entries) {
   return Buffer.concat([...locals,directory,end]);
 }
 module.exports = { makeZip };
-
