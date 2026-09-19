@@ -9,6 +9,7 @@ import type { ProgressCloud, CloudBackup, CloudPublication } from '../../modules
 import { createLegacySession as createSession } from '../../tests/legacy-session';
 import { enableAutomaticBackup } from './enable-backup';
 import { encodeEnvelope, emptyProgress } from './progress-envelope';
+import { createSession as createFreshSession } from './session';
 
 function fixture(t: TestContext) {
   const databases = new Map<string, DatabaseSync>();
@@ -53,6 +54,120 @@ function fixture(t: TestContext) {
 const publication = (revision: number, id = 'published-2'): CloudPublication => ({ id, token: id, revision, legacy: false, createdAt: '', cleanupPending: false });
 const backup = (id = 'remote'): CloudBackup => ({ id, token: id, revision: 90, legacy: false, createdAt: '' });
 const drain = () => new Promise<void>(resolve => setImmediate(resolve));
+
+// #52 journeys use real player/journal/SQLite boundaries. Only Apple transport
+// and audio are fixtures; these are not TestFlight or physical-device evidence.
+test('recovery journey: reinstall restores uploaded cycles only, then reconnect converges without duplicate XP', async t => {
+  const players: Player[] = [];
+  // Node after hooks are FIFO: checkpoint/dispose before fixture databases close.
+  t.after(() => players.forEach(player => player.dispose()));
+  const original = fixture(t);
+  await original.sync.refreshAccount(); await original.sync.enable(false);
+  const initial = createFreshSession({ runId: 'journey-run', stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
+  const journal = original.profiles.current().journal;
+  const player = new Player(initial, {
+    prepare: async () => {}, play() {}, pause() {}, position: () => 2.5, dispose() {},
+  }, journal.createWriter('sample-v1', initial, { language: 'english', book: 'sample' }), () => 0, () => {});
+  players.push(player);
+  await player.resume(); player.audioEnded(4); await player.confirm(); player.pause();
+  await original.sync.retry();
+  assert.equal(journal.progress.summary('english').xp, 1);
+  assert.equal(original.profiles.current().pending(), false);
+
+  const onlineList = original.cloud.list;
+  original.cloud.list = async () => { throw Error('progress-cloud-offline'); };
+  await player.resume(); player.audioEnded(4); await player.confirm(); player.pause();
+  await original.sync.retry();
+  assert.equal(journal.progress.summary('english').xp, 2);
+  assert.equal(original.profiles.current().pending(), true);
+  assert.equal(journal.load('sample-v1', 1, 2)?.audioSeconds, 2.5);
+  player.dispose(); original.sync.dispose();
+
+  // Relaunch keeps the installation's database; reinstall below uses an empty one.
+  const reopened = new ProgressProfiles(original.open, () => 'unexpected-profile');
+  const relaunched = new ProgressSync(reopened, original.cloud); t.after(() => relaunched.dispose());
+  await relaunched.refreshAccount();
+  assert.equal(reopened.current().journal.progress.summary('english').xp, 2);
+  assert.equal(reopened.current().journal.load('sample-v1', 1, 2)?.confirmed, 2);
+  assert.equal(reopened.current().journal.load('sample-v1', 1, 2)?.running, false);
+
+  original.cloud.list = onlineList;
+  const clean = fixture(t); clean.sync.dispose();
+  const restored = new ProgressSync(clean.profiles, original.cloud); t.after(() => restored.dispose());
+  await restored.refreshAccount(); await restored.enable(false);
+  assert.equal(clean.profiles.current().journal.progress.summary('english').xp, 1);
+  assert.equal(clean.profiles.current().journal.load('sample-v1', 1, 2)?.confirmed, 1);
+  assert.equal(clean.profiles.current().journal.completions('sample-v1', 1), 0);
+
+  await relaunched.retry(); await restored.retry(); await relaunched.retry();
+  for (const profiles of [reopened, clean.profiles]) {
+    assert.equal(profiles.current().journal.progress.summary('english').xp, 2);
+    assert.equal(profiles.current().journal.load('sample-v1', 1, 2)?.confirmed, 2);
+    assert.equal(profiles.current().journal.load('sample-v1', 1, 2)?.audioSeconds, 2.5);
+    assert.equal(profiles.current().journal.completions('sample-v1', 1), 0);
+    assert.equal(profiles.current().pending(), false);
+  }
+  assert.equal(reopened.current().exportBackup(), clean.profiles.current().exportBackup());
+});
+
+test('recovery journey: cloud deletion fences offline learning while new learning survives reinstall and account switches', async t => {
+  const players: Player[] = [];
+  t.after(() => players.forEach(player => player.dispose()));
+  const owner = fixture(t);
+  await owner.sync.refreshAccount(); await owner.sync.enable(false);
+  const practice = async (profiles: ProgressProfiles, runId: string) => {
+    const initial = createFreshSession({ runId, stage: 1, phraseCount: 2, mode: 'manual', rate: 1 });
+    const player = new Player(initial, {
+      prepare: async () => {}, play() {}, pause() {}, position: () => 1, dispose() {},
+    }, profiles.current().journal.createWriter('sample-v1', initial, { language: 'english', book: 'sample' }), () => 0, () => {});
+    players.push(player);
+    await player.resume(); player.audioEnded(3); await player.confirm(); player.pause();
+    return player;
+  };
+  await practice(owner.profiles, 'before-deletion'); await owner.sync.retry();
+
+  const stale = fixture(t); stale.sync.dispose();
+  let online = true;
+  const oldDevice = new ProgressSync(stale.profiles, { ...owner.cloud, list: async scope => {
+    if (!online) throw Error('progress-cloud-offline');
+    return owner.cloud.list(scope);
+  } });
+  t.after(() => oldDevice.dispose());
+  await oldDevice.refreshAccount(); await oldDevice.enable(false);
+  online = false;
+  const stalePlayer = await practice(stale.profiles, 'offline-before-deletion');
+  await oldDevice.retry();
+  assert.equal(stale.profiles.current().journal.progress.summary('english').xp, 2);
+  assert.equal(stale.profiles.current().pending(), true);
+
+  await owner.sync.deleteCloud();
+  assert.equal(owner.profiles.current().journal.progress.summary('english').xp, 0);
+  assert.equal(owner.sync.getSnapshot().deletion, null);
+  await practice(owner.profiles, 'after-deletion'); await owner.sync.refresh();
+  online = true; await oldDevice.retry();
+  stalePlayer.pause(); // A screen captured before deletion cannot resurrect its writer.
+  assert.equal(stalePlayer.error, 'save');
+  assert.equal(stale.profiles.current().journal.progress.summary('english').xp, 1);
+  assert.equal(stale.profiles.current().journal.load('sample-v1', 1, 2)?.runId, 'after-deletion');
+  await oldDevice.retry();
+
+  const clean = fixture(t); clean.sync.dispose();
+  let account = 'account-a';
+  const restored = new ProgressSync(clean.profiles, { ...owner.cloud,
+    account: async () => ({ status: 'available', scope: account }),
+  });
+  t.after(() => restored.dispose());
+  await restored.refreshAccount(); await restored.enable(false);
+  assert.equal(clean.profiles.current().journal.progress.summary('english').xp, 1);
+  assert.equal(clean.profiles.current().journal.load('sample-v1', 1, 2)?.runId, 'after-deletion');
+  account = 'account-b'; await restored.accountChanged(); await restored.enable(false);
+  assert.equal(clean.profiles.current().journal.progress.summary('english').xp, 0);
+  assert.equal(clean.profiles.current().journal.load('sample-v1', 1, 2), null);
+  account = 'account-a'; await restored.accountChanged(); await restored.retry();
+  assert.equal(clean.profiles.current().journal.progress.summary('english').xp, 1);
+  assert.equal(clean.profiles.current().journal.load('sample-v1', 1, 2)?.runId, 'after-deletion');
+  assert.equal(clean.profiles.current().exportBackup(), owner.profiles.current().exportBackup());
+});
 
 test('divergent offline learning merges automatically without remounting the profile', async t => {
   const { sync, profiles, heads, payloads } = fixture(t);
