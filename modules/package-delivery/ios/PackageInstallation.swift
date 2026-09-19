@@ -11,7 +11,7 @@ struct DeliveryPackage: Codable, Sendable, Equatable {
   let files: [Entry]
 }
 
-enum DeliveryError: String, Error { case invalidPackage, damagedFiles, unavailable, busy, unauthorized }
+enum DeliveryError: String, Error { case invalidPackage, damagedFiles, unavailable, busy, unauthorized, incompatibleVersion }
 
 typealias PackagePublication = @Sendable (() throws -> Void) throws -> Void
 
@@ -23,18 +23,24 @@ struct PackageInstallation: Sendable {
   func isInstalled(_ package: DeliveryPackage) throws -> Bool {
     try validate(package)
     try validateOwnedTree(package.key)
+    do { try checkIdentity(package) }
+    catch DeliveryError.incompatibleVersion { return false }
     let directory = root.appendingPathComponent(package.key)
     guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("ready").path) else { return false }
-    return package.files.allSatisfy { entry in
+    let verified = package.files.allSatisfy { entry in
       guard let data = try? Data(contentsOf: directory.appendingPathComponent(entry.file)) else { return false }
       return matches(data, entry)
     }
+    // Adopt a legacy installation only after every current pinned file matches.
+    if verified { try pinIdentity(package) }
+    return verified
   }
 
   func install(_ package: DeliveryPackage, publication: PackagePublication = { try $0() }, source: (String) throws -> Data) throws {
     try validate(package)
     try Task.checkCancellation()
     if try isInstalled(package) { return }
+    try checkIdentity(package)
     let fs = FileManager.default
     try fs.createDirectory(at: root, withIntermediateDirectories: true)
     // The download owner serializes installs. This exact per-version path also
@@ -60,6 +66,7 @@ struct PackageInstallation: Sendable {
     if try isInstalled(package) { return }
     try publication {
       try Task.checkCancellation()
+      try pinIdentity(package)
       if fs.fileExists(atPath: destination.path) { try fs.removeItem(at: destination) }
       try fs.moveItem(at: staging, to: destination)
     }
