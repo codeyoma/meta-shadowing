@@ -11,13 +11,14 @@ import { availableBooks } from '@/core/catalog';
 import { books } from '@/native/catalog';
 import { DeliveryDiagnostics } from '@/components/delivery-diagnostics';
 import { animationPreviewEnabled } from '../../../modules/package-delivery';
+import { isPaidDuo } from '@/native/paid-package';
 
 export default function Library() {
   const c = usePalette();
   const dark = useColorScheme() === 'dark';
   const { selection } = useLibrary();
   const [editing, setEditing] = useState(false);
-  const catalog = availableBooks(books, selection.language);
+  const catalog = availableBooks(books, selection.language).filter(book => !isPaidDuo(book));
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 40 }}>
     <View style={{ alignSelf: 'center', width: '100%', maxWidth: 260 }}>
       <Image source={dark ? require('../../../assets/brand/banner-dark.png') : require('../../../assets/brand/banner-light.png')} accessibilityLabel="쇄도잉" accessible
@@ -40,7 +41,7 @@ export default function Library() {
         </View>
       </View>
       {catalog.map(book => <LibraryBook key={book.packageKey} book={book} editing={editing} />)}
-      {selection.language === 'english' && <PackagePurchaseCard section="owned" />}
+      {selection.language === 'english' && <PackagePurchaseCard section="owned" editing={editing} />}
       {!catalog.length && <Label muted>이 언어에서 지원하는 구매/샘플 도서가 아직 없어요.</Label>}
     </View>
     {selection.language === 'english' && <PackagePurchaseCard section="store" />}

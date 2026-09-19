@@ -4,6 +4,7 @@ import { PackageMaterialStorage, packageOperations } from '../core/package-stora
 import { hostedStorage, removeHostedMaterials } from './hosted-package';
 import { verifyBundledMaterials } from './package';
 import { isFreeDuo, freeDuoActions } from './free-duo';
+import { isPaidDuo, paidDuoActions } from './paid-package';
 
 const storage = new PackageMaterialStorage(packageOperations, {
   async read(key, busy) {
@@ -22,6 +23,6 @@ const storage = new PackageMaterialStorage(packageOperations, {
 });
 
 export const readPackageStorage = (pack: LearningPackage): Promise<{ bytes: number; installed: boolean; busy: boolean }> =>
-  isFreeDuo(pack) ? freeDuoActions.storage() : storage.read(pack);
+  isPaidDuo(pack) ? paidDuoActions.storage() : isFreeDuo(pack) ? freeDuoActions.storage() : storage.read(pack);
 export const removePackageMaterials = (pack: LearningPackage): Promise<{ cacheCleared: boolean }> =>
-  isFreeDuo(pack) ? freeDuoActions.remove() : storage.remove(pack);
+  isPaidDuo(pack) ? paidDuoActions.remove() : isFreeDuo(pack) ? freeDuoActions.remove() : storage.remove(pack);

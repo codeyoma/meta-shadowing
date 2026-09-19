@@ -17,7 +17,7 @@ public final class PackageStoreModule: Module {
       try await self.perform(.restore)
     }
     OnDestroy {
-      Task { @MainActor in self.purchases?.stopObserving() }
+      Task { @MainActor in self.purchases?.onChange = nil }
     }
   }
 
@@ -28,7 +28,7 @@ public final class PackageStoreModule: Module {
     if let purchases { store = purchases }
     else {
       // Configured at native build time. JavaScript cannot set an ownership flag.
-      store = PackagePurchases(productID: Bundle.main.object(forInfoDictionaryKey: "LearningBookProductID") as? String ?? "")
+      store = PackageAccess.shared.store
       store.onChange = { [weak self] snapshot in
         guard let data = try? JSONEncoder().encode(snapshot), let json = String(data: data, encoding: .utf8) else { return }
         self?.sendEvent("onChange", ["snapshot": json])

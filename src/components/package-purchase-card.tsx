@@ -4,15 +4,20 @@ import { packagePurchases } from '@/native/purchases';
 import { purchasePresentation } from '@/core/package-purchase';
 import { paidLibraryEntry } from '@/core/library-presentation';
 import { ActionButton, Card, Icon, Label, usePalette } from './ui';
+import { PaidLibraryBook } from './paid-library-book';
+import { paidDuoPackage, paidAccess } from '@/native/paid-package';
 
-export function PackagePurchaseCard({ section }: { section: 'owned' | 'store' }) {
+export function PackagePurchaseCard({ section, editing = false }: { section: 'owned' | 'store'; editing?:boolean }) {
   const c = usePalette();
   const snapshot = useSyncExternalStore(packagePurchases.subscribe, packagePurchases.getSnapshot);
   const bridgeError = useSyncExternalStore(packagePurchases.subscribe, packagePurchases.hasBridgeError);
   const view = purchasePresentation(snapshot);
-  const entry = paidLibraryEntry(snapshot);
+  const access = useSyncExternalStore(paidAccess.subscribe, paidAccess.getSnapshot);
+  const entry = paidLibraryEntry(snapshot,{configured:!!paidDuoPackage,authorized:access.allowed,installed:false});
+  if (section === 'owned' && editing && paidDuoPackage) return <PaidLibraryBook editing title={entry.title} />;
   if (entry.section !== section) return null;
   if (section === 'store' && !view.showInStore) return null;
+  if (section === 'owned' && paidDuoPackage) return <PaidLibraryBook editing={editing} title={entry.title} />;
   const issue = snapshot.entitlementIssue !== 'none' || snapshot.outcome === 'unverified';
   const failed = snapshot.catalogIssue === 'failed' || snapshot.outcome === 'failed' || bridgeError;
   const unavailable = !packagePurchases.available || snapshot.catalogIssue === 'unavailable';
@@ -26,7 +31,8 @@ export function PackagePurchaseCard({ section }: { section: 'owned' | 'store' })
         <Label size={14} weight="700">{snapshot.busy ? 'App Store 확인 중…' : entry.status}</Label>
       </View>
     </View>
-    <Label size={14} muted>{view.detail}</Label>
+    <Label size={14} muted>{paidDuoPackage ? '한 번 구매한 뒤 자료를 다운로드하면 오프라인으로 학습할 수 있어요.' : view.detail}</Label>
+    {!paidDuoPackage && <Label size={14} muted>학습 자료 배포 준비 중이에요. 다운로드 가능한 버전에서 구매할 수 있어요.</Label>}
     {unavailable && <Label size={14} muted>{packagePurchases.available
       ? 'App Store에서 상품을 찾지 못했어요. 상품 설정과 판매 지역을 확인한 뒤 다시 시도해 주세요.'
       : '구매 기능이 포함된 iPhone 앱으로 업데이트해 주세요.'}</Label>}
@@ -39,7 +45,7 @@ export function PackagePurchaseCard({ section }: { section: 'owned' | 'store' })
     {snapshot.ownership !== 'owned' && <>
       <Label size={18} weight="800" color={c.heading}>{entry.price}</Label>
       <ActionButton title="구매하기"
-      disabled={!view.canPurchase || bridgeError} onPress={() => Alert.alert('다운로드 준비 중',
+      disabled={!view.canPurchase || bridgeError || !paidDuoPackage} onPress={() => paidDuoPackage ? void packagePurchases.purchase() : Alert.alert('다운로드 준비 중',
         '현재는 구매 및 복원 테스트만 가능하며, 패키지를 다운로드하거나 학습할 수 없어요. 계속할까요?', [
           { text: '취소', style: 'cancel' }, { text: '계속', onPress: () => { void packagePurchases.purchase(); } },
         ])} />

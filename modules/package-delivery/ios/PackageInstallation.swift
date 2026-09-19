@@ -11,7 +11,9 @@ struct DeliveryPackage: Codable, Sendable, Equatable {
   let files: [Entry]
 }
 
-enum DeliveryError: String, Error { case invalidPackage, damagedFiles, unavailable, busy }
+enum DeliveryError: String, Error { case invalidPackage, damagedFiles, unavailable, busy, unauthorized }
+
+typealias PackagePublication = @Sendable (() throws -> Void) throws -> Void
 
 /// Publishes an immutable version only after every pinned entry survives a disk read.
 /// This directory is independent of Background Assets' managed cache and of checkpoints.
@@ -29,7 +31,7 @@ struct PackageInstallation: Sendable {
     }
   }
 
-  func install(_ package: DeliveryPackage, source: (String) throws -> Data) throws {
+  func install(_ package: DeliveryPackage, publication: PackagePublication = { try $0() }, source: (String) throws -> Data) throws {
     try validate(package)
     try Task.checkCancellation()
     if try isInstalled(package) { return }
@@ -56,8 +58,11 @@ struct PackageInstallation: Sendable {
     let destination = root.appendingPathComponent(package.key)
     // An existing verified version is never replaced. A damaged version isn't playable.
     if try isInstalled(package) { return }
-    if fs.fileExists(atPath: destination.path) { try fs.removeItem(at: destination) }
-    try fs.moveItem(at: staging, to: destination)
+    try publication {
+      try Task.checkCancellation()
+      if fs.fileExists(atPath: destination.path) { try fs.removeItem(at: destination) }
+      try fs.moveItem(at: staging, to: destination)
+    }
   }
 
   private func matches(_ data: Data, _ entry: DeliveryPackage.Entry) -> Bool {
@@ -70,9 +75,16 @@ struct PackageInstallation: Sendable {
       Set(package.files.map(\.file)).count == package.files.count,
       package.files.contains(where: { $0.file == "manifest.json" }),
       package.files.allSatisfy({ entry in
-        (entry.file == "manifest.json" || entry.file.range(of: "^audio/[a-z0-9-]+\\.m4a$", options: .regularExpression) != nil)
+        (entry.file == "manifest.json" || (package.key == LibraryMaterial.paidDuo && ["cover.jpg", "info.json", "text.txt", "syntax.json"].contains(entry.file)) || entry.file.range(of: "^audio/[a-z0-9-]+\\.m4a$", options: .regularExpression) != nil)
           && entry.bytes > 0 && entry.bytes <= 50_000_000
           && entry.sha256.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil
       }) else { throw DeliveryError.invalidPackage }
+    guard package.files.reduce(0, { $0 + $1.bytes }) <= 1_000_000_000 else { throw DeliveryError.invalidPackage }
+    if package.key == LibraryMaterial.paidDuo {
+      let expected = Set(["manifest.json", "cover.jpg", "info.json", "text.txt", "syntax.json"] + (1...560).map { String(format: "audio/phrase-%03d.m4a", $0) })
+      guard Set(package.files.map(\.file)) == expected,
+        package.files.filter({ !$0.file.hasPrefix("audio/") }).allSatisfy({ $0.bytes <= 20_000_000 })
+      else { throw DeliveryError.invalidPackage }
+    }
   }
 }

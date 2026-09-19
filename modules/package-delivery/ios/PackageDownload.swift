@@ -35,7 +35,7 @@ actor PackageDownload {
     return DeliveryStatus(phase: "idle", progress: 0)
   }
 
-  func start(_ package: DeliveryPackage) async throws {
+  func start(_ package: DeliveryPackage, publication: @escaping PackagePublication = { try $0() }) async throws {
     guard running == nil && !removing else { throw DeliveryError.busy }
     if try installation.isInstalled(package) { return }
     guard let transport else { throw DeliveryError.unavailable }
@@ -46,7 +46,7 @@ actor PackageDownload {
       try await transport.download { value in await self.progress(value) }
       try Task.checkCancellation()
       self.state = DeliveryStatus(phase: "installing", progress: 1)
-      try installation.install(package, source: transport.contents)
+      try installation.install(package, publication: publication, source: transport.contents)
     }
     running = task
     defer { running = nil }
@@ -67,13 +67,13 @@ actor PackageDownload {
   }
 
   func storage(_ package: DeliveryPackage) throws -> MaterialStorage {
-    guard package.key == LibraryMaterial.hosted || package.key == LibraryMaterial.freeDuo else { throw DeliveryError.invalidPackage }
+    guard [LibraryMaterial.hosted, LibraryMaterial.freeDuo, LibraryMaterial.paidDuo].contains(package.key) else { throw DeliveryError.invalidPackage }
     return try MaterialStorage(bytes: installation.materialBytes(package.key),
       installed: !removing && installation.isInstalled(package), busy: running != nil || removing)
   }
 
   func remove(_ package: DeliveryPackage) async throws -> Bool {
-    guard package.key == LibraryMaterial.hosted || package.key == LibraryMaterial.freeDuo else { throw DeliveryError.invalidPackage }
+    guard [LibraryMaterial.hosted, LibraryMaterial.freeDuo, LibraryMaterial.paidDuo].contains(package.key) else { throw DeliveryError.invalidPackage }
     guard running == nil && !removing else { throw DeliveryError.busy }
     removing = true
     defer { removing = false }

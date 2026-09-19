@@ -10,6 +10,7 @@ Pod::Spec.new do |s|
   s.static_framework = true
   s.frameworks = 'BackgroundAssets'
   s.dependency 'ExpoModulesCore'
+  s.dependency 'PackageStore'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'SWIFT_VERSION' => '6.0', 'SWIFT_STRICT_CONCURRENCY' => 'complete' }
   s.source_files = '**/*.swift'
 end

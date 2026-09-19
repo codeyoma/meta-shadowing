@@ -8,6 +8,7 @@ import { hostedSample, hostedStatus } from './hosted-package';
 import delivery from '../../modules/package-delivery';
 import { knownMaterialKey, packageOperations } from '../core/package-storage';
 import { isFreeDuo, freeDuoActions } from './free-duo';
+import { isPaidDuo, paidDuoActions, authorizePackage, mayUsePackage } from './paid-package';
 
 export type BundledPackage = LearningPackage & { delivery: 'bundled'; modules: Readonly<Record<string, number>> };
 const modules: Record<string, number> = {
@@ -62,6 +63,7 @@ export function installBundledPackage(pack: BundledPackage, onProgress: (done: n
   return installations.get(key)!;
 }
 export async function isInstalled(pack: LearningPackage): Promise<boolean> {
+  if (isPaidDuo(pack)) return await authorizePackage(pack) && (await paidDuoActions.status()).phase === 'ready' && mayUsePackage(pack);
   if (isFreeDuo(pack)) return (await freeDuoActions.status()).phase === 'ready';
   const key = knownMaterialKey(pack);
   if (key === packageKeyOf(hostedSample)) return (await hostedStatus()).phase === 'ready';
@@ -76,6 +78,7 @@ export async function verifyBundledMaterials(): Promise<boolean> {
   return marker(samplePackage).exists && await verifyPackage(samplePackage.manifest, packageIO(samplePackage));
 }
 export function audioUri(pack: LearningPackage, phrase: number): string {
+  if (!mayUsePackage(pack)) throw new Error('package-delivery-unauthorized');
   const item = pack.manifest.phrases[phrase];
   if (!item) throw new Error('Unknown phrase.');
   const file = new File(directory(pack), item.file);
