@@ -13,23 +13,26 @@ import { canOpenStage } from '@/core/stage-overview';
 import { MethodLabel } from '@/components/method-label';
 import { BookTags } from '@/components/book-tags';
 import { isGroupedStage } from '@/core/catalog';
+import { usePackageLearningAccess } from '@/components/use-package-learning-access';
+import { mayUsePackage } from '@/native/paid-package';
 
 export default function Lesson() {
   const c = usePalette();
   const { selection } = useLibrary();
   const selectedBook = selectedPackage(selection.packageKey);
+  const access = usePackageLearningAccess(selectedBook);
   const { records, overview, bypass } = useBookRecords(selectedBook ?? null);
   const [ready, setReady] = useState<boolean | null>(null);
   useFocusEffect(useCallback(() => {
     let active = true;
     setReady(null);
-    if (selectedBook && !selectedBook.owned) setReady(false);
-    if (selectedBook?.owned) isInstalled(selectedBook).then(value => { if (active) setReady(value); })
+    if (!access) setReady(false);
+    if (access && selectedBook) isInstalled(selectedBook).then(value => { if (active) setReady(value); })
       .catch(() => { if (active) Alert.alert('레슨을 확인할 수 없어요', '저장 공간을 확인하고 다시 시도해 주세요.'); });
     return () => { active = false; };
-  }, [selectedBook]));
+  }, [selectedBook, access]));
   function open(stage: number) {
-    if (ready && selectedBook?.owned && records && canOpenStage(stage, records, bypass)) router.push({ pathname: '/player', params: { stage, package: selectedBook.packageKey } });
+    if (access && ready && selectedBook && mayUsePackage(selectedBook) && records && canOpenStage(stage, records, bypass)) router.push({ pathname: '/player', params: { stage, package: selectedBook.packageKey } });
   }
   if (!selectedBook) return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 40 }}>
     <Label size={27} weight="800" color={c.heading}>{languages.find(l => l.id === selection.language)?.name} 스테이지</Label>

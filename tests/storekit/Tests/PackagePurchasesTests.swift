@@ -9,6 +9,91 @@ import Testing
 struct PackagePurchasesTests {
   let productID = "com.example.packagestore.book"
 
+  @Test func overlappingAccessRefreshesReturnTheVerifiedResultToEveryCaller() async throws {
+    let session = try await session()
+    defer { session.clearTransactions() }
+    let transaction = try await buyProduct(session, identifier: productID)
+    var results: [VerificationResult<Transaction>] = []
+    for await result in Transaction.currentEntitlements { results.append(result) }
+    await transaction.finish()
+    session.clearTransactions()
+    try await waitUntil {
+      for await _ in Transaction.all { return false }
+      return true
+    }
+    let verified = results
+    let gate = ConcurrentEntitlementGate()
+    let store = PackagePurchases(productID: productID, currentEntitlements: {
+      await gate.wait()
+      return verified
+    })
+    defer { store.stopObserving() }
+    let access = PackageAccess(store: store)
+    let first = Task { await access.refresh() }
+    try await waitUntil { !gate.waiters.isEmpty }
+    let second = Task { gate.secondCallerStarted = true; return await access.refresh() }
+    try await waitUntil { gate.secondCallerStarted }
+    gate.releaseFirst()
+    let firstResult = await first.value
+    gate.releaseAll()
+    let secondResult = await second.value
+    #expect(firstResult.allowed)
+    #expect(secondResult.allowed)
+  }
+
+  @Test func staleEntitlementQueryCannotUndoNewerRestoreFailure() async throws {
+    let session = try await session()
+    defer { session.clearTransactions() }
+    let transaction = try await buyProduct(session, identifier: productID)
+    var verifiedResults: [VerificationResult<Transaction>] = []
+    for await result in Transaction.currentEntitlements {
+      verifiedResults.append(result)
+    }
+    // Hold a real verified response without relying on delivery of a past update.
+    await transaction.finish()
+    session.clearTransactions()
+    try await waitUntil {
+      for await _ in Transaction.all { return false }
+      return true
+    }
+    let gate = EntitlementQueryGate()
+    let results = verifiedResults
+    let store = PackagePurchases(productID: productID, currentEntitlements: {
+      if gate.enabled { await withCheckedContinuation { gate.held = $0 } }
+      return results
+    }, synchronize: { throw URLError(.notConnectedToInternet) })
+    defer { store.stopObserving() }
+    let access = PackageAccess(store: store)
+    #expect((await access.refresh()).allowed)
+    gate.enabled = true
+    let staleQuery = Task { await access.refresh() }
+    try await waitUntil { gate.held != nil }
+    await store.restore()
+    #expect(store.snapshot.entitlementIssue == .failed)
+    gate.held?.resume()
+    let result = await staleQuery.value
+    #expect(store.snapshot.entitlementIssue == .failed)
+    #expect(!result.allowed)
+  }
+
+  @Test func paidAccessUsesVerifiedLocalEntitlementAndRevokesOldLeases() async throws {
+    let session = try await session()
+    defer { session.clearTransactions() }
+    let store = PackagePurchases(productID: productID)
+    defer { store.stopObserving() }
+    let access = PackageAccess(store: store)
+    #expect(!(await access.refresh()).allowed)
+    let transaction = try await buyProduct(session, identifier: productID)
+    let allowed = await access.refresh()
+    #expect(allowed.allowed)
+    try access.lease.withAuthorization(revision: allowed.revision) {}
+    try await session.setSimulatedError(.generic(.networkError(URLError(.notConnectedToInternet))), forAPI: StoreKitLoadProductsAPI())
+    #expect((await access.refresh()).allowed)
+    try session.refundTransaction(identifier: UInt(transaction.id))
+    try await waitUntil { !(await access.refresh()).allowed }
+    #expect(throws: (any Error).self) { try access.lease.withAuthorization(revision: allowed.revision) {} }
+  }
+
   func session() async throws -> SKTestSession {
     let bundle = Bundle(for: BundleMarker.self)
     let url = try #require(bundle.url(forResource: "Books", withExtension: "storekit"))
@@ -38,12 +123,14 @@ struct PackagePurchasesTests {
   @Test func buysOnceAndRecoversOwnershipWithoutApplicationStorage() async throws {
     let session = try await session()
     defer { session.clearTransactions() }
-    let store = PackagePurchases(productID: productID)
+    let finishing = TransactionFinishingProbe()
+    let store = PackagePurchases(productID: productID, finishTransaction: finishing.finish)
     defer { store.stopObserving() }
     await store.refresh()
     await store.purchase()
     #expect(store.snapshot.outcome == .purchased)
     #expect(store.snapshot.ownership == .owned)
+    #expect(!finishing.ids.isEmpty)
     let reopened = PackagePurchases(productID: productID)
     defer { reopened.stopObserving() }
     await reopened.refresh()
@@ -230,7 +317,8 @@ struct PackagePurchasesTests {
   @Test func unverifiedPurchaseIsNotFinishedOrUnlocked() async throws {
     let session = try await session()
     defer { session.clearTransactions() }
-    let store = PackagePurchases(productID: productID)
+    let finishing = TransactionFinishingProbe()
+    let store = PackagePurchases(productID: productID, finishTransaction: finishing.finish)
     defer { store.stopObserving() }
     await store.refresh()
     try await session.setSimulatedError(.verification(.invalidSignature), forAPI: StoreKitVerificationAPI())
@@ -240,27 +328,10 @@ struct PackagePurchasesTests {
     #expect(store.snapshot.ownership == .notOwned)
     let purchases = session.allTransactions().filter { $0.productIdentifier == productID }
     #expect(purchases.count == 1)
-    let purchase = try #require(purchases.first)
-
-    // Fault injection is process-wide: stop the app observer before removing it,
-    // then inspect persistence without also injecting a failure into that query.
-    // Clearing the verification error must not clear or finish the transaction.
+    // Observe the app's finish boundary, not a second StoreKit query after
+    // changing process-wide verification faults (runtime/cache dependent).
+    #expect(finishing.ids.isEmpty)
     store.stopObserving()
-    try await session.setSimulatedError(nil, forAPI: StoreKitVerificationAPI())
-    var unfinishedIDs = Set<UInt64>()
-    do {
-      try await waitUntil("Unverified purchase did not remain unfinished") {
-        unfinishedIDs = []
-        for await result in Transaction.unfinished {
-          unfinishedIDs.insert(result.unsafePayloadValue.id)
-        }
-        return unfinishedIDs.contains(UInt64(purchase.identifier))
-      }
-    } catch {
-      Issue.record("Unfinished fixture transactions: \(unfinishedIDs.count); expected purchase present: \(unfinishedIDs.contains(UInt64(purchase.identifier)))")
-      throw error
-    }
-    #expect(unfinishedIDs == [UInt64(purchase.identifier)])
     #expect(store.snapshot.outcome == .unverified)
     #expect(store.snapshot.ownership == .notOwned)
   }
@@ -299,3 +370,24 @@ struct PackagePurchasesTests {
 }
 
 private final class BundleMarker: NSObject {}
+
+@MainActor private final class EntitlementQueryGate {
+  var enabled = false
+  var held: CheckedContinuation<Void, Never>?
+}
+
+@MainActor private final class TransactionFinishingProbe {
+  var ids = Set<UInt64>()
+  func finish(_ transaction: Transaction) async {
+    ids.insert(transaction.id)
+    await transaction.finish()
+  }
+}
+
+@MainActor private final class ConcurrentEntitlementGate {
+  var secondCallerStarted = false
+  var waiters: [CheckedContinuation<Void, Never>] = []
+  func wait() async { await withCheckedContinuation { waiters.append($0) } }
+  func releaseFirst() { if !waiters.isEmpty { waiters.removeFirst().resume() } }
+  func releaseAll() { while !waiters.isEmpty { releaseFirst() } }
+}

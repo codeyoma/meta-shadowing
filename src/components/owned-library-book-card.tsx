@@ -34,9 +34,10 @@ function IconControl({ title, icon, disabled, tone = 'primary', onPress }: {
 }
 
 export function OwnedLibraryBookCard({ title, sentences, chapters, completed, editing, installed, busy,
-  storage, storageFailed, download, onStudy, onDownload, onCancel, onRemove, onRetryStorage }: {
+  storage, storageFailed, download, onStudy, onDownload, onCancel, onRemove, onRetryStorage, accessBlocked = false }: {
   title: string; sentences: number; chapters: number | null; completed: number | null; editing: boolean;
   installed: boolean; busy: boolean;
+  accessBlocked?: boolean;
   storage: { bytes: number; installed: boolean; busy: boolean } | null; storageFailed: boolean;
   download?: DownloadPresentation | null; onStudy(): void; onDownload(): void; onCancel?(): void; onRemove(): void;
   onRetryStorage(): void;
@@ -74,9 +75,9 @@ export function OwnedLibraryBookCard({ title, sentences, chapters, completed, ed
             { text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: onRemove },
           ])} />
         : action === 'study'
-        ? <IconControl title="학습하기" icon="play.fill" disabled={!actions.canStudy} onPress={onStudy} />
+        ? <IconControl title="학습하기" icon="play.fill" disabled={accessBlocked || !actions.canStudy} onPress={onStudy} />
         : <IconControl title="다운로드" icon="square.and.arrow.down" tone="plain"
-          disabled={!actions.canDownload || !!download} onPress={onDownload} />}
+          disabled={accessBlocked || !actions.canDownload || !!download} onPress={onDownload} />}
       </LibraryDownloadAction>
     </Card>
   </View>;

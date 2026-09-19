@@ -1,6 +1,7 @@
 import type { StoreSnapshot } from '../../modules/package-store/src/PackageStore.types';
 import type { DeliveryStatus } from '../../modules/package-delivery';
 import { purchasePresentation } from './package-purchase';
+import { paidAction } from './paid-package';
 
 export function sampleLibraryEntry() {
   return { section: 'owned' as const, badge: '샘플' as const, receiptOwned: false };
@@ -12,20 +13,22 @@ export function minimumBookXp(sentences: number): number | null {
   return Number.isSafeInteger(sentences) && sentences > 0 && Number.isSafeInteger(xp) ? xp : null;
 }
 
-export function paidLibraryEntry(snapshot: StoreSnapshot) {
+export function paidLibraryEntry(snapshot: StoreSnapshot, material?: {configured:boolean;authorized:boolean;installed:boolean}) {
   const purchase = purchasePresentation(snapshot);
   const owned = snapshot.ownership === 'owned';
   const uncertain = snapshot.ownership === 'unknown' || snapshot.entitlementIssue !== 'none'
     || snapshot.outcome === 'unverified';
   const failed = snapshot.catalogIssue === 'failed' || snapshot.outcome === 'failed';
+  const action = material ? paidAction({...material, ownership:snapshot.ownership}) : 'unavailable';
   return {
     section: owned ? 'owned' as const : 'store' as const,
     title: snapshot.product?.title ?? purchase.title,
     price: snapshot.product?.price ?? '가격 확인 불가',
     canPurchase: purchase.canPurchase,
-    status: owned ? '학습 자료 준비 중' : purchase.status,
-    canStudy: false,
-    canDownload: false,
+    status: owned ? action === 'study' ? '학습 준비 완료' : action === 'download' ? '다운로드 가능'
+      : action === 'verify' ? '구매 내역 확인 필요' : '학습 자료 준비 중' : purchase.status,
+    canStudy: action === 'study',
+    canDownload: action === 'download',
     canRetry: !snapshot.busy && !owned && (!snapshot.product || uncertain || failed
       || snapshot.catalogIssue === 'unavailable'),
   };

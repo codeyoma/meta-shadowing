@@ -34,6 +34,8 @@ import { createCycleHaptics } from '@/core/cycle-haptics';
 import { XpGain, type XpGainEvent } from '@/components/xp-gain';
 import { completedUnitCount } from '@/core/session-navigation';
 import { sentenceEntry } from '@/core/sentence-entry';
+import { isPaidDuo, paidAccessSource, mayUsePackage } from '@/native/paid-package';
+import { PaidLearningAccess } from '@/core/paid-learning-access';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
@@ -53,11 +55,14 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const c = usePalette();
   const insets = useSafeAreaInsets();
   const engine = useRef<Player | null>(null);
+  const paidGuard = useRef<PaidLearningAccess | null>(null);
   const opened = useRef(false);
   const [state, setState] = useState<Session | null>(null);
   const [units, setUnits] = useState<LearningUnit[]>([]);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [accessReady, setAccessReady] = useState(!isPaidDuo(pack));
   const [error, setError] = useState<'save' | 'audio' | null>(null);
   const [duration, setDuration] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -72,6 +77,16 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const acting = useRef(false);
   useFocusEffect(useCallback(() => {
     let active = true;
+    setState(null);
+    setAccessReady(!isPaidDuo(pack));
+    const access = isPaidDuo(pack) ? new PaidLearningAccess(paidAccessSource, () => {
+      sentenceEntry.cancel(); engine.current?.pause();
+      if (active) { setAccessDenied(true); setCelebrating(false); setXpGain(null); }
+    }, allowed => {
+      if (active) { setAccessReady(allowed); if (allowed) setAccessDenied(false); }
+    }) : null;
+    paidGuard.current = access;
+    const permitted = () => active && mayUsePackage(pack) && (!access || access.allowed());
     prepareLearningHaptics();
     setMotionActive(AppState.currentState === 'active');
     let shown: string | null = null;
@@ -80,13 +95,13 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     let removeGuard: (() => void) | undefined;
     let interrupted = AppState.currentState !== 'active';
     const interruption = AppState.addEventListener('change', next => {
-      if (next !== 'active') { interrupted = true; sentenceEntry.cancel(); }
+      if (next !== 'active') { interrupted = true; sentenceEntry.cancel(); access?.suspend(); }
     });
     const initialize = async () => {
       try {
-        if (!pack.owned || !await isInstalled(pack)) { if (active) setUnavailable(true); return; }
+        if ((access && !await access.enter()) || !await isInstalled(pack) || !permitted()) { if (active) setUnavailable(true); return; }
         const bypass = await testStageAccess();
-        if (!active || !getProgressSync().authorized(profile.authority, profile.id)) return;
+        if (!permitted() || !getProgressSync().authorized(profile.authority, profile.id)) return;
         const context = new LearningContext(pack, getJournal());
         const predecessor = stage - 1;
         const records = isPlayableStage(predecessor) ? [{ stage: predecessor, count: context.completions(predecessor), session: null }] : [];
@@ -134,7 +149,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
             Alert.alert(player.error === 'save' ? '학습을 저장하지 못했어요' : '음성을 재생할 수 없어요',
               player.error === 'save' ? '학습을 잠시 멈췄어요. 저장 공간을 확인하고 다시 시도해 주세요.' : '학습 위치는 유지됩니다. 다시 시도하거나 레슨을 재설치해 주세요.',
               [{ text: '나중에', style: 'cancel' }, { text: '다시 시도', onPress: () => {
-                if (!active || engine.current !== player || AppState.currentState !== 'active') return;
+                if (!permitted() || engine.current !== player || AppState.currentState !== 'active') return;
                 shown = null;
                 if (player.error === 'save') player.retrySave();
                 else if (player.error === 'audio') {
@@ -157,7 +172,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         appState = AppState.addEventListener('change', next => {
           setMotionActive(next === 'active');
           if (next !== 'active') { stopLearningHaptics(); setCelebrating(false); setXpGain(null); player.pause(); }
-          else prepareLearningHaptics();
+          else { prepareLearningHaptics(); if (access) void access.enter(); }
         });
         const selectedEntry = sentenceEntry.consume({ profile: `${profile.id}:${profile.authority}`, packageKey: pack.packageKey, stage, runId: initial.runId, phrase: initial.phrase });
         if (!interrupted && (selectedEntry || (firstEntry && !profile.suppressEntry)) && AppState.currentState === 'active') {
@@ -168,21 +183,23 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       } catch { if (active) { setUnavailable(true); Alert.alert('학습을 열 수 없어요', '기록을 초기화하지 않았어요. 저장 공간과 레슨 설치 상태를 확인해 주세요.'); } }
     };
     void initialize();
-    return () => { active = false; interruption.remove(); sentenceEntry.cancel(); stopLearningHaptics(); setMotionActive(false); setCelebrating(false); setXpGain(null); gainOrigin.current = null; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
+    return () => { active = false; access?.dispose(); interruption.remove(); sentenceEntry.cancel(); stopLearningHaptics(); setMotionActive(false); setCelebrating(false); setXpGain(null); gainOrigin.current = null; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
   }, [stage, pack, lesson, profile.id, profile.authority, profile.suppressEntry]));
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = (option?: 'rate') => {
+    if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
     if (stage && engine.current && engine.current.error !== 'save' && getProgressSync().authorized(profile.authority, profile.id)) router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, run: engine.current.state.runId, profile: profile.id, authority: profile.authority, ...(option ? { option } : {}) } });
   };
   const openInfo = (kind: 'guide' | 'analysis') => {
+    if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
     if (!stage || !engine.current || engine.current.error === 'save' || !getProgressSync().authorized(profile.authority, profile.id)) return;
     router.push({ pathname: '/player-info', params: { kind, stage, package: pack.packageKey, phrase: engine.current.state.phrase, authority: profile.authority } });
   };
   async function act(point: ControlPressPoint, repeat = false) {
     const player = engine.current;
-    if (!player || acting.current || !getProgressSync().authorized(profile.authority, profile.id)) return;
+    if (!player || unavailable || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || acting.current || !getProgressSync().authorized(profile.authority, profile.id)) return;
     acting.current = true; setBusy(true);
     const action = mainPlayerAction(player.state, player.error);
     gainOrigin.current = action === 'confirm' || action === 'next'
@@ -196,6 +213,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         case 'resume': tapFeedback(); await player.resume(); break;
         case 'confirm':
           if (!player.state.running) await player.resume();
+          if (!mayUsePackage(pack)) {player.pause();return;}
           await player.confirm(); break;
         case 'next': await player.choose('next'); break;
         case 'leave': tapFeedback(); leave(); break;
@@ -213,7 +231,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       header: () => <PlayerHeaderProgress onOptions={() => openOptions()} current={state ? state.phrase + 1 : 0}
         total={state?.phraseCount ?? 0} unitLabel={unitLabel}
         completed={state ? completedUnitCount(state) : 0}>
-      {state && !unavailable &&
+      {state && accessReady && !unavailable && !accessDenied &&
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={`메타쉐도잉 레벨 ${Math.ceil(state.stage / 2)}, 학습 가이드 열기`} onPress={() => openInfo('guide')}
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
@@ -230,7 +248,9 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         </View>}
       </PlayerHeaderProgress> }} />
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, gap: 20 }}>
-      {unavailable ? <Card><Label>학습을 시작할 수 없어요.</Label><ActionButton title="레슨으로" onPress={leave} /></Card> : !state ? <Label muted>레슨을 여는 중…</Label> : <>
+      {unavailable || accessDenied ? <Card><Label>구매 내역과 레슨 설치 상태를 확인해 주세요. 학습 기록은 유지돼요.</Label>
+        {error === 'save' && <ActionButton title="기록 저장 다시 시도" onPress={() => engine.current?.retrySave()} />}
+        <ActionButton title="레슨으로" onPress={leave} /></Card> : !state || !accessReady ? <Label muted>레슨을 여는 중…</Label> : <>
         <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 16 }}>
           <Animated.View key={`${state.runId}:${state.phrase}:${state.phase === 'complete'}`} entering={CONTENT_ENTER}>
           {state.phase === 'complete'
@@ -245,7 +265,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         </View>
       </>}
     </ScrollView>
-    {state && !unavailable && <View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 12,
+    {state && accessReady && !unavailable && !accessDenied && <View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 12,
       backgroundColor: c.background, paddingBottom: Math.max(insets.bottom, 14) }}>
       {isFirstWordStage(stage) && state.phase !== 'complete' && <Pressable feedback={false}
         accessibilityRole="button" accessibilityLabel={revealed ? '자막 숨기기' : '자막 보기'} accessibilityState={{ selected: revealed, expanded: revealed }}

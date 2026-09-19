@@ -6,8 +6,9 @@ enum LibraryMaterial {
   static let bundled = "morning-notes-v1"
   static let hosted = "hosted-morning-notes-v1"
   static let freeDuo = "duo-33-free-test-v1"
+  static let paidDuo = "duo-33-v1"
   static func validate(_ key: String) throws {
-    guard key == bundled || key == hosted || key == freeDuo else { throw DeliveryError.invalidPackage }
+    guard [bundled, hosted, freeDuo, paidDuo].contains(key) else { throw DeliveryError.invalidPackage }
   }
 }
 

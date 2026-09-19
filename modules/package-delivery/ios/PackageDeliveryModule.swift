@@ -1,8 +1,39 @@
 import ExpoModulesCore
 import Foundation
 import BackgroundAssets
+import PackageStore
 
 public final class PackageDeliveryModule: Module {
+  private let accessObserver = PaidAccessObserver()
+  private static let paidDownload = PackageDownload(installation: installation,
+    transport: paidAssetID().map { AppleAssetDelivery(assetPackID: $0) }, purgeCache: {
+      guard let id = paidAssetID() else { throw DeliveryError.unavailable }
+      try await AssetPackManager.shared.remove(assetPackWithID: id)
+    })
+
+  private static func paidAssetID() -> String? {
+    let info = Bundle.main.infoDictionary ?? [:]
+    guard let id = info["PaidDuoAssetPackID"] as? String,
+      id.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", options: .regularExpression) != nil,
+      ![LibraryMaterial.freeDuo, "delivery-diagnostic-v1", info["SampleAssetPackID"] as? String ?? ""].contains(id),
+      let group = info["BAAppGroupID"] as? String, !group.isEmpty else { return nil }
+    return id
+  }
+  private static func paidDescriptor() throws -> DeliveryPackage {
+    guard paidAssetID() != nil,
+      let json = Bundle.main.object(forInfoDictionaryKey: "PaidDuoDescriptor") as? String,
+      let package = try? JSONDecoder().decode(DeliveryPackage.self, from: Data(json.utf8)),
+      package.key == LibraryMaterial.paidDuo else { throw DeliveryError.unavailable }
+    return package
+  }
+  private static func paidCoordinator() async -> PaidPackageDownload {
+    let lease = await PackageAccess.shared.lease
+    return PaidPackageDownload(download: paidDownload,
+      authorize: {
+        let snapshot = await PackageAccess.shared.refresh()
+        return (snapshot.revision, snapshot.allowed)
+      }, publish: { revision, operation in try lease.withAuthorization(revision: revision, operation) })
+  }
   private static let diagnostics: DeliveryDiagnostics? = {
     let info = Bundle.main.infoDictionary ?? [:]
     guard info["DeliveryDiagnosticsEnabled"] as? Bool == true,
@@ -70,7 +101,48 @@ public final class PackageDeliveryModule: Module {
 
   public func definition() -> ModuleDefinition {
     let download = Self.sharedDownload
+    let accessObserver = accessObserver
+    // Expo's event emitter crosses to JavaScriptActor internally. Only this weak
+    // identity crosses isolation; all observer lifetime state belongs to its actor.
+    nonisolated(unsafe) weak let emitter = self
     Name("PackageDelivery")
+    Events("onPaidDuoAccess")
+    OnCreate { Task { @MainActor in
+      accessObserver.start { snapshot in
+        emitter?.sendEvent("onPaidDuoAccess", ["revision": snapshot.revision, "allowed": snapshot.allowed])
+        if !snapshot.allowed { Task { await Self.paidDownload.cancel() } }
+      }
+    } }
+    OnDestroy { Task { @MainActor in accessObserver.stop() } }
+    Constant("paidDuoManifest") { () -> String? in
+      guard (try? Self.paidDescriptor()) != nil else { return nil }
+      return Bundle.main.object(forInfoDictionaryKey: "PaidDuoManifest") as? String
+    }
+    AsyncFunction("paidDuoAccess") { () async -> [String: Any] in
+      let value = await PackageAccess.shared.refresh()
+      return ["revision": value.revision, "allowed": value.allowed]
+    }
+    AsyncFunction("paidDuoStatus") { () async throws -> [String: Any] in
+      do {
+        let value = try await Self.paidCoordinator().status(Self.paidDescriptor())
+        return ["phase": value.phase, "progress": value.progress]
+      } catch { throw Self.sanitize(error) }
+    }
+    AsyncFunction("paidDuoStart") { () async throws in
+      do { try await Self.paidCoordinator().start(Self.paidDescriptor()) }
+      catch { throw Self.sanitize(error) }
+    }
+    AsyncFunction("paidDuoCancel") { () async in await Self.paidDownload.cancel() }
+    AsyncFunction("paidDuoStorage") { () async throws -> [String: Any] in
+      do {
+        let value = try await Self.paidDownload.storage(Self.paidDescriptor())
+        return ["bytes": value.bytes, "installed": value.installed, "busy": value.busy]
+      } catch { throw Self.sanitize(error) }
+    }
+    AsyncFunction("paidDuoRemove") { () async throws -> [String: Bool] in
+      do { return ["cacheCleared": try await Self.paidDownload.remove(Self.paidDescriptor())] }
+      catch { throw Self.sanitize(error) }
+    }
     Constant("freeDuoManifest") { () -> String? in
       guard (try? Self.freeDuoDescriptor()) != nil else { return nil }
       return Bundle.main.object(forInfoDictionaryKey: "FreeDuoManifest") as? String
@@ -177,7 +249,24 @@ public final class PackageDeliveryModule: Module {
   private static func sanitize(_ error: Error) -> NSError {
     let code = if error is CancellationError { "cancelled" }
       else if let known = error as? DeliveryError { known.rawValue }
+      else if (error as? CocoaError)?.code == .fileWriteOutOfSpace { "storageFull" }
+      else if (error as? CocoaError)?.code == .fileWriteNoPermission { "writeDenied" }
       else { "failed" }
     return NSError(domain: "PackageDelivery", code: 1, userInfo: [NSLocalizedDescriptionKey: "package-delivery-\(code)"])
+  }
+}
+
+@MainActor private final class PaidAccessObserver {
+  private var subscription: UUID?
+  private var destroyed = false
+  nonisolated init() {}
+  func start(_ changed: @escaping @MainActor (PackageAccessSnapshot) -> Void) {
+    guard !destroyed, subscription == nil else { return }
+    subscription = PackageAccess.shared.subscribe(changed)
+  }
+  func stop() {
+    destroyed = true
+    if let subscription { PackageAccess.shared.unsubscribe(subscription) }
+    subscription = nil
   }
 }
