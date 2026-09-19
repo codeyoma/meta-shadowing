@@ -2,7 +2,9 @@
 
 ## Scope and verdict
 
-Local acceptance coverage, based on `dev` at `dec5520`. **#52 is not complete.**
+Local acceptance coverage, based on `dev` at `dec5520`. **Physical-device and
+live-service acceptance remains incomplete and is now tracked in #61.** #52 was
+closed to consolidate the backlog; its closure does not mean those checks passed.
 The purchased-package journey still requires an active paid agreement, a working
 sandbox product, the #47 entitlement-to-package integration, and physical-device
 TestFlight/CloudKit evidence. A free sample is not evidence of paid access.
@@ -140,8 +142,8 @@ UI was added. This is not a VoiceOver or large-text interaction pass.
    owner's storage or delete their app/records just to force a failure. Use a
    second approved device for stale offline learning and account isolation.
 6. Observe representative network activity and perform VoiceOver/large-text
-   checks on purchase, progress, retry, restore and deletion controls. Keep #52
-   open until these results exist. None of this authorizes a public release.
+   checks on purchase, progress, retry, restore and deletion controls. Record
+   these outstanding results in #61. None of this authorizes a public release.
 
 ## Review
 
@@ -151,4 +153,4 @@ UI was added. This is not a VoiceOver or large-text interaction pass.
   the fix; focused tests and the full `npm run check` passed again afterward.
 - **Spec:** no blocking findings against the owner-approved local-automation
   scope. Native reproduction commands were added. Full #52 physical-device and
-  real-service acceptance remains pending as shown in the matrix.
+  real-service acceptance remains pending in #61 as shown in the matrix.
