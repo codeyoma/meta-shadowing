@@ -18,7 +18,7 @@ const compiled = ts.transpileModule(`module.exports = (${returned.getText(source
 type Element = React.ReactElement<Record<string, unknown>>;
 const require = createRequire(import.meta.url);
 
-function layout() {
+function layout(accessReady = true) {
   const actions: string[] = [];
   const module = { exports: {} as Element };
   runInNewContext(compiled, {
@@ -28,7 +28,7 @@ function layout() {
     Animated: { View: 'AnimatedView' }, SpeechContent: 'SpeechContent',
     CycleTimeline: 'CycleTimeline', PlayerControls: 'PlayerControls',
     state: { stage: 9, rate: 1.5, phrase: 1, phraseCount: 6, phase: 'listening', runId: 'test' },
-    stage: 9, unavailable: false, unitLabel: '학습 묶음', presented: [], speechView: 'list',
+    stage: 9, unavailable: false, accessReady, unitLabel: '학습 묶음', presented: [], speechView: 'list',
     c: {}, insets: { bottom: 0 }, duration: 0, motionActive: false, error: null,
     busy: false, xpGain: null, celebrating: false, CONTENT_ENTER: undefined,
     isFirstWordStage: () => false, completedUnitCount: () => 0,
@@ -59,6 +59,15 @@ test('all three learning navigation controls stay in the fixed header, outside t
     (button.props.onPress as () => void)();
   }
   assert.deepEqual(actions, ['guide', 'rate', 'analysis']);
+});
+
+test('pending paid reauthorization hides existing sentences, playback and navigation controls', () => {
+  const nodes = descendants(layout(false).root);
+  assert.equal(nodes.some(node => node.type === 'SpeechContent' || node.type === 'PlayerControls'), false);
+  const stack = nodes.find(node => node.type === 'Screen')!;
+  const header = (stack.props.options as { header(): Element }).header();
+  assert.equal(descendants(header).filter(node => node.type === 'Pressable').length, 0);
+  assert.ok(nodes.some(node => node.type === 'Label' && node.props.children === '레슨을 여는 중…'));
 });
 
 test('player updates clear subtitle reveal when leaving a unit, even when later returning to it', () => {

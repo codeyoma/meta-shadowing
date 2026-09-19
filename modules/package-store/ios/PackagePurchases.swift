@@ -24,13 +24,28 @@ struct StoreSnapshot: Codable {
 @MainActor
 final class PackagePurchases {
   private let productID: String
+  private let currentEntitlements: @MainActor () async -> [VerificationResult<Transaction>]
+  private let synchronize: @MainActor () async throws -> Void
   private var product: Product?
   private var observer: Task<Void, Never>?
   private var entitlementRevision = 0
   var onChange: ((StoreSnapshot) -> Void)?
+  var accessChange: ((StoreSnapshot) -> Void)?
   private(set) var snapshot = StoreSnapshot()
 
-  init(productID: String) { self.productID = productID }
+  init(
+    productID: String,
+    currentEntitlements: @escaping @MainActor () async -> [VerificationResult<Transaction>] = {
+      var results: [VerificationResult<Transaction>] = []
+      for await result in Transaction.currentEntitlements { results.append(result) }
+      return results
+    },
+    synchronize: @escaping @MainActor () async throws -> Void = { try await AppStore.sync() }
+  ) {
+    self.productID = productID
+    self.currentEntitlements = currentEntitlements
+    self.synchronize = synchronize
+  }
 
   func startObserving() {
     guard observer == nil else { return }
@@ -50,14 +65,19 @@ final class PackagePurchases {
     if case .unverified(let transaction, _) = result {
       // Untrusted metadata may exclude an unrelated result, never grant ownership.
       guard transaction.productID == productID, transaction.productType == .nonConsumable else { return }
-      entitlementRevision += 1
-      snapshot.entitlementIssue = .unverified
-      snapshot.outcome = .unverified
+      invalidateEntitlements(.unverified)
       return
     }
     guard case .verified(let transaction) = result,
           transaction.productID == productID, transaction.productType == .nonConsumable else { return }
     await applyVerified(transaction)
+  }
+
+  private func invalidateEntitlements(_ issue: StoreOutcome) {
+    // Queries started before this failure must not republish their older authority.
+    entitlementRevision += 1
+    snapshot.entitlementIssue = issue
+    snapshot.outcome = issue
   }
 
   private func applyVerified(_ transaction: Transaction) async {
@@ -66,6 +86,7 @@ final class PackagePurchases {
     snapshot.ownership = transaction.revocationDate == nil ? .owned : .notOwned
     snapshot.outcome = transaction.revocationDate == nil ? .purchased : .none
     // Setting ownership is idempotent; no XP, history or download side effects.
+    publish()
     await transaction.finish()
   }
 
@@ -82,8 +103,7 @@ final class PackagePurchases {
       case .success(let result):
         guard case .verified(let transaction) = result,
               transaction.productID == productID, transaction.productType == .nonConsumable else {
-          snapshot.outcome = .unverified
-          snapshot.entitlementIssue = .unverified
+          invalidateEntitlements(.unverified)
           return
         }
         await applyVerified(transaction)
@@ -121,20 +141,26 @@ final class PackagePurchases {
     defer { snapshot.busy = false; publish() }
     startObserving()
     do {
-      try await AppStore.sync()
+      try await synchronize()
       await refreshEntitlements()
       snapshot.outcome = snapshot.entitlementIssue == .unverified ? .unverified : .restored
     } catch {
-      snapshot.outcome = .failed
-      snapshot.entitlementIssue = .failed
+      invalidateEntitlements(.failed)
     }
   }
 
+  func refreshAccess() async {
+    startObserving()
+    await refreshEntitlements()
+    publish()
+  }
+
   private func refreshEntitlements(preserveOnAbsence: Bool = false) async {
+    entitlementRevision += 1
     let revision = entitlementRevision
     var ownership = PackageOwnership.notOwned
     var unverified = false
-    for await result in Transaction.currentEntitlements {
+    for result in await currentEntitlements() {
       if case .unverified(let transaction, _) = result,
          transaction.productID == productID, transaction.productType == .nonConsumable {
         unverified = true
@@ -154,6 +180,7 @@ final class PackagePurchases {
 
   private func publish() {
     snapshot.revision += 1
+    accessChange?(snapshot)
     onChange?(snapshot)
   }
 }

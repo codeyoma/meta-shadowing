@@ -3,18 +3,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const plist = require('@expo/plist');
 const { configureFreeDuo } = require('../../scripts/free-duo.cjs');
+const { configurePaidDuo } = require('../../scripts/paid-duo.cjs');
 
 const targetName = 'SampleDownloader';
 
 module.exports = function withPackageDelivery(config) {
   const group = process.env.APPLE_ASSET_APP_GROUP?.trim();
   const assetPackID = process.env.APPLE_SAMPLE_ASSET_PACK_ID?.trim();
+  const hasDelivery = !!assetPackID || process.env.APPLE_PAID_DUO_ENABLED === '1' || process.env.APPLE_FREE_DUO_TEST === '1';
   const diagnostics = process.env.APPLE_DELIVERY_DIAGNOSTICS === '1';
   if (diagnostics && (!group || !assetPackID || assetPackID === 'delivery-diagnostic-v1')) {
     throw new Error('Diagnostics require separate configured sample delivery.');
   }
   config = withInfoPlist(config, mod => {
     configureFreeDuo(mod.modResults, process.env, mod.modRequest.projectRoot);
+    configurePaidDuo(mod.modResults, process.env, mod.modRequest.projectRoot);
     const manifest = require('../../assets/sample/manifest.json');
     const specification = require('../../assets/sample/delivery.json');
     mod.modResults.SampleDescriptor = JSON.stringify({ key: specification.key, files: [specification.metadata,
@@ -25,8 +28,10 @@ module.exports = function withPackageDelivery(config) {
     if ((previousGroup && previousGroup !== group) || (!group && mod.modResults.SampleAssetPackID)) {
       throw new Error('Apple delivery configuration changed. Regenerate with expo prebuild --clean --platform ios before building; do not use --no-clean.');
     }
-    if (group && assetPackID) {
-      Object.assign(mod.modResults, { BAAppGroupID: group, BAHasManagedAssetPacks: true, BAUsesAppleHosting: true, SampleAssetPackID: assetPackID });
+    if (group && hasDelivery) {
+      Object.assign(mod.modResults, { BAAppGroupID: group, BAHasManagedAssetPacks: true, BAUsesAppleHosting: true });
+      if (assetPackID) mod.modResults.SampleAssetPackID = assetPackID;
+      else delete mod.modResults.SampleAssetPackID;
     } else {
       for (const key of ['BAAppGroupID', 'BAHasManagedAssetPacks', 'BAUsesAppleHosting', 'SampleAssetPackID']) delete mod.modResults[key];
     }
@@ -43,11 +48,11 @@ module.exports = function withPackageDelivery(config) {
     }
     return mod;
   });
-  if (!group && !assetPackID) return config;
+  if (!group && !hasDelivery) return config;
   if (!group || !/^group\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(group) || group.length > 255) {
     throw new Error('Set APPLE_ASSET_APP_GROUP to the registered shared App Group.');
   }
-  if (!assetPackID || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(assetPackID)) {
+  if ((!assetPackID && !hasDelivery) || (assetPackID && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(assetPackID))) {
     throw new Error('Set APPLE_SAMPLE_ASSET_PACK_ID to the controlled sample asset-pack identifier.');
   }
   const bundle = config.ios?.bundleIdentifier;

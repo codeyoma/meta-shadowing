@@ -9,6 +9,54 @@ import Testing
 struct PackagePurchasesTests {
   let productID = "com.example.packagestore.book"
 
+  @Test func staleEntitlementQueryCannotUndoNewerRestoreFailure() async throws {
+    let session = try await session()
+    defer { session.clearTransactions() }
+    _ = try await buyProduct(session, identifier: productID)
+    var verifiedResults: [VerificationResult<Transaction>] = []
+    for await result in Transaction.currentEntitlements {
+      verifiedResults.append(result)
+    }
+    let gate = EntitlementQueryGate()
+    let results = verifiedResults
+    let store = PackagePurchases(productID: productID, currentEntitlements: {
+      if gate.enabled { await withCheckedContinuation { gate.held = $0 } }
+      return results
+    }, synchronize: { throw URLError(.notConnectedToInternet) })
+    defer { store.stopObserving() }
+    let access = PackageAccess(store: store)
+    #expect((await access.refresh()).allowed)
+    // Drain the initial real purchase update before holding a subsequent query.
+    try await waitUntil { store.snapshot.outcome == .purchased }
+    gate.enabled = true
+    let staleQuery = Task { await access.refresh() }
+    try await waitUntil { gate.held != nil }
+    await store.restore()
+    #expect(store.snapshot.entitlementIssue == .failed)
+    gate.held?.resume()
+    let result = await staleQuery.value
+    #expect(store.snapshot.entitlementIssue == .failed)
+    #expect(!result.allowed)
+  }
+
+  @Test func paidAccessUsesVerifiedLocalEntitlementAndRevokesOldLeases() async throws {
+    let session = try await session()
+    defer { session.clearTransactions() }
+    let store = PackagePurchases(productID: productID)
+    defer { store.stopObserving() }
+    let access = PackageAccess(store: store)
+    #expect(!(await access.refresh()).allowed)
+    let transaction = try await buyProduct(session, identifier: productID)
+    let allowed = await access.refresh()
+    #expect(allowed.allowed)
+    try access.lease.withAuthorization(revision: allowed.revision) {}
+    try await session.setSimulatedError(.generic(.networkError(URLError(.notConnectedToInternet))), forAPI: StoreKitLoadProductsAPI())
+    #expect((await access.refresh()).allowed)
+    try session.refundTransaction(identifier: UInt(transaction.id))
+    try await waitUntil { !(await access.refresh()).allowed }
+    #expect(throws: (any Error).self) { try access.lease.withAuthorization(revision: allowed.revision) {} }
+  }
+
   func session() async throws -> SKTestSession {
     let bundle = Bundle(for: BundleMarker.self)
     let url = try #require(bundle.url(forResource: "Books", withExtension: "storekit"))
@@ -299,3 +347,8 @@ struct PackagePurchasesTests {
 }
 
 private final class BundleMarker: NSObject {}
+
+@MainActor private final class EntitlementQueryGate {
+  var enabled = false
+  var held: CheckedContinuation<Void, Never>?
+}

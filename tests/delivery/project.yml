@@ -23,11 +23,14 @@ targets:
     platform: iOS
     sources:
       - Tests
+      - path: ../../modules/package-store/ios
+        excludes: ['*Module.swift', '*.podspec']
       - path: ../../modules/package-delivery/ios
         excludes: ['*Module.swift', '*.podspec']
     dependencies:
       - target: DeliveryTestHost
       - sdk: BackgroundAssets.framework
+      - sdk: StoreKit.framework
 schemes:
   PackageDeliveryTests:
     build:

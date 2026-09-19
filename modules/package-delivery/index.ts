@@ -9,6 +9,14 @@ export type DiagnosticStatus = DeliveryStatus & {
   observedProgress: number;
 };
 interface PackageDelivery {
+  readonly paidDuoManifest?: string | null;
+  paidDuoAccess?(): Promise<{revision:number;allowed:boolean}>;
+  paidDuoStatus?(): Promise<DeliveryStatus>;
+  paidDuoStart?(): Promise<void>;
+  paidDuoCancel?(): Promise<void>;
+  paidDuoStorage?(): Promise<{bytes:number;installed:boolean;busy:boolean}>;
+  paidDuoRemove?(): Promise<{cacheCleared:boolean}>;
+  addListener?(event:'onPaidDuoAccess', fn:(value:unknown)=>void): {remove():void};
   readonly freeDuoManifest?: string | null;
   freeDuoStatus(): Promise<DeliveryStatus>;
   freeDuoStart(): Promise<void>;

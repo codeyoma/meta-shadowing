@@ -11,12 +11,14 @@
     "typecheck": "tsc --noEmit",
     "test:build-settings": "EXPO_NO_DOTENV=1 node --test scripts/ios-build-settings.test.cjs",
     "test:native-headers": "node --test scripts/native-header-diagnostics.test.cjs",
-    "check": "npm run test && npm run test:build-settings && npm run test:free-duo && npm run typecheck",
+    "check": "npm run test && npm run test:build-settings && npm run test:free-duo && npm run test:paid-duo && npm run typecheck",
     "bundle:ios": "expo export --platform ios",
     "prepare:audio": "node scripts/prepare-test-audio.mjs",
     "package:apple-sample": "node scripts/package-apple-sample.mjs",
     "package:free-duo": "node scripts/package-free-duo.mjs",
-    "test:free-duo": "node --test scripts/free-duo.test.cjs"
+    "test:free-duo": "node --test scripts/free-duo.test.cjs",
+    "test:paid-duo": "node --test scripts/duo-archive.test.cjs scripts/paid-duo.test.cjs",
+    "package:paid-duo": "node scripts/package-paid-duo.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/nunito": "^0.4.2",

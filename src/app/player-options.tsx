@@ -22,6 +22,8 @@ import { isInstalled } from '@/native/package';
 import { testStageAccess } from '@/native/stage-access';
 import { canOpenStage } from '@/core/stage-overview';
 import type { Session } from '@/core/session';
+import { usePackageLearningAccess } from '@/components/use-package-learning-access';
+import { mayUsePackage } from '@/native/paid-package';
 
 export default function PlayerOptionsScreen() {
   const profile = useProgressProfile();
@@ -30,6 +32,7 @@ export default function PlayerOptionsScreen() {
   const { stage: param, package: key, option, run, profile: boundProfile, authority } = useLocalSearchParams<{ stage: string; package: string; option?: string; run?: string; profile?: string; authority?: string }>();
   const stage = playableStage(param);
   const pack = selectedPackage(key);
+  const access = usePackageLearningAccess(pack);
   const [rate, setRate] = useState<number | null>(null);
   const [revision, setRevision] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -37,9 +40,9 @@ export default function PlayerOptionsScreen() {
   const [checkpoint, setCheckpoint] = useState<Session | null>(null);
   const [selecting, setSelecting] = useState(false);
   const generation = useRef(0), pending = useRef(false);
-  const sections = useMemo(() => pack && checkpoint
-    ? sentenceSections(pack.manifest.phrases, new LearningContext(pack, getJournal()).units(checkpoint)) : [], [pack, checkpoint]);
-  const scopeValid = () => boundProfile === profile.id && Number(authority) === profile.authority && getProgressSync().authorized(profile.authority, profile.id);
+  const sections = useMemo(() => access && pack && checkpoint
+    ? sentenceSections(pack.manifest.phrases, new LearningContext(pack, getJournal()).units(checkpoint)) : [], [pack, checkpoint, access]);
+  const scopeValid = () => access && !!pack && mayUsePackage(pack) && boundProfile === profile.id && Number(authority) === profile.authority && getProgressSync().authorized(profile.authority, profile.id);
   useEffect(() => {
     const listener = AppState.addEventListener('change', next => {
       if (next !== 'active') { generation.current++; sentenceEntry.cancel(); }
@@ -53,7 +56,7 @@ export default function PlayerOptionsScreen() {
       const valid = saved?.runId === run ? saved : null;
       setCheckpoint(valid); setRate(valid?.rate ?? null);
     } catch { Alert.alert('학습 옵션을 열 수 없어요', '저장된 학습 기록을 확인해 주세요. 기록은 초기화하지 않았어요.'); }
-  }, [stage, pack, run, boundProfile, profile.id, profile.authority, profile.available, authority]);
+  }, [stage, pack, run, boundProfile, profile.id, profile.authority, profile.available, authority, access]);
   async function selectSentence(sourceIndex: number) {
     if (!stage || !pack || !pack.owned || !scopeValid() || pending.current) return;
     const currentGeneration = generation.current;
