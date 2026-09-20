@@ -2,6 +2,7 @@ import type { Database } from './journal';
 import { transition, type Session } from './session';
 import { unitProgress } from './session-navigation';
 import { MAX_XP } from './levels';
+import { isRevealStage } from './catalog';
 
 export type UnitCredit = { counts: number[]; sourceCount: number; groupSize: number; baseline: number; earned: number };
 // Legacy frontiers lost exact optional-cycle counts for earlier units. Fence
@@ -11,12 +12,12 @@ function sameCheckpoint(a: Session, b: Session): boolean {
   return (Object.keys(b) as (keyof Session)[]).every(key => key === 'unitProgress'
     ? !!a.unitProgress && !!b.unitProgress && a.unitProgress.length === b.unitProgress.length
       && b.unitProgress.every((unit, i) => unit.confirmed === a.unitProgress![i]!.confirmed && unit.planned === a.unitProgress![i]!.planned)
-    : a[key] === b[key]);
+    : key === 'reveal' ? a.reveal?.speed === b.reveal?.speed && a.reveal?.wpm === b.reveal?.wpm : a[key] === b[key]);
 }
 export function unitWeight(state: Session, phrase: number): number {
-  return state.version === 2 ? Math.min(state.groupSize, state.sourcePhraseCount - phrase * state.groupSize) : 1;
+  return isRevealStage(state.stage) ? 3 : state.version === 2 ? Math.min(state.groupSize, state.sourcePhraseCount - phrase * state.groupSize) : 1;
 }
-export function validUnitCredit(value: UnitCredit): boolean {
+export function validUnitCredit(value: UnitCredit, stage = 0): boolean {
   return !!value && Object.keys(value).sort().join(',') === 'baseline,counts,earned,groupSize,sourceCount'
     && Number.isSafeInteger(value.sourceCount) && value.sourceCount >= 1 && value.sourceCount <= 100000
     && [1, 2, 3, 4].includes(value.groupSize)
@@ -24,7 +25,7 @@ export function validUnitCredit(value: UnitCredit): boolean {
     && value.counts.every(n => Number.isSafeInteger(n) && n >= 0 && n <= MAX_OBSERVED_CYCLES)
     && Number.isSafeInteger(value.baseline) && value.baseline >= 0 && value.baseline <= MAX_XP
     && Number.isSafeInteger(value.earned) && value.earned >= 0 && value.earned <= MAX_XP - value.baseline
-    && value.earned <= value.counts.reduce((sum, n, i) => sum + n * Math.min(value.groupSize, value.sourceCount - i * value.groupSize), 0);
+    && value.earned <= value.counts.reduce((sum, n, i) => sum + n * Math.min(value.groupSize, value.sourceCount - i * value.groupSize) * (isRevealStage(stage) ? 3 : 1), 0);
 }
 export function recordUnitCredit(db: Database, key: string, next: Session, prior: Session | null,
   credited: number, locked: boolean, mayCredit: boolean, frontier?: { phrase: number; confirmed: number }): number {
@@ -34,7 +35,7 @@ export function recordUnitCredit(db: Database, key: string, next: Session, prior
     counts: unitProgress(base).map((unit, i) => Math.max(unit.confirmed, frontier ? i < frontier.phrase ? MAX_OBSERVED_CYCLES : i === frontier.phrase ? frontier.confirmed : 0 : 0)), sourceCount: next.version === 2 ? next.sourcePhraseCount : next.phraseCount,
     groupSize: next.version === 2 ? next.groupSize : 1, baseline: credited, earned: 0,
   };
-  if (!validUnitCredit(ledger) || ledger.sourceCount !== (next.version === 2 ? next.sourcePhraseCount : next.phraseCount)
+  if (!validUnitCredit(ledger, next.stage) || ledger.sourceCount !== (next.version === 2 ? next.sourcePhraseCount : next.phraseCount)
     || ledger.groupSize !== (next.version === 2 ? next.groupSize : 1) || ledger.baseline + ledger.earned !== credited) throw Error('Conflicting unit credit plan.');
   const observed = unitProgress(next);
   // An ordinary stale checkpoint may be resumed, but cannot close the run with

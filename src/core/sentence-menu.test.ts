@@ -23,3 +23,10 @@ test('sectioned books initially show headers while headerless passages remain vi
   const groups = sentenceSections([...phrases, { text: 'Goodbye.', translation: '잘 가요.' }], learningUnits([...phrases, { text: 'Goodbye.', translation: '잘 가요.' }], 1));
   assert.deepEqual([...initiallyCollapsedSections(groups)], [0, 1]);
 });
+
+test('opening all sentences expands the current unit section without expanding unrelated sections', () => {
+  const groups = sentenceSections(phrases, learningUnits(phrases, 1));
+  assert.deepEqual([...initiallyCollapsedSections(groups, 2)], [0]);
+  assert.deepEqual([...initiallyCollapsedSections(groups, 0)], [1]);
+  assert.deepEqual([...initiallyCollapsedSections(groups, -1)], [0, 1]);
+});

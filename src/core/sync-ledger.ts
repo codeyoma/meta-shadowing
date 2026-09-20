@@ -7,7 +7,8 @@ import { unitProgress } from './unit-progress';
 
 export type Stamp = string;
 export type CreditCandidate = { credited: number; counts: number[] };
-export type Confirmation = { unit: number; ordinal: number; day: string };
+// Omitted on historical receipts: old confirmations always retain their value.
+export type Confirmation = { unit: number; ordinal: number; day: string; multiplier?: 3 };
 export type SyncRun = {
   package: string; stage: number; run: string; language: string; book: string;
   sourceCount: number; groupSize: number; observed: number[];
@@ -111,7 +112,7 @@ export function seedLedger(tables: Record<Table, Row[]>, ledger: SyncLedger = { 
 export function creditTotal(run: SyncRun): number {
   const weight = (unit: number) => Math.min(run.groupSize, run.sourceCount - unit * run.groupSize);
   return Math.min(MAX_XP, run.candidates.reduce((best, candidate) => Math.max(best, candidate.credited + run.events.reduce((sum, event) =>
-    sum + (event.ordinal > candidate.counts[event.unit]! ? weight(event.unit) : 0), 0)), 0));
+    sum + (event.ordinal > candidate.counts[event.unit]! ? weight(event.unit) * (event.multiplier ?? 1) : 0), 0)), 0));
 }
 export function mergeRun(a: SyncRun, b: SyncRun): SyncRun {
   if (runKey(a) !== runKey(b) || a.language !== b.language || a.book !== b.book || a.observed.length !== b.observed.length
@@ -119,7 +120,8 @@ export function mergeRun(a: SyncRun, b: SyncRun): SyncRun {
   const events = new Map<string, Confirmation>();
   for (const event of [...a.events, ...b.events]) {
     const old = events.get(eventKey(event));
-    events.set(eventKey(event), old && old.day < event.day ? old : event);
+    events.set(eventKey(event), { ...event, day: old && old.day < event.day ? old.day : event.day,
+      ...(old?.multiplier === 3 || event.multiplier === 3 ? { multiplier: 3 as const } : {}) });
   }
   return { ...a, sourceCount: a.sourceCount || b.sourceCount, groupSize: a.groupSize || b.groupSize,
     observed: a.observed.map((count, i) => Math.max(count, b.observed[i]!)), candidates: stable([...a.candidates, ...b.candidates]), events: stable([...events.values()]) };

@@ -27,7 +27,8 @@ export function createCycleTable(db: Database) {
 }
 // Journal supplies a canonical next checkpoint; historical predecessors may
 // contain unrelated settings arrays, whose object identity is not learning proof.
-const same = (a: Session, b: Session) => (Object.keys(b) as (keyof Session)[]).every(key => a[key] === b[key]);
+const same = (a: Session, b: Session) => (Object.keys(b) as (keyof Session)[]).every(key => key === 'reveal'
+  ? a.reveal?.speed === b.reveal?.speed && a.reveal?.wpm === b.reveal?.wpm : a[key] === b[key]);
 const position = (a: { phrase: number; confirmed: number }, b: { phrase: number; confirmed: number }) =>
   a.phrase - b.phrase || a.confirmed - b.confirmed;
 

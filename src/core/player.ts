@@ -1,4 +1,5 @@
 import { transition, type Session } from './session';
+import { isRevealStage } from './catalog';
 
 export interface AudioPort {
   prepare(phrase: number, position: number, rate: number): Promise<void>;
@@ -31,7 +32,7 @@ export class Player {
   /** Stage entry replays only an already-finished, unconfirmed audio pass. */
   async enter() {
     if (this.disposed || this.preparing || this.state.running || this.error) return;
-    if (this.state.phase === 'speaking') {
+    if (this.state.phase === 'speaking' && !this.state.reveal) {
       this.state = { ...this.state, phase: 'ready', audioSeconds: 0, remainingMs: 0 };
       this.changed();
     }
@@ -111,7 +112,7 @@ export class Player {
     this.state = next;
     if (!this.persist()) return;
     this.changed();
-    if (this.state.phase === 'ready') await this.resume(type === 'next' ? 1000 : 0, false);
+    if (this.state.phase === 'ready') await this.resume(type === 'next' && !isRevealStage(this.state.stage) ? 1000 : 0, false);
   }
   retrySave() { this.error = null; this.persist(); this.changed(); }
   dispose() { this.pause(); this.disposed = true; this.audio.dispose(); }

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, ScrollView, View } from 'react-native';
 import { FeedbackPressable as Pressable } from '@/components/feedback-pressable';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -14,7 +14,9 @@ import { isInstalled } from '../native/package';
 import { readSettings } from '../native/settings';
 import { selectedPackage } from '@/native/catalog';
 import { LearningContext } from '@/core/learning-context';
-import { playableStage, isPlayableStage, isGroupedStage, isFirstWordStage, type PlayableStage } from '@/core/catalog';
+import { playableStage, isPlayableStage, isGroupedStage, isFirstWordStage, isRevealStage, type PlayableStage } from '@/core/catalog';
+import { revealPlayback, playerSpeed } from '@/core/word-reveal';
+import { WordRevealContent } from '@/components/word-reveal-content';
 import type { LearningUnit } from '@/core/learning-units';
 import { presentLearningUnits } from '@/core/learning-presentation';
 import { testStageAccess } from '@/native/stage-access';
@@ -66,6 +68,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const [error, setError] = useState<'save' | 'audio' | null>(null);
   const [duration, setDuration] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(true);
   const [speechView, setSpeechView] = useState<'bubble' | 'list'>('bubble');
   const [celebrating, setCelebrating] = useState(false);
   const [motionActive, setMotionActive] = useState(false);
@@ -77,7 +80,10 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const acting = useRef(false);
   useFocusEffect(useCallback(() => {
     let active = true;
-    setState(null);
+    // A drawer return keeps this scope's paused frame mounted while reloading
+    // its checkpoint. Fresh routes/profile changes already mount with no state.
+    setRefreshing(true);
+    setBusy(false);
     setAccessReady(!isPaidDuo(pack));
     const access = isPaidDuo(pack) ? new PaidLearningAccess(paidAccessSource, () => {
       sentenceEntry.cancel(); engine.current?.pause();
@@ -122,7 +128,9 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         const observeHaptics = createCycleHaptics(initial);
         const firstEntry = !opened.current;
         opened.current = true;
-        const audio = nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), runUnits.map(unit => unit.sourceIndices));
+        const audio = isRevealStage(stage)
+          ? revealPlayback(runUnits, initial, duration => engine.current?.audioEnded(duration))
+          : nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), runUnits.map(unit => unit.sourceIndices));
         const save = context.createWriter(initial);
         const player = new Player(initial, audio, s => {
           const earned = save(s);
@@ -166,7 +174,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
           player.pause();
           if (player.error === 'save') throw Error('progress-cloud-storage');
         });
-        acting.current = false; setBusy(false);
+        acting.current = false; setBusy(false); setRefreshing(false);
         setState({ ...initial });
         timer = setInterval(() => { if (AppState.currentState === 'active') player.tick(); }, 100);
         appState = AppState.addEventListener('change', next => {
@@ -186,20 +194,20 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     return () => { active = false; access?.dispose(); interruption.remove(); sentenceEntry.cancel(); stopLearningHaptics(); setMotionActive(false); setCelebrating(false); setXpGain(null); gainOrigin.current = null; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
   }, [stage, pack, lesson, profile.id, profile.authority, profile.suppressEntry]));
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
-  const openOptions = (option?: 'rate') => {
+  const openOptions = useCallback((option?: 'rate' | 'reveal') => {
     if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
     if (stage && engine.current && engine.current.error !== 'save' && getProgressSync().authorized(profile.authority, profile.id)) router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, run: engine.current.state.runId, profile: profile.id, authority: profile.authority, ...(option ? { option } : {}) } });
-  };
-  const openInfo = (kind: 'guide' | 'analysis') => {
+  }, [pack, unavailable, stage, profile.authority, profile.id]);
+  const openInfo = useCallback((kind: 'guide' | 'analysis') => {
     if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
     if (!stage || !engine.current || engine.current.error === 'save' || !getProgressSync().authorized(profile.authority, profile.id)) return;
     router.push({ pathname: '/player-info', params: { kind, stage, package: pack.packageKey, phrase: engine.current.state.phrase, authority: profile.authority } });
-  };
+  }, [pack, unavailable, stage, profile.authority, profile.id]);
   async function act(point: ControlPressPoint, repeat = false) {
     const player = engine.current;
-    if (!player || unavailable || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || acting.current || !getProgressSync().authorized(profile.authority, profile.id)) return;
+    if (!player || refreshing || unavailable || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || acting.current || !getProgressSync().authorized(profile.authority, profile.id)) return;
     acting.current = true; setBusy(true);
     const action = mainPlayerAction(player.state, player.error);
     gainOrigin.current = action === 'confirm' || action === 'next'
@@ -226,8 +234,9 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const revealed = unitKey !== null && revealedKey === unitKey;
   const unitLabel = isGroupedStage(stage) ? '학습 묶음' : '학습 구간';
   const presented = presentLearningUnits(units, stage, revealed && state ? state.phrase : null);
-  return <View style={{ flex: 1 }}>
-    <Stack.Screen options={{ title: '학습', headerBackVisible: false,
+  // A fresh header function on navigation rerenders can feed setOptions back
+  // into multiple mounted player routes. Change it only with its inputs.
+  const headerOptions = useMemo(() => ({ title: '학습', headerBackVisible: false,
       header: () => <PlayerHeaderProgress onOptions={() => openOptions()} current={state ? state.phrase + 1 : 0}
         total={state?.phraseCount ?? 0} unitLabel={unitLabel}
         completed={state ? completedUnitCount(state) : 0}>
@@ -237,16 +246,18 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
             <Icon name="graduationcap.fill" /><Label size={14} weight="700">Lv {Math.ceil(state.stage / 2)}</Label>
           </Pressable>
-          <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={`재생 속도 ${state.rate}배, 변경`} onPress={() => openOptions('rate')}
+          <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={playerSpeed(state).accessibilityLabel} onPress={() => openOptions(playerSpeed(state).option)}
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-            <Icon name="speedometer" /><Label size={14} weight="700">{state.rate}×</Label>
+            <Icon name="speedometer" /><Label size={14} weight="700">{playerSpeed(state).label}</Label>
           </Pressable>
           <Pressable feedback={false} accessibilityRole="button" accessibilityLabel="문장 분석 열기" onPress={() => openInfo('analysis')}
             style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="text.magnifyingglass" />
           </Pressable>
         </View>}
-      </PlayerHeaderProgress> }} />
+      </PlayerHeaderProgress> }), [state, unitLabel, accessReady, unavailable, accessDenied, openOptions, openInfo]);
+  return <View style={{ flex: 1 }}>
+    <Stack.Screen options={headerOptions} />
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, gap: 20 }}>
       {unavailable || accessDenied ? <Card><Label>구매 내역과 레슨 설치 상태를 확인해 주세요. 학습 기록은 유지돼요.</Label>
         {error === 'save' && <ActionButton title="기록 저장 다시 시도" onPress={() => engine.current?.retrySave()} />}
@@ -260,6 +271,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
                 {methodNames[Math.ceil(state.stage / 2) - 1]} 학습을 마쳤어요.</Label>
               <Label muted>{state.phraseCount}개 {unitLabel}을 내 목소리로 연습했어요.</Label>
             </Card>
+            : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} />
             : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} />}
           </Animated.View>
         </View>
@@ -276,9 +288,9 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         <Icon name={revealed ? 'eye.slash' : 'eye'} size={17} />
         <Label size={15} weight="700">{revealed ? '자막 숨기기' : '자막 보기'}</Label>
       </Pressable>}
-      {!unavailable && state.phase !== 'complete' && <CycleTimeline key={`${state.runId}:${state.phrase}`} state={state} duration={duration} animate={motionActive && !error} />}
+      {!isRevealStage(stage) && !unavailable && state.phase !== 'complete' && <CycleTimeline key={`${state.runId}:${state.phrase}`} state={state} duration={duration} animate={motionActive && !error} />}
       <View>
-        <PlayerControls action={mainPlayerAction(state, error)} repeat={canOfferRepeat(state, error)} busy={busy}
+        <PlayerControls action={mainPlayerAction(state, error)} repeat={canOfferRepeat(state, error)} busy={busy} blocked={refreshing}
           onMain={point => void act(point)} onRepeat={point => void act(point, true)} />
         {xpGain && motionActive && <XpGain key={xpGain.id} event={xpGain} onFinish={finishXpGain} />}
       </View>
