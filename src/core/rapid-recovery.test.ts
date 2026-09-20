@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { ProgressBackupStore, type BackupDatabase } from './progress-backup';
 import { createSession, transition } from './session';
 import { changeRevealSpeed } from './word-reveal';
+import { jumpToSourcePhrase } from './session-navigation';
 
 function store(native: DatabaseSync) {
   const db: BackupDatabase = {
@@ -16,6 +17,34 @@ function store(native: DatabaseSync) {
   };
   return new ProgressBackupStore(db, () => new Date('2026-09-20T12:00:00Z'));
 }
+
+test('out-of-order silent confirmations retain exactly one award per phrase and complete once', t => {
+  for (const pinned of [false, true]) {
+    const database = new DatabaseSync(':memory:');
+    t.after(() => database.close());
+    const source = store(database), identity = { book: 'sample', language: 'english' };
+    let state = createSession({ runId: 'out-of-order-xp', stage: 11, phraseCount: 4, rate: 1, mode: 'manual' });
+    source.journal.save('sample-v1', state, identity);
+    const save = pinned ? source.journal.createWriter('sample-v1', state, identity)
+      : (value: typeof state) => source.journal.save('sample-v1', value, identity);
+    for (const index of [1, 2, 0, 3]) {
+      state = jumpToSourcePhrase(state, index);
+      assert.equal(save(state), 0);
+      state = transition(transition(state, { type: 'resume' }), { type: 'audio-ended', durationSeconds: 1 });
+      assert.equal(save(state), 0);
+      state = transition(state, { type: 'next' });
+      assert.equal(save(state), 3);
+      assert.equal(save(state), 0);
+      if (index === 0) { assert.equal(state.phrase, 3); assert.equal(state.phase, 'ready'); }
+    }
+    assert.equal(source.journal.progress.summary('english').xp, 12);
+    assert.equal(source.journal.completions('sample-v1', 11), 1);
+    assert.equal(source.journal.load('sample-v1', 11, 4)!.phase, 'complete');
+    source.restoreBackup(source.exportBackup());
+    assert.equal(source.journal.progress.summary('english').xp, 12);
+    assert.equal(source.journal.completions('sample-v1', 11), 1);
+  }
+});
 
 test('silent stage disk reopen and backup restore retain S4 and partial word progress without duplicate XP', t => {
   const directory = mkdtempSync(join(tmpdir(), 'reveal-recovery-'));

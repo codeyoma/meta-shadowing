@@ -4,6 +4,39 @@ import { createSession, restoreSession, transition } from './session';
 import { playableStage } from './catalog';
 import { canOpenStage } from './stage-overview';
 import { mainPlayerAction, canOfferRepeat } from './player-presentation';
+import { jumpToSourcePhrase } from './session-navigation';
+
+test('silent confirmation skips completed phrases, searches forward first and wraps to earlier gaps', () => {
+  for (const stage of [11, 12, 13, 14, 15, 16] as const) {
+    for (const type of ['confirm', 'next'] as const) {
+      for (const scenario of [
+        { completed: [1, 2], current: 0, next: 3 },
+        { completed: [2], current: 1, next: 3 },
+        { completed: [1, 2], current: 3, next: 0 },
+      ]) {
+        let state = createSession({ runId: 'out-of-order', stage, phraseCount: 4, mode: 'manual', rate: 1 });
+        const finish = () => {
+          state = transition(transition(state, { type: 'resume' }), { type: 'audio-ended', durationSeconds: 1 });
+          state = transition(state, { type });
+        };
+        for (const phrase of scenario.completed) {
+          state = jumpToSourcePhrase(state, phrase);
+          finish();
+        }
+        state = jumpToSourcePhrase(state, scenario.current);
+        finish();
+        assert.equal(state.phrase, scenario.next, `${stage}/${type}: select the next unfinished phrase`);
+        assert.equal(state.phase, 'ready');
+        for (const index of [...scenario.completed, scenario.current]) assert.equal(state.unitProgress![index]!.confirmed, 1);
+        assert.deepEqual(restoreSession(JSON.stringify(state), 4, stage), state);
+        for (let remaining = 0; remaining < 4 && state.unitProgress!.some(unit => unit.confirmed < unit.planned); remaining++) finish();
+        assert.equal(state.phase, 'complete');
+        assert.deepEqual(state.unitProgress, Array.from({ length: 4 }, () => ({ confirmed: 1, planned: 1 })));
+        assert.equal(state.phrase, 3);
+      }
+    }
+  }
+});
 
 test('silent stages require one reveal and one confirmation per phrase, with no repeat', () => {
   for (const stage of [11, 12, 13, 14, 15, 16] as const) {

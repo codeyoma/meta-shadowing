@@ -100,6 +100,10 @@ function transitionCurrent(s: Session, action: Action): Session {
         const units = unitProgress(s);
         const gap = units.findIndex(unit => unit.confirmed < unit.planned);
         if (gap < 0) return { ...selectUnit(s, s.phraseCount - 1), phase: 'complete' };
+        if (isRevealStage(s.stage)) {
+          const nextGap = units.findIndex((unit, index) => index > s.phrase && unit.confirmed < unit.planned);
+          return selectUnit(s, nextGap < 0 ? gap : nextGap);
+        }
         return selectUnit(s, s.phrase + 1 < s.phraseCount ? s.phrase + 1 : gap);
       }
       return s.phrase + 1 === s.phraseCount
