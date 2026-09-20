@@ -7,7 +7,9 @@ import { LearningPreferenceSection, type LearningPreference } from '@/components
 import { SettingsRow, useSettingsColors } from '@/components/settings-row';
 import { LearningPreferenceMenu, learningPreferenceMenus } from '@/components/learning-preference-menu';
 import { readSettings, saveSettings, type Settings } from '@/native/settings';
-import { isPlayableStage, playableStage } from '@/core/catalog';
+import { isPlayableStage, playableStage, isRevealStage } from '@/core/catalog';
+import { changeRevealSpeed, type RevealSpeed } from '@/core/word-reveal';
+import { RevealSpeedControl } from '@/components/reveal-speed-control';
 import { changeSessionRate } from '@/core/session';
 import { getJournal } from '@/native/journal';
 import { selectedPackage } from '@/native/catalog';
@@ -36,7 +38,8 @@ export default function PlayerOptionsScreen() {
   const [rate, setRate] = useState<number | null>(null);
   const [revision, setRevision] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [selected, setSelected] = useState<LearningPreference | 'sentences' | null>(() => option === 'rate' ? 'rate' : null);
+  const [selected, setSelected] = useState<LearningPreference | 'sentences' | 'reveal' | null>(() =>
+    stage && isRevealStage(stage) && (option === 'rate' || option === 'reveal') ? 'reveal' : option === 'rate' ? 'rate' : null);
   const [checkpoint, setCheckpoint] = useState<Session | null>(null);
   const [selecting, setSelecting] = useState(false);
   const generation = useRef(0), pending = useRef(false);
@@ -107,8 +110,21 @@ export default function PlayerOptionsScreen() {
       Alert.alert('재생 속도를 저장하지 못했어요', '학습 위치는 유지됩니다. 저장 공간을 확인하고 다시 시도해 주세요.');
     }
   }
+  function changeSpeed(speed: RevealSpeed) {
+    if (!stage || !pack || !scopeValid()) return;
+    try {
+      const context = new LearningContext(pack, getJournal());
+      const saved = context.load(stage);
+      if (!saved || saved.runId !== run) throw Error('Missing checkpoint.');
+      const next = changeRevealSpeed(saved, speed, readSettings().crazyWpm);
+      context.save(next);
+      setCheckpoint(next);
+    } catch {
+      Alert.alert('스피킹 속도를 저장하지 못했어요', '학습 위치는 유지됩니다. 다시 시도해 주세요.');
+    }
+  }
   return <View style={{ flex: 1, backgroundColor: c.sheet }}>
-    <Stack.Screen options={{ title: selected === 'sentences' ? '전체 문장' : learningPreferenceMenus.find(menu => menu.option === selected)?.title ?? '학습 옵션',
+    <Stack.Screen options={{ title: selected === 'reveal' ? '스피킹 속도' : selected === 'sentences' ? '전체 문장' : learningPreferenceMenus.find(menu => menu.option === selected)?.title ?? '학습 옵션',
       headerLeft: selected ? () => <HeaderButton title="학습 옵션으로 돌아가기" icon="chevron.left" onPress={() => setSelected(null)} /> : undefined,
       headerTransparent: true, headerBlurEffect: 'none',
       headerStyle: { backgroundColor: 'transparent' }, headerTintColor: c.text,
@@ -122,7 +138,12 @@ export default function PlayerOptionsScreen() {
         {selected === null ? <><View style={{ borderRadius: 24, overflow: 'hidden' }}>
           <SettingsRow title="전체 문장" icon="list.bullet" iconColor="#007aff" disclosure disabled={!checkpoint}
             onPress={() => setSelected('sentences')} /></View>
-          <LearningPreferenceMenu onSelect={setSelected} disabled={!settings} rateDisabled={rate === null} /></>
+          <LearningPreferenceMenu onSelect={option => setSelected(stage && isRevealStage(stage) && option === 'rate' ? 'reveal' : option)}
+            silent={!!stage && isRevealStage(stage)} disabled={!settings} rateDisabled={rate === null} /></>
+          : selected === 'reveal' ? stage && isRevealStage(stage) && settings && checkpoint?.reveal && scopeValid()
+            && <><RevealSpeedControl reveal={checkpoint.reveal} speeds={settings.crazyWpm} onChange={changeSpeed} />
+              <LearningPreferenceSection key={`reveal-wpm-${revision}`} option="wpm"
+                settings={settings} onChange={changePreference} /></>
           : settings && <LearningPreferenceSection key={`${selected}-${revision}`} option={selected}
           settings={{ ...settings, rate: rate ?? settings.rate }} onChange={changePreference} />}
       </ScrollView>}

@@ -4,13 +4,50 @@ Fresh specification, not reused implementation. The approved reference is the
 latest legacy behavior at be3761f, including its amended confirmation rules;
 earlier planning documents can contain superseded behavior.
 
-## Current stage expansion — 2026-09-16
+## Current stage expansion — 2026-09-20
 
-The owner-approved implementation now enables stages 1–10. Stages 1–4 share
+The owner-approved implementation now enables stages 1–16. Stages 1–4 share
 the same manual subtitle-shadowing flow. Stages 5–6 retain full original audio
 but show only each sentence's first word while always displaying translations. Stages 7–8
 continuously play groups of original source files; stages 9–10 combine grouping
-with first-word hints. Stages 11–16 remain unavailable.
+with first-word hints. Stages 11–16 use silent word reveal as specified below.
+
+### Silent word reveal — stages 11–16
+
+- 11–12 reveal the target text, then Korean; 13–14 reveal Korean, then the
+  target text; 15–16 contain only Korean. One original source block is one unit.
+- Begin with all words hidden. Reveal one whitespace-delimited word every
+  `60 / WPM` seconds, preserving punctuation, whitespace and the full layout.
+  Revealed words remain visible. Korean uses space-delimited eojeol. The first
+  language stays visible while the second appears. No native audio is opened.
+- The center header speed action shows **S1–S4**, not an audio multiplier or
+  raw WPM. It opens a selector using the existing configurable four WPM values
+  (defaults 150/200/250/300). Fresh runs start at S1; a selected level and its
+  WPM remain fixed throughout that run, without automatic speed progression.
+- Changing speed requires a paused checkpoint and preserves partial-word
+  progress. Editing global WPM presets does not silently alter an existing run;
+  select a speed explicitly to apply its current preset to that run.
+- Each phrase has one reveal pass, without a cycle indicator or Repeat action.
+  Finishing the reveal unlocks manual confirmation, which grants 3 XP and moves
+  directly to the next unfinished phrase (or completes the stage). Timing alone
+  never grants XP or advances a phrase.
+- After confirmation, the next phrase's reveal clock starts without the audio
+  stages' one-second inter-phrase pause. Words retain the selected WPM cadence.
+- Historical confirmations keep their original XP. Completed units stay complete;
+  an unfinished legacy unit needs only one remaining pass. Newly earned reveal
+  receipts carry an explicit 3x multiplier so backup merging cannot retroactively
+  multiply older awards or award the same confirmation twice.
+- Pause/foreground/navigation reuse the player's durable checkpoint behavior.
+  The saved `reveal` metadata contains level and WPM; `audioSeconds` is the
+  elapsed **silent reveal timeline** for these stages, not an audio position.
+  Normal interruption retains partial-word timing. Completed reveal passes stay
+  visible on reentry, unlike the audio-stage replay-on-entry behavior.
+- Hidden words are excluded from the text accessibility label and selection.
+  The analysis placeholder respects the same reveal boundary. All-sentences
+  navigation remains an explicit separate reference/navigation surface.
+- Backups retain the new stage checkpoints and speed metadata. Older app
+  versions cannot read these newly supported stages: update all syncing devices.
+  Existing stages 1–10 and their checkpoints retain their original behavior.
 
 A learning unit is one original source block for stages 1–6 and a group of
 2, 3, or 4 blocks for stages 7–10 (default 2). Source blocks can contain dialogue
@@ -202,9 +239,10 @@ confirmation. The current owner-approved behavior requires explicit confirmation
 
 ## Language XP and streaks
 
-- Each explicitly confirmed cycle earns its original source-member count: 1 XP
+- In stages 1–10, each explicitly confirmed cycle earns its original source-member count: 1 XP
   for single units, 2/3/4 XP for full groups, and the actual count for a short
-  remainder. Final Next and Repeat credit the originating unit once.
+  remainder. Final Next and Repeat credit the originating unit once. Stages 11–16
+  grant 3 XP for the single manual confirmation of each phrase.
 - Audio ending, opening a screen, pausing, elapsed time and restoring practice
   earn no XP. New runs, stages and books continue earning without a daily limit;
   full-run completion no longer grants the former 10-XP bonus.
@@ -245,6 +283,10 @@ confirmation. The current owner-approved behavior requires explicit confirmation
 - Reward rules cover all sixteen stages; M1 playback still implements only 1–2.
 
 ## Source navigation
+
+Opening All Sentences expands the current section and centers the current source
+row (the first member for a grouped unit), including near the start/end of the
+list. User scrolling or accordion interaction cancels automatic positioning.
 
 Selecting a source block targets its saved unit using the run's saved group
 size. It pauses, resets the target audio to zero, and retains every visited

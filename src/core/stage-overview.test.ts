@@ -4,12 +4,12 @@ import { stageOverview, bookAction, canOpenStage, stageStars, stageComplete } fr
 import { createSession } from './session';
 
 test('implemented stages require three predecessor runs unless explicitly bypassed', () => {
-  for (let stage = 2; stage <= 10; stage++) {
+  for (let stage = 2; stage <= 16; stage++) {
     assert.equal(canOpenStage(stage, [{ stage: stage - 1, count: 2, session: null }]), false);
     assert.equal(canOpenStage(stage, [{ stage: stage - 1, count: 3, session: null }]), true);
     assert.equal(canOpenStage(stage, [], true), true);
   }
-  for (const stage of [0, 11, 16, 1.5]) assert.equal(canOpenStage(stage, [], true), false);
+  for (const stage of [0, 17, 20, 1.5]) assert.equal(canOpenStage(stage, [], true), false);
 });
 
 test('book progress counts completed stages once, not repeated runs or partial checkpoints', () => {

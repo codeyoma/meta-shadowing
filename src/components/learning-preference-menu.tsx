@@ -9,14 +9,15 @@ export const learningPreferenceMenus = [
   { option: 'wpm', title: '크레이지 스피킹', icon: 'speedometer' },
 ] as const;
 
-export function LearningPreferenceMenu({ onSelect, disabled = false, rateDisabled = false }: {
+export function LearningPreferenceMenu({ onSelect, disabled = false, rateDisabled = false, silent = false }: {
   onSelect(option: LearningPreference): void;
   disabled?: boolean;
   rateDisabled?: boolean;
+  silent?: boolean;
 }) {
   const c = useSettingsColors();
   return <View style={{ borderRadius: 24, borderCurve: 'continuous', overflow: 'hidden', backgroundColor: c.group }}>
-    {learningPreferenceMenus.map((menu, index) => <SettingsRow key={menu.option} title={menu.title} icon={menu.icon} iconColor="#007aff"
+    {learningPreferenceMenus.map((menu, index) => <SettingsRow key={menu.option} title={silent && menu.option === 'rate' ? '스피킹 속도' : menu.title} icon={silent && menu.option === 'rate' ? 'speedometer' : menu.icon} iconColor="#007aff"
       disclosure separator={index < learningPreferenceMenus.length - 1} disabled={disabled || (menu.option === 'rate' && rateDisabled)}
       onPress={() => onSelect(menu.option)} />)}
   </View>;

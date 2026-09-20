@@ -1,4 +1,5 @@
 import { canChooseNext, canShowThirdCycleChoices, type Session } from './session';
+import { isRevealStage } from './catalog';
 
 export function phraseCounterText(current: number, total: number) {
   const digits = '8'.repeat(String(total).length);
@@ -10,7 +11,7 @@ export function canPulseCycle(state: Session): boolean {
   return state.phase === 'speaking' && state.confirmed < state.planned;
 }
 export function canOfferRepeat(state: Session, error: 'save' | 'audio' | null): boolean {
-  return !error && state.planned === 3 && (state.phase === 'decision' || canShowThirdCycleChoices(state));
+  return !error && !isRevealStage(state.stage) && state.planned === 3 && (state.phase === 'decision' || canShowThirdCycleChoices(state));
 }
 export function completedConnections(state: Session): number {
   return Math.min(state.confirmed, state.planned - 1);

@@ -1,7 +1,7 @@
 import { restoreSession, transition, type Session } from './session';
 import { Progression, localDay, type BookIdentity } from './progression';
 import { createCycleTable, recordCycles, validCycleIdentity } from './cycle-credit';
-import type { PlayableStage } from './catalog';
+import { isRevealStage, type PlayableStage } from './catalog';
 import { bindRun, checkpointKey, createSyncTable, creditTotal, nextStamp, readSync, saveSync, type SyncRun } from './sync-ledger';
 import { unitProgress } from './unit-progress';
 
@@ -90,7 +90,8 @@ export class Journal {
           && (['confirm', 'repeat', 'next'] as const).some(type => equal(transition(prior, { type }), state));
         if (accepted) {
           const existing = run.events.find(event => event.unit === prior.phrase && event.ordinal === prior.confirmed + 1);
-          if (!existing) run.events.push({ unit: prior.phrase, ordinal: prior.confirmed + 1, day });
+          if (!existing) run.events.push({ unit: prior.phrase, ordinal: prior.confirmed + 1, day,
+            ...(isRevealStage(state.stage) ? { multiplier: 3 as const } : {}) });
           else existing.day = existing.day < day ? existing.day : day;
         }
         run.observed = run.observed.map((count, i) => Math.max(count, observed[i]!.confirmed));
@@ -123,6 +124,10 @@ export class Journal {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const prior = this.db.first<{ state: string }>('SELECT state FROM checkpoints WHERE package=? AND stage=?', packageKey, state.stage);
+      if (prior) {
+        const old = JSON.parse(prior.state) as Session;
+        prior.state = JSON.stringify({ ...restoreSession(prior.state, old.version === 2 ? old.sourcePhraseCount : old.phraseCount, old.stage), running: old.running });
+      }
       const ledger = readSync(this.db, JSON.stringify([packageKey, state.stage, state.runId]));
       const boundRun = identity ? bindRun(this.db, ledger, packageKey, prior && JSON.parse(prior.state).runId === state.runId ? JSON.parse(prior.state) : state, identity) : undefined;
       const creditedBefore = boundRun ? creditTotal(boundRun) : 0;
@@ -141,7 +146,8 @@ export class Journal {
         if (row.credited > creditedBefore && prior) {
           const predecessor = JSON.parse(prior.state) as Session, day = localDay(this.now());
           if (!boundRun.events.some(event => event.unit === predecessor.phrase && event.ordinal === predecessor.confirmed + 1)) {
-            boundRun.events.push({ unit: predecessor.phrase, ordinal: predecessor.confirmed + 1, day });
+            boundRun.events.push({ unit: predecessor.phrase, ordinal: predecessor.confirmed + 1, day,
+              ...(isRevealStage(state.stage) ? { multiplier: 3 as const } : {}) });
           }
         }
         const observed = unitProgress(state);

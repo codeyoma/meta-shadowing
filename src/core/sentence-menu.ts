@@ -1,8 +1,9 @@
 import type { LearningUnit } from './learning-units';
 type Source = { text: string; translation: string; section?: number };
 export type SentenceSection = { title: string | null; rows: (Source & { sourceIndex: number; unitIndex: number })[] };
-export function initiallyCollapsedSections(sections: readonly SentenceSection[]) {
-  return new Set(sections.flatMap((section, index) => section.title ? [index] : []));
+export function initiallyCollapsedSections(sections: readonly SentenceSection[], currentUnit = -1) {
+  return new Set(sections.flatMap((section, index) => section.title
+    && !(currentUnit >= 0 && section.rows.some(row => row.unitIndex === currentUnit)) ? [index] : []));
 }
 /** Contiguous section runs preserve source order, including unsectioned passages. */
 export function sentenceSections(phrases: readonly Source[], units: readonly LearningUnit[]): SentenceSection[] {

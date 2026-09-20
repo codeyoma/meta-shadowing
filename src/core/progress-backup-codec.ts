@@ -1,6 +1,6 @@
 import { restoreSession } from './session';
 import { decodeSettings } from './settings';
-import { languages, type PlayableStage } from './catalog';
+import { languages, isRevealStage, type PlayableStage } from './catalog';
 import { dailyLimit } from './progression';
 import { validCycleIdentity } from './cycle-credit';
 import { MAX_XP } from './levels';
@@ -101,7 +101,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
       const row: Row = {};
       for (const column of columns[table]) {
         const cell = original[column];
-        if (column === 'stage') row[column] = integer(cell, 1, table === 'checkpoints' ? 10 : 16);
+        if (column === 'stage') row[column] = integer(cell, 1, 16);
         else if (column === 'xp') { if (cell !== 0 && cell !== 10) reject(); row[column] = cell as number; }
         else if (column === 'day') row[column] = table === 'cycle_credits' && cell === '' ? '' : day(cell);
         else if (column === 'phrase_count') row[column] = integer(cell, 1, 100000);
@@ -118,11 +118,11 @@ export function validateProgressBackup(json: string): ProgressBackup {
           if (typeof cell !== 'string' || cell.length > 4 * 1024 * 1024) reject();
           const parsed = JSON.parse(cell as string);
           if (table === 'unit_credits') {
-            if (!validUnitCredit(parsed)) reject();
+            if (!validUnitCredit(parsed, Number(original.stage))) reject();
             row[column] = JSON.stringify(parsed); continue;
           }
-          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(Number(root.version) >= 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : [])]);
-          integer(s.phraseCount, 1, 100000); integer(s.planned, 3, 100000); integer(s.confirmed, 0, 100000);
+          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(Number(root.version) >= 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : []), ...(parsed?.reveal !== undefined ? ['reveal'] : [])]);
+          integer(s.phraseCount, 1, 100000); integer(s.planned, isRevealStage(Number(original.stage)) ? 1 : 3, 100000); integer(s.confirmed, 0, 100000);
           if (s.version === 2) integer(s.sourcePhraseCount, 1, 100000);
           identity(s.runId);
           const restored = restoreSession(cell as string, (s.version === 2 ? s.sourcePhraseCount : s.phraseCount) as number, original.stage as PlayableStage);
@@ -169,22 +169,23 @@ export function validateProgressBackup(json: string): ProgressBackup {
     const row = frontiers.get(key);
     if (!row || row.phrase_count !== ledger.counts.length || row.credited !== ledger.baseline + ledger.earned
       || ledger.counts[Number(row.phrase)]! < Number(row.confirmed)) reject();
-    if (history.has(key) && ledger.counts.some(count => count < 3)) reject();
+    if (history.has(key) && ledger.counts.some(count => count < (isRevealStage(Number(row.stage)) ? 1 : 3))) reject();
   }
   for (const row of cycle_credits) {
     const ledger = unitCredits.get(compound(row, ['package', 'stage', 'run']));
     if (!validCycleIdentity(String(row.package), { language: String(row.language), book: String(row.book) })
       || String(row.run).length > 100 || Number(row.phrase) >= Number(row.phrase_count)
-      || (!ledger && Number(row.credited) > (Number(row.phrase) * 100000 + Number(row.confirmed)) * (Number(row.stage) >= 7 && Number(row.stage) <= 10 ? 4 : 1))) reject();
+      || (!ledger && Number(row.credited) > (Number(row.phrase) * 100000 + Number(row.confirmed)) * (isRevealStage(Number(row.stage)) ? 3 : Number(row.stage) >= 7 && Number(row.stage) <= 10 ? 4 : 1))) reject();
     const binding = compound(row, ['language', 'book']);
     const existing = bindings.get(String(row.package));
     if (existing && existing !== binding) reject();
     bindings.set(String(row.package), binding);
     const isComplete = history.has(compound(row, ['package', 'stage', 'run']));
-    if (isComplete && (row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < 3 || (!modern && Number(row.confirmed) % 2 !== 1))) reject();
+    const minConfirmed = isRevealStage(Number(row.stage)) ? 1 : 3;
+    if (isComplete && (row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < minConfirmed || (!modern && minConfirmed === 3 && Number(row.confirmed) % 2 !== 1))) reject();
     if (row.day) {
       const studyKey = compound(row, ['language', 'day']);
-      if (!isComplete || !study.has(studyKey) || row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < 3) reject();
+      if (!isComplete || !study.has(studyKey) || row.phrase !== Number(row.phrase_count) - 1 || Number(row.confirmed) < minConfirmed) reject();
       usedStudy.add(studyKey);
     } else if (isComplete && Number(row.credited) > 0) reject();
   }
@@ -262,12 +263,13 @@ function validateSync(value: unknown, tables: Record<Table, Row[]>): SyncLedger 
     });
     const eventsSeen = new Set<string>();
     const events = run.events.map(value => {
-      const event = object(value, ['unit', 'ordinal', 'day']);
+      const event = object(value, ['unit', 'ordinal', 'day', ...(value && typeof value === 'object' && Object.hasOwn(value, 'multiplier') ? ['multiplier'] : [])]);
+      if (event.multiplier !== undefined && (event.multiplier !== 3 || !isRevealStage(Number(run.stage)))) reject();
       const unit = integer(event.unit, 0, observed.length - 1), ordinal = integer(event.ordinal, 1, 100000);
       const key = JSON.stringify([unit, ordinal]);
       if (!run.sourceCount || ordinal > observed[unit]! || eventsSeen.has(key)) reject();
       eventsSeen.add(key);
-      return { unit, ordinal, day: day(event.day) };
+      return { unit, ordinal, day: day(event.day), ...(event.multiplier === 3 ? { multiplier: 3 as const } : {}) };
     });
     const result: SyncRun = { package: String(run.package), stage: Number(run.stage), run: String(run.run), language: String(run.language), book: String(run.book),
       sourceCount: Number(run.sourceCount), groupSize: Number(run.groupSize), observed, candidates, events };

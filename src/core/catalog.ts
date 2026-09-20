@@ -8,14 +8,15 @@ export const languages = [
   { id: 'spanish', name: '스페인어', flag: '🇪🇸', displayCode: 'ES' },
   { id: 'french', name: '프랑스어', flag: '🇫🇷', displayCode: 'FR' },
 ] as const;
-export type PlayableStage = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type PlayableStage = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
 export function isPlayableStage(value: unknown): value is PlayableStage {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 10;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 16;
 }
+export function isRevealStage(stage: number): boolean { return isPlayableStage(stage) && stage >= 11; }
 export function isGroupedStage(stage: number): boolean { return stage >= 7 && stage <= 10 && isPlayableStage(stage); }
 export function isFirstWordStage(stage: number): boolean { return [5, 6, 9, 10].includes(stage); }
 export function playableStage(param: unknown): PlayableStage | null {
-  return typeof param === 'string' && /^(?:[1-9]|10)$/.test(param) ? Number(param) as PlayableStage : null;
+  return typeof param === 'string' && /^(?:[1-9]|1[0-6])$/.test(param) ? Number(param) as PlayableStage : null;
 }
 export function availableBooks<T extends CatalogBook>(books: readonly T[], language: string): T[] {
   return books.filter(b => b.language === language);

@@ -14,11 +14,11 @@ const labels: Record<MainPlayerAction, string> = { resume: '이어하기', confi
 
 export type ControlPressPoint = { x: number; y: number };
 
-function Control({ action, repeat, disabled, onPress }: { action: MainPlayerAction; repeat?: boolean; disabled: boolean; onPress(event: GestureResponderEvent): void }) {
+function Control({ action, repeat, disabled, blocked, onPress }: { action: MainPlayerAction; repeat?: boolean; disabled: boolean; blocked: boolean; onPress(event: GestureResponderEvent): void }) {
   const c = usePalette();
   const reduced = useReducedMotion();
   return <Pressable feedback={false} accessibilityRole="button" accessibilityLabel={repeat ? '두 번 더 연습' : labels[action]}
-    accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}>
+    accessibilityState={{ disabled: disabled || blocked }} disabled={disabled || blocked} onPress={onPress}>
     {({ pressed }) => <Animated.View layout={CONTROL_LAYOUT} style={{ minHeight: 54, padding: 12, alignItems: 'center', justifyContent: 'center',
       borderRadius: 16, backgroundColor: repeat ? c.card : c.accent, borderWidth: repeat ? 2 : 0, borderColor: c.line,
       boxShadow: `0 4px 0 ${repeat ? c.line : c.accentPressed}`, opacity: disabled ? 0.45 : 1,
@@ -31,8 +31,8 @@ function Control({ action, repeat, disabled, onPress }: { action: MainPlayerActi
   </Pressable>;
 }
 
-export function PlayerControls({ action, repeat, busy, onMain, onRepeat }: {
-  action: MainPlayerAction; repeat: boolean; busy: boolean; onMain(point: ControlPressPoint): void; onRepeat(point: ControlPressPoint): void;
+export function PlayerControls({ action, repeat, busy, blocked = false, onMain, onRepeat }: {
+  action: MainPlayerAction; repeat: boolean; busy: boolean; blocked?: boolean; onMain(point: ControlPressPoint): void; onRepeat(point: ControlPressPoint): void;
 }) {
   const row = useRef<View>(null);
   const mounted = useRef(true);
@@ -51,10 +51,10 @@ export function PlayerControls({ action, repeat, busy, onMain, onRepeat }: {
   }
   return <View ref={row} collapsable={false} style={{ flexDirection: 'row', gap: 12 }}>
     {repeat && <Animated.View key="repeat" entering={REPEAT_ENTER} style={{ flex: 1 }}>
-      <Control action={action} repeat disabled={busy || action !== 'next'} onPress={event => press(event, true)} />
+      <Control action={action} repeat blocked={blocked} disabled={busy || action !== 'next'} onPress={event => press(event, true)} />
     </Animated.View>}
     <Animated.View key="main" layout={CONTROL_LAYOUT} style={{ flex: repeat ? 3 : 1 }}>
-      <Control action={action} disabled={busy || action === 'wait'} onPress={event => press(event, false)} />
+      <Control action={action} blocked={blocked} disabled={busy || action === 'wait'} onPress={event => press(event, false)} />
     </Animated.View>
   </View>;
 }
