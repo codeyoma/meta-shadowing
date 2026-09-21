@@ -26,19 +26,21 @@ import { canOpenStage } from '@/core/stage-overview';
 import type { Session } from '@/core/session';
 import { usePackageLearningAccess } from '@/components/use-package-learning-access';
 import { mayUsePackage } from '@/native/paid-package';
+import { LearningMonitorControls } from '@/components/learning-monitor-controls';
+import { learningMonitorSupported, learningMonitor } from '@/native/voice-monitor';
 
 export default function PlayerOptionsScreen() {
   const profile = useProgressProfile();
   const c = useSettingsColors();
   const insets = useSafeAreaInsets();
-  const { stage: param, package: key, option, run, profile: boundProfile, authority } = useLocalSearchParams<{ stage: string; package: string; option?: string; run?: string; profile?: string; authority?: string }>();
+  const { stage: param, package: key, option, run, profile: boundProfile, authority, monitorKey } = useLocalSearchParams<{ stage: string; package: string; option?: string; run?: string; profile?: string; authority?: string; monitorKey?: string }>();
   const stage = playableStage(param);
   const pack = selectedPackage(key);
   const access = usePackageLearningAccess(pack);
   const [rate, setRate] = useState<number | null>(null);
   const [revision, setRevision] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [selected, setSelected] = useState<LearningPreference | 'sentences' | 'reveal' | null>(() =>
+  const [selected, setSelected] = useState<LearningPreference | 'sentences' | 'reveal' | 'monitor' | null>(() =>
     stage && isRevealStage(stage) && (option === 'rate' || option === 'reveal') ? 'reveal' : option === 'rate' ? 'rate' : null);
   const [checkpoint, setCheckpoint] = useState<Session | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -124,7 +126,7 @@ export default function PlayerOptionsScreen() {
     }
   }
   return <View style={{ flex: 1, backgroundColor: c.sheet }}>
-    <Stack.Screen options={{ title: selected === 'reveal' ? '스피킹 속도' : selected === 'sentences' ? '전체 문장' : learningPreferenceMenus.find(menu => menu.option === selected)?.title ?? '학습 옵션',
+    <Stack.Screen options={{ title: selected === 'monitor' ? '내 목소리 듣기' : selected === 'reveal' ? '스피킹 속도' : selected === 'sentences' ? '전체 문장' : learningPreferenceMenus.find(menu => menu.option === selected)?.title ?? '학습 옵션',
       headerLeft: selected ? () => <HeaderButton title="학습 옵션으로 돌아가기" icon="chevron.left" onPress={() => setSelected(null)} /> : undefined,
       headerTransparent: true, headerBlurEffect: 'none',
       headerStyle: { backgroundColor: 'transparent' }, headerTintColor: c.text,
@@ -139,7 +141,14 @@ export default function PlayerOptionsScreen() {
           <SettingsRow title="전체 문장" icon="list.bullet" iconColor="#007aff" disclosure disabled={!checkpoint}
             onPress={() => setSelected('sentences')} /></View>
           <LearningPreferenceMenu onSelect={option => setSelected(stage && isRevealStage(stage) && option === 'rate' ? 'reveal' : option)}
-            silent={!!stage && isRevealStage(stage)} disabled={!settings} rateDisabled={rate === null} /></>
+            silent={!!stage && isRevealStage(stage)} disabled={!settings} rateDisabled={rate === null} />
+          {learningMonitorSupported && <View style={{ borderRadius: 24, overflow: 'hidden' }}>
+            <SettingsRow title="내 목소리 듣기" icon="mic.fill" iconColor="#007aff" disclosure
+              disabled={!learningMonitor(monitorKey) || !checkpoint || !scopeValid()}
+              onPress={() => setSelected('monitor')} />
+          </View>}</>
+          : selected === 'monitor' ? <LearningMonitorControls sessionKey={monitorKey}
+            allowed={!!checkpoint && checkpoint.phase !== 'complete' && !!scopeValid()} />
           : selected === 'reveal' ? stage && isRevealStage(stage) && settings && checkpoint?.reveal && scopeValid()
             && <><RevealSpeedControl reveal={checkpoint.reveal} speeds={settings.crazyWpm} onChange={changeSpeed} />
               <LearningPreferenceSection key={`reveal-wpm-${revision}`} option="wpm"

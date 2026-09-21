@@ -41,6 +41,7 @@ targets:
       - target: AudioTestHost
       - sdk: AVFoundation.framework
       - sdk: StoreKit.framework
+      - sdk: MediaPlayer.framework
 schemes:
   MacLearningAudioTests:
     build:

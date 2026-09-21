@@ -1,4 +1,5 @@
-import { createAudioPlayer, createAudioPlaylist, setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, createAudioPlaylist } from 'expo-audio';
+import { configureLessonAudio, learningMonitorSupported } from './voice-monitor';
 import { audioPort } from '../core/audio';
 import { playlistHandle } from '../core/playlist-audio';
 import { audioUri } from './package';
@@ -7,9 +8,8 @@ import learningAudio from '../../modules/learning-audio';
 import { mayUsePackage } from './paid-package';
 
 export function nativeAudio(pack: LearningPackage, ended: (duration: number) => void, failed: () => void,
-  interrupted: () => void, sourceIndices?: readonly (readonly number[])[]) {
-  return audioPort(() => setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false,
-    allowsRecording: false, interruptionMode: 'doNotMix' }), async phrase => {
+  interrupted: () => void, sourceIndices?: readonly (readonly number[])[], monitorKey?: string) {
+  return audioPort(() => configureLessonAudio(monitorKey), async phrase => {
     const authorize = () => {if (!mayUsePackage(pack)) throw Error('package-delivery-unauthorized');};
     authorize();
     const members = sourceIndices ? sourceIndices[phrase] : [phrase];
@@ -33,7 +33,10 @@ export function nativeAudio(pack: LearningPackage, ended: (duration: number) => 
         }, durations);
       } catch (error) { queue.pause(); queue.destroy(); queue.release(); throw error; }
     }
-    const player = createAudioPlayer({ uri: uris[0]! }, { updateInterval: 200 });
+    // Expo's delayed deactivation after pause/end must not stop the native mic.
+    // Session exit explicitly releases the shared session instead.
+    const player = createAudioPlayer({ uri: uris[0]! }, { updateInterval: 200,
+      keepAudioSessionActive: !!learningAudio?.beginLessonRemote || (learningMonitorSupported && !!monitorKey) });
     return {
       get currentTime() { return player.currentTime; },
       get duration() { return player.duration; },

@@ -5,6 +5,18 @@ const { tmpdir } = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+test('prebuild permits user-enabled voice monitoring to continue with the screen locked', async t => {
+  const { getPrebuildConfigAsync } = require('@expo/prebuild-config');
+  const { compileModsAsync } = require('@expo/config-plugins');
+  const { exp } = await getPrebuildConfigAsync(process.cwd(), { platforms: ['ios'] });
+  const root = mkdtempSync(path.join(tmpdir(), 'ios-monitor-background-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const compiled = await compileModsAsync(exp, { projectRoot: root, platforms: ['ios'], introspect: true });
+  const plist = compiled._internal.modResults.ios.infoPlist;
+  assert.ok(plist.UIBackgroundModes?.includes('audio'));
+  assert.ok(plist.NSMicrophoneUsageDescription);
+});
+
 // Exercise the actual RN bundling script and installed Hermes compiler. Only
 // Metro's bundle emission is replaced with a tiny controlled source fixture.
 function bundle(t, source, extraEnv = {}) {
