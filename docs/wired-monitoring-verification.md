@@ -6,6 +6,16 @@ is implemented. No microphone audio is included in logs or test artifacts.
 
 ## Publication checkpoint — 2026-09-21
 
+PR CI exposed a Swift 6 concurrency compile error in the configuration-change
+observer under Xcode 26.6, before the LearningAudio tests ran. The notification
+callback captured a non-Sendable engine and transferred it into MainActor.
+The engine is now captured only by an explicit `@MainActor @Sendable` action;
+the notification callback invokes that action on its existing main queue. Weak
+ownership, the current-graph identity guard and stop/invalidation behavior remain
+unchanged. No concurrency checking, tests or production safety gates were disabled.
+Local Xcode 27 Debug and Release LearningAudio test schemes and `npm run check`
+pass after this fix. The pinned Xcode 26.6 result must be confirmed by the new CI run.
+
 Fresh pre-PR verification passes `npm run check` (412 domain tests, 22
 build/package checks and TypeScript) and the iOS LearningAudio simulator test
 scheme. The staged whitespace and privacy checks pass; no device logs or private

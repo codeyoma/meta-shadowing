@@ -115,13 +115,16 @@ final class VoiceMonitorEngine: VoiceMonitorHardware {
       }
       graph = engine
       voice = voicePath
+      // Keep the non-Sendable engine capture entirely on MainActor. The
+      // notification callback transfers only this Sendable actor-bound action.
+      let invalidateGraph: @MainActor @Sendable () -> Void = { [weak self, weak engine] in
+        guard let self, let engine, self.graph === engine else { return }
+        self.stop()
+        self.onInvalidation?()
+      }
       observers.append(NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange,
-        object: engine, queue: .main) { [weak self, weak engine] _ in
-          MainActor.assumeIsolated {
-            guard let self, let engine, self.graph === engine else { return }
-            self.stop()
-            self.onInvalidation?()
-          }
+        object: engine, queue: .main) { _ in
+          MainActor.assumeIsolated { invalidateGraph() }
         })
       engine.prepare()
       try engine.start()
