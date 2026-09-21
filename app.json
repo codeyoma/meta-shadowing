@@ -28,8 +28,9 @@
       [
         "expo-audio",
         {
-          "microphonePermission": false,
+          "microphonePermission": "내 목소리 듣기를 켜면 유선 이어폰으로 실시간 모니터링해요. 다른 앱 사용·화면 잠금 중에도 계속되며, 음성은 저장하거나 전송하지 않아요.",
           "recordAudioAndroid": false,
+          "enableBackgroundRecording": true,
           "enableBackgroundPlayback": false
         }
       ],

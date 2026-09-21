@@ -3,6 +3,9 @@ import { View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Icon, Label, usePalette } from '@/components/ui';
 import { useSettingsColors } from './settings-row';
+import { sliderReleaseValue, sliderValue } from '@/core/slider-value';
+
+const rateRange = { min: 0.25, max: 3, step: 0.25 };
 
 /** Shared settings layout. The caller persists the rate and remounts on save failure. */
 export function PlaybackRateControl({ rate, onChange, appearance = 'default', showTitle = true }: { rate: number; onChange: (rate: number) => void; appearance?: 'default' | 'settings'; showTitle?: boolean }) {
@@ -11,9 +14,10 @@ export function PlaybackRateControl({ rate, onChange, appearance = 'default', sh
   const c = compact ? { ...palette, heading: settings.text, secondary: settings.secondary, line: settings.separator, accentPressed: '#007aff' } : palette;
   const [draftRate, setDraftRate] = useState(rate);
   const sliding = useRef(false);
-  useEffect(() => { setDraftRate(rate); }, [rate]);
+  const displayedRate = useRef<number | null>(null);
+  useEffect(() => { if (!sliding.current) setDraftRate(rate); }, [rate]);
   function commit(value: number) {
-    const next = Math.max(0.25, Math.min(3, Math.round(value * 4) / 4));
+    const next = sliderValue(value, rateRange);
     setDraftRate(next);
     onChange(next);
   }
@@ -31,13 +35,20 @@ export function PlaybackRateControl({ rate, onChange, appearance = 'default', sh
           if (nativeEvent.actionName === 'decrement') commit((Math.ceil(rate * 4) - 1) / 4);
         }}
         value={rate} minimumValue={0.25} maximumValue={3} step={0.25} tapToSeek
-        onSlidingStart={() => { sliding.current = true; }}
+        onSlidingStart={() => { sliding.current = true; displayedRate.current = null; }}
         onValueChange={value => {
-          setDraftRate(Number(value.toFixed(2)));
+          const next = sliderValue(value, rateRange);
+          displayedRate.current = next;
+          setDraftRate(next);
           // VoiceOver adjustments emit value changes without touch start/end.
-          if (!sliding.current) commit(value);
+          if (!sliding.current) commit(next);
         }}
-        onSlidingComplete={value => { sliding.current = false; commit(value); }}
+        onSlidingComplete={value => {
+          const next = sliderReleaseValue(displayedRate.current, value, rateRange);
+          sliding.current = false;
+          displayedRate.current = null;
+          commit(next);
+        }}
         minimumTrackTintColor={c.accentPressed} maximumTrackTintColor={c.line}
         style={{ width: '100%', height: 48 }} />
       <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"

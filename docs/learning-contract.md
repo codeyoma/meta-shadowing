@@ -117,6 +117,34 @@ unavailable even after their predecessor is complete.
 
 ## Audio cycle contract (M1)
 
+- Development-only live voice monitoring starts automatically in an eligible
+  foreground lesson when wired headphones connect, or on entry already connected,
+  after microphone permission. Manual OFF is retained until unplug/replug or a
+  new lesson. Menus/background/lock preserve existing capture; they do not start
+  new capture in the background. Exit, completion, access loss, interruption or
+  unsupported output stops capture. Only a first permission-sheet cancellation
+  may retry once after grant, never an audio interruption. Voice-only 4x gain
+  leaves original playback and XP unchanged; no recording or transmission.
+- A wired headphone's center transport button invokes the visible player's main
+  action (resume, explicit confirmation, or next), using the same access, busy,
+  checkpoint and XP guards. It cannot skip unfinished playback/reveal, recover
+  errors, or act while a menu is open or the app is inactive. Duplicate/stale
+  commands are discarded. iOS play, pause and toggle transport commands share
+  this binding, including Control Center when wired headphones are connected.
+  The mounted lesson publishes generic Now Playing metadata and owns transport
+  handlers through temporary menus; leaving/completing releases them. Restoring
+  transport ownership never starts microphone capture or learning playback.
+  Other apps can take system audio ownership; actual headset dispatch remains a
+  physical-device acceptance check, especially for silent stages without capture.
+- A quick double-press of the wired EarPods center button maps iOS next-track to
+  the existing Repeat action, only after third-cycle audio has ended and Repeat
+  is actionable. It confirms cycle three and adds exactly cycles four and five,
+  without advancing the phrase or pre-awarding their XP. Single-press remains
+  Confirm/Next. Both actions share the same one-shot revision gate. Next-track
+  is consumed without action during playback, menus, inactive state, errors,
+  unsupported routes, extra cycles and silent stages 11–16; it never falls back
+  to the main action. Control Center next-track uses the same binding while the
+  lesson owns transport. No app-level double-click timer or single-press delay.
 - Normal enabled button taps provide a light native haptic. The owner-approved
   #57 refinement adds this feedback to all three browsing tabs, including Settings,
   and to the header flag that opens the native language menu. The flag trigger is

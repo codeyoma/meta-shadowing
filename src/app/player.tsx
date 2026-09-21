@@ -38,6 +38,8 @@ import { completedUnitCount } from '@/core/session-navigation';
 import { sentenceEntry } from '@/core/sentence-entry';
 import { isPaidDuo, paidAccessSource, mayUsePackage } from '@/native/paid-package';
 import { PaidLearningAccess } from '@/core/paid-learning-access';
+import { useLearningMonitor } from '@/components/use-learning-monitor';
+import { useLessonRemote } from '@/components/use-lesson-remote';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
@@ -78,6 +80,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const finishXpGain = useCallback((id: number) => setXpGain(current => current?.id === id ? null : current), []);
   const finishCelebration = useCallback(() => setCelebrating(false), []);
   const acting = useRef(false);
+  const monitorKey = useLearningMonitor(`${profile.id}:${profile.authority}:${pack.packageKey}:${stage}`,
+    state?.phase === 'complete', unavailable || accessDenied, !refreshing && accessReady);
   useFocusEffect(useCallback(() => {
     let active = true;
     // A drawer return keeps this scope's paused frame mounted while reloading
@@ -130,7 +134,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         opened.current = true;
         const audio = isRevealStage(stage)
           ? revealPlayback(runUnits, initial, duration => engine.current?.audioEnded(duration))
-          : nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), runUnits.map(unit => unit.sourceIndices));
+          : nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), runUnits.map(unit => unit.sourceIndices), monitorKey);
         const save = context.createWriter(initial);
         const player = new Player(initial, audio, s => {
           const earned = save(s);
@@ -192,13 +196,13 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     };
     void initialize();
     return () => { active = false; access?.dispose(); interruption.remove(); sentenceEntry.cancel(); stopLearningHaptics(); setMotionActive(false); setCelebrating(false); setXpGain(null); gainOrigin.current = null; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
-  }, [stage, pack, lesson, profile.id, profile.authority, profile.suppressEntry]));
+  }, [stage, pack, lesson, profile.id, profile.authority, profile.suppressEntry, monitorKey]));
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = useCallback((option?: 'rate' | 'reveal') => {
     if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
-    if (stage && engine.current && engine.current.error !== 'save' && getProgressSync().authorized(profile.authority, profile.id)) router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, run: engine.current.state.runId, profile: profile.id, authority: profile.authority, ...(option ? { option } : {}) } });
-  }, [pack, unavailable, stage, profile.authority, profile.id]);
+    if (stage && engine.current && engine.current.error !== 'save' && getProgressSync().authorized(profile.authority, profile.id)) router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, run: engine.current.state.runId, profile: profile.id, authority: profile.authority, monitorKey, ...(option ? { option } : {}) } });
+  }, [pack, unavailable, stage, profile.authority, profile.id, monitorKey]);
   const openInfo = useCallback((kind: 'guide' | 'analysis') => {
     if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
@@ -230,6 +234,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       }
     } finally { gainOrigin.current = null; acting.current = false; setBusy(false); }
   }
+  useLessonRemote(state, error, !refreshing && !busy && !unavailable && !accessDenied && accessReady,
+    monitorKey, () => void act({ x: 0, y: 0 }), () => void act({ x: 0, y: 0 }, true));
   const unitKey = state ? `${state.runId}:${state.phrase}` : null;
   const revealed = unitKey !== null && revealedKey === unitKey;
   const unitLabel = isGroupedStage(stage) ? '학습 묶음' : '학습 구간';

@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   }
   s.source         = { git: '' }
   s.static_framework = true
-  s.frameworks = 'AVFoundation', 'StoreKit'
+  s.frameworks = 'AVFoundation', 'StoreKit', 'MediaPlayer'
 
   s.dependency 'ExpoModulesCore'
 
