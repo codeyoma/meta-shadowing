@@ -1,5 +1,8 @@
 import AVFoundation
 import Foundation
+#if os(iOS)
+import UIKit
+#endif
 
 /// One original-video source, with native end bounds and no independent reward authority.
 @MainActor final class LessonVideoPlayer {
@@ -15,21 +18,67 @@ import Foundation
   private var active = false, completed = false, hasPlayed = false, prepared = false
   private var periodic: Any?
   private var notifications: [NSObjectProtocol] = []
+  private var lifecycleObservers: [NSObjectProtocol] = []
+  private var interruptible = false
+  private var preparing = false
+  private var requestedPosition = 0.0
+  private let lifecycleNotifications: NotificationCenter
   private let transitionSeek: @MainActor (AVPlayer, CMTime) async -> Bool
 
-  init(transitionSeek: @escaping @MainActor (AVPlayer, CMTime) async -> Bool = { player, time in
+  init(lifecycleNotifications: NotificationCenter = .default,
+       transitionSeek: @escaping @MainActor (AVPlayer, CMTime) async -> Bool = { player, time in
     await player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
   }) {
     self.transitionSeek = transitionSeek
+    self.lifecycleNotifications = lifecycleNotifications
   }
 
   func matches(_ owner: String, _ generation: Int) -> Bool { self.owner == owner && self.generation == generation }
-  func reserve(owner: String, generation: Int) {
+  func reserve(owner: String, generation: Int, position: Double = 0) {
     player.pause(); active = false; completed = false; hasPlayed = false; prepared = false
     transitioning = false; memberRevision += 1
     player.currentItem?.cancelPendingSeeks()
     clearObservers()
     self.owner = owner; self.generation = generation
+    timeline = nil; requestedPosition = position; interruptible = true; preparing = true
+    observeLifecycle()
+  }
+  private var foreground: Bool {
+    #if os(iOS)
+    UIApplication.shared.applicationState == .active
+    #else
+    true
+    #endif
+  }
+  private func observeLifecycle() {
+    #if os(iOS)
+    guard lifecycleObservers.isEmpty else { return }
+    for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification,
+                 AVAudioSession.interruptionNotification, AVAudioSession.routeChangeNotification,
+                 AVAudioSession.mediaServicesWereLostNotification, AVAudioSession.mediaServicesWereResetNotification] {
+      lifecycleObservers.append(lifecycleNotifications.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+        let interruption = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+        let route = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+        MainActor.assumeIsolated {
+          // Recovery never restarts playback. Our own audio-session category
+          // setup is not a physical route change.
+          if name == AVAudioSession.interruptionNotification,
+             interruption == AVAudioSession.InterruptionType.ended.rawValue { return }
+          if name == AVAudioSession.routeChangeNotification,
+             route == AVAudioSession.RouteChangeReason.categoryChange.rawValue { return }
+          self?.interrupt()
+        }
+      })
+    }
+    #endif
+  }
+  private func interrupt() {
+    guard interruptible, !owner.isEmpty else { return }
+    // Capture the old generation and selected-time boundary before retiring the
+    // seek. JavaScript must receive the matching event even if it resumes later.
+    let event = status("paused")
+    pause(owner: owner)
+    onStatus?(event)
   }
   private func clearObservers() {
     if let periodic { player.removeTimeObserver(periodic); self.periodic = nil }
@@ -40,6 +89,8 @@ import Foundation
                owner: String, generation: Int) async throws {
     guard matches(owner, generation), url.isFileURL, rate.isFinite, (0.25...3).contains(rate)
     else { throw VideoError.invalid }
+    guard foreground else { interrupt(); throw VideoError.cancelled }
+    requestedPosition = position
     let timeline = try VideoSegmentTimeline(segments: segments)
     let location = try timeline.locate(position)
     let asset = AVURLAsset(url: url)
@@ -73,8 +124,9 @@ import Foundation
     let sought = await player.seek(to: CMTime(seconds: location.mediaSeconds, preferredTimescale: 60000),
       toleranceBefore: .zero, toleranceAfter: .zero)
     guard matches(owner, generation), sought else { throw VideoError.cancelled }
+    guard foreground else { interrupt(); throw VideoError.cancelled }
     observe(item: item, owner: owner, generation: generation)
-    prepared = true
+    prepared = true; preparing = false
     emit("ready")
   }
   private func observe(item: AVPlayerItem, owner: String, generation: Int) {
@@ -105,7 +157,7 @@ import Foundation
           } else if self.player.timeControlStatus == .playing {
             self.hasPlayed = true; self.emit("playing")
           } else if self.hasPlayed && self.player.timeControlStatus == .paused {
-            self.active = false; self.emit("paused")
+            self.interrupt()
           }
         }
       }
@@ -115,7 +167,7 @@ import Foundation
       CMTimeCompare(player.currentTime(), item.forwardPlaybackEndTime) >= 0 else { return }
     player.pause()
     if member == timeline.segments.count - 1 {
-      active = false; completed = true; emit("ended"); return
+      active = false; interruptible = false; completed = true; emit("ended"); return
     }
     // Retire this member before awaiting its seek. Both AVFoundation end paths can fire.
     transitioning = true; memberRevision += 1; clearObservers()
@@ -127,6 +179,7 @@ import Foundation
       guard let self, self.matches(owner, generation), self.memberRevision == revision, self.active else { return }
       let sought = await self.transitionSeek(self.player, CMTime(seconds: timeline.segments[next].start, preferredTimescale: 60000))
       guard self.matches(owner, generation), self.memberRevision == revision, self.active else { return }
+      guard self.foreground else { self.interrupt(); return }
       self.transitioning = false
       guard sought, item.status == .readyToPlay else { self.fail(); return }
       self.member = next; self.hasPlayed = false
@@ -136,28 +189,33 @@ import Foundation
   }
   private func fail() {
     guard active else { return }
-    active = false; prepared = false; player.pause(); emit("failed")
+    active = false; prepared = false; interruptible = false; player.pause(); emit("failed")
   }
   func play(owner: String, generation: Int) {
     guard matches(owner, generation), prepared, player.currentItem?.status == .readyToPlay, !completed else { return }
+    guard foreground else { interrupt(); return }
     active = true; player.playImmediately(atRate: rate)
   }
   func pause(owner: String) {
     guard self.owner == owner else { return }
-    player.pause(); active = false; prepared = false; generation += 1
+    player.pause(); active = false; prepared = false; preparing = false; interruptible = false; generation += 1
     memberRevision += 1; transitioning = false; player.currentItem?.cancelPendingSeeks()
     clearObservers()
   }
   func dispose(owner: String) {
     guard self.owner == owner else { return }
     pause(owner: owner); player.replaceCurrentItem(with: nil); self.owner = ""; onStatus = nil
+    lifecycleObservers.forEach(lifecycleNotifications.removeObserver)
+    lifecycleObservers.removeAll()
   }
-  private func emit(_ phase: String) {
-    guard let timeline else { return }
+  private func status(_ phase: String) -> [String: Any] {
     let raw = player.currentTime().seconds
-    let position = completed ? timeline.duration : timeline.position(member: member,
-      mediaSeconds: transitioning ? timeline.segments[member].end : raw)
-    onStatus?(["owner": owner, "generation": generation, "phase": phase,
-      "position": position, "duration": timeline.duration])
+    let position = preparing ? requestedPosition : timeline.map { timeline in
+      completed ? timeline.duration : timeline.position(member: member,
+        mediaSeconds: transitioning ? timeline.segments[member].end : raw)
+    } ?? requestedPosition
+    return ["owner": owner, "generation": generation, "phase": phase,
+      "position": position, "duration": timeline?.duration ?? 0]
   }
+  private func emit(_ phase: String) { onStatus?(status(phase)) }
 }

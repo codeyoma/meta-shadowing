@@ -1,5 +1,69 @@
 # Video learning verification
 
+## Interruptions and wired controls (#70) — 2026-09-24
+
+Native video now retires the current preparation/playback generation on app
+inactivity, background entry, audio interruption, physical route change, or media
+services loss/reset. This includes a pending seek between grouped members. The
+pause event carries the old generation and the selected-time checkpoint; pending
+initial preparation retains its requested offset. Recovery notifications do not
+play, confirm, or reactivate microphone capture. A fresh explicit Resume is needed.
+The existing menu pause path, wired-monitoring lifecycle, and single/double-press
+action gates remain authoritative. Playback session category setup is not treated
+as an earphone disconnect.
+
+Regression coverage uses generated video/audio, native notifications, the actual
+Player/video adapter, and SQLite-backed progress. It covers interruption during
+preparation and member seeks, duplicate/stale callbacks, checkpoint preservation,
+explicit resume, unavailable headset actions, one-shot confirmation, and Repeat
+adding exactly two cycles. Monitoring and remote-command policy tests remain in
+the regression suite. These tests do not prove physical microphone continuity,
+EarPods command delivery, or ownership against another music app.
+
+Automated JavaScript verification: `npm run check` passed 450 core tests,
+25 build/package checks and TypeScript. `EXPO_NO_DOTENV=1 npm run bundle:ios`
+passed. Native runtime results are recorded separately below after execution.
+
+### Combined physical-device checklist — all pending
+
+Use an internal build containing the updated native module and an installed local
+video package. A JavaScript reload alone is insufficient. Preserve existing app
+data. Start with low system volume; the microphone path has 4x gain. Use Apple
+USB-C EarPods and let the owner grant microphone permission. Record build, stage,
+group size, observed result and any reproduction steps without device/account
+identifiers. Repeat the interruption cases both inside a phrase and near a grouped
+member boundary. Do not infer a pass from simulator results.
+
+- [ ] Stages 1–6 and 7–10: open each learning menu during video playback. Original
+  video/audio pause at the same phrase/group; enabled monitoring remains audible.
+  Closing the menu stays paused. Explicit Resume continues the saved position.
+- [ ] Switch apps, return, then lock/unlock. Original video/audio stay paused,
+  including near member transitions. Existing monitoring continues under its
+  existing rules; returning alone starts neither original playback nor new capture.
+- [ ] With a music app paused beforehand, single-press EarPods during original
+  playback: no skip, confirmation, XP, or playback in the music app. After the
+  original ends, single-press performs exactly the displayed Confirm/Next action.
+  On a paused unfinished phrase it performs Resume. Check with monitoring ON/OFF.
+- [ ] Double-press before the third-cycle decision: no Repeat or skip. At the
+  permitted third-cycle decision: exactly two additional cycles, same phrase/group,
+  no duplicate confirmation/XP. Rapid duplicate input cannot add more cycles.
+- [ ] Press during a menu, app switch, lock, loading or an error: no learning
+  action. After return and explicit resume, controls work without stale actions.
+- [ ] Unplug during playback/seek: original playback and monitoring stop. Reconnect
+  respects the existing foreground/manual-off connection rules; video stays paused.
+  Bluetooth, AirPlay and unapproved USB routes never enable voice monitoring.
+- [ ] Interrupt with a call or another audio app, then dismiss/return: video remains
+  paused; monitoring follows its existing interruption-off rule. Resume only by
+  explicit action. No stale video end, phrase advance, or duplicate XP appears.
+- [ ] Permission denied or a pending permission prompt followed by backgrounding
+  does not start capture. Manual OFF remains off on the same connection. Lesson
+  exit/completion releases monitoring and transport ownership. Silent stages 11–16
+  remain text-only and retain their existing guarded headset behavior.
+
+Physical-device outcomes for #70: **not performed**. Earlier owner acceptance of
+live monitoring and #67 offline playback does not satisfy this combined checklist.
+The consolidated device-validation issue is unchanged.
+
 ## Silent stages 11–16 implementation — 2026-09-24
 
 - #69 enables the remaining six stages for the same installed video package.
