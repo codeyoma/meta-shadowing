@@ -140,7 +140,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         const audio = isRevealStage(stage)
           ? revealPlayback(runUnits, initial, duration => engine.current?.audioEnded(duration))
           : videoOwner
-          ? nativeVideo(videoOwner, monitorKey, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), isVideoPackage(pack) ? pack.manifest.phrases.map(p => p.end - p.start) : [])
+          ? nativeVideo(videoOwner, monitorKey, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(),
+            isVideoPackage(pack) ? pack.manifest.phrases.map(p => p.end - p.start) : [], runUnits.map(unit => unit.sourceIndices))
           : nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), runUnits.map(unit => unit.sourceIndices), monitorKey);
         const save = context.createWriter(initial);
         const player = new Player(initial, audio, s => {

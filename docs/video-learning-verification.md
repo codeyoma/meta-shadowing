@@ -1,12 +1,51 @@
-# Video stage-one verification
+# Video learning verification
+
+## Stages 2–10 implementation — 2026-09-24
+
+- #68 enables phrase video in stages 2–6 and saved video groups in stages 7–10.
+  Stage 1 remains supported. Silent video-package stages 11–16 remain gated for #69.
+- One AVPlayer plays the selected manifest segments in order, skipping source
+  gaps. Position/duration use the sum of selected durations. Member boundaries
+  do not emit a cycle end, pause, confirmation or reward. The final frame stays
+  visible; replay and paused restoration use the same saved unit mapping.
+- `npm run check` passed 427 core tests, 25 build/package checks and TypeScript.
+  `npm run test:native-headers` passed 7 checks. Adapter tests exercise real
+  mapping/restoration with native SDK boundaries replaced. SQLite-backed Player
+  tests preserve saved groups, partial-failure checkpoints, short remainders,
+  hints, three-cycle confirmation, Repeat +2 and idempotent per-member XP.
+- Native macOS tests passed: 38 test functions / 41 parameterized executions,
+  zero failures or skips. Generated audio/video covers gap skipping, rate,
+  final decoded frame, second-member resume, first-member replay, duplicate end
+  notifications, pause/replacement during a pending seek and failed transitions.
+- Independent Standards and Spec reviews identified native endpoint rounding and
+  inconsistent cumulative floating-point arithmetic. Both were reproduced by
+  failing tests and corrected. Completion compares native CMTime boundaries;
+  checkpoint encoding and lookup now use identical segment-duration sums.
+- Simulator verification exposed an additional integration gap: the stage list
+  still displayed only stage 1. It now follows the shared stage policy. A
+  regression test exercises the real hook and SQLite-backed learning context,
+  covering video stages 1–10 and unchanged audio stages 1–16.
+- A current full native Simulator build demonstrated stage 9 with three-member
+  groups and first-word hints. Playback retained its final frame; confirmation
+  displayed +3 XP, restarted at the first member, and Repeat expanded three
+  cycles to five. Opening a menu paused playback; closing it preserved the frame
+  without autoplay, and explicit resume continued the group. Changing the
+  preference from three to two retained the active six-unit, three-member run.
+  The original two-member preference was restored. Exact gap exclusion and
+  short final groups are additionally covered by generated-media/core tests;
+  simulator observations are not an instrumented listening test.
+- The arm64 iOS test-fixture build passed. This is compilation evidence, not
+  physical-device acceptance. Expanded device interruptions and monitoring remain
+  #70; no new physical-device install was performed for #68.
 
 ## Scope and status
 
 Issue #67 is implemented on `codex/video-learning`: explicit private preparation,
-local installation/removal, and stage-1 inline video. Video stages 2–16 remain
-unavailable. Existing audio packages keep their own adapters and identities.
-Issue #67 remains open because the full simulator acceptance sequence and
-standalone offline cold launch are not yet verified.
+local installation/removal, and stage-1 inline video. The section above records
+the later #68 expansion. Existing audio packages keep their own adapters and identities.
+Issue #67 acceptance is verified through automated tests, simulator interaction
+and physical-device checks. Standalone offline cold launch and local playback
+passed on the owner's iPhone; missing/corrupt-media recovery passed in Simulator.
 
 The original media remains unchanged. Corrected English and final Korean are
 read from the supplied export. The prepared identity covers media metadata,
@@ -114,12 +153,92 @@ video reads only local files; demonstrate the application offline separately
 with an appropriate standalone internal build. Do not enable private content in
 a public Release build to bypass this check.
 
-## Remaining acceptance
+## Interactive acceptance
 
-- Complete the remaining simulator acceptance sequence: installation, offline
-  playback, three confirmations, Repeat +2, speed changes, menu return and
-  missing/corrupt-media recovery. The layout and same-phrase frame restoration
-  checks above do not replace this complete sequence.
+### Physical-device acceptance attempt — 2026-09-24
+
+- Built and installed the merged #67 code on the owner's connected iPhone using
+  development signing. Existing app data was retained, and the local progress
+  databases were copied to a private local backup before installation.
+- Prepared an explicitly local, ignored Debug build override to load an embedded
+  JavaScript bundle instead of Metro. The private video remains Debug-only; no
+  Release content gate was changed and nothing was uploaded to App Store Connect.
+  The packaged original media matched its manifest checksum; all 17 phrases were
+  present. No learning-engine code changed for this attempt.
+- The first offline launch reproduced Expo's embedded-development-bundle error:
+  `Cannot create devtools websocket connections in embedded environments.`
+  The local build was corrected to bundle JavaScript with `--dev false`, rebuilt,
+  and reinstalled. Native compilation remains Debug for private local content.
+- The replacement's first launch was blocked by iOS's development-signature trust
+  check while offline. After the owner restored connectivity and opened the app,
+  the library opened without the Expo startup error. The local video package then
+  installed successfully. A subsequent offline cold launch passed after this
+  first trusted launch, as detailed below.
+- Physical-device interaction demonstrated stage-one video playback, a retained
+  frame at the phrase boundary, and explicit confirmation. Two confirmations
+  added exactly 2 XP. Repeat at the third decision confirmed that cycle and
+  expanded the plan from three to five, without pre-crediting the extra cycles.
+  Confirming both extra cycles advanced to the second phrase with exactly 5 XP
+  added in total. Read-only copies of the device database verified these results.
+- The speed menu saved the displayed 3x rate. Closing it retained the second
+  phrase in the speaking phase with playback paused and no additional XP.
+  Audible output and malformed-media recovery have not yet been established by
+  this physical-device sequence.
+- Fresh `npm run check` passed 422 core tests, 25 build/package tests and TypeScript.
+  Fresh `MacLearningAudioTests` passed 32 tests with zero failures.
+
+The owner authorized a temporary Airplane Mode/Wi-Fi change and initially
+confirmed offline settings directly on the phone. Connectivity was subsequently
+restored for development-signature verification; Wi-Fi was visibly connected
+during the playback checks above.
+
+### Offline cold-launch acceptance — 2026-09-24
+
+- The owner enabled Airplane Mode and disabled Wi-Fi again. The mirrored physical
+  phone showed the airplane indicator without a Wi-Fi connection throughout this
+  check. The installed app was terminated and launched again over the USB device
+  connection; it opened the library without Metro, internet or a startup error.
+- The stage entry restored phrase 3/17 with two of three cycles confirmed and
+  the existing 35 XP. These values included additional practice by the owner
+  after the earlier interactive test. Reopening the lesson retained its decoded
+  video frame and confirmation state without adding XP.
+- One explicit confirmation advanced to phrase 4/17. Successive observations
+  showed the local video change frames and stop at the phrase boundary while
+  offline. Device database snapshots confirmed exactly one additional XP,
+  reaching 36 XP, with zero confirmed cycles on the new phrase and rate 1x.
+- The device owner was asked to restore Airplane Mode OFF and Wi-Fi ON, then
+  reported that the app appeared to work correctly. This is owner-reported
+  usability evidence, not an instrumented listening or latency measurement.
+  Network restoration was requested but was not independently observed.
+
+### Simulator missing/corrupt-media recovery — 2026-09-24
+
+- Backed up only the simulator's installed test video and local progress databases.
+  Physical-phone files and the supplied source materials were not changed.
+- Moved the installed video out of its expected location, then resumed the lesson
+  through the stage screen. The app blocked learning, displayed installation-check
+  guidance and retained the learning record. Following the visible lesson/library
+  actions exposed the normal download button; reinstalling restored the original
+  media byte-for-byte and reopened phrase 5/17.
+- Changed one byte in the installed test video while preserving its file size.
+  Reentry rejected the changed checksum instead of trusting the prior successful
+  verification. The same visible recovery path reinstalled a matching original
+  and resumed the saved phrase. Video frames advanced and playback stopped at
+  the phrase boundary, awaiting manual confirmation.
+- Both failures and both reinstall/reentry cycles retained exactly 129 total XP
+  and identical serialized video checkpoints: phrase 5/17, zero confirmed cycles
+  of three, rate 1x. No confirmation action was taken during these tests.
+- Fresh `npm run check` passed 422 core tests, 25 build/package checks and
+  TypeScript. Fresh `MacLearningAudioTests` passed all 32 cases, with zero failures
+  or skipped tests. No product-code change was required.
+- The simulator recovery demonstrations complement the preceding physical-device
+  installation, offline cold launch, confirmations, Repeat, speed and menu checks.
+  This is combined acceptance evidence, not a claim that every scenario ran in
+  one continuous simulator session. Temporary fault injection is no longer active;
+  the installed test video matches its verified backup.
+
+## Follow-up validation outside stage-one acceptance
+
 - Measure seek/start latency on the target device, including the first full
   integrity check after relaunch and subsequent metadata-only cache hits.
 - Physical microphone monitoring, wired remote control, interruption/route changes

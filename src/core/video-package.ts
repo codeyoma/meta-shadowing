@@ -29,4 +29,4 @@ export function readVideoPackage(json: unknown): VideoPackage | null {
     return { language: 'english', delivery: 'localVideo', manifest: m };
   } catch { throw Error('Unsupported video package.'); }
 }
-export function videoStageAvailable(stage: number) { return stage === 1; }
+export function videoStageAvailable(stage: number) { return Number.isInteger(stage) && stage >= 1 && stage <= 10; }

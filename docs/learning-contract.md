@@ -6,6 +6,24 @@ earlier planning documents can contain superseded behavior.
 
 ## Current stage expansion — 2026-09-20
 
+### Video packages — stages 1–10
+
+Video stages 1–6 play one bounded source phrase; stages 7–10 play the saved
+unit's ordered source segments on one native player. Intervening source gaps
+are skipped, without an extra confirmation, cycle, delay or reward. Native
+position and duration count only selected segment time. A checkpoint exactly
+at a member boundary resumes the next included member, not the excluded gap.
+Single-member stage-one checkpoints retain their existing meaning.
+
+Group size comes from the saved run, including a separate short final unit.
+The final member holds its decoded frame until confirmation; replay starts at
+the first member. Speed, paired subtitles, first-word hints in 5–6/9–10,
+three-cycle confirmation, Repeat +2 and per-member XP follow the rules below.
+Only the video supplies original audio. Pausing or replacing a unit cancels
+pending member transitions; stale callbacks cannot resume or finish it.
+Video packages remain gated from silent stages 11–16 until #69. Expanded
+physical-device interruption/monitoring acceptance remains in #70.
+
 The owner-approved implementation now enables stages 1–16. Stages 1–4 share
 the same manual subtitle-shadowing flow. Stages 5–6 retain full original audio
 but show only each sentence's first word while always displaying translations. Stages 7–8

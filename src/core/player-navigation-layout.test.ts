@@ -245,6 +245,30 @@ test('all six silent routes construct a timer without opening native audio', asy
   }
 });
 
+test('video routes pass the saved unit mapping without opening independent native audio', () => {
+  let declaration: ts.VariableDeclaration | undefined;
+  function find(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'audio') declaration = node;
+    ts.forEachChild(node, find);
+  }
+  find(screen);
+  const code = ts.transpileModule(`module.exports = (${declaration!.initializer!.getText(source)});`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  for (const stage of [2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+    const runUnits = stage < 7 ? [{ sourceIndices: [0] }, { sourceIndices: [1] }]
+      : [{ sourceIndices: [0, 1, 2] }, { sourceIndices: [3] }];
+    let args: unknown[] = [];
+    runInNewContext(code, { module: { exports: {} }, stage, isRevealStage, videoOwner: 'video', monitorKey: 'monitor',
+      runUnits, engine: { current: null }, pack: { manifest: { phrases: [{ start: 1, end: 2 }, { start: 3, end: 5 }] } },
+      isVideoPackage: () => true, nativeVideo: (...values: unknown[]) => { args = values; },
+      nativeAudio() { assert.fail('Video route opened native audio'); },
+    });
+    assert.equal(JSON.stringify(args[6]), JSON.stringify(runUnits.map(unit => unit.sourceIndices)));
+    assert.equal(JSON.stringify(args[5]), '[1,2]');
+  }
+});
+
 test('reauthorization restores paused player content without clearing unrelated unavailability', async () => {
   let construction: ts.NewExpression | undefined;
   function find(node: ts.Node) {

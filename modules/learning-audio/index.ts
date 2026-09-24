@@ -9,7 +9,7 @@ interface LearningAudio {
   videoPackageStatus(): Promise<{ installed: boolean; bytes: number }>;
   installVideoPackage(): Promise<void>;
   removeVideoPackage(): Promise<void>;
-  videoPrepare(owner: string, generation: number, phrase: number, position: number, rate: number): Promise<void>;
+  videoPrepare(owner: string, generation: number, sourceIndices: number[], position: number, rate: number): Promise<void>;
   videoPlay(owner: string, generation: number): Promise<void>;
   videoPause(owner: string): Promise<void>;
   videoDispose(owner: string): Promise<void>;

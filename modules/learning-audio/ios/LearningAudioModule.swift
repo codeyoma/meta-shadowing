@@ -51,7 +51,7 @@ public class LearningAudioModule: Module {
     }
     AsyncFunction("installVideoPackage") { () async throws -> Void in try await self.videoPackage.install() }
     AsyncFunction("removeVideoPackage") { () async throws -> Void in try await self.videoPackage.remove() }
-    AsyncFunction("videoPrepare") { (owner: String, generation: Int, phrase: Int, position: Double, rate: Double, promise: Promise) in
+    AsyncFunction("videoPrepare") { (owner: String, generation: Int, sourceIndices: [Int], position: Double, rate: Double, promise: Promise) in
       MainActor.assumeIsolated {
         guard self.monitorLifetime.isOpen else { promise.reject("video-unavailable", "Video is unavailable."); return }
         let controller = LessonVideoPlayer.shared
@@ -63,11 +63,17 @@ public class LearningAudioModule: Module {
         }
         Task { @MainActor in
           do {
-            guard let manifest = self.videoPackage.manifest, manifest.phrases.indices.contains(phrase) else { throw VideoError.invalid }
+            guard let manifest = self.videoPackage.manifest,
+              (1...4).contains(sourceIndices.count),
+              sourceIndices.allSatisfy({ manifest.phrases.indices.contains($0) }),
+              zip(sourceIndices, sourceIndices.dropFirst()).allSatisfy({ $0.0 < $0.1 })
+            else { throw VideoError.invalid }
             let url = try await self.videoPackage.mediaURL()
             guard self.monitorLifetime.isOpen, controller.matches(owner, generation) else { throw VideoError.cancelled }
-            let segment = manifest.phrases[phrase]
-            try await controller.prepare(url: url, start: segment.start, end: segment.end,
+            let segments = sourceIndices.map {
+              VideoSegmentTimeline.Segment(start: manifest.phrases[$0].start, end: manifest.phrases[$0].end)
+            }
+            try await controller.prepare(url: url, segments: segments,
               position: position, rate: rate, owner: owner, generation: generation)
             promise.resolve()
           } catch { promise.reject("video-unavailable", "Video could not be prepared.") }

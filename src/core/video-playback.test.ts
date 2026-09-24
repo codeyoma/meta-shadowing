@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { videoPlayback, type VideoBridge, type VideoStatus } from './video-playback';
 import { Player } from './player';
-import { createSession } from './session';
+import { createSession, createGroupedSession } from './session';
 import { DatabaseSync } from 'node:sqlite';
 import { Journal } from './journal';
 import { LearningContext } from './learning-context';
 import { readVideoPackage } from './video-package';
+import { presentLearningUnits } from './learning-presentation';
+import { decodeSettings } from './settings';
 
 function fixture() {
   let listener: (s: VideoStatus) => void = () => {};
@@ -115,5 +117,72 @@ test('video confirmations persist five repeat credits once and restore without a
     player.dispose();
     assert.equal(context.save(context.load(1)!), 0);
     assert.equal(journal.progress.summary('english').xp, 5);
+  } finally { db.close(); }
+});
+
+test('saved video groups preserve member counts, hints, pause checkpoints and explicit repeat rewards', async () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const journal = new Journal({ exec: sql => db.exec(sql),
+      run: (sql, ...args) => { db.prepare(sql).run(...args); },
+      first: <T>(sql: string, ...args: (string | number)[]) => db.prepare(sql).get(...args) as T | null });
+    const phrases = ['Open the window.', 'Bring the cup.', 'Take a seat.', 'Read the book.', 'Close the door.'];
+    const pack = readVideoPackage(JSON.stringify({ kind: 'video', schemaVersion: 1, id: 'video-groups', version: 1,
+      title: 'Generated groups', media: { file: 'video/source.mp4', bytes: 10, sha256: 'a'.repeat(64), duration: 20 },
+      phrases: phrases.map((text, i) => ({ id: `p${i}`, start: i * 3, end: i * 3 + 1, text, translation: `번역 ${i}` })) }))!;
+    const context = new LearningContext(pack, journal);
+    let settings = decodeSettings('{"mode":"manual","rate":1.5,"groupSize":3}');
+    const initial = createGroupedSession({ ...settings, groupSize: settings.groupSize!, runId: 'group', stage: 9, sourcePhraseCount: 5 });
+    context.save(initial);
+    settings = decodeSettings('{"mode":"manual","rate":1,"groupSize":2}');
+    const saved = context.load(9)!;
+    assert.equal(settings.groupSize, 2);
+    assert.deepEqual(context.units(saved).map(u => u.sourceIndices), [[0, 1, 2], [3, 4]]);
+    assert.equal(saved.phraseCount, 2);
+    assert.equal(saved.rate, 1.5);
+    const four = createGroupedSession({ ...settings, groupSize: 4, runId: 'four', stage: 10, sourcePhraseCount: 5 });
+    assert.deepEqual(context.units(four).map(u => u.sourceIndices), [[0, 1, 2, 3], [4]]);
+    const shown = presentLearningUnits(context.units(saved), 9, null);
+    assert.equal(shown[0]!.text, 'Open …\nBring …\nTake …');
+    assert.deepEqual(shown[1]!.members, [
+      { text: 'Read the book.', translation: '번역 3' }, { text: 'Close the door.', translation: '번역 4' }]);
+    for (const stage of [2, 3, 4, 5, 6] as const) {
+      const single = createSession({ runId: `single${stage}`, stage, phraseCount: 5, rate: 1, mode: 'manual' });
+      const units = context.units(single);
+      assert.deepEqual(units.map(u => u.sourceIndices), [[0], [1], [2], [3], [4]]);
+      const presentation = presentLearningUnits(units, stage, null);
+      assert.equal(presentation[0]!.text, stage >= 5 ? 'Open …' : 'Open the window.');
+      assert.equal(presentation[0]!.translation, '번역 0');
+    }
+    const f = fixture();
+    let player: Player;
+    const port = videoPlayback('test', f.bridge, d => player.audioEnded(d), () => player.audioFailed(), () => player.pause());
+    player = new Player(saved, port, context.createWriter(saved), () => 1000, () => {});
+    await player.resume();
+    f.emit('playing', 1.4); f.emit('failed', 1.4);
+    assert.equal(context.load(9)!.audioSeconds, 1.4);
+    assert.equal(player.state.phrase, 0);
+    assert.equal(player.state.confirmed, 0);
+    assert.equal(journal.progress.summary('english').xp, 0);
+    await player.resume();
+    for (let cycle = 0; cycle < 5; cycle++) {
+      f.emit('ended', 2.5); f.emit('ended', 2.5);
+      assert.equal(journal.progress.summary('english').xp, cycle * 3);
+      if (cycle === 2) { await player.choose('repeat'); assert.equal(player.state.planned, 5); }
+      else if (cycle === 4) await player.choose('next');
+      else await player.confirm();
+    }
+    assert.equal(player.state.phrase, 1);
+    assert.equal(journal.progress.summary('english').xp, 15);
+    for (let cycle = 0; cycle < 3; cycle++) {
+      f.emit('ended', 2.5); f.emit('ended', 2.5);
+      assert.equal(journal.progress.summary('english').xp, 15 + cycle * 2);
+      if (cycle === 2) await player.choose('next'); else await player.confirm();
+    }
+    assert.equal(journal.progress.summary('english').xp, 21);
+    assert.equal(context.completions(9), 1);
+    player.dispose();
+    assert.equal(context.save(context.load(9)!), 0);
+    assert.equal(journal.progress.summary('english').xp, 21);
   } finally { db.close(); }
 });
