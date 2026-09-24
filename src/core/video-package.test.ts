@@ -28,6 +28,6 @@ test('a prepared video package preserves final text and gates unimplemented stag
   assert.equal(pack.manifest.phrases[0]?.translation, '창문을 여세요.');
   assert.equal(pack.manifest.media.file, 'video/source.mp4');
   assert.equal(readVideoPackage(null), null);
-  assert.equal(videoStageAvailable(1), true);
-  for (const stage of [0, 2, 10, 11, 16, 1.5, NaN]) assert.equal(videoStageAvailable(stage), false);
+  for (let stage = 1; stage <= 10; stage++) assert.equal(videoStageAvailable(stage), true);
+  for (const stage of [0, 11, 16, 17, 1.5, NaN, Infinity]) assert.equal(videoStageAvailable(stage), false);
 });

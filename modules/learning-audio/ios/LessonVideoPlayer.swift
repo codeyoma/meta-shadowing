@@ -8,14 +8,26 @@ import Foundation
   var onStatus: (([String: Any]) -> Void)?
   private(set) var owner = ""
   private var generation = 0
-  private var start = 0.0, end = 0.0, rate: Float = 1
+  private var timeline: VideoSegmentTimeline?
+  private var member = 0, memberRevision = 0
+  private var transitioning = false
+  private var rate: Float = 1
   private var active = false, completed = false, hasPlayed = false, prepared = false
   private var periodic: Any?
   private var notifications: [NSObjectProtocol] = []
+  private let transitionSeek: @MainActor (AVPlayer, CMTime) async -> Bool
+
+  init(transitionSeek: @escaping @MainActor (AVPlayer, CMTime) async -> Bool = { player, time in
+    await player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+  }) {
+    self.transitionSeek = transitionSeek
+  }
 
   func matches(_ owner: String, _ generation: Int) -> Bool { self.owner == owner && self.generation == generation }
   func reserve(owner: String, generation: Int) {
     player.pause(); active = false; completed = false; hasPlayed = false; prepared = false
+    transitioning = false; memberRevision += 1
+    player.currentItem?.cancelPendingSeeks()
     clearObservers()
     self.owner = owner; self.generation = generation
   }
@@ -24,15 +36,16 @@ import Foundation
     for token in notifications { NotificationCenter.default.removeObserver(token) }
     notifications = []
   }
-  func prepare(url: URL, start: Double, end: Double, position: Double, rate: Double,
+  func prepare(url: URL, segments: [VideoSegmentTimeline.Segment], position: Double, rate: Double,
                owner: String, generation: Int) async throws {
-    guard matches(owner, generation), url.isFileURL, start.isFinite, end.isFinite, position.isFinite,
-      start >= 0, end > start, position >= 0, position <= end - start, rate.isFinite, (0.25...3).contains(rate)
+    guard matches(owner, generation), url.isFileURL, rate.isFinite, (0.25...3).contains(rate)
     else { throw VideoError.invalid }
+    let timeline = try VideoSegmentTimeline(segments: segments)
+    let location = try timeline.locate(position)
     let asset = AVURLAsset(url: url)
     let duration = try await asset.load(.duration).seconds
     guard matches(owner, generation) else { throw VideoError.cancelled }
-    guard duration.isFinite, end <= duration + 0.05,
+    guard duration.isFinite, segments.last!.end <= duration + 0.05,
       !(try await asset.loadTracks(withMediaType: .video)).isEmpty else { throw VideoError.invalid }
     let audioTracks = try await asset.loadTracks(withMediaType: .audio)
     var hasDecodableAudio = false
@@ -44,9 +57,9 @@ import Foundation
     }
     guard matches(owner, generation) else { throw VideoError.cancelled }
     guard hasDecodableAudio else { throw VideoError.invalid }
-    self.start = start; self.end = end; self.rate = Float(rate)
+    self.timeline = timeline; member = location.member; self.rate = Float(rate)
     let item = AVPlayerItem(asset: asset)
-    item.forwardPlaybackEndTime = CMTime(seconds: end, preferredTimescale: 60000)
+    item.forwardPlaybackEndTime = CMTime(seconds: segments[member].end, preferredTimescale: 60000)
     item.audioTimePitchAlgorithm = .timeDomain
     player.actionAtItemEnd = .pause
     player.allowsExternalPlayback = false
@@ -57,31 +70,38 @@ import Foundation
       guard matches(owner, generation) else { throw VideoError.cancelled }
     }
     guard item.status == .readyToPlay else { throw VideoError.unavailable }
-    let sought = await player.seek(to: CMTime(seconds: start + position, preferredTimescale: 60000),
+    let sought = await player.seek(to: CMTime(seconds: location.mediaSeconds, preferredTimescale: 60000),
       toleranceBefore: .zero, toleranceAfter: .zero)
     guard matches(owner, generation), sought else { throw VideoError.cancelled }
+    observe(item: item, owner: owner, generation: generation)
+    prepared = true
+    emit("ready")
+  }
+  private func observe(item: AVPlayerItem, owner: String, generation: Int) {
+    let revision = memberRevision
     notifications.append(NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
       object: item, queue: .main) { [weak self] _ in
         MainActor.assumeIsolated {
-          guard let self, self.matches(owner, generation) else { return }
-          self.finish()
+          guard let self, self.matches(owner, generation), self.memberRevision == revision else { return }
+          self.finishMember()
         }
       })
     notifications.append(NotificationCenter.default.addObserver(forName: .AVPlayerItemFailedToPlayToEndTime,
       object: item, queue: .main) { [weak self] _ in
         MainActor.assumeIsolated {
-          guard let self, self.matches(owner, generation), self.active else { return }
-          self.active = false; self.player.pause(); self.emit("failed")
+          guard let self, self.matches(owner, generation), self.memberRevision == revision else { return }
+          self.fail()
         }
       })
     periodic = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.025, preferredTimescale: 60000),
       queue: .main) { [weak self] _ in
         MainActor.assumeIsolated {
-          guard let self, self.matches(owner, generation), self.active else { return }
+          guard let self, self.matches(owner, generation), self.memberRevision == revision,
+            self.active, !self.transitioning, let timeline = self.timeline else { return }
           if self.player.currentItem?.status == .failed {
-            self.active = false; self.player.pause(); self.emit("failed")
-          } else if self.player.currentTime().seconds >= self.end {
-            self.finish()
+            self.fail()
+          } else if self.player.currentTime().seconds >= timeline.segments[self.member].end {
+            self.finishMember()
           } else if self.player.timeControlStatus == .playing {
             self.hasPlayed = true; self.emit("playing")
           } else if self.hasPlayed && self.player.timeControlStatus == .paused {
@@ -89,12 +109,34 @@ import Foundation
           }
         }
       }
-    prepared = true
-    emit("ready")
   }
-  private func finish() {
-    guard active, !completed else { return }
-    active = false; completed = true; player.pause(); emit("ended")
+  private func finishMember() {
+    guard active, !completed, !transitioning, let timeline, let item = player.currentItem,
+      player.currentTime().seconds >= timeline.segments[member].end - 0.000001 else { return }
+    player.pause()
+    if member == timeline.segments.count - 1 {
+      active = false; completed = true; emit("ended"); return
+    }
+    // Retire this member before awaiting its seek. Both AVFoundation end paths can fire.
+    transitioning = true; memberRevision += 1; clearObservers()
+    let owner = owner, generation = generation, revision = memberRevision
+    let next = member + 1
+    item.forwardPlaybackEndTime = CMTime(seconds: timeline.segments[next].end, preferredTimescale: 60000)
+    emit("playing") // Persist the selected-time boundary, never the skipped source gap.
+    Task { @MainActor [weak self] in
+      guard let self, self.matches(owner, generation), self.memberRevision == revision, self.active else { return }
+      let sought = await self.transitionSeek(self.player, CMTime(seconds: timeline.segments[next].start, preferredTimescale: 60000))
+      guard self.matches(owner, generation), self.memberRevision == revision, self.active else { return }
+      self.transitioning = false
+      guard sought, item.status == .readyToPlay else { self.fail(); return }
+      self.member = next; self.hasPlayed = false
+      self.observe(item: item, owner: owner, generation: generation)
+      self.player.playImmediately(atRate: self.rate)
+    }
+  }
+  private func fail() {
+    guard active else { return }
+    active = false; prepared = false; player.pause(); emit("failed")
   }
   func play(owner: String, generation: Int) {
     guard matches(owner, generation), prepared, player.currentItem?.status == .readyToPlay, !completed else { return }
@@ -103,6 +145,7 @@ import Foundation
   func pause(owner: String) {
     guard self.owner == owner else { return }
     player.pause(); active = false; prepared = false; generation += 1
+    memberRevision += 1; transitioning = false; player.currentItem?.cancelPendingSeeks()
     clearObservers()
   }
   func dispose(owner: String) {
@@ -110,9 +153,11 @@ import Foundation
     pause(owner: owner); player.replaceCurrentItem(with: nil); self.owner = ""; onStatus = nil
   }
   private func emit(_ phase: String) {
+    guard let timeline else { return }
     let raw = player.currentTime().seconds
-    let position = completed ? end - start : max(0, min(end - start, raw.isFinite ? raw - start : 0))
+    let position = completed ? timeline.duration : timeline.position(member: member,
+      mediaSeconds: transitioning ? timeline.segments[member].end : raw)
     onStatus?(["owner": owner, "generation": generation, "phase": phase,
-      "position": position, "duration": end - start])
+      "position": position, "duration": timeline.duration])
   }
 }

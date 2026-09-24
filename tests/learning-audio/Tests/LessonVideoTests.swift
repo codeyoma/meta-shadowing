@@ -3,6 +3,79 @@ import Foundation
 import Testing
 
 struct LessonVideoTests {
+  @Test(arguments: ["pause", "replace", "fail"])
+  @MainActor func pendingMemberSeekCannotCompleteOrRestartRetiredPlayback(action: String) async throws {
+    let url = try await movie()
+    defer { try? FileManager.default.removeItem(at: url) }
+    var continuation: CheckedContinuation<Bool, Never>?
+    let video = LessonVideoPlayer(transitionSeek: { _, _ in
+      await withCheckedContinuation { continuation = $0 }
+    })
+    defer { video.dispose(owner: video.owner) }
+    var events: [[String: Any]] = []
+    video.onStatus = { events.append($0) }
+    video.reserve(owner: "group", generation: 1)
+    try await video.prepare(url: url, segments: [.init(start: 0.2, end: 0.4), .init(start: 1.8, end: 2.4)],
+      position: 0, rate: 3, owner: "group", generation: 1)
+    video.play(owner: "group", generation: 1)
+    let deadline = ContinuousClock.now + .seconds(5)
+    while continuation == nil && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    let pending = try #require(continuation)
+    let oldItem = try #require(video.player.currentItem)
+    // Duplicate notifications while the seek is pending must not skip another member.
+    for _ in 0..<3 { NotificationCenter.default.post(name: .AVPlayerItemDidPlayToEndTime, object: oldItem) }
+    #expect(!events.contains { $0["phase"] as? String == "ended" })
+    if action == "pause" { video.pause(owner: "group") }
+    if action == "replace" {
+      video.reserve(owner: "new", generation: 2)
+      try await video.prepare(url: url, segments: [.init(start: 1, end: 1.5)], position: 0, rate: 1, owner: "new", generation: 2)
+    }
+    pending.resume(returning: action != "fail")
+    try await Task.sleep(for: .milliseconds(100))
+    NotificationCenter.default.post(name: .AVPlayerItemDidPlayToEndTime, object: oldItem)
+    video.play(owner: "group", generation: 1)
+    #expect(video.player.rate == 0)
+    #expect(!events.contains { $0["phase"] as? String == "ended" })
+    #expect(events.filter { $0["phase"] as? String == "failed" }.count == (action == "fail" ? 1 : 0))
+    if action == "fail" {
+      #expect(abs((events.last?["position"] as? Double ?? 0) - 0.2) < 0.000001)
+    }
+    if action == "replace" { #expect(abs(video.player.currentTime().seconds - 1) < 0.01) }
+  }
+  @Test @MainActor func playsSelectedMembersOnceAndResumesOnTheirCombinedTimeline() async throws {
+    let url = try await movie()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let video = LessonVideoPlayer()
+    defer { video.dispose(owner: "group") }
+    let segments: [VideoSegmentTimeline.Segment] = [.init(start: 0.2, end: 0.6), .init(start: 1.8, end: 2.4)]
+    var events: [[String: Any]] = []
+    video.onStatus = { events.append($0) }
+    video.reserve(owner: "group", generation: 1)
+    try await video.prepare(url: url, segments: segments, position: 0, rate: 1.5, owner: "group", generation: 1)
+    let item = try #require(video.player.currentItem)
+    let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+    item.add(output)
+    video.play(owner: "group", generation: 1)
+    let deadline = ContinuousClock.now + .seconds(5)
+    while !events.contains(where: { $0["phase"] as? String == "ended" }) && ContinuousClock.now < deadline {
+      let time = video.player.currentTime().seconds
+      #expect(time <= 0.61 || time >= 1.79)
+      if time > 1.85 && time < 2.3 { #expect(video.player.rate == 1.5) }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(events.filter { $0["phase"] as? String == "ended" }.count == 1)
+    #expect(!events.contains { $0["phase"] as? String == "paused" })
+    #expect(abs((events.last?["duration"] as? Double ?? 0) - 1) < 0.000001)
+    #expect(abs(video.player.currentTime().seconds - 2.4) < 0.05)
+    #expect(output.copyPixelBuffer(forItemTime: CMTime(seconds: 2.39, preferredTimescale: 60000), itemTimeForDisplay: nil) != nil)
+    #expect(video.player.rate == 0)
+    video.reserve(owner: "group", generation: 2)
+    try await video.prepare(url: url, segments: segments, position: 0.6, rate: 2, owner: "group", generation: 2)
+    #expect(abs(video.player.currentTime().seconds - 2) < 0.01)
+    video.reserve(owner: "group", generation: 3)
+    try await video.prepare(url: url, segments: segments, position: 0, rate: 1, owner: "group", generation: 3)
+    #expect(abs(video.player.currentTime().seconds - 0.2) < 0.01)
+  }
   func movie(includeAudio: Bool = true) async throws -> URL {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
     let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -47,7 +120,7 @@ struct LessonVideoTests {
     var ends = 0
     video.onStatus = { event in if event["phase"] as? String == "ended" { ends += 1 } }
     video.reserve(owner: "test", generation: 1)
-    try await video.prepare(url: url, start: 1, end: 1.5, position: 0, rate: 2, owner: "test", generation: 1)
+    try await video.prepare(url: url, segments: [.init(start: 1, end: 1.5)], position: 0, rate: 2, owner: "test", generation: 1)
     let item = try #require(video.player.currentItem)
     #expect(try await item.asset.loadTracks(withMediaType: .audio).count == 1)
     let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
@@ -64,10 +137,10 @@ struct LessonVideoTests {
     #expect(video.player.rate == 0)
     #expect(abs(video.player.currentTime().seconds - 1.5) < 0.05)
     video.reserve(owner: "test", generation: 2)
-    try await video.prepare(url: url, start: 1, end: 1.5, position: 0.2, rate: 1, owner: "test", generation: 2)
+    try await video.prepare(url: url, segments: [.init(start: 1, end: 1.5)], position: 0.2, rate: 1, owner: "test", generation: 2)
     #expect(abs(video.player.currentTime().seconds - 1.2) < 0.05)
     video.reserve(owner: "test", generation: 3)
-    try await video.prepare(url: url, start: 1, end: 1.5, position: 0, rate: 1, owner: "test", generation: 3)
+    try await video.prepare(url: url, segments: [.init(start: 1, end: 1.5)], position: 0, rate: 1, owner: "test", generation: 3)
     #expect(abs(video.player.currentTime().seconds - 1) < 0.01)
     video.dispose(owner: "obsolete-owner")
     #expect(video.player.currentItem != nil)
@@ -79,7 +152,7 @@ struct LessonVideoTests {
     defer { video.dispose(owner: "test") }
     video.reserve(owner: "test", generation: 1)
     let task = Task { @MainActor in
-      try await video.prepare(url: url, start: 0, end: 1, position: 0, rate: 1, owner: "test", generation: 1)
+      try await video.prepare(url: url, segments: [.init(start: 0, end: 1)], position: 0, rate: 1, owner: "test", generation: 1)
     }
     video.pause(owner: "test")
     await #expect(throws: (any Error).self) { try await task.value }
@@ -93,7 +166,7 @@ struct LessonVideoTests {
     let video = LessonVideoPlayer()
     video.reserve(owner: "invalid", generation: 1)
     await #expect(throws: (any Error).self) {
-      try await video.prepare(url: url, start: 0, end: 1, position: 0, rate: 1, owner: "invalid", generation: 1)
+      try await video.prepare(url: url, segments: [.init(start: 0, end: 1)], position: 0, rate: 1, owner: "invalid", generation: 1)
     }
     video.play(owner: "invalid", generation: 1)
     #expect(video.player.rate == 0)
@@ -107,12 +180,12 @@ struct LessonVideoTests {
     let video = LessonVideoPlayer()
     defer { video.dispose(owner: "test") }
     video.reserve(owner: "test", generation: 1)
-    try await video.prepare(url: valid, start: 0, end: 1, position: 0, rate: 1, owner: "test", generation: 1)
+    try await video.prepare(url: valid, segments: [.init(start: 0, end: 1)], position: 0, rate: 1, owner: "test", generation: 1)
     var ready = false
     video.onStatus = { event in if event["phase"] as? String == "ready" { ready = true } }
     video.reserve(owner: "test", generation: 2)
     await #expect(throws: (any Error).self) {
-      try await video.prepare(url: silent, start: 0, end: 1, position: 0, rate: 1, owner: "test", generation: 2)
+      try await video.prepare(url: silent, segments: [.init(start: 0, end: 1)], position: 0, rate: 1, owner: "test", generation: 2)
     }
     #expect(!ready)
     video.play(owner: "test", generation: 2)
