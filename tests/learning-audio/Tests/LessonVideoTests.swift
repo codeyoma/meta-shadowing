@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 struct LessonVideoTests {
-  func movie() async throws -> URL {
+  func movie(includeAudio: Bool = true) async throws -> URL {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
     let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -24,6 +24,7 @@ struct LessonVideoTests {
     }
     input.markAsFinished(); await writer.finishWriting()
     #expect(writer.status == .completed)
+    if !includeAudio { return url }
     let tone = url.deletingPathExtension().appendingPathExtension("m4a")
     let combined = url.deletingPathExtension().appendingPathExtension("mov")
     defer { try? FileManager.default.removeItem(at: url); try? FileManager.default.removeItem(at: tone) }
@@ -97,5 +98,24 @@ struct LessonVideoTests {
     video.play(owner: "invalid", generation: 1)
     #expect(video.player.rate == 0)
     video.dispose(owner: "invalid")
+  }
+  @Test @MainActor func videoWithoutAudioNeverBecomesReadyOrReusesPreviousPlayback() async throws {
+    let valid = try await movie(), silent = try await movie(includeAudio: false)
+    defer { try? FileManager.default.removeItem(at: valid); try? FileManager.default.removeItem(at: silent) }
+    #expect(try await AVURLAsset(url: silent).loadTracks(withMediaType: .video).count == 1)
+    #expect(try await AVURLAsset(url: silent).loadTracks(withMediaType: .audio).isEmpty)
+    let video = LessonVideoPlayer()
+    defer { video.dispose(owner: "test") }
+    video.reserve(owner: "test", generation: 1)
+    try await video.prepare(url: valid, start: 0, end: 1, position: 0, rate: 1, owner: "test", generation: 1)
+    var ready = false
+    video.onStatus = { event in if event["phase"] as? String == "ready" { ready = true } }
+    video.reserve(owner: "test", generation: 2)
+    await #expect(throws: (any Error).self) {
+      try await video.prepare(url: silent, start: 0, end: 1, position: 0, rate: 1, owner: "test", generation: 2)
+    }
+    #expect(!ready)
+    video.play(owner: "test", generation: 2)
+    #expect(video.player.rate == 0)
   }
 }

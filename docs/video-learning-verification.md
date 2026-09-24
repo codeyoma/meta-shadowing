@@ -59,6 +59,26 @@ checkpoints. No supplied content, identifiers or hashes are recorded here.
 
 ## Review resolution
 
+PR #71 follow-up addresses both review findings:
+
+- Package verification now caches a process-local result against the file path,
+  device/inode, size, and nanosecond modification/change timestamps. Every access
+  still checks path safety and file metadata. Changed or replaced media is
+  rehashed; removal/reinstallation clears the cache; a new package instance
+  revalidates the bytes. Metadata is checked again after hashing before caching.
+  The regression first reproduced 42 full reads during repeated access, then
+  passed with one verification and a second verification after relaunch.
+- Playback requires a decodable audio track with loadable format descriptions
+  before emitting ready. A failed preparation cannot play the previously retained
+  item. A generated video-only fixture reproduced the failure before the fix;
+  the fixed player rejects it without ready or playback.
+- Fresh `MacLearningAudioTests` passed all 32 reported test cases, including
+  same-size edits with a restored modification date, atomic replacement, removal,
+  reinstall, symlink rejection, and existing bounded playback tests. Fresh
+  `npm run check` passed 422 core tests, 25 build/package checks and TypeScript.
+  The native fixture also passed an arm64 iOS Simulator build-for-testing;
+  this compile check does not claim a physical-device test.
+
 Standards review identified two documented breaches: a reused package identity
 and subprocess errors exposing input paths. Both were corrected and regression
 tested. The module now also limits teardown to its own video owner and suppresses
@@ -100,8 +120,8 @@ a public Release build to bypass this check.
   playback, three confirmations, Repeat +2, speed changes, menu return and
   missing/corrupt-media recovery. The layout and same-phrase frame restoration
   checks above do not replace this complete sequence.
-- Measure seek/start latency on the target device. Integrity verification streams
-  the complete file on preparation; it currently does not cache verification.
+- Measure seek/start latency on the target device, including the first full
+  integrity check after relaunch and subsequent metadata-only cache hits.
 - Physical microphone monitoring, wired remote control, interruption/route changes
   and background interactions are unperformed here and remain in the follow-up
   video acceptance scope. No simulator was booted without approval.

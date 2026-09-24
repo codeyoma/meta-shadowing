@@ -1,8 +1,32 @@
 import Foundation
 import CryptoKit
 import Testing
+import Synchronization
 
 struct LocalVideoPackageTests {
+  @Test func repeatedSegmentAccessReusesVerificationButRelaunchVerifiesAgain() async throws {
+    let (root, installer) = try fixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    try await installer.install()
+    let reads = Mutex(0)
+    let checksum: @Sendable (URL) throws -> String = { url in
+      reads.withLock { $0 += 1 }
+      return try LocalVideoPackage.sha256(url)
+    }
+    let store = LocalVideoPackage(source: root.appendingPathComponent("source"),
+      packages: root.appendingPathComponent("installed"), checksum: checksum)
+    #expect(try await store.status().installed)
+    let url = try await store.mediaURL()
+    for _ in 0..<20 {
+      #expect(try await store.mediaURL() == url)
+      #expect(try await store.status().installed)
+    }
+    #expect(reads.withLock { $0 } == 1, "Repeated segment preparation must not reread the complete movie")
+    let relaunched = LocalVideoPackage(source: root.appendingPathComponent("source"),
+      packages: root.appendingPathComponent("installed"), checksum: checksum)
+    #expect(try await relaunched.status().installed)
+    #expect(reads.withLock { $0 } == 2, "A new package instance must verify the installed bytes again")
+  }
   @Test func malformedSourceIsReportedButAbsentOptInIsNotAnError() throws {
     let (root, _) = try fixture()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -11,6 +35,27 @@ struct LocalVideoPackageTests {
     #expect(LocalVideoPackage(source: source, packages: root).manifestInvalid)
     #expect(!LocalVideoPackage(source: nil, packages: root).manifestInvalid)
     #expect(!LocalVideoPackage(source: root.appendingPathComponent("absent"), packages: root).manifestInvalid)
+  }
+  @Test func cachedVerificationRejectsSameSizeEditsAndReplacementsAndCanRecover() async throws {
+    let (root, store) = try fixture()
+    defer { try? FileManager.default.removeItem(at: root) }
+    try await store.install()
+    let url = try await store.mediaURL()
+    let modified = try #require(FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
+    try Data("changed!!".utf8).write(to: url)
+    try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: url.path)
+    #expect(try await store.status().installed == false)
+    await #expect(throws: (any Error).self) { try await store.mediaURL() }
+    try Data("synthetic".utf8).write(to: url, options: .atomic)
+    #expect(try await store.mediaURL() == url)
+    try Data("changed!!".utf8).write(to: url, options: .atomic)
+    try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: url.path)
+    await #expect(throws: (any Error).self) { try await store.mediaURL() }
+    try await store.remove()
+    await #expect(throws: (any Error).self) { try await store.mediaURL() }
+    try await store.install()
+    #expect(try await store.mediaURL() == url)
+    #expect(try await store.status().installed)
   }
   func fixture() throws -> (URL, LocalVideoPackage) {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

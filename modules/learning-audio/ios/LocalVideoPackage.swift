@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Darwin
 
 enum VideoError: Error { case unavailable, invalid, cancelled }
 
@@ -45,6 +46,31 @@ actor LocalVideoPackage {
   private let source: URL?
   private let packages: URL
   private let fm = FileManager.default
+  private let checksum: @Sendable (URL) throws -> String
+  // Process-local only: a new instance must verify bytes before trusting them.
+  private var verification: (url: URL, identity: FileIdentity, valid: Bool)?
+
+  private struct FileIdentity: Equatable {
+    let device: dev_t
+    let inode: ino_t
+    let bytes: off_t
+    let modifiedSeconds: Int
+    let modifiedNanoseconds: Int
+    let changedSeconds: Int
+    let changedNanoseconds: Int
+
+    init?(_ url: URL) throws {
+      var info = stat()
+      guard lstat(url.path, &info) == 0 else {
+        if errno == ENOENT { return nil }
+        throw VideoError.invalid
+      }
+      guard info.st_mode & S_IFMT == S_IFREG else { throw VideoError.invalid }
+      device = info.st_dev; inode = info.st_ino; bytes = info.st_size
+      modifiedSeconds = info.st_mtimespec.tv_sec; modifiedNanoseconds = info.st_mtimespec.tv_nsec
+      changedSeconds = info.st_ctimespec.tv_sec; changedNanoseconds = info.st_ctimespec.tv_nsec
+    }
+  }
 
   nonisolated static var bundledSource: URL? {
     #if DEBUG
@@ -54,9 +80,11 @@ actor LocalVideoPackage {
     #endif
   }
 
-  init(source: URL?, packages: URL) {
+  init(source: URL?, packages: URL,
+       checksum: @escaping @Sendable (URL) throws -> String = LocalVideoPackage.sha256) {
     self.source = source?.standardizedFileURL
     self.packages = packages.standardizedFileURL
+    self.checksum = checksum
     if let source, let data = try? Self.safeData(source.appendingPathComponent("manifest.json")),
        let decoded = try? VideoManifest.decode(data) {
       manifest = decoded; json = String(data: data, encoding: .utf8); manifestInvalid = false
@@ -91,14 +119,24 @@ actor LocalVideoPackage {
   private func verified(_ url: URL) throws -> Bool {
     guard let manifest else { return false }
     try Self.safePath(url)
-    guard fm.fileExists(atPath: url.path) else { return false }
-    let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-    guard values.isRegularFile == true, Int64(values.fileSize ?? 0) == manifest.media.bytes else { return false }
+    guard let identity = try FileIdentity(url), identity.bytes == manifest.media.bytes else {
+      verification = nil
+      return false
+    }
+    if let verification, verification.url == url, verification.identity == identity { return verification.valid }
+    verification = nil
+    let valid = try checksum(url) == manifest.media.sha256
+    // Do not bless a replacement or an in-place edit that happened during hashing.
+    guard try FileIdentity(url) == identity else { return false }
+    verification = (url, identity, valid)
+    return valid
+  }
+  nonisolated static func sha256(_ url: URL) throws -> String {
     let handle = try FileHandle(forReadingFrom: url)
     defer { try? handle.close() }
     var hash = SHA256()
     while let bytes = try handle.read(upToCount: 1_048_576), !bytes.isEmpty { hash.update(data: bytes) }
-    return hash.finalize().map { String(format: "%02x", $0) }.joined() == manifest.media.sha256
+    return hash.finalize().map { String(format: "%02x", $0) }.joined()
   }
   func status() throws -> Status {
     guard manifest != nil else { return Status(installed: false, bytes: 0) }
@@ -115,6 +153,7 @@ actor LocalVideoPackage {
   func install() throws {
     guard let source, let manifest else { throw VideoError.unavailable }
     if try status().installed { return }
+    verification = nil
     let original = source.appendingPathComponent(manifest.media.file)
     guard try verified(original) else { throw VideoError.invalid }
     let destination = try directory()
@@ -129,8 +168,10 @@ actor LocalVideoPackage {
     // A valid installation returned above; only an invalid directory is replaced.
     if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
     try fm.moveItem(at: staging, to: destination)
+    verification = nil
   }
   func remove() throws {
+    verification = nil
     let destination = try directory()
     if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
   }

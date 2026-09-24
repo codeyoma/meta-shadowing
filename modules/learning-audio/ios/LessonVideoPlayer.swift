@@ -9,13 +9,13 @@ import Foundation
   private(set) var owner = ""
   private var generation = 0
   private var start = 0.0, end = 0.0, rate: Float = 1
-  private var active = false, completed = false, hasPlayed = false
+  private var active = false, completed = false, hasPlayed = false, prepared = false
   private var periodic: Any?
   private var notifications: [NSObjectProtocol] = []
 
   func matches(_ owner: String, _ generation: Int) -> Bool { self.owner == owner && self.generation == generation }
   func reserve(owner: String, generation: Int) {
-    player.pause(); active = false; completed = false; hasPlayed = false
+    player.pause(); active = false; completed = false; hasPlayed = false; prepared = false
     clearObservers()
     self.owner = owner; self.generation = generation
   }
@@ -34,7 +34,16 @@ import Foundation
     guard matches(owner, generation) else { throw VideoError.cancelled }
     guard duration.isFinite, end <= duration + 0.05,
       !(try await asset.loadTracks(withMediaType: .video)).isEmpty else { throw VideoError.invalid }
+    let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+    var hasDecodableAudio = false
+    for track in audioTracks {
+      if try await track.load(.isDecodable), !(try await track.load(.formatDescriptions)).isEmpty {
+        hasDecodableAudio = true
+        break
+      }
+    }
     guard matches(owner, generation) else { throw VideoError.cancelled }
+    guard hasDecodableAudio else { throw VideoError.invalid }
     self.start = start; self.end = end; self.rate = Float(rate)
     let item = AVPlayerItem(asset: asset)
     item.forwardPlaybackEndTime = CMTime(seconds: end, preferredTimescale: 60000)
@@ -80,6 +89,7 @@ import Foundation
           }
         }
       }
+    prepared = true
     emit("ready")
   }
   private func finish() {
@@ -87,12 +97,12 @@ import Foundation
     active = false; completed = true; player.pause(); emit("ended")
   }
   func play(owner: String, generation: Int) {
-    guard matches(owner, generation), player.currentItem?.status == .readyToPlay, !completed else { return }
+    guard matches(owner, generation), prepared, player.currentItem?.status == .readyToPlay, !completed else { return }
     active = true; player.playImmediately(atRate: rate)
   }
   func pause(owner: String) {
     guard self.owner == owner else { return }
-    player.pause(); active = false; generation += 1
+    player.pause(); active = false; prepared = false; generation += 1
     clearObservers()
   }
   func dispose(owner: String) {
