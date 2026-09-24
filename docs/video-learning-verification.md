@@ -11,6 +11,11 @@ play, confirm, or reactivate microphone capture. A fresh explicit Resume is need
 The existing menu pause path, wired-monitoring lifecycle, and single/double-press
 action gates remain authoritative. Playback session category setup is not treated
 as an earphone disconnect.
+If JavaScript's AppState pause arrives first, it retains the latest 25 ms position
+sample and ignores the retired native event. Checkpoints are sampled, not a claim
+of exact-frame interruption timing. Both event orders are regression tested.
+Native cancellation also has a distinct adapter error code, so a rejection that
+arrives before its pause event does not display a spurious audio error.
 
 Regression coverage uses generated video/audio, native notifications, the actual
 Player/video adapter, and SQLite-backed progress. It covers interruption during
@@ -20,9 +25,16 @@ adding exactly two cycles. Monitoring and remote-command policy tests remain in
 the regression suite. These tests do not prove physical microphone continuity,
 EarPods command delivery, or ownership against another music app.
 
-Automated JavaScript verification: `npm run check` passed 450 core tests,
+Automated JavaScript verification: `npm run check` passed 452 core tests,
 25 build/package checks and TypeScript. `EXPO_NO_DOTENV=1 npm run bundle:ios`
-passed. Native runtime results are recorded separately below after execution.
+passed. Native macOS tests passed 38 functions / 45 executions. The iOS 26.5
+Simulator suite passed 40 functions / 47 executions, with no failures or skips.
+The iOS-specific tests cover native lifecycle notifications and preparation/seek
+cancellation. Notifications are isolated from the test host's own lifecycle;
+posting synthetic system events globally caused an initial runner cleanup stall.
+These are generated-media automated results, not physical-device observations.
+The full arm64 iOS Simulator Debug app build also passed. Existing SDK and native
+warnings remain; this is not a warning-free build or physical listening test.
 
 ### Combined physical-device checklist — all pending
 

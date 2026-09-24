@@ -76,7 +76,10 @@ public class LearningAudioModule: Module {
             try await controller.prepare(url: url, segments: segments,
               position: position, rate: rate, owner: owner, generation: generation)
             promise.resolve()
-          } catch { promise.reject("video-unavailable", "Video could not be prepared.") }
+          } catch {
+            let code = controller.matches(owner, generation) ? "video-unavailable" : "video-cancelled"
+            promise.reject(code, "Video could not be prepared.")
+          }
         }
       }
     }.runOnQueue(.main)

@@ -44,6 +44,22 @@ test('native interruption during preparation cancels resume without an audio err
   assert.equal(player.state.confirmed, 0);
   player.dispose();
 });
+test('AppState pause arriving first retains the latest sampled checkpoint and rejects late native events', async () => {
+  const f = fixture();
+  let player: Player;
+  const port = videoPlayback('test', f.bridge, d => player.audioEnded(d), () => player.audioFailed(), () => player.pause());
+  player = new Player(createSession({ runId: 'app-state-first', stage: 1, phraseCount: 2, rate: 1, mode: 'manual' }),
+    port, () => {}, () => 0, () => {});
+  await player.resume();
+  f.emit('playing', 0.75);
+  player.pause();
+  f.emit('paused', 0.76); f.emit('ended', 2.5);
+  assert.equal(player.state.audioSeconds, 0.75);
+  assert.equal(player.state.running, false);
+  assert.equal(player.state.confirmed, 0);
+  assert.equal(player.error, null);
+  player.dispose();
+});
 test('decision entry restores its paused video frame without playback or additional credits', async () => {
   let frames = 0, plays = 0, saves = 0;
   const port = { async prepare() {}, play() { plays++; }, pause() {}, position: () => 0, dispose() {},

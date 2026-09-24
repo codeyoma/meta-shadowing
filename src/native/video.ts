@@ -22,7 +22,14 @@ export function nativeVideo(owner: string, monitorKey: string | undefined, ended
       const current = ++request;
       await configureLessonAudio(monitorKey);
       if (current !== request) throw Error('Video cancelled.');
-      await module.videoPrepare(key, generation, members, position, rate);
+      try { await module.videoPrepare(key, generation, members, position, rate); }
+      catch (error) {
+        // Native promise rejection and status events can reach JS in either order.
+        // A retired seek is a pause; genuine decode/seek errors stay retryable errors.
+        if (current === request && typeof error === 'object' && error !== null &&
+          'code' in error && error.code === 'video-cancelled') interrupted();
+        throw error;
+      }
     },
     play(key, generation) {
       const current = request;
