@@ -12,7 +12,16 @@ import { Player } from './player';
 import { canOfferRepeat, mainPlayerAction } from './player-presentation';
 import { changeRevealSpeed, revealLines, revealPlayback, visibleReveal } from './word-reveal';
 
-for (const stage of [11, 12, 13, 14, 15, 16] as const) {
+const cases = [
+  { stages: [11, 12], text: ['  We\n  go, now! ', ' 지금  가요. '], hidden: ['', ''], partial: ['We', ''],
+    duration: 1.5, remainingMs: 1050, nextMs: 1200 },
+  { stages: [13, 14], text: [' 지금  가요. ', '  We\n  go, now! '], hidden: ['', ''], partial: ['지금', ''],
+    duration: 1.5, remainingMs: 1050, nextMs: 1200 },
+  { stages: [15, 16], text: [' 지금  가요. '], hidden: [''], partial: ['지금'],
+    duration: 0.6, remainingMs: 150, nextMs: 600 },
+] as const;
+
+for (const expected of cases) for (const stage of expected.stages) {
   test(`video stage ${stage} preserves final text, fixed speed and single-pass credits across database reopen`, async t => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const directory = mkdtempSync(join(tmpdir(), 'video-silent-test-'));
@@ -29,14 +38,18 @@ for (const stage of [11, 12, 13, 14, 15, 16] as const) {
       run: (sql, ...args) => { db.prepare(sql).run(...args); },
       first: <T>(sql: string, ...args: (string | number)[]) => db.prepare(sql).get(...args) as T | null });
     let journal = openJournal(), context = new LearningContext(pack, journal), time = 0;
+    const reopen = () => {
+      player!.dispose(); player = undefined; db.close();
+      db = new DatabaseSync(join(directory, 'progress.db'));
+      journal = openJournal(); context = new LearningContext(pack, journal);
+    };
     const initial = changeRevealSpeed(createSession({ runId: `silent-${stage}`, stage, phraseCount: 2, rate: 3, mode: 'manual' }),
       3, [100, 150, 200, 250]);
     const units = context.units(initial);
     assert.deepEqual(units.map(unit => unit.sourceIndices), [[0], [1]]);
     const lines = revealLines(units[0]!, stage);
-    assert.deepEqual(lines.map(line => line.text), stage <= 12 ? ['  We\n  go, now! ', ' 지금  가요. ']
-      : stage <= 14 ? [' 지금  가요. ', '  We\n  go, now! '] : [' 지금  가요. ']);
-    assert.deepEqual(visibleReveal(lines, 0, 200).map(line => line.visibleText), stage <= 14 ? ['', ''] : ['']);
+    assert.deepEqual(lines.map(line => line.text), expected.text);
+    assert.deepEqual(visibleReveal(lines, 0, 200).map(line => line.visibleText), expected.hidden);
     const start = (state: Session) => {
       const port = revealPlayback(context.units(state), state, seconds => player!.audioEnded(seconds), () => time);
       player = new Player(state, port, context.createWriter(state), () => time, () => {});
@@ -45,15 +58,12 @@ for (const stage of [11, 12, 13, 14, 15, 16] as const) {
     const advance = (ms: number) => { time += ms; t.mock.timers.tick(ms); player!.tick(); };
     const port = start(initial);
     await player!.resume();
-    assert.equal(port.duration!(), stage <= 14 ? 1.5 : 0.6, 'Reveal uses finalized text, not video duration or ASR timing');
+    assert.equal(port.duration!(), expected.duration, 'Reveal uses finalized text, not video duration or ASR timing');
     advance(450); player!.pause();
     assert.equal(context.load(stage)!.audioSeconds, 0.45);
-    assert.deepEqual(visibleReveal(lines, 0.45, 200).map(line => line.visibleText),
-      stage <= 12 ? ['We', ''] : stage <= 14 ? ['지금', ''] : ['지금']);
+    assert.deepEqual(visibleReveal(lines, 0.45, 200).map(line => line.visibleText), expected.partial);
     assert.equal(journal.progress.summary('english').xp, 0);
-    player!.dispose(); player = undefined; db.close();
-    db = new DatabaseSync(join(directory, 'progress.db'));
-    journal = openJournal(); context = new LearningContext(pack, journal);
+    reopen();
     const restored = context.load(stage)!;
     assert.equal(restored.running, false);
     assert.equal(restored.audioSeconds, 0.45);
@@ -62,7 +72,7 @@ for (const stage of [11, 12, 13, 14, 15, 16] as const) {
     advance(90000);
     assert.equal(player!.state.audioSeconds, 0.45, 'Background time does not reveal words');
     await player!.resume();
-    advance(stage <= 14 ? 1050 : 150);
+    advance(expected.remainingMs);
     assert.equal(player!.state.phase, 'speaking');
     assert.equal(canOfferRepeat(player!.state, null), false);
     assert.equal(mainPlayerAction(player!.state, null), 'next');
@@ -80,14 +90,12 @@ for (const stage of [11, 12, 13, 14, 15, 16] as const) {
     assert.deepEqual(player!.state.reveal, { speed: 3, wpm: 200 });
     await player!.choose('repeat'); await player!.choose('next');
     assert.equal(journal.progress.summary('english').xp, 3, 'Early or repeated actions cannot award another pass');
-    advance(stage <= 14 ? 1200 : 600);
+    advance(expected.nextMs);
     await player!.choose('next');
     assert.equal(player!.state.phase, 'complete');
     assert.equal(journal.progress.summary('english').xp, 6);
     assert.equal(context.completions(stage), 1);
-    player!.dispose(); player = undefined; db.close();
-    db = new DatabaseSync(join(directory, 'progress.db'));
-    journal = openJournal(); context = new LearningContext(pack, journal);
+    reopen();
     const complete = context.load(stage)!;
     assert.equal(complete.phase, 'complete');
     assert.equal(context.save(complete), 0);

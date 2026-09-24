@@ -1,3 +1,5 @@
+import { isPlayableStage } from './catalog';
+
 export type VideoManifest = {
   kind: 'video'; schemaVersion: 1; id: string; version: number; title: string;
   media: { file: 'video/source.mp4'; bytes: number; sha256: string; duration: number };
@@ -29,4 +31,4 @@ export function readVideoPackage(json: unknown): VideoPackage | null {
     return { language: 'english', delivery: 'localVideo', manifest: m };
   } catch { throw Error('Unsupported video package.'); }
 }
-export function videoStageAvailable(stage: number) { return Number.isInteger(stage) && stage >= 1 && stage <= 16; }
+export function videoStageAvailable(stage: number) { return isPlayableStage(stage); }

@@ -17,6 +17,9 @@
   Route tests exercise the actual transport initializer and cleanup with native
   audio/video boundaries forbidden. Existing presentation tests cover hidden
   video/cycle controls, S1–S4 controls and text accessibility.
+- iOS JavaScript export also passed. Standards review found no mandatory
+  violations and suggested three small duplication cleanups, now applied.
+  Spec review found no actionable mismatch.
 - This change was verified automatically; no new physical-device test or native
   build is claimed. Expanded device interruptions and monitoring remain in #70.
 
