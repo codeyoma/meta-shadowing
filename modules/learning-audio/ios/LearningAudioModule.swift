@@ -42,7 +42,7 @@ public class LearningAudioModule: Module {
 
   public func definition() -> ModuleDefinition {
     Name("LearningAudio")
-    Constant("monitoringSupported") { VoiceMonitorPolicy.developmentBuild }
+    Constant("monitoringSupported") { VoiceMonitorPolicy.monitoringSupported }
     Events("onMonitorStatus", "onLessonRemotePress", "onVideoStatus")
     Constant("localVideoManifest") { self.videoPackage.json }
     Constant("localVideoManifestInvalid") { self.videoPackage.manifestInvalid }

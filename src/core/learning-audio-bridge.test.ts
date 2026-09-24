@@ -16,7 +16,7 @@ function load(native: unknown, developmentJS: boolean) {
   return module.exports;
 }
 
-test('native development monitoring remains available with standalone production JavaScript', () => {
+test('native monitoring remains available with standalone production JavaScript', () => {
   const native = { monitoringSupported: true, configureLearningPlayback() {} };
   for (const developmentJS of [true, false]) {
     assert.equal(load(native, developmentJS).learningMonitorSupported, true);

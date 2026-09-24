@@ -8,12 +8,14 @@ import { usePalette } from '../components/ui';
 import { LibraryProvider } from '@/components/library-context';
 import { StudyHeader } from '@/components/study-header';
 import { startPurchases } from '@/native/purchases';
+import { startPackageAvailability } from '@/native/package-availability';
 import { ProgressProfile } from '@/components/progress-profile';
 
 void SplashScreen.preventAutoHideAsync();
 
 export default function Layout() {
   useEffect(startPurchases, []);
+  useEffect(startPackageAvailability, []);
   const c = usePalette();
   const [fontsLoaded, fontError] = useFonts({ Nunito_800ExtraBold });
   useEffect(() => {

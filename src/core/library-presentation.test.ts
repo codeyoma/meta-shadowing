@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { StoreSnapshot } from '../../modules/package-store/src/PackageStore.types';
 import { canRetryStorageRead, formatMaterialBytes, hasLocalMaterials, hostedDownloadPresentation, materialActions, materialCardAction, paidLibraryEntry,
-  refreshHostedMaterial, sampleLibraryEntry, minimumBookXp } from './library-presentation';
+  sampleLibraryEntry, minimumBookXp } from './library-presentation';
 
 test('minimum book XP covers 16 stages with three runs of three cycles, without optional repeats', () => {
   assert.equal(minimumBookXp(12), 1728);
@@ -101,20 +101,6 @@ test('the card keeps one action slot including absent material and storage failu
   }
   assert.equal(materialCardAction({ installed: true, editing: false, readFailed: false }), 'study');
   assert.equal(materialCardAction({ installed: false, editing: false, readFailed: false }), 'download');
-});
-
-test('hosted download completion refreshes missing delivery and storage into one ready view', async () => {
-  let delivered = false;
-  let delivery = { phase: 'failed', progress: 0 };
-  let storage = { bytes: 0, installed: false, busy: false };
-  delivered = true;
-  await refreshHostedMaterial(
-    async () => { delivery = delivered ? { phase: 'ready', progress: 1 } : delivery; },
-    async () => { storage = delivered ? { bytes: 2048, installed: true, busy: false } : storage; },
-  );
-  assert.deepEqual(delivery, { phase: 'ready', progress: 1 });
-  assert.deepEqual(storage, { bytes: 2048, installed: true, busy: false });
-  assert.equal(materialActions({ installed: storage.installed, busy: false, editing: false }).canStudy, true);
 });
 
 test('failed storage information exposes retry unless a package operation is busy', () => {

@@ -15,7 +15,6 @@ export function useBookRecords(pack: LearningPackage | null) {
   const [bypass, setBypass] = useState(false);
   useFocusEffect(useCallback(() => {
     let active = true;
-    setBypass(false);
     void testStageAccess().then(value => { if (active) setBypass(value); });
     if (!pack || !key) { setResult(null); return () => { active = false; }; }
     let shownError = false;

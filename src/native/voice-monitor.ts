@@ -1,7 +1,8 @@
 import { setAudioModeAsync, setIsAudioActiveAsync } from 'expo-audio';
 import audio, { learningMonitorSupported } from '../../modules/learning-audio';
 import { VoiceMonitorLab } from '../core/voice-monitor-lab';
-import { audioUri, installBundledPackage, samplePackage } from './package';
+import { audioUri, samplePackage } from './package';
+import { installMaterials } from './package-availability';
 
 let previous: VoiceMonitorLab | undefined;
 let learning: { key: string; lab: VoiceMonitorLab } | undefined;
@@ -63,7 +64,7 @@ export function createMonitorLab() {
 
 export async function prepareMonitorSample() {
   if (!__DEV__) throw Error('Monitoring lab is development-only.');
-  await installBundledPackage(samplePackage, () => {});
+  await installMaterials(samplePackage, () => {});
   return audioUri(samplePackage, 0);
 }
 

@@ -34,7 +34,7 @@ export class VoiceMonitorLab {
   private permissionRetry = false;
   private permissionRetryVersion?: number;
   private automatic?: { status: MonitorStatus; context: AutomaticContext };
-  constructor(private readonly monitor: MonitorPort, private readonly lease: AudioLease, private readonly development: boolean,
+  constructor(private readonly monitor: MonitorPort, private readonly lease: AudioLease, private readonly supported: boolean,
     private readonly homeRoute: 'monitoring-lab' | 'player' = 'monitoring-lab') {}
 
   get available() { return !this.closed; }
@@ -46,7 +46,7 @@ export class VoiceMonitorLab {
   }
 
   open(): Promise<void> {
-    if (!this.development) return Promise.reject(Error('Monitoring lab is development-only.'));
+    if (!this.supported) return Promise.reject(Error('Voice monitoring is unavailable.'));
     if (this.closed) return Promise.resolve();
     return this.acquiring ??= (async () => {
       // A failed suspend may still have partially changed the shared session.
@@ -68,7 +68,7 @@ export class VoiceMonitorLab {
     this.autoSuppressed = true;
     this.permissionRetry = false;
     ++this.generation;
-    if (this.development) await this.monitor.disableMonitor();
+    if (this.supported) await this.monitor.disableMonitor();
   }
 
   /** One automatic attempt per wired connection. Native remains the route/permission authority. */
@@ -117,7 +117,7 @@ export class VoiceMonitorLab {
 
   private canStartAutomatically(): boolean {
     const current = this.automatic;
-    return this.development && this.homeRoute === 'player' && this.observedHome && !this.closed
+    return this.supported && this.homeRoute === 'player' && this.observedHome && !this.closed
       && !this.autoSuppressed && !!current?.context.foreground && current.context.eligible
       && current.status.output === 'headphones'
       && (current.status.permission === 'granted' || current.status.permission === 'undetermined');
@@ -169,22 +169,21 @@ export class VoiceMonitorLab {
   }
 }
 
-export function monitorPresentation(development: boolean, state: MonitorStatus['state'], output: MonitorStatus['output'], appearance: 'full' | 'compact' = 'full') {
+export function monitorPresentation(supported: boolean, state: MonitorStatus['state'], output: MonitorStatus['output'], appearance: 'full' | 'compact' = 'full') {
   const compact = appearance === 'compact';
   const message = compact
-    ? !development ? '개발 빌드에서만 사용할 수 있어요.'
+    ? !supported ? '음성 모니터링을 지원하는 앱으로 업데이트해 주세요.'
       : state === 'denied' ? '마이크 권한을 허용해 주세요.'
-      : output !== 'headphones' ? '유선 이어폰을 연결해 주세요.'
       : state === 'failed' ? '연결을 확인하고 다시 켜 주세요.'
-      : ''
-    : !development ? '개발 빌드에서만 사용할 수 있어요.'
+      : '유선이어폰 사용시 실시간으로 내 목소리를 모니터링 할 수 있어요'
+    : !supported ? '음성 모니터링을 지원하는 앱으로 업데이트해 주세요.'
     : state === 'denied' ? '설정에서 마이크 접근을 허용한 뒤 다시 켜 주세요.'
     : output !== 'headphones' ? '유선 헤드폰으로 확인된 이어폰만 지원해요. Bluetooth·일반 USB 출력은 사용할 수 없어요.'
     : state === 'failed' ? '오디오를 시작하지 못했어요. 연결을 확인한 뒤 다시 켜 주세요.'
     : state === 'requesting' ? '마이크 권한을 확인하고 있어요.'
     : state === 'monitoring' ? '내 목소리를 듣고 있어요. 음성은 저장하거나 전송하지 않아요.'
     : '낮은 음량으로 시작하세요. 중단 후에는 직접 다시 켜 주세요.';
-  return { available: development, message,
-    canEnable: development && output === 'headphones' && state !== 'requesting',
-    canPlay: development && output === 'headphones' && state === 'monitoring' };
+  return { available: supported, message,
+    canEnable: supported && output === 'headphones' && state !== 'requesting',
+    canPlay: supported && output === 'headphones' && state === 'monitoring' };
 }

@@ -9,12 +9,14 @@ private final class MonitorHardwareStub: VoiceMonitorHardware {
   var active = false
   var starts = 0
   var permissionRequests = 0
+  var immediatePermission: Bool?
   var permission: CheckedContinuation<Bool, Never>?
   var failStart = false
   var onStart: (() -> Void)?
   var gain: Float = 0
   func requestPermission() async -> Bool {
     permissionRequests += 1
+    if let immediatePermission { return immediatePermission }
     return await withCheckedContinuation { permission = $0 }
   }
   func start(gain: Float) throws {
@@ -29,6 +31,17 @@ private final class MonitorHardwareStub: VoiceMonitorHardware {
 }
 
 final class VoiceMonitorTests: XCTestCase {
+  @MainActor
+  func testLearningMonitoringCanStartInEveryBuildConfiguration() async {
+    let hardware = MonitorHardwareStub()
+    hardware.immediatePermission = true
+    let controller = VoiceMonitorController(hardware: hardware, allowed: VoiceMonitorPolicy.monitoringSupported)
+    await controller.enable()
+    XCTAssertEqual(hardware.permissionRequests, 1)
+    XCTAssertTrue(hardware.active)
+    XCTAssertEqual(controller.state, .monitoring)
+  }
+
   func testOnlyOneIdentifiableHeadphoneOutputIsAllowed() {
     XCTAssertTrue(VoiceMonitorPolicy.allows([.headphones]))
     for output in [MonitorOutput.speaker, .receiver, .bluetooth, .airplay, .usb, .other] {
@@ -69,7 +82,7 @@ final class VoiceMonitorTests: XCTestCase {
   }
 
   @MainActor
-  func testUnsupportedAndReleaseNeverRequestPermissionOrStart() async {
+  func testUnsupportedCapabilityOrRouteNeverRequestsPermissionOrStarts() async {
     for allowed in [false, true] {
       let hardware = MonitorHardwareStub()
       if allowed { hardware.outputs = [.usb] }

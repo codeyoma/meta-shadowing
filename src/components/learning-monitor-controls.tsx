@@ -5,7 +5,7 @@ import { ActionButton, Label } from './ui';
 import { SettingsSection } from './settings-section';
 import { useSettingsColors } from './settings-row';
 import { monitorPresentation, type MonitorStatus } from '@/core/voice-monitor-lab';
-import { learningMonitor, monitorNative } from '@/native/voice-monitor';
+import { learningMonitor, learningMonitorSupported, monitorNative } from '@/native/voice-monitor';
 import { sliderReleaseValue, sliderValue } from '@/core/slider-value';
 
 const volumeRange = { min: 0, max: 1, step: 0.05 };
@@ -40,7 +40,7 @@ export function LearningMonitorControls({ sessionKey, allowed }: { sessionKey?: 
   }
   const current = learningMonitor(sessionKey);
   const on = status?.state === 'monitoring';
-  const view = status && monitorPresentation(__DEV__, status.state, status.output, 'compact');
+  const view = status && monitorPresentation(learningMonitorSupported, status.state, status.output, 'compact');
   const gain = status?.gain ?? 0.25;
   const displayedPercent = Math.round((draftGain ?? gain) * 100);
   return <View style={{ gap: 16 }}>

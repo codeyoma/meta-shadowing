@@ -1,12 +1,34 @@
 # Video learning verification
 
+## Monitoring controls and shared browsing state — 2026-09-25
+
+The review follow-up makes the actual learning switch use the native capability,
+not `__DEV__`. A production-JavaScript component test exercises manual OFF/ON and
+explicit re-enable after interruption. Native route and permission guards remain
+unchanged; the owner's Release-feature amendment is recorded in the monitoring
+design and learning contract.
+
+Library and stage screens now subscribe to shared material snapshots instead of
+checking installation on each tab focus. Regression tests cover remounts, slow
+reads, download completion/failure/cancellation, deletion, entitlement revocation,
+foreground reconciliation and stale responses. Direct learning routes retain
+fresh native authorization and file checks.
+
+`npm run check` passed 468 core tests, 25 build/package checks and TypeScript.
+The production iOS JavaScript export passed. Native macOS Release tests passed
+40 functions / 47 executions, with no failures or skips. These follow-up changes
+have not been installed on the physical iPhone; the owner-reported device
+acceptance below applies to the earlier installed build, not this revision.
+
 ## Standalone build regressions — 2026-09-25
 
 The owner reported a missing learning-monitoring menu and a brief source-opening
 frame before each video cycle. An offline Debug binary bundled production-mode
 JavaScript, so the JavaScript development flag incorrectly hid native monitoring.
-The bridge now reads the native monitoring capability; native Release restrictions
-and wired-route/permission checks remain unchanged.
+The bridge now reads the native monitoring capability. A subsequent owner
+amendment makes learning monitoring available in Release as well as Debug; the
+learning drawer no longer gates on JavaScript development mode. Wired-route and
+permission checks remain unchanged. The separate diagnostic lab is still gated.
 
 Native video preparation now loads and seeks a separate paused player before
 binding it to the presentation layer. The previous positioned player stays bound

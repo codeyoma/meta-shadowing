@@ -1,19 +1,17 @@
-import { useCallback, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { FeedbackPressable as Pressable } from '@/components/feedback-pressable';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Card, Label, ActionButton, Icon, usePalette } from '@/components/ui';
 import { StagePath } from '@/components/stage-path';
 import { useBookRecords } from '@/components/use-book-records';
 import { useLibrary } from '@/components/library-context';
-import { isInstalled } from '@/native/package';
 import { selectedPackage, languages } from '@/native/catalog';
 import { canOpenStage } from '@/core/stage-overview';
 import { MethodLabel } from '@/components/method-label';
 import { BookTags } from '@/components/book-tags';
 import { isGroupedStage } from '@/core/catalog';
-import { usePackageLearningAccess } from '@/components/use-package-learning-access';
+import { usePackageLearningStatus } from '@/components/use-package-learning-access';
 import { mayUsePackage } from '@/native/paid-package';
 import { isVideoPackage } from '@/core/learning-context';
 import { videoStageAvailable } from '@/core/video-package';
@@ -22,17 +20,8 @@ export default function Lesson() {
   const c = usePalette();
   const { selection } = useLibrary();
   const selectedBook = selectedPackage(selection.packageKey);
-  const access = usePackageLearningAccess(selectedBook);
+  const { ready, allowed: access } = usePackageLearningStatus(selectedBook);
   const { records, overview, bypass } = useBookRecords(selectedBook ?? null);
-  const [ready, setReady] = useState<boolean | null>(null);
-  useFocusEffect(useCallback(() => {
-    let active = true;
-    setReady(null);
-    if (!access) setReady(false);
-    if (access && selectedBook) isInstalled(selectedBook).then(value => { if (active) setReady(value); })
-      .catch(() => { if (active) Alert.alert('레슨을 확인할 수 없어요', '저장 공간을 확인하고 다시 시도해 주세요.'); });
-    return () => { active = false; };
-  }, [selectedBook, access]));
   function open(stage: number) {
     if (selectedBook && isVideoPackage(selectedBook) && !videoStageAvailable(stage)) return;
     if (access && ready && selectedBook && mayUsePackage(selectedBook) && records && canOpenStage(stage, records, bypass)) router.push({ pathname: '/player', params: { stage, package: selectedBook.packageKey } });
@@ -65,7 +54,7 @@ export default function Lesson() {
       <Label size={12} weight="700" color="#b8c7d8">{overview?.completed ?? '—'}/16</Label>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={`Stage ${overview?.current ?? 1} ${resumed ? '이어하기' : '학습 시작'}`}
-        disabled={!ready || !overview} accessibilityState={{ disabled: !ready || !overview }}
+        disabled={!access || !overview} accessibilityState={{ disabled: !access || !overview }}
         onPress={() => open(overview!.current)} style={({ pressed }) => ({ padding: 14, minHeight: 66, gap: 12,
           flexDirection: 'row', alignItems: 'center', borderRadius: 16, backgroundColor: c.accent,
           opacity: !ready || !overview ? 0.5 : pressed ? 0.75 : 1, boxShadow: `0 4px 0 ${c.accentPressed}` })}>
@@ -81,6 +70,6 @@ export default function Lesson() {
       </Pressable>
     </View>
     {ready === false && <Card><Label>레슨 설치가 필요해요.</Label><ActionButton title="도서 선택으로" onPress={() => router.navigate('/')} /></Card>}
-    {records && overview && <StagePath records={records} current={overview.current} ready={ready === true} bypass={bypass} onSelect={open} />}
+    {records && overview && <StagePath records={records} current={overview.current} ready={access} bypass={bypass} onSelect={open} />}
   </ScrollView>;
 }

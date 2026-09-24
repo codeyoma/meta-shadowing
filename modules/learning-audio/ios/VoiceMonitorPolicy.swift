@@ -9,13 +9,9 @@ enum VoiceMonitorPolicy {
     inputs.contains(.headset) ? .headset : inputs.contains(.builtIn) ? .builtIn : nil
   }
   static func gain(_ value: Float) -> Float { value.isFinite ? min(1, max(0, value)) : 0.25 }
-  static var developmentBuild: Bool {
-    #if DEBUG
-    true
-    #else
-    false
-    #endif
-  }
+  // Learning monitoring is a normal feature. Runtime route/permission checks
+  // remain authoritative in every build configuration.
+  static let monitoringSupported = true
 }
 
 @MainActor
