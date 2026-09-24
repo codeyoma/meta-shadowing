@@ -5,7 +5,8 @@
 Issue #67 is implemented on `codex/video-learning`: explicit private preparation,
 local installation/removal, and stage-1 inline video. Video stages 2–16 remain
 unavailable. Existing audio packages keep their own adapters and identities.
-Issue #67 remains open because the simulator demonstration is not yet performed.
+Issue #67 remains open because the full simulator acceptance sequence and
+standalone offline cold launch are not yet verified.
 
 The original media remains unchanged. Corrected English and final Korean are
 read from the supplied export. The prepared identity covers media metadata,
@@ -40,6 +41,21 @@ checkpoints. No supplied content, identifiers or hashes are recorded here.
 - The owner-supplied 17-phrase package was prepared and verified locally. The
   opt-in native build contains the current manifest and original media. It was
   not installed on a physical phone or uploaded.
+
+## PR preparation evidence — 2026-09-24
+
+- Fresh `npm run check` passed: 422 core tests, 25 build/package checks and
+  TypeScript. `npm run test:native-headers` passed all 7 checks.
+- The video now fills the screen width without rounded corners and stays fixed
+  below the top navigation. Only the text viewport scrolls; playback controls
+  remain fixed. Layout regression tests cover this separation, preserved text
+  insets, silent stages and unavailable/unauthorized lessons.
+- The live simulator demonstrated text scrolling without moving the video area
+  or controls. Reloading and reopening the same lesson restored the video frame
+  at the same phrase without confirming a cycle or advancing progress.
+- The outgoing diff was checked against the private transcript and media identity,
+  local-path and credential patterns, and private payload file paths. No matches
+  were found. Private materials and unrelated scratch files remain untracked.
 
 ## Review resolution
 
@@ -80,9 +96,10 @@ a public Release build to bypass this check.
 
 ## Remaining acceptance
 
-- Boot an approved simulator and demonstrate installation, offline playback,
-  three confirmations, Repeat +2, speed changes, restart, menu return, retained
-  decision frame and missing/corrupt-media recovery.
+- Complete the remaining simulator acceptance sequence: installation, offline
+  playback, three confirmations, Repeat +2, speed changes, menu return and
+  missing/corrupt-media recovery. The layout and same-phrase frame restoration
+  checks above do not replace this complete sequence.
 - Measure seek/start latency on the target device. Integrity verification streams
   the complete file on preparation; it currently does not cache verification.
 - Physical microphone monitoring, wired remote control, interruption/route changes

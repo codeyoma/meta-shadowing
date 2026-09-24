@@ -271,13 +271,15 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       </PlayerHeaderProgress> }), [state, unitLabel, accessReady, unavailable, accessDenied, openOptions, openInfo]);
   return <View style={{ flex: 1 }}>
     <Stack.Screen options={headerOptions} />
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, gap: 20 }}>
-      {unavailable || accessDenied ? <Card><Label>구매 내역과 레슨 설치 상태를 확인해 주세요. 학습 기록은 유지돼요.</Label>
+    {state && accessReady && !unavailable && !accessDenied && videoOwner && !isRevealStage(stage) && state.phase !== 'complete' && <LessonVideo />}
+    <ScrollView style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, paddingTop: 20, paddingBottom: 24, gap: 20 }}>
+      {unavailable || accessDenied ? <View style={{ paddingHorizontal: 24 }}><Card><Label>구매 내역과 레슨 설치 상태를 확인해 주세요. 학습 기록은 유지돼요.</Label>
         {error === 'save' && <ActionButton title="기록 저장 다시 시도" onPress={() => engine.current?.retrySave()} />}
-        <ActionButton title="레슨으로" onPress={leave} /></Card> : !state || !accessReady ? <Label muted>레슨을 여는 중…</Label> : <>
-        <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 16 }}>
-          {videoOwner && !isRevealStage(stage) && state.phase !== 'complete' && <LessonVideo />}
-          <Animated.View key={`${state.runId}:${state.phrase}:${state.phase === 'complete'}`} entering={CONTENT_ENTER}>
+        <ActionButton title="레슨으로" onPress={leave} /></Card></View> : !state || !accessReady ? <View style={{ paddingHorizontal: 24 }}><Label muted>레슨을 여는 중…</Label></View> : <>
+        <View style={{ flex: 1, ...(videoOwner && !isRevealStage(stage) && state.phase !== 'complete'
+          ? { justifyContent: 'flex-start' as const }
+          : { justifyContent: 'center' as const, paddingVertical: 16 }) }}>
+          <Animated.View key={`${state.runId}:${state.phrase}:${state.phase === 'complete'}`} entering={CONTENT_ENTER} style={{ paddingHorizontal: 24 }}>
           {state.phase === 'complete'
             ? <Card style={{ gap: 22, paddingVertical: 26 }}>
               <Label size={30} weight="800" color={c.heading}>잘 마쳤어요!</Label>

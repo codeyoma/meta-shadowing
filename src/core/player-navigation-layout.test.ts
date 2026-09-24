@@ -61,6 +61,56 @@ test('inline video precedes paired text and is absent from silent stages', () =>
   assert.equal(descendants(layout(true, false, false, true, false, true).root).some(n => n.type === 'LessonVideo'), false);
 });
 
+test('video stays fixed above the scrolling text while playback controls stay below it', () => {
+  const root = layout(true, false, false, false, false, true).root;
+  const nodes = descendants(root);
+  const scrolling = nodes.find(node => node.type === 'ScrollView')!;
+  const scrollingNodes = descendants(scrolling);
+  assert.equal(nodes.filter(node => node.type === 'LessonVideo').length, 1);
+  assert.equal(scrollingNodes.some(node => node.type === 'LessonVideo'), false);
+  assert.equal(scrollingNodes.some(node => node.type === 'SpeechContent'), true);
+  assert.equal(scrollingNodes.some(node => node.type === 'PlayerControls'), false);
+  assert.ok(nodes.findIndex(node => node.type === 'LessonVideo') < nodes.indexOf(scrolling));
+  assert.equal((scrolling.props.style as { flex: number }).flex, 1);
+
+  for (const [ready, unavailable, denied] of [[false, false, false], [true, true, false], [true, false, true]]) {
+    assert.equal(descendants(layout(ready, unavailable, denied, false, false, true).root)
+      .some(node => node.type === 'LessonVideo'), false, 'Video is hidden until the lesson is available and authorized');
+  }
+});
+
+test('video fills the screen width with square corners while text and controls keep their insets', () => {
+  const root = layout(true, false, false, false, false, true).root;
+  function horizontalInset(node: unknown, target: string, inset = 0): number | undefined {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        const found = horizontalInset(child, target, inset);
+        if (found !== undefined) return found;
+      }
+    }
+    if (!React.isValidElement<Record<string, unknown>>(node)) return;
+    const style = { ...(node.props.style as Record<string, number>), ...(node.props.contentContainerStyle as Record<string, number>) };
+    const next = inset + (style.paddingHorizontal ?? style.padding ?? 0) + (style.marginHorizontal ?? style.margin ?? 0);
+    return node.type === target ? next : horizontalInset(node.props.children, target, next);
+  }
+  assert.equal(horizontalInset(root, 'LessonVideo'), 0);
+  assert.equal(horizontalInset(root, 'SpeechContent'), 24);
+  assert.equal(horizontalInset(root, 'PlayerControls'), 24);
+  assert.equal(horizontalInset(layout().root, 'SpeechContent'), 24);
+  assert.equal(horizontalInset(layout(true, false, false, true).root, 'WordRevealContent'), 24);
+
+  const videoSource = ts.createSourceFile('lesson-video.tsx', readFileSync(new URL('../components/lesson-video.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const component = videoSource.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === 'LessonVideo')!;
+  const code = ts.transpileModule(`module.exports = () => ${component.body!.getText(videoSource)};`, {
+    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const module = { exports: {} as unknown as () => Element };
+  runInNewContext(code, { module, exports: module.exports, require, NativeVideo: 'NativeVideo' });
+  const style = module.exports().props.style as Record<string, unknown>;
+  assert.equal(style.borderRadius ?? 0, 0);
+  assert.equal(style.aspectRatio, 16 / 9);
+});
+
 function descendants(node: unknown): Element[] {
   if (Array.isArray(node)) return node.flatMap(descendants);
   if (!React.isValidElement<Record<string, unknown>>(node)) return [];
