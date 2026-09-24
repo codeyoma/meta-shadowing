@@ -4,6 +4,7 @@ import { createCycleTable, recordCycles, validCycleIdentity } from './cycle-cred
 import { isRevealStage, type PlayableStage } from './catalog';
 import { bindRun, checkpointKey, createSyncTable, creditTotal, nextStamp, readSync, saveSync, type SyncRun } from './sync-ledger';
 import { unitProgress } from './unit-progress';
+import { unitWeight } from './unit-credit';
 
 export interface Database {
   exec(sql: string): void;
@@ -91,6 +92,7 @@ export class Journal {
         if (accepted) {
           const existing = run.events.find(event => event.unit === prior.phrase && event.ordinal === prior.confirmed + 1);
           if (!existing) run.events.push({ unit: prior.phrase, ordinal: prior.confirmed + 1, day,
+            ...(prior.sourceProgress ? { weight: unitWeight(prior, prior.phrase) } : {}),
             ...(isRevealStage(state.stage) ? { multiplier: 3 as const } : {}) });
           else existing.day = existing.day < day ? existing.day : day;
         }
@@ -147,6 +149,7 @@ export class Journal {
           const predecessor = JSON.parse(prior.state) as Session, day = localDay(this.now());
           if (!boundRun.events.some(event => event.unit === predecessor.phrase && event.ordinal === predecessor.confirmed + 1)) {
             boundRun.events.push({ unit: predecessor.phrase, ordinal: predecessor.confirmed + 1, day,
+              ...(predecessor.sourceProgress ? { weight: unitWeight(predecessor, predecessor.phrase) } : {}),
               ...(isRevealStage(state.stage) ? { multiplier: 3 as const } : {}) });
           }
         }

@@ -78,10 +78,22 @@ phase change, or artificial delay. The final short remainder is a separate unit;
 the current flat package format has no section boundaries. This supersedes the
 historical remainder/timing reference below.
 
-Fresh grouped runs save their source count and group size. Restored runs derive
-their units from that saved plan, even after changing settings. A changed source
-count or incompatible checkpoint is rejected. Settings explain that group-size
-changes apply only to the next fresh run. Existing stage 1/2 progress is preserved.
+Fresh grouped runs save their source count and group size. Global Settings sets
+the default for fresh runs. The learning menu displays the active run's actual
+size and applies an explicit change immediately (owner update, 2026-09-24).
+Regrouping creates a new immutable plan identity, retains completed/optional
+cycles per source sentence, and leaves all prior XP receipts intact. The new
+current group contains the previous group's first source; playback resets to
+zero and stays paused. Completed groups are skipped in favor of unfinished work.
+When a new group mixes completed and unfinished sentences, completed sentences
+may be replayed as context but need no further confirmations or XP. Each pass
+advances only unfinished members; its receipt records that actual member count.
+Changing size alone grants no XP or stage completion. Repeated size changes,
+navigation, restoration and backup merging preserve the same source work.
+The menu's per-run size does not silently overwrite the global default, matching
+the existing per-run playback-rate editor. A changed source count or incompatible
+checkpoint is rejected. Existing stage 1/2 progress is preserved. Older app
+versions cannot import the new backup fields; update syncing devices before using them.
 
 The accessible “자막 보기” toggle above playback reveals only the current unit.
 Hidden target text retains all characters and layout:

@@ -9,12 +9,15 @@ export type UnitCredit = { counts: number[]; sourceCount: number; groupSize: num
 // those observed cycles at the same validated bound instead of minting them again.
 export const MAX_OBSERVED_CYCLES = 100000;
 function sameCheckpoint(a: Session, b: Session): boolean {
-  return (Object.keys(b) as (keyof Session)[]).every(key => key === 'unitProgress'
+  return (Object.keys(b) as (keyof Session)[]).every(key => key === 'sourceProgress'
+    ? JSON.stringify(a.sourceProgress) === JSON.stringify(b.sourceProgress) : key === 'unitProgress'
     ? !!a.unitProgress && !!b.unitProgress && a.unitProgress.length === b.unitProgress.length
       && b.unitProgress.every((unit, i) => unit.confirmed === a.unitProgress![i]!.confirmed && unit.planned === a.unitProgress![i]!.planned)
     : key === 'reveal' ? a.reveal?.speed === b.reveal?.speed && a.reveal?.wpm === b.reveal?.wpm : a[key] === b[key]);
 }
 export function unitWeight(state: Session, phrase: number): number {
+  if (state.version === 2 && state.sourceProgress) return state.sourceProgress.slice(phrase * state.groupSize, (phrase + 1) * state.groupSize)
+    .filter(p => p.confirmed < p.planned).length;
   return isRevealStage(state.stage) ? 3 : state.version === 2 ? Math.min(state.groupSize, state.sourcePhraseCount - phrase * state.groupSize) : 1;
 }
 export function validUnitCredit(value: UnitCredit, stage = 0): boolean {

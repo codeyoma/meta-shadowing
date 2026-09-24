@@ -1,6 +1,15 @@
 import type { Session } from './session';
 
 export type UnitProgress = { confirmed: number; planned: number };
+export function groupedSourceProgress(sources: readonly UnitProgress[], size: number): UnitProgress[] {
+  const groups: UnitProgress[] = [];
+  for (let start = 0; start < sources.length; start += size) {
+    const members = sources.slice(start, start + size);
+    const planned = Math.max(...members.map(p => p.planned));
+    groups.push({ planned, confirmed: planned - Math.max(...members.map(p => p.planned - p.confirmed)) });
+  }
+  return groups;
+}
 export function unitProgress(state: Session): UnitProgress[] {
   return Array.from({ length: state.phraseCount }, (_, index) => index === state.phrase
     ? { confirmed: state.confirmed, planned: state.planned }

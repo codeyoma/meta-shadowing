@@ -121,7 +121,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
             if (!validUnitCredit(parsed, Number(original.stage))) reject();
             row[column] = JSON.stringify(parsed); continue;
           }
-          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(Number(root.version) >= 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : []), ...(parsed?.reveal !== undefined ? ['reveal'] : [])]);
+          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(Number(root.version) >= 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : []), ...(parsed?.reveal !== undefined ? ['reveal'] : []), ...(Number(root.version) >= 4 && parsed?.sourceProgress !== undefined ? ['sourceProgress'] : [])]);
           integer(s.phraseCount, 1, 100000); integer(s.planned, isRevealStage(Number(original.stage)) ? 1 : 3, 100000); integer(s.confirmed, 0, 100000);
           if (s.version === 2) integer(s.sourcePhraseCount, 1, 100000);
           identity(s.runId);
@@ -263,13 +263,18 @@ function validateSync(value: unknown, tables: Record<Table, Row[]>): SyncLedger 
     });
     const eventsSeen = new Set<string>();
     const events = run.events.map(value => {
-      const event = object(value, ['unit', 'ordinal', 'day', ...(value && typeof value === 'object' && Object.hasOwn(value, 'multiplier') ? ['multiplier'] : [])]);
+      const event = object(value, ['unit', 'ordinal', 'day', ...['multiplier', 'weight'].filter(key => value && typeof value === 'object' && Object.hasOwn(value, key))]);
       if (event.multiplier !== undefined && (event.multiplier !== 3 || !isRevealStage(Number(run.stage)))) reject();
       const unit = integer(event.unit, 0, observed.length - 1), ordinal = integer(event.ordinal, 1, 100000);
+      if (event.weight !== undefined) {
+        if (Number(run.stage) < 7 || Number(run.stage) > 10 || event.multiplier !== undefined) reject();
+        integer(event.weight, 1, Math.min(Number(run.groupSize), Number(run.sourceCount) - unit * Number(run.groupSize)));
+      }
       const key = JSON.stringify([unit, ordinal]);
       if (!run.sourceCount || ordinal > observed[unit]! || eventsSeen.has(key)) reject();
       eventsSeen.add(key);
-      return { unit, ordinal, day: day(event.day), ...(event.multiplier === 3 ? { multiplier: 3 as const } : {}) };
+      return { unit, ordinal, day: day(event.day), ...(event.multiplier === 3 ? { multiplier: 3 as const } : {}),
+        ...(event.weight !== undefined ? { weight: Number(event.weight) } : {}) };
     });
     const result: SyncRun = { package: String(run.package), stage: Number(run.stage), run: String(run.run), language: String(run.language), book: String(run.book),
       sourceCount: Number(run.sourceCount), groupSize: Number(run.groupSize), observed, candidates, events };
