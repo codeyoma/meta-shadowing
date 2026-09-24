@@ -8,11 +8,13 @@ import { unitProgress } from './unit-progress';
 export type Stamp = string;
 export type CreditCandidate = { credited: number; counts: number[] };
 // Omitted on historical receipts: old confirmations always retain their value.
-export type Confirmation = { unit: number; ordinal: number; day: string; multiplier?: 3 };
+export type SourceCycle = { source: number; ordinal: number };
+export type Confirmation = { unit: number; ordinal: number; day: string; multiplier?: 3; weight?: number; sources?: SourceCycle[] };
 export type SyncRun = {
   package: string; stage: number; run: string; language: string; book: string;
   sourceCount: number; groupSize: number; observed: number[];
   candidates: CreditCandidate[]; events: Confirmation[];
+  lineage?: string;
 };
 export type SyncLedger = { clocks: Record<string, Stamp>; runs: SyncRun[] };
 export function stringifyCounts(value: unknown): string {
@@ -109,18 +111,74 @@ export function seedLedger(tables: Record<Table, Row[]>, ledger: SyncLedger = { 
   }
   return ledger;
 }
-export function creditTotal(run: SyncRun): number {
+function candidateCredit(run: SyncRun, candidate: CreditCandidate): number {
   const weight = (unit: number) => Math.min(run.groupSize, run.sourceCount - unit * run.groupSize);
-  return Math.min(MAX_XP, run.candidates.reduce((best, candidate) => Math.max(best, candidate.credited + run.events.reduce((sum, event) =>
-    sum + (event.ordinal > candidate.counts[event.unit]! ? weight(event.unit) * (event.multiplier ?? 1) : 0), 0)), 0));
+  return Math.min(MAX_XP, candidate.credited + run.events.reduce((sum, event) =>
+    sum + (event.ordinal > candidate.counts[event.unit]! ? (event.weight ?? weight(event.unit)) * (event.multiplier ?? 1) : 0), 0));
+}
+export function creditTotal(run: SyncRun): number {
+  return run.candidates.reduce((best, candidate) => Math.max(best, candidateCredit(run, candidate)), 0);
+}
+/** Source ordinals, unlike group ordinals, survive changes to group boundaries. */
+export function confirmedSources(prior: Session): Pick<Confirmation, 'sources'> {
+  if (prior.version !== 2) return {};
+  const start = prior.phrase * prior.groupSize;
+  const sources = Array.from({ length: Math.min(prior.groupSize, prior.sourcePhraseCount - start) }, (_, offset) => {
+    const source = start + offset, progress = prior.sourceProgress?.[source];
+    return progress && progress.confirmed === progress.planned ? [] : [{ source, ordinal: (progress?.confirmed ?? prior.confirmed) + 1 }];
+  }).flat();
+  return { sources };
+}
+
+/** Raw per-plan projections remain immutable; only overlapping source receipts are removed from totals. */
+export function duplicateSourceCredit(runs: SyncRun[]): number {
+  const groups = new Map<string, SyncRun[]>();
+  for (const run of runs) {
+    const key = JSON.stringify([run.package, run.stage, run.lineage ?? run.run]);
+    const group = groups.get(key) ?? [];
+    group.push(run); groups.set(key, group);
+  }
+  let duplicates = 0;
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const root = group.find(run => !run.lineage);
+    if (!root) throw Error('Missing regrouping lineage.');
+    let best = 0;
+    for (const candidate of root.candidates) {
+      let total = candidateCredit(root, candidate);
+      const seen = new Set<string>();
+      for (const run of [root, ...group.filter(run => run !== root)]) {
+        const baseline = run === root ? candidate : run.candidates[0]!;
+        for (const event of run.events) {
+          if (event.ordinal <= baseline.counts[event.unit]!) continue;
+          // Old weighted receipts have no provable member identities. Keep them opaque.
+          const sources = event.sources ?? (event.weight === undefined ? Array.from({ length: Math.min(run.groupSize, run.sourceCount - event.unit * run.groupSize) },
+            (_, i) => ({ source: event.unit * run.groupSize + i, ordinal: event.ordinal })) : []);
+          for (const source of sources) {
+            const key = JSON.stringify([source.source, source.ordinal]);
+            if (seen.has(key) || source.ordinal <= candidate.counts[Math.floor(source.source / root.groupSize)]!) continue;
+            seen.add(key);
+            if (run !== root) total++;
+          }
+        }
+      }
+      best = Math.max(best, total);
+    }
+    duplicates += group.reduce((sum, run) => sum + creditTotal(run), 0) - best;
+  }
+  return duplicates;
 }
 export function mergeRun(a: SyncRun, b: SyncRun): SyncRun {
   if (runKey(a) !== runKey(b) || a.language !== b.language || a.book !== b.book || a.observed.length !== b.observed.length
+    || a.lineage !== b.lineage
     || (a.sourceCount && b.sourceCount && (a.sourceCount !== b.sourceCount || a.groupSize !== b.groupSize))) throw Error('Incompatible learning run identity.');
   const events = new Map<string, Confirmation>();
   for (const event of [...a.events, ...b.events]) {
     const old = events.get(eventKey(event));
+    if (old && old.weight !== event.weight) throw Error('Conflicting confirmation weight.');
+    if (old?.sources && event.sources && JSON.stringify(old.sources) !== JSON.stringify(event.sources)) throw Error('Conflicting source confirmation.');
     events.set(eventKey(event), { ...event, day: old && old.day < event.day ? old.day : event.day,
+      ...((old?.sources ?? event.sources) ? { sources: old?.sources ?? event.sources } : {}),
       ...(old?.multiplier === 3 || event.multiplier === 3 ? { multiplier: 3 as const } : {}) });
   }
   return { ...a, sourceCount: a.sourceCount || b.sourceCount, groupSize: a.groupSize || b.groupSize,
@@ -134,17 +192,24 @@ export function mergeLedger(a: SyncLedger, b: SyncLedger): SyncLedger {
   return { clocks, runs: [...runs.values()] };
 }
 export function bindRun(db: Database, ledger: SyncLedger, key: string, state: Session, identity: { language: string; book: string }): SyncRun {
+  if (state.lineage) {
+    const row = db.first<{ state: string }>('SELECT state FROM progress_sync_runs WHERE key=?', JSON.stringify([key, state.stage, state.lineage]));
+    const root: SyncRun | undefined = row ? JSON.parse(row.state) : undefined;
+    if (!root || root.lineage || root.language !== identity.language || root.book !== identity.book
+      || state.version !== 2 || root.sourceCount !== state.sourcePhraseCount) throw Error('Invalid regrouping lineage.');
+  }
   let run = ledger.runs.find(run => runKey(run) === JSON.stringify([key, state.stage, state.runId]));
   if (!run) {
     const row = db.first<Row>('SELECT * FROM cycle_credits WHERE package=? AND stage=? AND run=?', key, state.stage, state.runId);
     const unit = db.first<{ state: string }>('SELECT state FROM unit_credits WHERE package=? AND stage=? AND run=?', key, state.stage, state.runId);
     run = row ? seedRun(row, unit ? JSON.parse(unit.state) : undefined, state) : { package: key, stage: state.stage, run: state.runId, ...identity,
+      ...(state.lineage ? { lineage: state.lineage } : {}),
       sourceCount: state.version === 2 ? state.sourcePhraseCount : state.phraseCount, groupSize: state.version === 2 ? state.groupSize : 1,
       observed: unitProgress(state).map(unit => unit.confirmed), candidates: [{ credited: 0, counts: unitProgress(state).map(unit => unit.confirmed) }], events: [] };
     ledger.runs.push(run);
   }
   const source = state.version === 2 ? state.sourcePhraseCount : state.phraseCount, size = state.version === 2 ? state.groupSize : 1;
-  if (run.language !== identity.language || run.book !== identity.book || run.observed.length !== state.phraseCount
+  if (run.language !== identity.language || run.book !== identity.book || run.observed.length !== state.phraseCount || run.lineage !== state.lineage
     || (run.sourceCount && (run.sourceCount !== source || run.groupSize !== size))) throw Error('Conflicting learning run plan.');
   run.sourceCount = source; run.groupSize = size;
   return run;

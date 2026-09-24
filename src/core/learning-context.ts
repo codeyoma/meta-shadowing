@@ -4,6 +4,8 @@ import { restoreSession, type Session } from './session';
 import type { PlayableStage } from './catalog';
 import { learningUnits } from './learning-units';
 import type { VideoPackage } from './video-package';
+import { regroupSession } from './regroup-session';
+import type { GroupSize } from './learning-units';
 
 export type AudioLearningPackage = {
   language: string;
@@ -42,6 +44,13 @@ export class LearningContext {
   save(state: Session) {
     this.validate(state);
     return this.journal.save(this.packageKey, state, { book: this.pack.manifest.id, language: this.pack.language });
+  }
+  regroup(stage: PlayableStage, expectedRun: string, size: GroupSize, newRun: string): Session {
+    const saved = this.load(stage);
+    if (!saved || saved.runId !== expectedRun) throw Error('Stale run.');
+    const next = regroupSession(saved, size, newRun);
+    if (next !== saved) this.save(next);
+    return next;
   }
   createWriter(initial: Session) {
     this.validate(initial);

@@ -121,7 +121,7 @@ export function validateProgressBackup(json: string): ProgressBackup {
             if (!validUnitCredit(parsed, Number(original.stage))) reject();
             row[column] = JSON.stringify(parsed); continue;
           }
-          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(Number(root.version) >= 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : []), ...(parsed?.reveal !== undefined ? ['reveal'] : [])]);
+          const s = object(parsed, ['version', 'runId', 'stage', 'phraseCount', 'phrase', 'mode', 'rate', 'confirmed', 'planned', 'phase', 'running', 'audioSeconds', 'remainingMs', ...(parsed?.version === 2 ? ['sourcePhraseCount', 'groupSize'] : []), ...(Number(root.version) >= 3 && parsed?.unitProgress !== undefined ? ['unitProgress'] : []), ...(parsed?.reveal !== undefined ? ['reveal'] : []), ...(Number(root.version) >= 4 ? ['sourceProgress', 'lineage'].filter(key => parsed?.[key] !== undefined) : [])]);
           integer(s.phraseCount, 1, 100000); integer(s.planned, isRevealStage(Number(original.stage)) ? 1 : 3, 100000); integer(s.confirmed, 0, 100000);
           if (s.version === 2) integer(s.sourcePhraseCount, 1, 100000);
           identity(s.runId);
@@ -232,10 +232,12 @@ function validateSync(value: unknown, tables: Record<Table, Row[]>): SyncLedger 
   const cyclesByKey = new Map(tables.cycle_credits.map(row => [runKey(row), row]));
   const unitsByKey = new Map(tables.unit_credits.map(row => [runKey(row), row]));
   const runs: SyncRun[] = raw.runs.map(value => {
-    const run = object(value, ['package', 'stage', 'run', 'language', 'book', 'sourceCount', 'groupSize', 'observed', 'candidates', 'events']);
+    const run = object(value, ['package', 'stage', 'run', 'language', 'book', 'sourceCount', 'groupSize', 'observed', 'candidates', 'events',
+      ...(value && typeof value === 'object' && Object.hasOwn(value, 'lineage') ? ['lineage'] : [])]);
     for (const key of ['package', 'run', 'language', 'book']) identity(run[key]);
     integer(run.stage, 1, 16); integer(run.sourceCount, 0, 100000); integer(run.groupSize, 0, 4);
     if ((run.sourceCount === 0) !== (run.groupSize === 0)) reject();
+    if (run.lineage !== undefined && (identity(run.lineage) === run.run || Number(run.stage) < 7 || Number(run.stage) > 10 || !run.sourceCount)) reject();
     const counts = (value: unknown): number[] => {
       if (typeof value === 'string') {
         if (!value || value.length > 1_500_000 || !/^[1-9][0-9]*\*[0-9]+(?:,[1-9][0-9]*\*[0-9]+)*$/.test(value)) return reject();
@@ -263,15 +265,33 @@ function validateSync(value: unknown, tables: Record<Table, Row[]>): SyncLedger 
     });
     const eventsSeen = new Set<string>();
     const events = run.events.map(value => {
-      const event = object(value, ['unit', 'ordinal', 'day', ...(value && typeof value === 'object' && Object.hasOwn(value, 'multiplier') ? ['multiplier'] : [])]);
+      const event = object(value, ['unit', 'ordinal', 'day', ...['multiplier', 'weight', 'sources'].filter(key => value && typeof value === 'object' && Object.hasOwn(value, key))]);
       if (event.multiplier !== undefined && (event.multiplier !== 3 || !isRevealStage(Number(run.stage)))) reject();
       const unit = integer(event.unit, 0, observed.length - 1), ordinal = integer(event.ordinal, 1, 100000);
+      if (event.weight !== undefined) {
+        if (Number(run.stage) < 7 || Number(run.stage) > 10 || event.multiplier !== undefined) reject();
+        integer(event.weight, 1, Math.min(Number(run.groupSize), Number(run.sourceCount) - unit * Number(run.groupSize)));
+      }
+      if (event.sources !== undefined) {
+        if (Number(run.stage) < 7 || Number(run.stage) > 10 || !Array.isArray(event.sources)
+          || event.sources.length !== (event.weight ?? Math.min(Number(run.groupSize), Number(run.sourceCount) - unit * Number(run.groupSize)))) reject();
+        const sources = new Set<number>();
+        for (const item of event.sources as unknown[]) {
+          const source = object(item, ['source', 'ordinal']);
+          const index = integer(source.source, unit * Number(run.groupSize), Math.min(Number(run.sourceCount), (unit + 1) * Number(run.groupSize)) - 1);
+          integer(source.ordinal, 1, 100000);
+          if (sources.has(index)) reject(); sources.add(index);
+        }
+      } else if (run.lineage !== undefined) reject();
       const key = JSON.stringify([unit, ordinal]);
       if (!run.sourceCount || ordinal > observed[unit]! || eventsSeen.has(key)) reject();
       eventsSeen.add(key);
-      return { unit, ordinal, day: day(event.day), ...(event.multiplier === 3 ? { multiplier: 3 as const } : {}) };
+      return { unit, ordinal, day: day(event.day), ...(event.multiplier === 3 ? { multiplier: 3 as const } : {}),
+        ...(event.sources !== undefined ? { sources: (event.sources as { source: number; ordinal: number }[]).slice().sort((a, b) => a.source - b.source) } : {}),
+        ...(event.weight !== undefined ? { weight: Number(event.weight) } : {}) };
     });
     const result: SyncRun = { package: String(run.package), stage: Number(run.stage), run: String(run.run), language: String(run.language), book: String(run.book),
+      ...(run.lineage !== undefined ? { lineage: String(run.lineage) } : {}),
       sourceCount: Number(run.sourceCount), groupSize: Number(run.groupSize), observed, candidates, events };
     const key = runKey(result), row = cyclesByKey.get(key);
     if (seen.has(key) || !row || row.language !== result.language || row.book !== result.book || row.phrase_count !== observed.length || row.credited !== creditTotal(result)
@@ -284,5 +304,15 @@ function validateSync(value: unknown, tables: Record<Table, Row[]>): SyncLedger 
     seen.add(key); return result;
   });
   if (seen.size !== tables.cycle_credits.length) reject();
+  const byKey = new Map(runs.map(run => [runKey(run), run]));
+  for (const run of runs) if (run.lineage) {
+    const root = byKey.get(JSON.stringify([run.package, run.stage, run.lineage]));
+    if (!root || root.lineage || root.sourceCount !== run.sourceCount || root.language !== run.language || root.book !== run.book
+      || run.candidates.length !== 1 || run.candidates[0]!.credited !== 0) reject();
+  }
+  for (const row of tables.checkpoints) {
+    const state = JSON.parse(String(row.state));
+    if (state.lineage !== byKey.get(JSON.stringify([row.package, row.stage, state.runId]))?.lineage) reject();
+  }
   return { clocks, runs };
 }

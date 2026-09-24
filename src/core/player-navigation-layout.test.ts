@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm';
 import React from 'react';
 import ts from 'typescript';
 import { PaidLearningAccess } from './paid-learning-access';
+import { isVideoPackage } from './learning-context';
 import { isRevealStage } from './catalog';
 import { playerSpeed, revealPlayback } from './word-reveal';
 import { createSession } from './session';
@@ -222,26 +223,38 @@ test('silent stage header shows selected S level and opens reveal speed instead 
   assert.equal(descendants(layout().root).some(node => node.type === 'CycleTimeline'), true, 'Audio stages keep their indicator');
 });
 
-test('all six silent routes construct a timer without opening native audio', async () => {
+test('all six silent video routes use only a clock, including native-free teardown', async () => {
   let declaration: ts.VariableDeclaration | undefined;
   function find(node: ts.Node) {
     if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'audio') declaration = node;
     ts.forEachChild(node, find);
   }
   find(screen);
-  const code = ts.transpileModule(`module.exports = (${declaration!.initializer!.getText(source)});`, {
+  const owner = screen.body!.statements.filter(ts.isVariableStatement)
+    .flatMap(node => [...node.declarationList.declarations]).find(node => node.name.getText(source) === '[videoOwner]')!;
+  const disposal = screen.body!.statements.find(node => ts.isExpressionStatement(node)
+    && ts.isCallExpression(node.expression) && node.expression.expression.getText(source) === 'useEffect')!;
+  const code = ts.transpileModule(`const ${owner.getText(source)};
+    ${disposal.getText(source)}
+    module.exports = (${declaration!.initializer!.getText(source)});`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
   }).outputText;
   for (const stage of [11, 12, 13, 14, 15, 16] as const) {
+    let cleanup = () => {};
     const module = { exports: {} as AudioPort };
-    runInNewContext(code, { module, stage, isRevealStage, revealPlayback,
+    runInNewContext(code, { module, stage, isRevealStage, isVideoPackage, revealPlayback,
+      useState: (initialize: () => unknown) => [initialize()], randomUUID: () => 'video-owner',
+      useEffect: (effect: () => () => void) => { cleanup = effect(); },
+      disposeVideo() { assert.fail('Silent route touched the native video player on teardown'); },
+      nativeVideo() { assert.fail('Silent stage opened native video'); },
       initial: createSession({ runId: 'silent-route', stage, phraseCount: 1, mode: 'manual', rate: 1 }),
-      runUnits: [{ text: 'We go.', translation: '가요.' }], engine: { current: null }, pack: {},
+      runUnits: [{ text: 'We go.', translation: '가요.' }], engine: { current: null }, pack: { manifest: { kind: 'video' } },
       nativeAudio() { assert.fail('Silent stage opened native audio'); },
     });
     await module.exports.prepare(0, 0, 1);
     assert.ok(module.exports.duration!() > 0);
     module.exports.dispose();
+    cleanup();
   }
 });
 

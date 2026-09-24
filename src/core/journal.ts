@@ -2,8 +2,9 @@ import { restoreSession, transition, type Session } from './session';
 import { Progression, localDay, type BookIdentity } from './progression';
 import { createCycleTable, recordCycles, validCycleIdentity } from './cycle-credit';
 import { isRevealStage, type PlayableStage } from './catalog';
-import { bindRun, checkpointKey, createSyncTable, creditTotal, nextStamp, readSync, saveSync, type SyncRun } from './sync-ledger';
+import { bindRun, checkpointKey, confirmedSources, createSyncTable, creditTotal, nextStamp, readSync, saveSync, type SyncRun } from './sync-ledger';
 import { unitProgress } from './unit-progress';
+import { unitWeight } from './unit-credit';
 
 export interface Database {
   exec(sql: string): void;
@@ -91,6 +92,8 @@ export class Journal {
         if (accepted) {
           const existing = run.events.find(event => event.unit === prior.phrase && event.ordinal === prior.confirmed + 1);
           if (!existing) run.events.push({ unit: prior.phrase, ordinal: prior.confirmed + 1, day,
+            ...confirmedSources(prior),
+            ...(prior.sourceProgress ? { weight: unitWeight(prior, prior.phrase) } : {}),
             ...(isRevealStage(state.stage) ? { multiplier: 3 as const } : {}) });
           else existing.day = existing.day < day ? existing.day : day;
         }
@@ -123,6 +126,7 @@ export class Journal {
     const json = JSON.stringify(state);
     this.db.exec('BEGIN IMMEDIATE');
     try {
+      const before = identity ? this.progress.summary(identity.language).xp : 0;
       const prior = this.db.first<{ state: string }>('SELECT state FROM checkpoints WHERE package=? AND stage=?', packageKey, state.stage);
       if (prior) {
         const old = JSON.parse(prior.state) as Session;
@@ -147,6 +151,8 @@ export class Journal {
           const predecessor = JSON.parse(prior.state) as Session, day = localDay(this.now());
           if (!boundRun.events.some(event => event.unit === predecessor.phrase && event.ordinal === predecessor.confirmed + 1)) {
             boundRun.events.push({ unit: predecessor.phrase, ordinal: predecessor.confirmed + 1, day,
+              ...confirmedSources(predecessor),
+              ...(predecessor.sourceProgress ? { weight: unitWeight(predecessor, predecessor.phrase) } : {}),
               ...(isRevealStage(state.stage) ? { multiplier: 3 as const } : {}) });
           }
         }
@@ -163,8 +169,9 @@ export class Journal {
         this.db.run('INSERT OR IGNORE INTO completions (package,stage,run) VALUES (?,?,?)', packageKey, state.stage, state.runId);
       }
       this.onSaved?.();
+      const visibleEarned = identity ? this.progress.summary(identity.language).xp - before : earned;
       this.db.exec('COMMIT');
-      return earned;
+      return visibleEarned;
     } catch (error) {
       this.db.exec('ROLLBACK');
       throw error;
@@ -172,6 +179,9 @@ export class Journal {
   }
   completions(packageKey: string, stage: PlayableStage): number {
     return this.db.first<{ count: number }>(
-      'SELECT COUNT(*) AS count FROM completions WHERE package = ? AND stage = ?', packageKey, stage)?.count ?? 0;
+      `SELECT COUNT(DISTINCT COALESCE(json_extract(ledger.state, '$.lineage'), completed.run)) AS count
+       FROM completions AS completed LEFT JOIN progress_sync_runs AS ledger
+       ON ledger.key=json_array(completed.package, completed.stage, completed.run)
+       WHERE completed.package=? AND completed.stage=?`, packageKey, stage)?.count ?? 0;
   }
 }

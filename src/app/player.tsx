@@ -62,7 +62,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const c = usePalette();
   const insets = useSafeAreaInsets();
   const engine = useRef<Player | null>(null);
-  const [videoOwner] = useState(() => isVideoPackage(pack) ? randomUUID() : null);
+  const [videoOwner] = useState(() => isVideoPackage(pack) && !isRevealStage(stage) ? randomUUID() : null);
   useEffect(() => () => { if (videoOwner) disposeVideo(videoOwner); }, [videoOwner]);
   const paidGuard = useRef<PaidLearningAccess | null>(null);
   const opened = useRef(false);

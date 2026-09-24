@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, ScrollView, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { randomUUID } from 'expo-crypto';
 import { ActionButton, HeaderButton } from '@/components/ui';
 import { LearningPreferenceSection, type LearningPreference } from '@/components/learning-preference-section';
 import { SettingsRow, useSettingsColors } from '@/components/settings-row';
@@ -28,6 +29,7 @@ import { usePackageLearningAccess } from '@/components/use-package-learning-acce
 import { mayUsePackage } from '@/native/paid-package';
 import { LearningMonitorControls } from '@/components/learning-monitor-controls';
 import { learningMonitorSupported, learningMonitor } from '@/native/voice-monitor';
+import { isGroupSize } from '@/core/learning-units';
 
 export default function PlayerOptionsScreen() {
   const profile = useProgressProfile();
@@ -88,6 +90,19 @@ export default function PlayerOptionsScreen() {
   }
   function changePreference(patch: Partial<Settings>) {
     if (patch.rate !== undefined) { change(patch.rate); return; }
+    if (patch.groupSize !== undefined && checkpoint?.version === 2) {
+      if (!stage || !pack || !run || !scopeValid() || !isGroupSize(patch.groupSize)) return;
+      try {
+        const next = new LearningContext(pack, getJournal()).regroup(stage, run, patch.groupSize, randomUUID());
+        sentenceEntry.cancel();
+        setCheckpoint(next);
+        router.setParams({ run: next.runId });
+      } catch {
+        setRevision(value => value + 1);
+        Alert.alert('묶음 크기를 변경하지 못했어요', '학습 기록은 유지됩니다. 다시 시도해 주세요.');
+      }
+      return;
+    }
     if (!settings || !scopeValid()) return;
     try {
       const next = { ...readSettings(), ...patch };
@@ -154,7 +169,9 @@ export default function PlayerOptionsScreen() {
               <LearningPreferenceSection key={`reveal-wpm-${revision}`} option="wpm"
                 settings={settings} onChange={changePreference} /></>
           : settings && <LearningPreferenceSection key={`${selected}-${revision}`} option={selected}
-          settings={{ ...settings, rate: rate ?? settings.rate }} onChange={changePreference} />}
+          activeGroup={checkpoint?.version === 2}
+          settings={{ ...settings, rate: rate ?? settings.rate,
+            groupSize: checkpoint?.version === 2 ? checkpoint.groupSize : settings.groupSize }} onChange={changePreference} />}
       </ScrollView>}
     </View>
     <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: Math.max(16, insets.bottom), gap: 16 }}>

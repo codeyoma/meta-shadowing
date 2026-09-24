@@ -6,7 +6,7 @@ earlier planning documents can contain superseded behavior.
 
 ## Current stage expansion — 2026-09-20
 
-### Video packages — stages 1–10
+### Video packages — stages 1–16
 
 Video stages 1–6 play one bounded source phrase; stages 7–10 play the saved
 unit's ordered source segments on one native player. Intervening source gaps
@@ -21,7 +21,9 @@ the first member. Speed, paired subtitles, first-word hints in 5–6/9–10,
 three-cycle confirmation, Repeat +2 and per-member XP follow the rules below.
 Only the video supplies original audio. Pausing or replacing a unit cancels
 pending member transitions; stale callbacks cannot resume or finish it.
-Video packages remain gated from silent stages 11–16 until #69. Expanded
+Video packages also support silent stages 11–16 using their finalized text and
+the shared reveal behavior below. These stages never create or dispose native
+video/audio playback resources and display no video or thumbnail. Expanded
 physical-device interruption/monitoring acceptance remains in #70.
 
 The owner-approved implementation now enables stages 1–16. Stages 1–4 share
@@ -76,10 +78,30 @@ phase change, or artificial delay. The final short remainder is a separate unit;
 the current flat package format has no section boundaries. This supersedes the
 historical remainder/timing reference below.
 
-Fresh grouped runs save their source count and group size. Restored runs derive
-their units from that saved plan, even after changing settings. A changed source
-count or incompatible checkpoint is rejected. Settings explain that group-size
-changes apply only to the next fresh run. Existing stage 1/2 progress is preserved.
+Fresh grouped runs save their source count and group size. Global Settings sets
+the default for fresh runs. The learning menu displays the active run's actual
+size and applies an explicit change immediately (owner update, 2026-09-24).
+Regrouping creates a new immutable plan identity, retains completed/optional
+cycles per source sentence, and leaves all prior XP receipts intact. The new
+current group contains the previous group's first source; playback resets to
+zero and stays paused. Completed groups are skipped in favor of unfinished work.
+When a new group mixes completed and unfinished sentences, completed sentences
+may be replayed as context but need no further confirmations or XP. Each pass
+advances only unfinished members; its receipt records that actual member count.
+Sources already complete when a plan is regrouped stay closed, including when
+Repeat adds two optional passes for the remaining members. Regrouped plans retain
+the original reward lineage and record each confirmed source/cycle identity.
+Concurrent devices may choose different group sizes, but overlapping source
+confirmations and completed-run counts contribute only once within that lineage.
+Per-plan accounting stays intact for backup validation; visible XP subtracts
+overlapping source receipts before applying the language cap. Historical opaque
+credits remain preserved, and genuinely new runs have independent lineages.
+Changing size alone grants no XP or stage completion. Repeated size changes,
+navigation, restoration and backup merging preserve the same source work.
+The menu's per-run size does not silently overwrite the global default, matching
+the existing per-run playback-rate editor. A changed source count or incompatible
+checkpoint is rejected. Existing stage 1/2 progress is preserved. Older app
+versions cannot import the new backup fields; update syncing devices before using them.
 
 The accessible “자막 보기” toggle above playback reveals only the current unit.
 Hidden target text retains all characters and layout:

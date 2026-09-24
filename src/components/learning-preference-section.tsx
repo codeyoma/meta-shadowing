@@ -10,17 +10,20 @@ import { FeedbackPressable } from './feedback-pressable';
 export type LearningPreference = 'display' | 'rate' | 'group' | 'wpm';
 
 /** Shared editors; callers choose whether changes target preferences or a paused session. */
-export function LearningPreferenceSection({ option, settings, onChange }: {
+export function LearningPreferenceSection({ option, settings, onChange, activeGroup = false }: {
   option: LearningPreference;
   settings: Settings;
   onChange(patch: Partial<Settings>): void;
+  activeGroup?: boolean;
 }) {
   const c = useSettingsColors();
   if (option === 'rate') return <SettingsSection title="배속" paddingVertical={8}>
     <PlaybackRateControl appearance="settings" showTitle={false} rate={settings.rate}
       onChange={rate => onChange({ rate: Number(rate.toFixed(2)) })} />
   </SettingsSection>;
-  if (option === 'group') return <SettingsSection title="다구간 학습 사이즈" note="7–10 스테이지에서 원본 학습 구간을 묶는 개수예요. 다음 새 학습부터 적용되며, 진행 중인 학습은 시작할 때의 묶음 크기를 유지해요.">
+  if (option === 'group') return <SettingsSection title="다구간 학습 사이즈" note={activeGroup
+    ? '바로 적용돼요. 완료한 학습과 XP는 유지하고, 현재 묶음은 처음부터 재생해요.'
+    : '7–10 스테이지의 기본 묶음 크기예요. 진행 중인 학습은 학습 메뉴에서 바꿀 수 있어요.'}>
     <SystemPicker label="다구간 학습 사이즈" value={settings.groupSize ?? 2}
       options={([2, 3, 4] as const).map(value => ({ value, label: `${value}구간` }))}
       onChange={groupSize => onChange({ groupSize })} />

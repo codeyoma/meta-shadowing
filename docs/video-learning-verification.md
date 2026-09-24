@@ -1,9 +1,33 @@
 # Video learning verification
 
+## Silent stages 11–16 implementation — 2026-09-24
+
+- #69 enables the remaining six stages for the same installed video package.
+  They reuse the existing silent reveal clock and finalized text, not media
+  segment durations or ASR timestamps. No native video owner is allocated, so
+  leaving a silent stage does not invoke native video teardown either.
+- SQLite-backed Player tests cover all six stages: unchanged finalized text,
+  language order, cumulative reveal, fixed S3 at 200 WPM, partial-word pause,
+  database close/reopen, completed-reveal reentry, explicit +3 XP confirmation,
+  immediate next-phrase start and idempotent completed-stage restoration.
+- The new integration tests exposed rejected Next/Repeat actions stopping the
+  reveal clock. Session transitions now retain their identity for a no-op,
+  allowing Player to reject those actions without touching playback or credit.
+- `npm run check` passed 433 core tests, 25 build/package checks and TypeScript.
+  Route tests exercise the actual transport initializer and cleanup with native
+  audio/video boundaries forbidden. Existing presentation tests cover hidden
+  video/cycle controls, S1–S4 controls and text accessibility.
+- iOS JavaScript export also passed. Standards review found no mandatory
+  violations and suggested three small duplication cleanups, now applied.
+  Spec review found no actionable mismatch.
+- This change was verified automatically; no new physical-device test or native
+  build is claimed. Expanded device interruptions and monitoring remain in #70.
+
 ## Stages 2–10 implementation — 2026-09-24
 
 - #68 enables phrase video in stages 2–6 and saved video groups in stages 7–10.
-  Stage 1 remains supported. Silent video-package stages 11–16 remain gated for #69.
+  Stage 1 remains supported. At that revision, silent stages 11–16 were gated;
+  the #69 section above records their subsequent enablement.
 - One AVPlayer plays the selected manifest segments in order, skipping source
   gaps. Position/duration use the sum of selected durations. Member boundaries
   do not emit a cycle end, pause, confirmation or reward. The final frame stays
