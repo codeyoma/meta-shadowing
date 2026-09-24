@@ -4,6 +4,7 @@ import type { LessonRemoteEvent } from '../../src/core/lesson-remote';
 import type { VideoStatus } from '../../src/core/video-playback';
 
 interface LearningAudio {
+  readonly monitoringSupported?: boolean;
   readonly localVideoManifest?: string | null;
   readonly localVideoManifestInvalid?: boolean;
   videoPackageStatus(): Promise<{ installed: boolean; bytes: number }>;
@@ -31,4 +32,8 @@ interface LearningAudio {
   addListener(name: 'onLessonRemotePress', listener: (event: LessonRemoteEvent) => void): { remove(): void };
   addListener(name: 'onMonitorStatus', listener: (status: MonitorStatus) => void): { remove(): void };
 }
-export default requireOptionalNativeModule<LearningAudio>('LearningAudio');
+const audio = requireOptionalNativeModule<LearningAudio>('LearningAudio');
+// Native policy is authoritative: offline Debug builds can bundle production JS.
+export const learningMonitorSupported = audio?.monitoringSupported === true
+  && typeof audio.configureLearningPlayback === 'function';
+export default audio;

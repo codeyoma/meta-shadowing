@@ -1,5 +1,5 @@
 import { setAudioModeAsync, setIsAudioActiveAsync } from 'expo-audio';
-import audio from '../../modules/learning-audio';
+import audio, { learningMonitorSupported } from '../../modules/learning-audio';
 import { VoiceMonitorLab } from '../core/voice-monitor-lab';
 import { audioUri, installBundledPackage, samplePackage } from './package';
 
@@ -9,7 +9,7 @@ let learning: { key: string; lab: VoiceMonitorLab } | undefined;
 const playbackMode = () => setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false,
   allowsRecording: false, interruptionMode: 'doNotMix' });
 
-export const learningMonitorSupported = __DEV__ && !!audio?.configureLearningPlayback;
+export { learningMonitorSupported };
 
 export function createLearningMonitor(key: string) {
   if (!learningMonitorSupported || !audio) throw Error('Learning monitoring is unavailable.');

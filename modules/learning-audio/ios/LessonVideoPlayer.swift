@@ -7,7 +7,20 @@ import UIKit
 /// One original-video source, with native end bounds and no independent reward authority.
 @MainActor final class LessonVideoPlayer {
   static let shared = LessonVideoPlayer()
-  let player = AVPlayer()
+  private(set) var player = AVPlayer()
+  private var preparingPlayer: AVPlayer?
+  private let layers = NSHashTable<AVPlayerLayer>.weakObjects()
+
+  func attach(_ layer: AVPlayerLayer) {
+    layers.add(layer)
+    layer.player = player
+  }
+
+  private func cancelPreparation() {
+    preparingPlayer?.pause()
+    preparingPlayer?.currentItem?.cancelPendingSeeks()
+    preparingPlayer = nil
+  }
   var onStatus: (([String: Any]) -> Void)?
   private(set) var owner = ""
   private var generation = 0
@@ -35,6 +48,7 @@ import UIKit
 
   func matches(_ owner: String, _ generation: Int) -> Bool { self.owner == owner && self.generation == generation }
   func reserve(owner: String, generation: Int, position: Double = 0) {
+    cancelPreparation()
     player.pause(); active = false; completed = false; hasPlayed = false; prepared = false
     transitioning = false; memberRevision += 1
     player.currentItem?.cancelPendingSeeks()
@@ -112,19 +126,28 @@ import UIKit
     let item = AVPlayerItem(asset: asset)
     item.forwardPlaybackEndTime = CMTime(seconds: segments[member].end, preferredTimescale: 60000)
     item.audioTimePitchAlgorithm = .timeDomain
-    player.actionAtItemEnd = .pause
-    player.allowsExternalPlayback = false
-    player.replaceCurrentItem(with: item)
+    // Keep the last positioned player visible while the next item loads/seeks.
+    // Binding a fresh item to the visible layer exposes its source-opening frame.
+    let candidate = AVPlayer(playerItem: item)
+    candidate.actionAtItemEnd = .pause
+    candidate.allowsExternalPlayback = false
+    preparingPlayer = candidate
+    defer { if preparingPlayer === candidate { preparingPlayer = nil } }
     let deadline = ContinuousClock.now + .seconds(10)
     while item.status == .unknown && ContinuousClock.now < deadline {
       try await Task.sleep(for: .milliseconds(10))
       guard matches(owner, generation) else { throw VideoError.cancelled }
     }
     guard item.status == .readyToPlay else { throw VideoError.unavailable }
-    let sought = await player.seek(to: CMTime(seconds: location.mediaSeconds, preferredTimescale: 60000),
+    let sought = await candidate.seek(to: CMTime(seconds: location.mediaSeconds, preferredTimescale: 60000),
       toleranceBefore: .zero, toleranceAfter: .zero)
     guard matches(owner, generation), sought else { throw VideoError.cancelled }
     guard foreground else { interrupt(); throw VideoError.cancelled }
+    player = candidate
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    for layer in layers.allObjects { layer.player = candidate }
+    CATransaction.commit()
     observe(item: item, owner: owner, generation: generation)
     prepared = true; preparing = false
     emit("ready")
@@ -198,6 +221,7 @@ import UIKit
   }
   func pause(owner: String) {
     guard self.owner == owner else { return }
+    cancelPreparation()
     player.pause(); active = false; prepared = false; preparing = false; interruptible = false; generation += 1
     memberRevision += 1; transitioning = false; player.currentItem?.cancelPendingSeeks()
     clearObservers()
