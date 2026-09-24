@@ -28,7 +28,7 @@ const compiled = ts.transpileModule(`module.exports = () => {
 type Element = React.ReactElement<Record<string, unknown>>;
 const require = createRequire(import.meta.url);
 
-function layout(accessReady = true, unavailable = false, accessDenied = false, rapid = false, refreshing = false) {
+function layout(accessReady = true, unavailable = false, accessDenied = false, rapid = false, refreshing = false, video = false) {
   const actions: string[] = [];
   const module = { exports: {} as unknown as () => Element };
   let memo: { dependencies: unknown[]; value: unknown } | undefined;
@@ -37,6 +37,7 @@ function layout(accessReady = true, unavailable = false, accessDenied = false, r
     Stack: { Screen: 'Screen' }, PlayerHeaderProgress: 'PlayerHeaderProgress',
     Icon: 'Icon', Label: 'Label', Card: 'Card', ActionButton: 'ActionButton',
     Animated: { View: 'AnimatedView' }, SpeechContent: 'SpeechContent', WordRevealContent: 'WordRevealContent',
+    videoOwner: video ? 'test-video' : null, LessonVideo: 'LessonVideo',
     CycleTimeline: 'CycleTimeline', PlayerControls: 'PlayerControls',
     state: { stage: rapid ? 11 : 9, rate: 1.5, phrase: 1, phraseCount: 6, phase: 'listening', runId: 'test', ...(rapid ? { reveal: { speed: 3, wpm: 250 } } : {}) },
     stage: rapid ? 11 : 9, unavailable, accessReady, accessDenied, leave() {}, unitLabel: '학습 묶음', presented: [], speechView: 'list', units: [],
@@ -53,6 +54,12 @@ function layout(accessReady = true, unavailable = false, accessDenied = false, r
   });
   return { root: module.exports(), render: module.exports, actions };
 }
+
+test('inline video precedes paired text and is absent from silent stages', () => {
+  const nodes = descendants(layout(true, false, false, false, false, true).root);
+  assert.ok(nodes.findIndex(n => n.type === 'LessonVideo') < nodes.findIndex(n => n.type === 'SpeechContent'));
+  assert.equal(descendants(layout(true, false, false, true, false, true).root).some(n => n.type === 'LessonVideo'), false);
+});
 
 function descendants(node: unknown): Element[] {
   if (Array.isArray(node)) return node.flatMap(descendants);

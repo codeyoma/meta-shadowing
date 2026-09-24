@@ -1,5 +1,6 @@
 import delivery from '../../modules/package-delivery';
-import type { LearningPackage } from '../core/learning-context';
+import { isVideoPackage, type LearningPackage } from '../core/learning-context';
+import { videoPackageActions } from './video-package';
 import { PackageMaterialStorage, packageOperations } from '../core/package-storage';
 import { hostedStorage, removeHostedMaterials } from './hosted-package';
 import { verifyBundledMaterials } from './package';
@@ -23,6 +24,6 @@ const storage = new PackageMaterialStorage(packageOperations, {
 });
 
 export const readPackageStorage = (pack: LearningPackage): Promise<{ bytes: number; installed: boolean; busy: boolean }> =>
-  isPaidDuo(pack) ? paidDuoActions.storage() : isFreeDuo(pack) ? freeDuoActions.storage() : storage.read(pack);
+  isVideoPackage(pack) ? videoPackageActions.status(pack) : isPaidDuo(pack) ? paidDuoActions.storage() : isFreeDuo(pack) ? freeDuoActions.storage() : storage.read(pack);
 export const removePackageMaterials = (pack: LearningPackage): Promise<{ cacheCleared: boolean }> =>
-  isPaidDuo(pack) ? paidDuoActions.remove() : isFreeDuo(pack) ? freeDuoActions.remove() : storage.remove(pack);
+  isVideoPackage(pack) ? videoPackageActions.remove(pack) : isPaidDuo(pack) ? paidDuoActions.remove() : isFreeDuo(pack) ? freeDuoActions.remove() : storage.remove(pack);

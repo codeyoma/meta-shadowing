@@ -18,7 +18,7 @@ targets:
     sources:
       - Tests
       - path: ../../modules/learning-audio/ios
-        excludes: ['*Module.swift', '*.podspec']
+        excludes: ['*Module.swift', '*View.swift', '*.podspec']
     dependencies:
       - sdk: AVFoundation.framework
       - sdk: StoreKit.framework
@@ -36,7 +36,7 @@ targets:
     sources:
       - Tests
       - path: ../../modules/learning-audio/ios
-        excludes: ['*Module.swift', '*.podspec']
+        excludes: ['*Module.swift', '*View.swift', '*.podspec']
     dependencies:
       - target: AudioTestHost
       - sdk: AVFoundation.framework

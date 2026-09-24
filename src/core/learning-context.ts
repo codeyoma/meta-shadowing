@@ -3,12 +3,17 @@ import type { Journal } from './journal';
 import { restoreSession, type Session } from './session';
 import type { PlayableStage } from './catalog';
 import { learningUnits } from './learning-units';
+import type { VideoPackage } from './video-package';
 
-export type LearningPackage = {
+export type AudioLearningPackage = {
   language: string;
   manifest: PackageManifest & { id: string; version: number; title: string;
     phrases: (PackageManifest['phrases'][number] & { text: string; translation: string })[] };
 };
+export type LearningPackage = AudioLearningPackage | VideoPackage;
+export function isVideoPackage(pack: LearningPackage): pack is VideoPackage {
+  return 'kind' in pack.manifest && pack.manifest.kind === 'video';
+}
 
 export function packageKeyOf(pack: LearningPackage): string {
   const { id, version } = pack.manifest;

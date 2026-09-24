@@ -15,6 +15,8 @@ import { BookTags } from '@/components/book-tags';
 import { isGroupedStage } from '@/core/catalog';
 import { usePackageLearningAccess } from '@/components/use-package-learning-access';
 import { mayUsePackage } from '@/native/paid-package';
+import { isVideoPackage } from '@/core/learning-context';
+import { videoStageAvailable } from '@/core/video-package';
 
 export default function Lesson() {
   const c = usePalette();
@@ -32,6 +34,7 @@ export default function Lesson() {
     return () => { active = false; };
   }, [selectedBook, access]));
   function open(stage: number) {
+    if (selectedBook && isVideoPackage(selectedBook) && !videoStageAvailable(stage)) return;
     if (access && ready && selectedBook && mayUsePackage(selectedBook) && records && canOpenStage(stage, records, bypass)) router.push({ pathname: '/player', params: { stage, package: selectedBook.packageKey } });
   }
   if (!selectedBook) return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 24, paddingBottom: 40 }}>

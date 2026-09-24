@@ -3,9 +3,12 @@ import AVFoundation
 import UIKit
 
 public class LearningAudioModule: Module {
+  private let videoPackage = LocalVideoPackage(source: LocalVideoPackage.bundledSource,
+    packages: URL.documentsDirectory.appendingPathComponent("lesson-packages"))
   private let inspection = LocalAudioInspection(packages: URL.documentsDirectory.appendingPathComponent("lesson-packages"))
   @MainActor private var monitor: VoiceMonitorService?
   @MainActor private var remote: LessonRemoteControl?
+  @MainActor private var videoOwner: String?
   private let monitorLifetime = MonitorLifetime()
 
   @MainActor private func activateRemote(_ owner: String) throws {
@@ -30,6 +33,8 @@ public class LearningAudioModule: Module {
   private func destroyMonitoring() {
     monitorLifetime.close()
     DispatchQueue.main.async {
+      if let owner = self.videoOwner { LessonVideoPlayer.shared.dispose(owner: owner) }
+      self.videoOwner = nil
       self.remote?.shutdown(); self.remote = nil
       self.monitor?.shutdown(); self.monitor = nil
     }
@@ -37,7 +42,51 @@ public class LearningAudioModule: Module {
 
   public func definition() -> ModuleDefinition {
     Name("LearningAudio")
-    Events("onMonitorStatus", "onLessonRemotePress")
+    Events("onMonitorStatus", "onLessonRemotePress", "onVideoStatus")
+    Constant("localVideoManifest") { self.videoPackage.json }
+    Constant("localVideoManifestInvalid") { self.videoPackage.manifestInvalid }
+    AsyncFunction("videoPackageStatus") { () async throws -> [String: Any] in
+      let status = try await self.videoPackage.status()
+      return ["installed": status.installed, "bytes": status.bytes]
+    }
+    AsyncFunction("installVideoPackage") { () async throws -> Void in try await self.videoPackage.install() }
+    AsyncFunction("removeVideoPackage") { () async throws -> Void in try await self.videoPackage.remove() }
+    AsyncFunction("videoPrepare") { (owner: String, generation: Int, phrase: Int, position: Double, rate: Double, promise: Promise) in
+      MainActor.assumeIsolated {
+        guard self.monitorLifetime.isOpen else { promise.reject("video-unavailable", "Video is unavailable."); return }
+        let controller = LessonVideoPlayer.shared
+        self.videoOwner = owner
+        controller.reserve(owner: owner, generation: generation)
+        controller.onStatus = { [weak self] status in
+          guard let self, self.monitorLifetime.isOpen else { return }
+          self.sendEvent("onVideoStatus", status)
+        }
+        Task { @MainActor in
+          do {
+            guard let manifest = self.videoPackage.manifest, manifest.phrases.indices.contains(phrase) else { throw VideoError.invalid }
+            let url = try await self.videoPackage.mediaURL()
+            guard self.monitorLifetime.isOpen, controller.matches(owner, generation) else { throw VideoError.cancelled }
+            let segment = manifest.phrases[phrase]
+            try await controller.prepare(url: url, start: segment.start, end: segment.end,
+              position: position, rate: rate, owner: owner, generation: generation)
+            promise.resolve()
+          } catch { promise.reject("video-unavailable", "Video could not be prepared.") }
+        }
+      }
+    }.runOnQueue(.main)
+    AsyncFunction("videoPlay") { (owner: String, generation: Int) in
+      MainActor.assumeIsolated {
+        guard self.monitorLifetime.isOpen, UIApplication.shared.applicationState == .active else { return }
+        LessonVideoPlayer.shared.play(owner: owner, generation: generation)
+      }
+    }.runOnQueue(.main)
+    AsyncFunction("videoPause") { (owner: String) in
+      MainActor.assumeIsolated { LessonVideoPlayer.shared.pause(owner: owner) }
+    }.runOnQueue(.main)
+    AsyncFunction("videoDispose") { (owner: String) in
+      MainActor.assumeIsolated { LessonVideoPlayer.shared.dispose(owner: owner) }
+    }.runOnQueue(.main)
+    View(LessonVideoView.self) {}
     AsyncFunction("beginLessonRemote") { (owner: String) throws -> Void in
       try MainActor.assumeIsolated {
         guard self.monitorLifetime.isOpen else { throw LocalAudioError.invalidInput }
