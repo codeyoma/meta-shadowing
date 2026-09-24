@@ -5,6 +5,8 @@ export interface AudioPort {
   prepare(phrase: number, position: number, rate: number): Promise<void>;
   play(): void; pause(): void; position(): number; dispose(): void;
   duration?(): number;
+  /** Optional visual restoration; never starts playback or confirms a cycle. */
+  restoreFrame?(phrase: number, rate: number): Promise<void>;
 }
 
 /** Coordinates only local boundaries. No server acknowledgement is involved. */
@@ -39,6 +41,14 @@ export class Player {
     await this.resume(1000);
   }
   async resume(delayMs = 0, persistBeforeStart = true) {
+    if (!this.disposed && !this.preparing && this.state.phase === 'decision' && this.audio.restoreFrame && this.error !== 'save') {
+      const generation = ++this.generation;
+      this.preparing = true; this.error = null;
+      try { await this.audio.restoreFrame(this.state.phrase, this.state.rate); }
+      catch { if (generation === this.generation) this.audioFailed(); }
+      finally { if (generation === this.generation) { this.preparing = false; this.changed(); } }
+      return;
+    }
     if (this.disposed || this.preparing || this.state.running
       || ['decision', 'complete'].includes(this.state.phase)) return;
     this.error = null;

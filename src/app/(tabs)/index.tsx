@@ -12,6 +12,7 @@ import { books } from '@/native/catalog';
 import { DeliveryDiagnostics } from '@/components/delivery-diagnostics';
 import { animationPreviewEnabled } from '../../../modules/package-delivery';
 import { isPaidDuo } from '@/native/paid-package';
+import { localVideoPackageInvalid } from '@/native/video-package';
 
 export default function Library() {
   const c = usePalette();
@@ -41,6 +42,7 @@ export default function Library() {
         </View>
       </View>
       {catalog.map(book => <LibraryBook key={book.packageKey} book={book} editing={editing} />)}
+      {localVideoPackageInvalid && <Label muted>동영상 자료를 읽을 수 없어요. 자료를 다시 준비한 개발 빌드로 설치해 주세요.</Label>}
       {selection.language === 'english' && <PackagePurchaseCard section="owned" editing={editing} />}
       {!catalog.length && <Label muted>이 언어에서 지원하는 구매/샘플 도서가 아직 없어요.</Label>}
     </View>

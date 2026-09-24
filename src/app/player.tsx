@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, ScrollView, View } from 'react-native';
 import { FeedbackPressable as Pressable } from '@/components/feedback-pressable';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -13,7 +13,10 @@ import { nativeAudio } from '../native/audio';
 import { isInstalled } from '../native/package';
 import { readSettings } from '../native/settings';
 import { selectedPackage } from '@/native/catalog';
-import { LearningContext } from '@/core/learning-context';
+import { LearningContext, isVideoPackage } from '@/core/learning-context';
+import { videoStageAvailable } from '@/core/video-package';
+import { nativeVideo, disposeVideo } from '@/native/video';
+import { LessonVideo } from '@/components/lesson-video';
 import { playableStage, isPlayableStage, isGroupedStage, isFirstWordStage, isRevealStage, type PlayableStage } from '@/core/catalog';
 import { revealPlayback, playerSpeed } from '@/core/word-reveal';
 import { WordRevealContent } from '@/components/word-reveal-content';
@@ -48,7 +51,7 @@ export default function PlayerRoute() {
   const { stage: param, package: key } = useLocalSearchParams<{ stage: string; package: string }>();
   const stage = playableStage(param);
   const pack = selectedPackage(key);
-  if (!pack || !stage || !profile.available) return <View style={{ padding: 24 }}><Label>학습을 시작할 수 없어요.</Label>
+  if (!pack || !stage || !profile.available || (isVideoPackage(pack) && !videoStageAvailable(stage))) return <View style={{ padding: 24 }}><Label>학습을 시작할 수 없어요.</Label>
     <ActionButton title="레슨으로" onPress={() => router.replace('/lesson')} /></View>;
   return <PlayerScreen key={`${pack.packageKey}:${stage}`} pack={pack} stage={stage} />;
 }
@@ -59,6 +62,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const c = usePalette();
   const insets = useSafeAreaInsets();
   const engine = useRef<Player | null>(null);
+  const [videoOwner] = useState(() => isVideoPackage(pack) ? randomUUID() : null);
+  useEffect(() => () => { if (videoOwner) disposeVideo(videoOwner); }, [videoOwner]);
   const paidGuard = useRef<PaidLearningAccess | null>(null);
   const opened = useRef(false);
   const [state, setState] = useState<Session | null>(null);
@@ -134,6 +139,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         opened.current = true;
         const audio = isRevealStage(stage)
           ? revealPlayback(runUnits, initial, duration => engine.current?.audioEnded(duration))
+          : videoOwner
+          ? nativeVideo(videoOwner, monitorKey, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), isVideoPackage(pack) ? pack.manifest.phrases.map(p => p.end - p.start) : [])
           : nativeAudio(pack, duration => engine.current?.audioEnded(duration), () => engine.current?.audioFailed(), () => engine.current?.pause(), runUnits.map(unit => unit.sourceIndices), monitorKey);
         const save = context.createWriter(initial);
         const player = new Player(initial, audio, s => {
@@ -158,7 +165,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
           if (mediaDuration > 0) setDuration(mediaDuration);
           if (player.error && player.error !== shown) {
             shown = player.error;
-            Alert.alert(player.error === 'save' ? '학습을 저장하지 못했어요' : '음성을 재생할 수 없어요',
+            Alert.alert(player.error === 'save' ? '학습을 저장하지 못했어요' : videoOwner ? '동영상을 재생할 수 없어요' : '음성을 재생할 수 없어요',
               player.error === 'save' ? '학습을 잠시 멈췄어요. 저장 공간을 확인하고 다시 시도해 주세요.' : '학습 위치는 유지됩니다. 다시 시도하거나 레슨을 재설치해 주세요.',
               [{ text: '나중에', style: 'cancel' }, { text: '다시 시도', onPress: () => {
                 if (!permitted() || engine.current !== player || AppState.currentState !== 'active') return;
@@ -196,7 +203,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     };
     void initialize();
     return () => { active = false; access?.dispose(); interruption.remove(); sentenceEntry.cancel(); stopLearningHaptics(); setMotionActive(false); setCelebrating(false); setXpGain(null); gainOrigin.current = null; removeGuard?.(); if (timer) clearInterval(timer); appState?.remove(); engine.current?.dispose(); engine.current = null; };
-  }, [stage, pack, lesson, profile.id, profile.authority, profile.suppressEntry, monitorKey]));
+  }, [stage, pack, lesson, profile.id, profile.authority, profile.suppressEntry, monitorKey, videoOwner]));
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = useCallback((option?: 'rate' | 'reveal') => {
     if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
@@ -264,12 +271,15 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       </PlayerHeaderProgress> }), [state, unitLabel, accessReady, unavailable, accessDenied, openOptions, openInfo]);
   return <View style={{ flex: 1 }}>
     <Stack.Screen options={headerOptions} />
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24, gap: 20 }}>
-      {unavailable || accessDenied ? <Card><Label>구매 내역과 레슨 설치 상태를 확인해 주세요. 학습 기록은 유지돼요.</Label>
+    {state && accessReady && !unavailable && !accessDenied && videoOwner && !isRevealStage(stage) && state.phase !== 'complete' && <LessonVideo />}
+    <ScrollView style={{ flex: 1 }} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ flexGrow: 1, paddingTop: 20, paddingBottom: 24, gap: 20 }}>
+      {unavailable || accessDenied ? <View style={{ paddingHorizontal: 24 }}><Card><Label>구매 내역과 레슨 설치 상태를 확인해 주세요. 학습 기록은 유지돼요.</Label>
         {error === 'save' && <ActionButton title="기록 저장 다시 시도" onPress={() => engine.current?.retrySave()} />}
-        <ActionButton title="레슨으로" onPress={leave} /></Card> : !state || !accessReady ? <Label muted>레슨을 여는 중…</Label> : <>
-        <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 16 }}>
-          <Animated.View key={`${state.runId}:${state.phrase}:${state.phase === 'complete'}`} entering={CONTENT_ENTER}>
+        <ActionButton title="레슨으로" onPress={leave} /></Card></View> : !state || !accessReady ? <View style={{ paddingHorizontal: 24 }}><Label muted>레슨을 여는 중…</Label></View> : <>
+        <View style={{ flex: 1, ...(videoOwner && !isRevealStage(stage) && state.phase !== 'complete'
+          ? { justifyContent: 'flex-start' as const }
+          : { justifyContent: 'center' as const, paddingVertical: 16 }) }}>
+          <Animated.View key={`${state.runId}:${state.phrase}:${state.phase === 'complete'}`} entering={CONTENT_ENTER} style={{ paddingHorizontal: 24 }}>
           {state.phase === 'complete'
             ? <Card style={{ gap: 22, paddingVertical: 26 }}>
               <Label size={30} weight="800" color={c.heading}>잘 마쳤어요!</Label>

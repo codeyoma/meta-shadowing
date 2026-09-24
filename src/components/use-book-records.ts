@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getJournal } from '@/native/journal';
 import { getProgressSync } from '@/native/progress-sync';
-import { LearningContext, packageKeyOf, type LearningPackage } from '@/core/learning-context';
+import { LearningContext, packageKeyOf, isVideoPackage, type LearningPackage } from '@/core/learning-context';
 import { stageOverview, type StageRecord } from '@/core/stage-overview';
 import { isPlayableStage } from '@/core/catalog';
 import { testStageAccess } from '@/native/stage-access';
@@ -21,7 +21,7 @@ export function useBookRecords(pack: LearningPackage | null) {
     function refresh() { try {
       if (!getProgressSync().getSnapshot().learningAvailable) { setResult(null); return; }
       const context = new LearningContext(pack!, getJournal());
-      setResult({ key: key!, latestStage: context.latestStage(), records: Array.from({ length: 16 }, (_, i) => {
+      setResult({ key: key!, latestStage: context.latestStage(), records: Array.from({ length: isVideoPackage(pack!) ? 1 : 16 }, (_, i) => {
         const stage = i + 1;
         return { stage, count: isPlayableStage(stage) ? context.completions(stage) : 0,
           session: isPlayableStage(stage) ? context.load(stage) : null };

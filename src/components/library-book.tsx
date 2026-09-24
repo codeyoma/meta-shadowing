@@ -8,6 +8,7 @@ import { useBookRecords } from './use-book-records';
 import { HostedLibraryBook } from './hosted-library-book';
 import { OwnedLibraryBookCard } from './owned-library-book-card';
 import { usePackageMaterials } from './use-package-materials';
+import { videoPackageActions } from '@/native/video-package';
 
 export function LibraryBook({ book, editing }: { book: typeof books[number]; editing: boolean }) {
   return book.delivery === 'appleHosted'
@@ -16,7 +17,7 @@ export function LibraryBook({ book, editing }: { book: typeof books[number]; edi
 }
 
 function BundledLibraryBook({ book, editing }: {
-  book: Extract<typeof books[number], { delivery: 'bundled' }>; editing: boolean;
+  book: Extract<typeof books[number], { delivery: 'bundled' | 'localVideo' }>; editing: boolean;
 }) {
   const { select } = useLibrary();
   const { overview } = useBookRecords(book);
@@ -34,7 +35,11 @@ function BundledLibraryBook({ book, editing }: {
   }, [book]));
   async function install() {
     setProgress(0);
-    try { await installBundledPackage(book, setProgress); setReady(true); await materials.refresh(); }
+    try {
+      if (book.delivery === 'localVideo') await videoPackageActions.install(book);
+      else await installBundledPackage(book, setProgress);
+      setReady(true); await materials.refresh();
+    }
     catch { setReady(false); Alert.alert('레슨을 설치하지 못했어요', '저장 공간과 연결을 확인하고 다시 시도해 주세요. 설치가 끝나기 전에는 학습을 시작할 수 없어요.'); }
     finally { setProgress(null); }
   }

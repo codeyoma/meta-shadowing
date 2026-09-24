@@ -1,8 +1,19 @@
 import { requireOptionalNativeModule } from 'expo';
 import type { MonitorStatus } from '../../src/core/voice-monitor-lab';
 import type { LessonRemoteEvent } from '../../src/core/lesson-remote';
+import type { VideoStatus } from '../../src/core/video-playback';
 
 interface LearningAudio {
+  readonly localVideoManifest?: string | null;
+  readonly localVideoManifestInvalid?: boolean;
+  videoPackageStatus(): Promise<{ installed: boolean; bytes: number }>;
+  installVideoPackage(): Promise<void>;
+  removeVideoPackage(): Promise<void>;
+  videoPrepare(owner: string, generation: number, phrase: number, position: number, rate: number): Promise<void>;
+  videoPlay(owner: string, generation: number): Promise<void>;
+  videoPause(owner: string): Promise<void>;
+  videoDispose(owner: string): Promise<void>;
+  addListener(name: 'onVideoStatus', listener: (status: VideoStatus) => void): { remove(): void };
   durations(uris: string[]): Promise<number[]>;
   testStageAccess(): Promise<boolean>;
   monitorStatus(): Promise<MonitorStatus>;
