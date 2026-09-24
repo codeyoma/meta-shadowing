@@ -97,10 +97,10 @@ import Foundation
       queue: .main) { [weak self] _ in
         MainActor.assumeIsolated {
           guard let self, self.matches(owner, generation), self.memberRevision == revision,
-            self.active, !self.transitioning, let timeline = self.timeline else { return }
+            self.active, !self.transitioning else { return }
           if self.player.currentItem?.status == .failed {
             self.fail()
-          } else if self.player.currentTime().seconds >= timeline.segments[self.member].end {
+          } else if CMTimeCompare(self.player.currentTime(), item.forwardPlaybackEndTime) >= 0 {
             self.finishMember()
           } else if self.player.timeControlStatus == .playing {
             self.hasPlayed = true; self.emit("playing")
@@ -112,7 +112,7 @@ import Foundation
   }
   private func finishMember() {
     guard active, !completed, !transitioning, let timeline, let item = player.currentItem,
-      player.currentTime().seconds >= timeline.segments[member].end - 0.000001 else { return }
+      CMTimeCompare(player.currentTime(), item.forwardPlaybackEndTime) >= 0 else { return }
     player.pause()
     if member == timeline.segments.count - 1 {
       active = false; completed = true; emit("ended"); return

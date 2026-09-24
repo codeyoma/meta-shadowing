@@ -8,15 +8,32 @@
   gaps. Position/duration use the sum of selected durations. Member boundaries
   do not emit a cycle end, pause, confirmation or reward. The final frame stays
   visible; replay and paused restoration use the same saved unit mapping.
-- `npm run check` passed 426 core tests, 25 build/package checks and TypeScript.
+- `npm run check` passed 427 core tests, 25 build/package checks and TypeScript.
   `npm run test:native-headers` passed 7 checks. Adapter tests exercise real
   mapping/restoration with native SDK boundaries replaced. SQLite-backed Player
   tests preserve saved groups, partial-failure checkpoints, short remainders,
   hints, three-cycle confirmation, Repeat +2 and idempotent per-member XP.
-- Native macOS tests passed: 36 test functions / 38 parameterized executions,
+- Native macOS tests passed: 38 test functions / 41 parameterized executions,
   zero failures or skips. Generated audio/video covers gap skipping, rate,
   final decoded frame, second-member resume, first-member replay, duplicate end
   notifications, pause/replacement during a pending seek and failed transitions.
+- Independent Standards and Spec reviews identified native endpoint rounding and
+  inconsistent cumulative floating-point arithmetic. Both were reproduced by
+  failing tests and corrected. Completion compares native CMTime boundaries;
+  checkpoint encoding and lookup now use identical segment-duration sums.
+- Simulator verification exposed an additional integration gap: the stage list
+  still displayed only stage 1. It now follows the shared stage policy. A
+  regression test exercises the real hook and SQLite-backed learning context,
+  covering video stages 1–10 and unchanged audio stages 1–16.
+- A current full native Simulator build demonstrated stage 9 with three-member
+  groups and first-word hints. Playback retained its final frame; confirmation
+  displayed +3 XP, restarted at the first member, and Repeat expanded three
+  cycles to five. Opening a menu paused playback; closing it preserved the frame
+  without autoplay, and explicit resume continued the group. Changing the
+  preference from three to two retained the active six-unit, three-member run.
+  The original two-member preference was restored. Exact gap exclusion and
+  short final groups are additionally covered by generated-media/core tests;
+  simulator observations are not an instrumented listening test.
 - The arm64 iOS test-fixture build passed. This is compilation evidence, not
   physical-device acceptance. Expanded device interruptions and monitoring remain
   #70; no new physical-device install was performed for #68.

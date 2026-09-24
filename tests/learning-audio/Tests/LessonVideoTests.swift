@@ -3,6 +3,24 @@ import Foundation
 import Testing
 
 struct LessonVideoTests {
+  @Test(arguments: [1, 2])
+  @MainActor func roundedNativeEndpointsStillAdvanceAndEnableConfirmation(count: Int) async throws {
+    let url = try await movie()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let video = LessonVideoPlayer()
+    defer { video.dispose(owner: "rounded") }
+    var events: [String] = []
+    video.onStatus = { events.append($0["phase"] as? String ?? "") }
+    let segments: [VideoSegmentTimeline.Segment] = [.init(start: 0.2, end: 0.600008), .init(start: 1.8, end: 2.400008)]
+    video.reserve(owner: "rounded", generation: 1)
+    try await video.prepare(url: url, segments: Array(segments.prefix(count)), position: 0, rate: 3, owner: "rounded", generation: 1)
+    video.play(owner: "rounded", generation: 1)
+    let deadline = ContinuousClock.now + .seconds(3)
+    while !events.contains("ended") && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    #expect(events.filter { $0 == "ended" }.count == 1)
+    #expect(!events.contains("paused"))
+    #expect(abs(video.player.currentTime().seconds - (count == 1 ? 0.6 : 2.4)) < 0.0001)
+  }
   @Test(arguments: ["pause", "replace", "fail"])
   @MainActor func pendingMemberSeekCannotCompleteOrRestartRetiredPlayback(action: String) async throws {
     let url = try await movie()

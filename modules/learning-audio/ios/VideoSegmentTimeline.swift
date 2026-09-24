@@ -35,7 +35,7 @@ struct VideoSegmentTimeline: Sendable {
 
   func position(member: Int, mediaSeconds: Double) -> Double {
     let segment = segments[member]
-    let prefix = segments.prefix(member).reduce(0) { $0 + $1.end - $1.start }
+    let prefix = segments.prefix(member).reduce(0) { $0 + ($1.end - $1.start) }
     return prefix + max(0, min(segment.end - segment.start, mediaSeconds.isFinite ? mediaSeconds - segment.start : 0))
   }
 }

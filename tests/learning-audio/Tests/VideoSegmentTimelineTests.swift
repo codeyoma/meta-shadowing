@@ -1,6 +1,18 @@
 import Testing
 
 struct VideoSegmentTimelineTests {
+  @Test func everySavedMemberEndResumesTheNextIncludedMember() throws {
+    let segments: [VideoSegmentTimeline.Segment] = [.init(start: 0.2, end: 0.6), .init(start: 0.6, end: 1),
+      .init(start: 5, end: 5.6), .init(start: 7, end: 7.8)]
+    let timeline = try VideoSegmentTimeline(segments: segments)
+    for member in 0..<3 {
+      let checkpoint = timeline.position(member: member, mediaSeconds: segments[member].end)
+      let restored = try timeline.locate(checkpoint)
+      #expect(restored.member == member + 1)
+      #expect(abs(restored.mediaSeconds - segments[member + 1].start) < 0.000001)
+    }
+    #expect(timeline.position(member: 3, mediaSeconds: segments[3].end) == timeline.duration)
+  }
   @Test func rejectsInvalidSegmentsAndOffsets() throws {
     let invalid: [[VideoSegmentTimeline.Segment]] = [[],
       (0..<5).map { .init(start: Double($0), end: Double($0) + 0.5) },
