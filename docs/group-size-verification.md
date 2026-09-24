@@ -26,3 +26,26 @@ Simulator, selecting four instead of two immediately changed the active
 source progress, reset playback to zero, remained paused and left XP unchanged.
 The four-source selection and five-group counter were visibly verified. No
 new native build or physical-device verification is claimed.
+
+## PR #73 review corrections
+
+Regression tests reproduced both review findings before correction: Repeat
+reopened sources completed before regrouping, and two offline devices awarded
+overlapping source work under different plan IDs.
+
+- Closed source markers survive checkpoint restoration and exclude those
+  members from optional Repeat passes. A fully closed decision cannot Repeat.
+- Regrouped plans retain the original reward lineage. Confirmation receipts
+  identify source indices and cycle ordinals, independently of group size.
+  Displayed XP counts overlapping evidence once without rewriting historical
+  per-plan receipts; completed branches count as one original practice run.
+- Two SQLite-backed devices cover same-size and different-size regrouping,
+  a branch that keeps the original plan, nested regrouping, mixed Repeat,
+  both merge orders, retransmission, restoration, and continued pinned-player
+  confirmations after sync. An independent new run still earns normally.
+- Migrated version-3 progress preserves historical XP. Malformed lineage and
+  source receipt payloads are rejected before changing local progress.
+
+After these corrections, `npm run check` passed 449 core tests, 25 build/package
+checks and TypeScript. iOS JavaScript export passed. These are automated local
+checks, not a two-phone or real CloudKit test.

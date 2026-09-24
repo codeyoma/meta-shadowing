@@ -9,7 +9,8 @@ export function regroupSession(state: Session, size: GroupSize, runId: string): 
   if (!runId || runId === state.runId) throw Error('Regrouping requires a new plan identity.');
   const saved = restoreSession(JSON.stringify(state), state.sourcePhraseCount, state.stage);
   const units = unitProgress(saved);
-  const sourceProgress = saved.sourceProgress ?? Array.from({ length: state.sourcePhraseCount }, (_, i) => ({ ...units[Math.floor(i / state.groupSize)]! }));
+  const sourceProgress = (saved.sourceProgress ?? Array.from({ length: state.sourcePhraseCount }, (_, i) => ({ ...units[Math.floor(i / state.groupSize)]! })))
+    .map(p => p.confirmed === p.planned ? { ...p, closed: true as const } : p);
   const progress = groupedSourceProgress(sourceProgress, size);
   let phrase = Math.floor(state.phrase * state.groupSize / size);
   if (progress[phrase]!.confirmed === progress[phrase]!.planned) {
@@ -19,7 +20,7 @@ export function regroupSession(state: Session, size: GroupSize, runId: string): 
   // An already confirmed final decision is left for the user's explicit Next.
   if (phrase < 0) phrase = progress.length - 1;
   const current = progress[phrase]!;
-  const json = JSON.stringify({ ...saved, runId, groupSize: size, sourceProgress,
+  const json = JSON.stringify({ ...saved, runId, lineage: saved.lineage ?? saved.runId, groupSize: size, sourceProgress,
     unitProgress: progress, phraseCount: progress.length, phrase, ...current,
     phase: current.confirmed === current.planned ? 'decision' : 'ready', audioSeconds: 0, remainingMs: 0 });
   if (json.length > 4 * 1024 * 1024) throw Error('Regrouped checkpoint exceeds the backup limit.');

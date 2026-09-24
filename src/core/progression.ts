@@ -1,5 +1,6 @@
 import type { Database } from './journal';
 import { levelProgress, MAX_XP } from './levels';
+import { duplicateSourceCredit, type SyncRun } from './sync-ledger';
 export { levelProgress } from './levels';
 
 export type BookIdentity = { language: string; book: string };
@@ -42,9 +43,13 @@ export class Progression {
   }
   summary(language: string) {
     const day = localDay(this.now());
+    const related = this.db.first<{ states: string }>(`SELECT '[' || COALESCE(group_concat(state, ','), '') || ']' AS states
+      FROM progress_sync_runs WHERE json_extract(state, '$.language')=? AND json_extract(state, '$.stage') BETWEEN 7 AND 10
+      AND EXISTS (SELECT 1 FROM progress_sync_runs WHERE json_extract(state, '$.lineage') IS NOT NULL)`, language);
+    const duplicates = duplicateSourceCredit(JSON.parse(related?.states ?? '[]') as SyncRun[]);
     const xp = Math.min(MAX_XP, this.db.first<{ total: number }>(`SELECT
       (SELECT TOTAL(xp) FROM stage_awards WHERE language=?) +
-      (SELECT TOTAL(credited) FROM cycle_credits WHERE language=?) AS total`, language, language)!.total);
+      (SELECT TOTAL(credited) FROM cycle_credits WHERE language=?) AS total`, language, language)!.total - duplicates);
     const last = this.db.first<{ day: string | null }>('SELECT MAX(day) AS day FROM study_days WHERE language=? AND day<=?', language, day)?.day;
     let streak = 0;
     if (last && (last === day || last === previousDay(day))) {

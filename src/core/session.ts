@@ -12,7 +12,9 @@ export type Session = {
   phase: Phase; running: boolean; audioSeconds: number; remainingMs: number;
   unitProgress?: UnitProgress[];
   /** Regrouped plans retain each source's completed and optional cycles. */
-  sourceProgress?: UnitProgress[];
+  sourceProgress?: (UnitProgress & { closed?: true })[];
+  /** Stable reward lineage across immutable regrouped playback plans. */
+  lineage?: string;
   /** Silent stages use audioSeconds as their elapsed reveal timeline, not audio. */
   reveal?: { speed: 1 | 2 | 3 | 4; wpm: number };
 } & ({ version: 1 } | { version: 2; sourcePhraseCount: number; groupSize: GroupSize });
@@ -71,7 +73,8 @@ function isFinalSpeakingCycle(s: Session): boolean {
 }
 
 export function canChooseRepeat(s: Session): boolean {
-  return !isRevealStage(s.stage) && s.planned === 3 && (s.phase === 'decision' || isFinalSpeakingCycle(s));
+  return !isRevealStage(s.stage) && s.planned === 3 && (s.phase === 'decision' || isFinalSpeakingCycle(s))
+    && !(s.version === 2 && s.sourceProgress?.slice(s.phrase * s.groupSize, (s.phrase + 1) * s.groupSize).every(p => p.closed));
 }
 
 export function canChooseNext(s: Session): boolean {
@@ -106,7 +109,7 @@ function transitionCurrent(s: Session, action: Action): Session {
     case 'repeat': {
       if (s.phase !== 'decision' || s.planned !== 3) return s;
       const sourceProgress = s.version === 2 && s.sourceProgress
-        ? s.sourceProgress.map((p, i) => Math.floor(i / s.groupSize) === s.phrase ? { ...p, planned: p.planned + 2 } : p) : undefined;
+        ? s.sourceProgress.map((p, i) => Math.floor(i / s.groupSize) === s.phrase && !p.closed ? { ...p, planned: p.planned + 2 } : p) : undefined;
       return { ...s, ...(sourceProgress ? { sourceProgress } : {}), planned: s.planned + 2, phase: 'ready', running: false };
     }
     case 'next':
@@ -168,12 +171,16 @@ export function restoreSession(json: string, sourcePhraseCount: number, stage: P
   }
   if (s.sourceProgress !== undefined) {
     if (s.version !== 2 || !Array.isArray(s.sourceProgress) || s.sourceProgress.length !== sourcePhraseCount
-      || s.sourceProgress.some(p => !p || Object.keys(p).sort().join(',') !== 'confirmed,planned'
+      || s.sourceProgress.some(p => !p || Object.keys(p).sort().join(',') !== (p.closed === true ? 'closed,confirmed,planned' : 'confirmed,planned')
+        || (p.closed !== undefined && (p.closed !== true || p.confirmed !== p.planned))
         || !Number.isSafeInteger(p.confirmed) || !Number.isSafeInteger(p.planned)
         || p.confirmed < 0 || p.confirmed > p.planned || p.planned < 3 || p.planned > 100000 || p.planned % 2 !== 1)) throw Error('Invalid source progress.');
     const progress = groupedSourceProgress(s.sourceProgress, s.groupSize);
     if (!s.unitProgress || progress.some((p, i) => p.confirmed !== s.unitProgress![i]!.confirmed || p.planned !== s.unitProgress![i]!.planned)) throw Error('Inconsistent source progress.');
   }
+  if (s.lineage !== undefined && (s.version !== 2 || !s.sourceProgress || typeof s.lineage !== 'string'
+    || !s.lineage || s.lineage.length > 100 || s.lineage === s.runId || s.lineage.trim() !== s.lineage
+    || /[\u0000-\u001f]/.test(s.lineage))) throw Error('Invalid regrouping lineage.');
   if (silent) {
     // Preserve confirmed ordinals (and their credit identities), not the old
     // three/five-pass plan. Loading this migration never confirms a phrase.
@@ -184,7 +191,7 @@ export function restoreSession(json: string, sourcePhraseCount: number, stage: P
   // Old native callers spread full preferences into sessions. Keep only the
   // learning checkpoint contract; settings remain in their own persistence.
   const metadata = s.version === 2 ? { version: 2 as const, sourcePhraseCount: s.sourcePhraseCount, groupSize: s.groupSize } : { version: 1 as const };
-  return { ...metadata, ...(s.sourceProgress ? { sourceProgress: s.sourceProgress } : {}), ...(s.reveal ? { reveal: { ...s.reveal } } : {}), ...(s.unitProgress ? { unitProgress: s.unitProgress } : {}), runId: s.runId, stage: s.stage, phraseCount: s.phraseCount, phrase: s.phrase,
+  return { ...metadata, ...(s.lineage ? { lineage: s.lineage } : {}), ...(s.sourceProgress ? { sourceProgress: s.sourceProgress } : {}), ...(s.reveal ? { reveal: { ...s.reveal } } : {}), ...(s.unitProgress ? { unitProgress: s.unitProgress } : {}), runId: s.runId, stage: s.stage, phraseCount: s.phraseCount, phrase: s.phrase,
     mode: 'manual', rate: s.rate, confirmed: s.confirmed, planned: s.planned, phase: s.phase,
     running: false, audioSeconds: s.audioSeconds, remainingMs: s.remainingMs };
 }

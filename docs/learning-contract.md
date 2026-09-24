@@ -88,6 +88,14 @@ zero and stays paused. Completed groups are skipped in favor of unfinished work.
 When a new group mixes completed and unfinished sentences, completed sentences
 may be replayed as context but need no further confirmations or XP. Each pass
 advances only unfinished members; its receipt records that actual member count.
+Sources already complete when a plan is regrouped stay closed, including when
+Repeat adds two optional passes for the remaining members. Regrouped plans retain
+the original reward lineage and record each confirmed source/cycle identity.
+Concurrent devices may choose different group sizes, but overlapping source
+confirmations and completed-run counts contribute only once within that lineage.
+Per-plan accounting stays intact for backup validation; visible XP subtracts
+overlapping source receipts before applying the language cap. Historical opaque
+credits remain preserved, and genuinely new runs have independent lineages.
 Changing size alone grants no XP or stage completion. Repeated size changes,
 navigation, restoration and backup merging preserve the same source work.
 The menu's per-run size does not silently overwrite the global default, matching
