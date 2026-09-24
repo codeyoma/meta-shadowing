@@ -22,12 +22,12 @@ test('invalid identity, media, text and timelines cannot become an installed les
   for (const invalid of variants) assert.throws(() => readVideoPackage(JSON.stringify(invalid)), /Unsupported video package/);
   assert.throws(() => readVideoPackage({}), /Unsupported video package/);
 });
-test('a prepared video package preserves final text and gates unimplemented stages', () => {
+test('a prepared video package preserves final text and supports all sixteen stages', () => {
   const pack = readVideoPackage(JSON.stringify(manifest()))!;
   assert.equal(pack.manifest.phrases[0]?.text, 'Open the window.');
   assert.equal(pack.manifest.phrases[0]?.translation, '창문을 여세요.');
   assert.equal(pack.manifest.media.file, 'video/source.mp4');
   assert.equal(readVideoPackage(null), null);
-  for (let stage = 1; stage <= 10; stage++) assert.equal(videoStageAvailable(stage), true);
-  for (const stage of [0, 11, 16, 17, 1.5, NaN, Infinity]) assert.equal(videoStageAvailable(stage), false);
+  for (let stage = 1; stage <= 16; stage++) assert.equal(videoStageAvailable(stage), true);
+  for (const stage of [0, 17, 1.5, NaN, Infinity]) assert.equal(videoStageAvailable(stage), false);
 });

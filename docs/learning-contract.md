@@ -6,7 +6,7 @@ earlier planning documents can contain superseded behavior.
 
 ## Current stage expansion — 2026-09-20
 
-### Video packages — stages 1–10
+### Video packages — stages 1–16
 
 Video stages 1–6 play one bounded source phrase; stages 7–10 play the saved
 unit's ordered source segments on one native player. Intervening source gaps
@@ -21,7 +21,9 @@ the first member. Speed, paired subtitles, first-word hints in 5–6/9–10,
 three-cycle confirmation, Repeat +2 and per-member XP follow the rules below.
 Only the video supplies original audio. Pausing or replacing a unit cancels
 pending member transitions; stale callbacks cannot resume or finish it.
-Video packages remain gated from silent stages 11–16 until #69. Expanded
+Video packages also support silent stages 11–16 using their finalized text and
+the shared reveal behavior below. These stages never create or dispose native
+video/audio playback resources and display no video or thumbnail. Expanded
 physical-device interruption/monitoring acceptance remains in #70.
 
 The owner-approved implementation now enables stages 1–16. Stages 1–4 share

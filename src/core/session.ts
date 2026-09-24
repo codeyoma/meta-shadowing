@@ -70,6 +70,7 @@ export function canChooseNext(s: Session): boolean {
 
 export function transition(s: Session, action: Action): Session {
   const next = transitionCurrent(s, action);
+  if (next === s) return s;
   return next.unitProgress ? { ...next, unitProgress: unitProgress(next) } : next;
 }
 function transitionCurrent(s: Session, action: Action): Session {
