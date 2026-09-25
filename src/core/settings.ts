@@ -1,5 +1,10 @@
 export type Settings = { mode: 'manual'; rate: number; speechView?: 'bubble' | 'list'; groupSize?: 2 | 3 | 4;
-  crazyWpm?: [number, number, number, number] };
+  crazyWpm?: [number, number, number, number]; originalTextSize?: number; translationTextSize?: number };
+export const defaultTextSizes = { originalTextSize: 20, translationTextSize: 18 } as const;
+export function freshSettings(): Settings { return { mode: 'manual', rate: 1, ...defaultTextSizes }; }
+export function isLearningTextSize(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 12 && value <= 48;
+}
 export const defaultCrazyWpm: [number, number, number, number] = [150, 200, 250, 300];
 export function isSpeakingWpm(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 999;
@@ -23,6 +28,12 @@ export function decodeSettings(json: string | null): Settings {
   if ('crazyWpm' in value) {
     if (!Array.isArray(value.crazyWpm) || value.crazyWpm.length !== 4 || !value.crazyWpm.every(isSpeakingWpm)) throw Error('Invalid speaking speed.');
     result.crazyWpm = [...value.crazyWpm] as Settings['crazyWpm'];
+  }
+  for (const key of ['originalTextSize', 'translationTextSize'] as const) {
+    if (key in value) {
+      if (!isLearningTextSize(value[key])) throw Error('Invalid learning text size.');
+      result[key] = value[key];
+    }
   }
   return result;
 }

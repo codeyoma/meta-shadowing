@@ -44,6 +44,21 @@ export class ProgressBackupStore {
   readValue(key: 'settings' | 'selection'): string | null {
     return this.db.first<{ value: string }>('SELECT value FROM preferences WHERE key=?', key)?.value ?? null;
   }
+  /** Baseline defaults are durable, but are not a user edit awaiting backup. */
+  initializeSettings(value: string): void {
+    this.authorize();
+    validateValue('settings', value);
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      if (!this.hasData() && this.revision() === 0) {
+        this.db.run('INSERT INTO preferences(key,value) VALUES (?,?)', 'settings', value);
+        // Keep a nonzero baseline so reopening does not classify it as legacy
+        // user work. Both writes roll back together; later edits remain pending.
+        this.db.run('UPDATE backup_state SET revision=1,acknowledged=1 WHERE id=1');
+      }
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
   saveValue(key: 'settings' | 'selection', value: string): void {
     this.authorize();
     validateValue(key, value);

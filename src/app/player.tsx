@@ -43,6 +43,7 @@ import { isPaidDuo, paidAccessSource, mayUsePackage } from '@/native/paid-packag
 import { PaidLearningAccess } from '@/core/paid-learning-access';
 import { useLearningMonitor } from '@/components/use-learning-monitor';
 import { useLessonRemote } from '@/components/use-lesson-remote';
+import { useLearningSettings } from '@/components/use-learning-settings';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
@@ -58,6 +59,7 @@ export default function PlayerRoute() {
 
 function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof selectedPackage>>; stage: PlayableStage }) {
   const profile = useProgressProfile();
+  const textSettings = useLearningSettings();
   const lesson = pack.manifest;
   const c = usePalette();
   const insets = useSafeAreaInsets();
@@ -288,8 +290,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
                 {methodNames[Math.ceil(state.stage / 2) - 1]} 학습을 마쳤어요.</Label>
               <Label muted>{state.phraseCount}개 {unitLabel}을 내 목소리로 연습했어요.</Label>
             </Card>
-            : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} />
-            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} />}
+            : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} textSizes={textSettings ?? undefined} />
+            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} textSizes={textSettings ?? undefined} />}
           </Animated.View>
         </View>
       </>}
