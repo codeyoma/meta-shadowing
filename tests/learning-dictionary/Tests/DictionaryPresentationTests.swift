@@ -20,12 +20,18 @@ final class DictionaryPresentationTests: XCTestCase {
     let sheet = try XCTUnwrap(root.presentedViewController)
     XCTAssertTrue(sheet.children.contains { $0 is UIReferenceLibraryViewController })
     XCTAssertTrue(sheet.view.accessibilityViewIsModal)
+    XCTAssertEqual(sheet.modalPresentationStyle, .formSheet)
+    let drawer = try XCTUnwrap(sheet.sheetPresentationController)
+    XCTAssertTrue(drawer.prefersGrabberVisible, "Use the learning drawer's visible drag handle")
+    XCTAssertEqual(drawer.detents.map(\.identifier), [.large], "Open at the learning drawer's full height")
     let duplicate = expectation(description: "Duplicate rejected")
     presenter.present(id: "two", term: "door", from: root) { result in
       if case .success = result { XCTFail("A second presentation must not open") }
       duplicate.fulfill()
     }
-    presenter.dismiss(id: "one") // Includes cancellation during the presentation animation.
+    let resume = try XCTUnwrap(sheet.view.subviews.compactMap { $0 as? UIButton }.first)
+    XCTAssertEqual(resume.accessibilityLabel, "학습 이어하기")
+    resume.sendActions(for: .touchUpInside) // Includes dismissal during the presentation animation.
     await fulfillment(of: [dismissed, duplicate], timeout: 5)
     XCTAssertNil(root.presentedViewController)
     XCTAssertEqual(finishes, 1)
@@ -45,6 +51,16 @@ final class DictionaryPresentationTests: XCTestCase {
     let sheet = try XCTUnwrap(root.presentedViewController)
     let library = try XCTUnwrap(sheet.children.first as? UIReferenceLibraryViewController)
     try await Task.sleep(for: .milliseconds(600))
+    sheet.view.layoutIfNeeded()
+    let resume = try XCTUnwrap(sheet.view.subviews.compactMap { $0 as? UIButton }.first)
+    XCTAssertEqual(library.view.frame.minY, 0, "Do not restore the duplicate top header")
+    XCTAssertEqual(library.view.frame.width, sheet.view.bounds.width)
+    XCTAssertLessThanOrEqual(library.view.frame.maxY, resume.frame.minY - 16,
+      "Dictionary content must not extend behind the fixed learning button")
+    XCTAssertEqual(resume.frame.minX, 16, accuracy: 0.5)
+    XCTAssertEqual(resume.frame.maxX, sheet.view.bounds.maxX - 16, accuracy: 0.5)
+    XCTAssertEqual(resume.frame.maxY, sheet.view.safeAreaLayoutGuide.layoutFrame.maxY - 16, accuracy: 0.5)
+    XCTAssertGreaterThanOrEqual(resume.frame.height, 54)
     library.dismiss(animated: false)
     await fulfillment(of: [done], timeout: 5)
     XCTAssertNil(root.presentedViewController)

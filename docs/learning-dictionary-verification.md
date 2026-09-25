@@ -23,7 +23,9 @@ lesson text, account or device identifiers.
 - Six native iOS Simulator tests use the real Apple tokenizer and dictionary
   controller. They cover punctuation and Unicode offsets, internal apostrophes
   and hyphens, Japanese/Thai segmentation, one sheet, dismissal during opening,
-  system-child dismissal, missing terms, detached presenters and shutdown.
+  system-child dismissal, missing terms, detached presenters and shutdown. They
+  also verify the full-height drawer and drag handle, the fixed safe-area learning
+  button, non-overlapping dictionary content, and one-shot button dismissal.
 - The native fixture is included in `ci-native-tests`. It verifies UIKit
   presentation, not the availability or correctness of installed definitions.
 
@@ -36,13 +38,24 @@ phrase and confirmation state without automatic playback or progression.
 Interactive downward dismissal of the sheet also returned to that same paused
 phrase without advancing its cycle.
 
+Subsequent owner-provided Simulator screenshots show installed dictionary
+results. This establishes native content rendering, not offline availability or
+physical-device acceptance. No definition content is reproduced here.
+
+The owner-requested presentation uses the existing learning drawer's full-height
+form sheet and visible drag handle. Apple's own close control remains; the
+duplicate instruction/close row was removed. The fixed bottom “학습 이어하기”
+button dismisses the sheet to the paused lesson without replay or confirmation.
+Korean dictionary availability is not an acceptance requirement; available
+definitions remain controlled by the user's installed system dictionaries.
+
 The app's Debug Simulator build completed. Build output also contains existing
 dependency warnings; this work does not claim a warning-free dependency tree.
 
 ## Still unverified
 
-- Real definitions and offline lookup with a downloaded dictionary, separately
-  from the observed missing-dictionary result.
+- Offline lookup with a downloaded dictionary, separately from the observed
+  installed-definition and missing-dictionary results.
 - Interactive swipe dismissal on a physical iPhone, full VoiceOver operation/
   focus containment and maximum accessibility text size on that device.
 - Physical audio/video interruption, grouped member position, wired-headphone
