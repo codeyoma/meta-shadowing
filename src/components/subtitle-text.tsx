@@ -7,18 +7,19 @@ import { subtitleSpans } from '@/core/subtitle-mask';
 const REVEAL_EASING = cubicBezier(0.23, 1, 0.32, 1);
 
 /** Stable native text layout: reveal changes ink only, never characters or sizing. */
-export function SubtitleText({ text, masked, background, color, size, display = false, weight = '500' }: {
+export function SubtitleText({ text, masked, background, color, size, display = false, weight = '500', fontFamily }: {
   text: string; masked: boolean; background: string; color: string; size: number;
-  display?: boolean; weight?: '400' | '500' | '700';
+  display?: boolean; weight?: '400' | '500' | '700'; fontFamily?: string;
 }) {
   const { fontScale } = useWindowDimensions();
   const reduced = useReducedMotion();
   const spans = useMemo(() => subtitleSpans(text), [text]);
-  const rounded = display && isLoaded('Nunito_800ExtraBold');
+  const rounded = !fontFamily && display && isLoaded('Nunito_800ExtraBold');
   const accessibleText = masked ? spans.filter(span => span.hint).map(span => span.text).join(' … ') : text;
   return <Text accessible accessibilityLabel={accessibleText} selectable={!masked} allowFontScaling={false}
-    style={{ color, fontSize: size * fontScale, fontFamily: rounded ? 'Nunito_800ExtraBold' : undefined,
-      fontWeight: rounded ? undefined : weight, lineHeight: size * fontScale * (display ? 1.2 : 1.45), flexShrink: 1 }}>
+    style={{ color, fontSize: size * fontScale, fontFamily: fontFamily ?? (rounded ? 'Nunito_800ExtraBold' : undefined),
+      fontWeight: fontFamily ? '400' : rounded ? undefined : weight,
+      lineHeight: size * fontScale * (display && !fontFamily ? 1.2 : 1.45), flexShrink: 1 }}>
     {spans.map((span, index) => <Animated.Text key={index} accessible={false} style={{
       color: masked && !span.hint ? background : color,
       transitionProperty: 'color', transitionDuration: reduced ? 0 : 180,

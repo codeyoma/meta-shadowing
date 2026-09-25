@@ -130,7 +130,20 @@ content wraps and scrolls without changing fixed video, header, or footer layout
 Typography updates do not restart the player, alter checkpoints, speeds or reveal
 visibility, or award progress. Preferences use the existing local-first,
 profile-isolated storage and opt-in private iCloud synchronization. Font selection
-is a separate feature. Global data deletion retains its empty-preference semantics;
+uses independent original/translation choices: System, Rounded, Serif, Avenir
+Next, Georgia and Apple SD Gothic Neo. Only available built-in faces are offered;
+there are no font downloads or user-installed-font enumeration. Named fonts use
+their verified regular face, and the system designs use React Native's native
+system-design aliases. Unsupported glyphs use the operating system's fallback;
+Korean letterforms are not promised to differ for every choice.
+Font taps save/apply immediately. Font reset writes System for both languages,
+without resetting sizes. New empty profiles start with System; absent font fields
+in existing profiles retain their prior appearance until customized. An unavailable
+saved choice renders as System without replacing the stored identifier. Only the
+active learning text and fixed bilingual preview receive the font, never menu or
+reference text. The same checkpoint, accessibility and synchronization boundaries
+as size edits apply. See [font verification](learning-font-verification.md).
+Global data deletion retains its empty-preference semantics;
 the size-reset control is the explicit 20/18 reset. See
 [size verification](learning-text-size-verification.md).
 Revealing never plays, pauses, confirms, or changes

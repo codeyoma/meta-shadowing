@@ -9,6 +9,8 @@ android/
 !modules/package-delivery/ios/
 !modules/learning-haptics/ios/
 !modules/learning-audio/ios/
+!modules/learning-fonts/ios/
+tests/learning-fonts/*.xcodeproj/
 tests/learning-audio/*.xcodeproj/
 tests/storekit/*.xcodeproj/
 tests/cloudkit/*.xcodeproj/

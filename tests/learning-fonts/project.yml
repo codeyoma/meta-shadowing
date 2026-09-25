@@ -1,0 +1,38 @@
+name: LearningFontsTests
+options:
+  deploymentTarget:
+    iOS: '26.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  FontTestHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.learningfonts.tests
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  LearningFontsTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - ../../modules/learning-fonts/ios/BuiltInLearningFonts.swift
+    dependencies:
+      - target: FontTestHost
+      - sdk: UIKit.framework
+      - sdk: CoreText.framework
+schemes:
+  LearningFontsTests:
+    build:
+      targets:
+        FontTestHost: all
+        LearningFontsTests: [test]
+    test:
+      targets: [LearningFontsTests]

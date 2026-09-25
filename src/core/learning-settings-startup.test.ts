@@ -62,6 +62,7 @@ for (const failure of ['malformed', 'kv-read', 'sqlite'] as const) {
     const restarted = f.native.getProgressSync();
     assert.deepEqual(JSON.parse(restarted.profiles.readValue('settings')!), {
       mode: 'manual', rate: 1, originalTextSize: 20, translationTextSize: 18,
+      originalTextFont: 'system', translationTextFont: 'system',
     });
     await restarted.refreshAccount();
     assert.equal(restarted.getSnapshot().pending, false);
@@ -76,6 +77,7 @@ test('initial defaults do not depend on a legacy KV write or create pending work
   assert.equal(sync.getSnapshot().pending, false);
   assert.deepEqual(JSON.parse(sync.profiles.readValue('settings')!), {
     mode: 'manual', rate: 1, originalTextSize: 20, translationTextSize: 18,
+    originalTextFont: 'system', translationTextFont: 'system',
   });
   assert.equal(f.legacy.size, 0);
   assert.deepEqual(f.alerts, []);

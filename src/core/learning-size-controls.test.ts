@@ -114,12 +114,20 @@ test('both real settings routes save immediately, share updates, reset, and reco
   assert.equal(settings.readSettings().translationTextSize, 21);
   assert.equal(settings.readSettings().rate, 1.25);
   assert.equal(settings.readSettings().groupSize, 4);
+  runtime.find('원문 폰트: Serif').onPress();
+  runtime.find('번역 폰트: Apple SD Gothic Neo').onPress();
+  assert.equal(settings.readSettings().originalTextFont, 'serif');
+  assert.equal(settings.readSettings().translationTextFont, 'apple-sd-gothic-neo');
 
   runtime.render(null);
   params = { profile: 'guest', authority: '0' };
   runtime.render(React.createElement(OptionsScreen));
   await new Promise(resolve => setImmediate(resolve));
   runtime.find('학습 화면').onPress();
+  assert.equal(runtime.find('원문 폰트: Serif').accessibilityState.checked, true);
+  runtime.find('원문 폰트: Rounded').onPress();
+  runtime.find('원문 폰트: Georgia').onPress();
+  assert.equal(settings.readSettings().originalTextFont, 'georgia');
   assert.equal(runtime.find('원문 폰트 크기').value, '21');
   runtime.find('원문 폰트 크기').onChangeText('48');
   assert.equal(runtime.find('원문 폰트 크기 늘리기').disabled, true, 'Bounds follow a valid draft before completion too');
@@ -135,10 +143,13 @@ test('both real settings routes save immediately, share updates, reset, and reco
   runtime.find('번역 폰트 크기').onEndEditing();
   assert.equal(runtime.find('번역 폰트 크기 줄이기').disabled, true);
   fail = true;
+  runtime.find('원문 폰트: System').onPress();
+  assert.equal(settings.readSettings().originalTextFont, 'georgia');
+  assert.equal(runtime.find('원문 폰트: Georgia').accessibilityState.checked, true);
   runtime.find('번역 폰트 크기 늘리기').onPress();
   assert.equal(runtime.find('번역 폰트 크기').value, '12');
   assert.equal(settings.readSettings().translationTextSize, 12);
-  assert.deepEqual(alerts, ['설정을 저장하지 못했어요']);
+  assert.deepEqual(alerts, ['설정을 저장하지 못했어요', '설정을 저장하지 못했어요']);
   fail = false;
   runtime.find('폰트 크기 초기화').onPress();
   assert.equal(runtime.find('원문 폰트 크기').value, '20');
@@ -146,10 +157,14 @@ test('both real settings routes save immediately, share updates, reset, and reco
   runtime.render(null);
   params = { option: 'display' };
   runtime.render(React.createElement(SettingsScreen));
+  assert.equal(runtime.find('원문 폰트: Georgia').accessibilityState.checked, true);
+  runtime.find('폰트 초기화').onPress();
+  assert.equal(settings.readSettings().originalTextFont, 'system');
+  assert.equal(settings.readSettings().translationTextFont, 'system');
   assert.equal(runtime.find('원문 폰트 크기').value, '20');
   settings.saveSettings({ ...settings.readSettings(), originalTextSize: 35 }, 'guest', 0);
   assert.equal(runtime.find('원문 폰트 크기').value, '35', 'An already open editor follows external updates');
-  assert.equal(alerts.length, 1, 'Successful saves are quiet');
+  assert.equal(alerts.length, 2, 'Successful saves are quiet');
 
   // Keep the real route, subscription, player, journal and rendering mounted.
   // Only navigation/native playback boundaries are fixtures.
@@ -168,13 +183,15 @@ test('both real settings routes save immediately, share updates, reset, and reco
     await new Promise(resolve => setImmediate(resolve));
     runtime.flush();
     const entries = focusEntries;
-    settings.saveSettings({ ...settings.readSettings(), originalTextSize: 48, translationTextSize: 48 }, 'guest', 0);
+    settings.saveSettings({ ...settings.readSettings(), originalTextSize: 48, translationTextSize: 48,
+      originalTextFont: 'serif', translationTextFont: 'georgia' }, 'guest', 0);
     const output = runtime.flush();
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(focusEntries, entries, `Stage ${stage} typography must not restart the focus/engine effect`);
     assert.deepEqual(profiles.current().journal.load(pack.packageKey, stage, manifest.phrases.length), checkpoint);
     assert(output.some(node => node.props.style?.fontSize === 48), `Stage ${stage} mounted text updates`);
-    assert.equal(alerts.length, 1);
+    assert(output.some(node => node.props.style?.fontFamily === 'Georgia'), `Stage ${stage} mounted font updates`);
+    assert.equal(alerts.length, 2);
     settings.saveSettings({ ...settings.readSettings(), originalTextSize: 20, translationTextSize: 18 }, 'guest', 0);
   }
 });

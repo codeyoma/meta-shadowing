@@ -11,16 +11,16 @@ export function usePalette() {
   return palettes[useColorScheme() === 'dark' ? 'dark' : 'light'];
 }
 
-export function Label({ children, size = 17, muted = false, weight = '500', color, display = false, align }: PropsWithChildren<{
+export function Label({ children, size = 17, muted = false, weight = '500', color, display = false, align, fontFamily }: PropsWithChildren<{
   size?: number; muted?: boolean; weight?: '400' | '500' | '600' | '700' | '800';
-  color?: string; display?: boolean; align?: TextStyle['textAlign'];
+  color?: string; display?: boolean; align?: TextStyle['textAlign']; fontFamily?: string;
 }>) {
   const c = usePalette();
   const { fontScale } = useWindowDimensions();
-  const rounded = display && isLoaded('Nunito_800ExtraBold');
+  const rounded = !fontFamily && display && isLoaded('Nunito_800ExtraBold');
   // Keep native measurement in sync when Dynamic Type changes with the screen open.
   return <Text selectable allowFontScaling={false} style={{ color: color ?? (muted ? c.secondary : c.text), fontSize: size * fontScale,
-    fontFamily: rounded ? 'Nunito_800ExtraBold' : undefined, fontWeight: rounded ? undefined : weight,
+    fontFamily: fontFamily ?? (rounded ? 'Nunito_800ExtraBold' : undefined), fontWeight: fontFamily ? '400' : rounded ? undefined : weight,
     lineHeight: size * fontScale * (display ? 1.2 : 1.45), flexShrink: 1, textAlign: align }}>{children}</Text>;
 }
 

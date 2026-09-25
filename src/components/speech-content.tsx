@@ -2,12 +2,13 @@ import { View } from 'react-native';
 import { Label, usePalette } from './ui';
 import { groupedSpeechBubbles } from '@/core/grouped-speech';
 import { SubtitleText } from './subtitle-text';
-import type { Settings } from '@/core/settings';
+import type { LearningTypography } from '@/core/settings';
+import { learningFontFamily } from '@/native/learning-fonts';
 
 /** Display only the active unit; the player owns scrolling for long content. */
 export function SpeechContent({ phrases, active, view, unitLabel = '학습 구간', textSizes }: {
   phrases: readonly { text: string; translation: string; masked?: boolean; members?: { text: string; translation: string }[] }[]; active: number; view: 'bubble' | 'list'; unitLabel?: string;
-  textSizes?: Pick<Settings, 'originalTextSize' | 'translationTextSize'>;
+  textSizes?: LearningTypography;
 }) {
   const c = usePalette();
   const phrase = phrases[active];
@@ -23,8 +24,8 @@ export function SpeechContent({ phrases, active, view, unitLabel = '학습 구�
     }}>
       <View style={{ gap: 16 }}>{pairs.map((pair, member) => <View key={member} style={{ gap: 8 }}>
         <SubtitleText text={pair.text} masked={!!phrase.masked} size={textSizes?.originalTextSize ?? 29} display color={c.heading}
-          background={index % 2 === 0 ? c.card : c.blueSoft} />
-        {!!pair.translation && <Label size={textSizes?.translationTextSize ?? 18} color={c.heading}>{pair.translation}</Label>}
+          fontFamily={learningFontFamily(textSizes?.originalTextFont)} background={index % 2 === 0 ? c.card : c.blueSoft} />
+        {!!pair.translation && <Label size={textSizes?.translationTextSize ?? 18} fontFamily={learningFontFamily(textSizes?.translationTextFont)} color={c.heading}>{pair.translation}</Label>}
       </View>)}</View>
     </View>)}
   </View>;
@@ -33,8 +34,8 @@ export function SpeechContent({ phrases, active, view, unitLabel = '학습 구�
       <Label size={13} muted>{active + 1} · 현재 {unitLabel}</Label>
       <View style={{ gap: 16 }}>{bubbles.flat().map((member, memberIndex) => <View key={memberIndex} style={{ gap: 8 }}>
         <SubtitleText text={member.text} masked={!!phrase.masked} size={textSizes?.originalTextSize ?? 24}
-          weight="700" color={c.heading} background={c.blueSoft} />
-        {!!member.translation && <Label size={textSizes?.translationTextSize ?? 16} muted>{member.translation}</Label>}
+          weight="700" color={c.heading} background={c.blueSoft} fontFamily={learningFontFamily(textSizes?.originalTextFont)} />
+        {!!member.translation && <Label size={textSizes?.translationTextSize ?? 16} fontFamily={learningFontFamily(textSizes?.translationTextFont)} muted>{member.translation}</Label>}
       </View>)}</View>
   </View>;
 }

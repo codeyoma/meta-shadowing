@@ -1,10 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { runInNewContext } from 'node:vm';
 import React from 'react';
-import ts from 'typescript';
+import { nativeModules } from '../test-support/native-render';
 import { groupedSpeechBubbles } from './grouped-speech';
 import type { SpeechContent } from '../components/speech-content';
 
@@ -14,17 +12,12 @@ const require = createRequire(import.meta.url);
 const { renderToStaticMarkup } = require('react-dom/server');
 const nativeContainer = ({ children }: React.PropsWithChildren) => React.createElement('div', null, children);
 const leaf = ({ children }: React.PropsWithChildren) => React.createElement('span', null, children);
-const compiled = ts.transpileModule(readFileSync(new URL('../components/speech-content.tsx', import.meta.url), 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
-}).outputText;
-const component = { exports: {} as { SpeechContent: typeof SpeechContent } };
-runInNewContext(compiled, { exports: component.exports, module: component, require: (id: string) => {
-  if (id === 'react-native') return { View: nativeContainer, ScrollView: nativeContainer, useWindowDimensions: () => ({ height: 900 }) };
-  if (id === './ui') return { Label: leaf, usePalette: () => ({}) };
-  if (id === './subtitle-text') return { SubtitleText: ({ text }: { text: string }) => React.createElement('span', null, text) };
-  if (id === '@/core/grouped-speech') return { groupedSpeechBubbles };
-  return require(id);
-} });
+const component = nativeModules({
+  'react-native': { View: nativeContainer, ScrollView: nativeContainer, useWindowDimensions: () => ({ height: 900 }) },
+  './ui': { Label: leaf, usePalette: () => ({}) },
+  './subtitle-text': { SubtitleText: ({ text }: { text: string }) => React.createElement('span', null, text) },
+  '@/core/grouped-speech': { groupedSpeechBubbles },
+})('components/speech-content.tsx') as { SpeechContent: typeof SpeechContent };
 
 const phrases = [
   { text: 'Previous source.', translation: '이전 번역' },
@@ -35,7 +28,7 @@ const phrases = [
   { text: 'Next source.', translation: '다음 번역' },
 ];
 const render = (active: number, view: 'bubble' | 'list' = 'list', source = phrases) => renderToStaticMarkup(
-  React.createElement(component.exports.SpeechContent, { phrases: source, active, view }));
+  React.createElement(component.SpeechContent, { phrases: source, active, view }));
 
 test('list view renders only the active group, with each translation immediately after its source', () => {
   const html = render(1);
