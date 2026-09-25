@@ -116,6 +116,23 @@ List mode renders only the current saved learning unit, with all its paired
 utterances in one left-aligned vertical list. It is not a scrollable lesson index;
 the separate all-sentences option remains the navigation surface. Long current
 content scrolls using the outer player screen, without an inner fixed-height list.
+The Settings and in-practice “학습 화면” editors share profile-wide original and
+translation size preferences. Integer sizes from 12 through 48 apply and save
+immediately, with one-unit minus/plus controls and numeric input committed when
+editing ends. Keystrokes remain drafts so invalid prefixes cannot be saved. Invalid drafts
+never replace a saved size. Reset writes 20/18 immediately; new empty profiles
+start at those sizes. Legacy profiles without explicit sizes retain each existing
+layout's appearance until customized. Merely opening an editor does not migrate
+them. The fixed bilingual preview contains no lesson text.
+These preferences affect only active phrases/translations in stages 1–16 and the
+explicit preview. iOS text scaling applies once to the chosen base size; learning
+content wraps and scrolls without changing fixed video, header, or footer layout.
+Typography updates do not restart the player, alter checkpoints, speeds or reveal
+visibility, or award progress. Preferences use the existing local-first,
+profile-isolated storage and opt-in private iCloud synchronization. Font selection
+is a separate feature. Global data deletion retains its empty-preference semantics;
+the size-reset control is the explicit 20/18 reset. See
+[size verification](learning-text-size-verification.md).
 Revealing never plays, pauses, confirms, or changes
 cycles. Reveal state resets when the unit/run changes and on player re-entry.
 Analysis derives the current saved unit and always retains hints in hint stages;

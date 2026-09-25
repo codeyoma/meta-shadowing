@@ -30,6 +30,7 @@ import { mayUsePackage } from '@/native/paid-package';
 import { LearningMonitorControls } from '@/components/learning-monitor-controls';
 import { learningMonitorSupported, learningMonitor } from '@/native/voice-monitor';
 import { isGroupSize } from '@/core/learning-units';
+import { useLearningSettings } from '@/components/use-learning-settings';
 
 export default function PlayerOptionsScreen() {
   const profile = useProgressProfile();
@@ -41,7 +42,7 @@ export default function PlayerOptionsScreen() {
   const access = usePackageLearningAccess(pack);
   const [rate, setRate] = useState<number | null>(null);
   const [revision, setRevision] = useState(0);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const settings = useLearningSettings();
   const [selected, setSelected] = useState<LearningPreference | 'sentences' | 'reveal' | 'monitor' | null>(() =>
     stage && isRevealStage(stage) && (option === 'rate' || option === 'reveal') ? 'reveal' : option === 'rate' ? 'rate' : null);
   const [checkpoint, setCheckpoint] = useState<Session | null>(null);
@@ -58,7 +59,6 @@ export default function PlayerOptionsScreen() {
   }, [profile.id, profile.authority, run, key, param]);
   useEffect(() => {
     try {
-      setSettings(readSettings());
       const saved = stage && pack && scopeValid() ? new LearningContext(pack, getJournal()).load(stage) : null;
       const valid = saved?.runId === run ? saved : null;
       setCheckpoint(valid); setRate(valid?.rate ?? null);
@@ -103,14 +103,15 @@ export default function PlayerOptionsScreen() {
       }
       return;
     }
-    if (!settings || !scopeValid()) return;
+    if (!settings || !scopeValid()) return false;
     try {
       const next = { ...readSettings(), ...patch };
-      if (!saveSettings(next, profile.id, profile.authority)) return;
-      setSettings(next);
+      if (!saveSettings(next, profile.id, profile.authority)) throw Error('Unavailable settings authority.');
+      return true;
     } catch {
       setRevision(value => value + 1);
       Alert.alert('설정을 저장하지 못했어요', '저장 공간을 확인하고 다시 시도해 주세요.');
+      return false;
     }
   }
   function change(rate: number) {
@@ -151,7 +152,7 @@ export default function PlayerOptionsScreen() {
     <View collapsable={false} style={{ flex: 1 }}>
       {selected === 'sentences' ? <SentenceMenu sections={sections} currentUnit={checkpoint?.phrase ?? -1}
         disabled={selecting || !checkpoint || !scopeValid()} onSelect={index => void selectSentence(index)} />
-      : <ScrollView key={selected ?? 'menu'} contentInsetAdjustmentBehavior="automatic" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16 }}>
+      : <ScrollView key={selected ?? 'menu'} contentInsetAdjustmentBehavior="automatic" automaticallyAdjustKeyboardInsets keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16 }}>
         {selected === null ? <><View style={{ borderRadius: 24, overflow: 'hidden' }}>
           <SettingsRow title="전체 문장" icon="list.bullet" iconColor="#007aff" disclosure disabled={!checkpoint}
             onPress={() => setSelected('sentences')} /></View>

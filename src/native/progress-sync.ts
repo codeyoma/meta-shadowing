@@ -31,6 +31,7 @@ export function getProgressSync(): ProgressSync {
       return JSON.stringify(key === 'settings' ? decodeSettings(raw) : resolveSelection(books, JSON.parse(raw)));
     }, (key, value) => { Storage.setItemSync(keys[key], value); }, key => { Storage.removeItemSync(keys[key]); });
     sync = new ProgressSync(profiles, progressCloud, undefined, randomUUID);
+    if (sync.getSnapshot().learningAvailable) profiles.initializeLearningSettings();
   }
   return sync;
 }

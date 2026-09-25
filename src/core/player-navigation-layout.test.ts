@@ -41,7 +41,7 @@ function layout(accessReady = true, unavailable = false, accessDenied = false, r
     videoOwner: video ? 'test-video' : null, LessonVideo: 'LessonVideo',
     CycleTimeline: 'CycleTimeline', PlayerControls: 'PlayerControls',
     state: { stage: rapid ? 11 : 9, rate: 1.5, phrase: 1, phraseCount: 6, phase: 'listening', runId: 'test', ...(rapid ? { reveal: { speed: 3, wpm: 250 } } : {}) },
-    stage: rapid ? 11 : 9, unavailable, accessReady, accessDenied, leave() {}, unitLabel: '학습 묶음', presented: [], speechView: 'list', units: [],
+    stage: rapid ? 11 : 9, unavailable, accessReady, accessDenied, leave() {}, unitLabel: '학습 묶음', presented: [], speechView: 'list', units: [], textSettings: null,
     c: {}, insets: { bottom: 0 }, duration: 0, motionActive: false, error: null,
     busy: false, refreshing, xpGain: null, celebrating: false, CONTENT_ENTER: undefined,
     isFirstWordStage: () => false, completedUnitCount: () => 0, isRevealStage, playerSpeed,

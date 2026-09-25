@@ -2,10 +2,12 @@ import { View } from 'react-native';
 import { Label, usePalette } from './ui';
 import { groupedSpeechBubbles } from '@/core/grouped-speech';
 import { SubtitleText } from './subtitle-text';
+import type { Settings } from '@/core/settings';
 
 /** Display only the active unit; the player owns scrolling for long content. */
-export function SpeechContent({ phrases, active, view, unitLabel = '학습 구간' }: {
+export function SpeechContent({ phrases, active, view, unitLabel = '학습 구간', textSizes }: {
   phrases: readonly { text: string; translation: string; masked?: boolean; members?: { text: string; translation: string }[] }[]; active: number; view: 'bubble' | 'list'; unitLabel?: string;
+  textSizes?: Pick<Settings, 'originalTextSize' | 'translationTextSize'>;
 }) {
   const c = usePalette();
   const phrase = phrases[active];
@@ -20,9 +22,9 @@ export function SpeechContent({ phrases, active, view, unitLabel = '학습 구�
       padding: 20, borderWidth: 1, borderColor: index % 2 === 0 ? c.line : c.blueSoft,
     }}>
       <View style={{ gap: 16 }}>{pairs.map((pair, member) => <View key={member} style={{ gap: 8 }}>
-        <SubtitleText text={pair.text} masked={!!phrase.masked} size={29} display color={c.heading}
+        <SubtitleText text={pair.text} masked={!!phrase.masked} size={textSizes?.originalTextSize ?? 29} display color={c.heading}
           background={index % 2 === 0 ? c.card : c.blueSoft} />
-        {!!pair.translation && <Label size={18} color={c.heading}>{pair.translation}</Label>}
+        {!!pair.translation && <Label size={textSizes?.translationTextSize ?? 18} color={c.heading}>{pair.translation}</Label>}
       </View>)}</View>
     </View>)}
   </View>;
@@ -30,9 +32,9 @@ export function SpeechContent({ phrases, active, view, unitLabel = '학습 구�
     borderLeftWidth: 3, borderLeftColor: c.blue }}>
       <Label size={13} muted>{active + 1} · 현재 {unitLabel}</Label>
       <View style={{ gap: 16 }}>{bubbles.flat().map((member, memberIndex) => <View key={memberIndex} style={{ gap: 8 }}>
-        <SubtitleText text={member.text} masked={!!phrase.masked} size={24}
+        <SubtitleText text={member.text} masked={!!phrase.masked} size={textSizes?.originalTextSize ?? 24}
           weight="700" color={c.heading} background={c.blueSoft} />
-        {!!member.translation && <Label size={16} muted>{member.translation}</Label>}
+        {!!member.translation && <Label size={textSizes?.translationTextSize ?? 16} muted>{member.translation}</Label>}
       </View>)}</View>
   </View>;
 }

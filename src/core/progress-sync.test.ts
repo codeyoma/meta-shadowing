@@ -55,6 +55,36 @@ const publication = (revision: number, id = 'published-2'): CloudPublication => 
 const backup = (id = 'remote'): CloudBackup => ({ id, token: id, revision: 90, legacy: false, createdAt: '' });
 const drain = () => new Promise<void>(resolve => setImmediate(resolve));
 
+test('typography preferences restore through opt-in cloud sync and keep offline edits local until reconnect', async t => {
+  const original = fixture(t);
+  original.profiles.initializeLearningSettings();
+  original.sync.savePreference('settings', JSON.stringify({ mode: 'manual', rate: 1.5,
+    originalTextSize: 48, translationTextSize: 12 }), 0, 'guest');
+  assert.equal(original.published.length, 0, 'No cloud writes before consent');
+  await original.sync.refreshAccount(); await original.sync.enable(true);
+  await original.sync.retry();
+  const second = fixture(t); second.sync.dispose();
+  const restored = new ProgressSync(second.profiles, original.cloud); t.after(() => restored.dispose());
+  await restored.refreshAccount(); await restored.enable(false);
+  assert.deepEqual(JSON.parse(second.profiles.readValue('settings')!), {
+    mode: 'manual', rate: 1.5, originalTextSize: 48, translationTextSize: 12,
+  });
+  const online = original.cloud.list;
+  original.cloud.list = async () => { throw Error('progress-cloud-offline'); };
+  const snapshot = original.sync.getSnapshot();
+  for (const originalTextSize of [20, 21, 22]) assert.equal(original.sync.savePreference('settings',
+    JSON.stringify({ mode: 'manual', rate: 1.5, originalTextSize, translationTextSize: 12 }),
+    snapshot.authority, snapshot.profile), true);
+  await original.sync.retry();
+  assert.equal(JSON.parse(original.profiles.readValue('settings')!).originalTextSize, 22);
+  assert.equal(original.profiles.current().pending(), true);
+  original.cloud.list = online;
+  await original.sync.retry(); await restored.retry();
+  assert.deepEqual(JSON.parse(second.profiles.readValue('settings')!), {
+    mode: 'manual', rate: 1.5, originalTextSize: 22, translationTextSize: 12,
+  });
+});
+
 // #52 journeys use real player/journal/SQLite boundaries. Only Apple transport
 // and audio are fixtures; these are not TestFlight or physical-device evidence.
 test('recovery journey: reinstall restores uploaded cycles only, then reconnect converges without duplicate XP', async t => {
@@ -225,7 +255,7 @@ test('first automatic backup waits for explicit import, separate, or cancel cons
     assert.equal(sync.getSnapshot().enabled, false);
     decide(choice); await pending;
     assert.equal(sync.getSnapshot().enabled, choice !== null);
-    assert.equal(profiles.readValue('settings'), choice === false ? '{"mode":"manual","rate":1}' : '{"mode":"manual","rate":2}');
+    assert.equal(profiles.readValue('settings'), choice === false ? '{"mode":"manual","rate":1,"originalTextSize":20,"translationTextSize":18}' : '{"mode":"manual","rate":2}');
     assert.equal(published.length, choice === null ? 0 : 1);
     assert.equal(profiles.guestBackup(), guest);
   }
@@ -640,7 +670,7 @@ test('declining guest import starts an independent profile with defaults and dur
   const reopened = new ProgressProfiles(open, () => 'other', () => '{"mode":"manual","rate":3}');
   assert.equal(reopened.id(), profiles.id());
   assert.equal(reopened.account('account-a')?.enabled, 1);
-  assert.equal(reopened.readValue('settings'), '{"mode":"manual","rate":1}');
+  assert.equal(reopened.readValue('settings'), '{"mode":"manual","rate":1,"originalTextSize":20,"translationTextSize":18}');
 });
 
 test('hung list never blocks sign-out and old consent cannot authorize the next account', async t => {

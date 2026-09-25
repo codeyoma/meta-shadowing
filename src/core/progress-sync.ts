@@ -2,6 +2,7 @@ import { ProgressBackupStore, ProgressMergeError, validateProgressBackup, type B
 import type { CloudAccount, CloudBackup, ProgressCloud } from '../../modules/progress-cloud';
 import { ProgressDeletions } from './progress-deletion';
 import { decodeEnvelope, emptyProgress, encodeEnvelope } from './progress-envelope';
+import { freshSettings } from './settings';
 
 type Preference = 'settings' | 'selection';
 export class ProgressProfiles {
@@ -36,6 +37,12 @@ export class ProgressProfiles {
     return store;
   }
   current(): ProgressBackupStore { return this.store(this.id()); }
+  /** Only an empty local profile gets new defaults; existing appearance is not migrated. */
+  initializeLearningSettings(): void {
+    if (!this.current().hasData() && this.readValue('settings') === null && this.readValue('selection') === null) {
+      this.saveValue('settings', JSON.stringify(freshSettings()));
+    }
+  }
   retire(id: string): void { this.stores.get(id)?.revoke(); this.stores.delete(id); }
   clearGuest(): void {
     this.deletions.removeGuest();
@@ -81,7 +88,7 @@ export class ProgressProfiles {
     const backup = validateProgressBackup(this.store('guest').exportBackup());
     if (Object.entries(backup.tables).some(([key, rows]) => key !== 'preferences' && rows.length > 0)) return true;
     const settings = this.readValue('settings', 'guest');
-    if (settings && settings !== '{"mode":"manual","rate":1}') return true;
+    if (settings && settings !== '{"mode":"manual","rate":1}' && settings !== JSON.stringify(freshSettings())) return true;
     return this.readValue('selection', 'guest') !== null;
   }
   guestBackup(): string {
@@ -460,7 +467,7 @@ export class ProgressSync {
       const id = this.profiles.create(), store = this.profiles.store(id);
       if (importGuest) store.restoreBackup(this.profiles.guestBackup());
       // Defaults must not stamp over settings recovered from another device.
-      if (!store.hasData() && !this.snapshot.backups.length) store.saveValue('settings', '{"mode":"manual","rate":1}');
+      if (!store.hasData() && !this.snapshot.backups.length) store.saveValue('settings', JSON.stringify(freshSettings()));
       this.profiles.select(id, this.scope!, enabled);
     }
     this.emit({ enabled, hasProfile: true, error: null, learningAvailable: true });
