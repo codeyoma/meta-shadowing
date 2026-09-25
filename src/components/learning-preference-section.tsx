@@ -8,7 +8,7 @@ import { SystemPicker } from './system-picker';
 import { FeedbackPressable } from './feedback-pressable';
 import { LearningTypographyControl } from './learning-typography-control';
 
-export type LearningPreference = 'display' | 'rate' | 'group' | 'wpm';
+export type LearningPreference = 'display' | 'typography' | 'rate' | 'group' | 'wpm';
 
 /** Shared editors; callers choose whether changes target preferences or a paused session. */
 export function LearningPreferenceSection({ option, settings, onChange, activeGroup = false }: {
@@ -18,6 +18,7 @@ export function LearningPreferenceSection({ option, settings, onChange, activeGr
   activeGroup?: boolean;
 }) {
   const c = useSettingsColors();
+  if (option === 'typography') return <LearningTypographyControl settings={settings} onChange={onChange} />;
   if (option === 'rate') return <SettingsSection title="배속" paddingVertical={8}>
     <PlaybackRateControl appearance="settings" showTitle={false} rate={settings.rate}
       onChange={rate => onChange({ rate: Number(rate.toFixed(2)) })} />
@@ -32,7 +33,7 @@ export function LearningPreferenceSection({ option, settings, onChange, activeGr
   if (option === 'wpm') return <SettingsSection title="크레이지 스피킹" paddingVertical={4} note="각 항목을 눌러 WPM(분당 단어 수)을 바꿀 수 있어요. 크레이지 스피킹 학습시 적용됩니다.">
     <SpeakingSpeedControl speeds={settings.crazyWpm} onChange={crazyWpm => onChange({ crazyWpm })} />
   </SettingsSection>;
-  return <><SettingsSection title="학습 화면">
+  return <SettingsSection title="학습 화면">
     <View style={{ flexDirection: 'row', gap: 16 }}>
       {(['bubble', 'list'] as const).map(view => {
         const selected = (settings.speechView ?? 'bubble') === view;
@@ -57,5 +58,5 @@ export function LearningPreferenceSection({ option, settings, onChange, activeGr
     <SystemPicker label="학습 화면" value={settings.speechView ?? 'bubble'}
       options={[{ value: 'bubble', label: '버블로 보기' }, { value: 'list', label: '리스트로 보기' }] as const}
       onChange={speechView => onChange({ speechView })} />
-  </SettingsSection><LearningTypographyControl settings={settings} onChange={onChange} /></>;
+  </SettingsSection>;
 }

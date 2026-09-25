@@ -56,8 +56,10 @@ export function LearningTypographyControl({ settings, onChange }: {
   const [reset, setReset] = useState(0);
   return <View style={{ gap: 20, paddingTop: 12 }}>
     <View style={{ paddingHorizontal: 16 }}><Label size={18} weight="600" color={c.secondary}>폰트 설정</Label></View>
-    <LearningFontControl label="원문 폰트" value={settings.originalTextFont} onChange={originalTextFont => onChange({ originalTextFont })} />
-    <LearningFontControl label="번역 폰트" value={settings.translationTextFont} onChange={translationTextFont => onChange({ translationTextFont })} />
+    <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+      <LearningFontControl label="원문 폰트" value={settings.originalTextFont} onChange={originalTextFont => onChange({ originalTextFont })} />
+      <LearningFontControl label="번역 폰트" value={settings.translationTextFont} onChange={translationTextFont => onChange({ translationTextFont })} />
+    </View>
     <View style={{ paddingHorizontal: 8 }}><Label size={14} color={c.secondary}>일부 폰트의 한글은 시스템 글꼴로 표시돼요.</Label></View>
     <View style={{ flexDirection: 'row', gap: 12 }}>
       <SizeInput key={`original-${reset}`} label="원문 폰트 크기" value={settings.originalTextSize ?? defaultTextSizes.originalTextSize}

@@ -1,7 +1,9 @@
-import { Pressable, View, useWindowDimensions } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
+import { Button, Host, HStack, Image, Menu, Spacer, Text } from '@expo/ui/swift-ui';
+import { accessibilityAddTraits, accessibilityLabel, buttonStyle, font, foregroundStyle, frame, padding } from '@expo/ui/swift-ui/modifiers';
 import { learningFonts, type LearningFont } from '@/core/learning-fonts';
 import { availableFontChoices } from '@/native/learning-fonts';
-import { Icon, Label } from './ui';
+import { Label } from './ui';
 import { useSettingsColors } from './settings-row';
 
 export function LearningFontControl({ label, value, onChange }: {
@@ -9,22 +11,27 @@ export function LearningFontControl({ label, value, onChange }: {
 }) {
   const c = useSettingsColors();
   const { fontScale } = useWindowDimensions();
+  const current = learningFonts.find(font => font.id === (value ?? 'system'))!;
   const unavailable = value !== undefined && !availableFontChoices.some(font => font.id === value);
-  return <View style={{ gap: 8 }}>
+  return <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
     <View style={{ paddingHorizontal: 8 }}><Label size={15} weight="600" color={c.secondary}>{label}</Label></View>
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-      {availableFontChoices.map(font => {
-        const selected = (value ?? 'system') === font.id;
-        return <Pressable key={font.id} accessibilityRole="radio" accessibilityLabel={`${label}: ${font.label}`}
-          accessibilityState={{ checked: selected }} onPress={() => onChange(font.id)}
-          style={({ pressed }) => ({ flexGrow: 1, flexBasis: 100 * fontScale, maxWidth: '100%', minHeight: 48, paddingHorizontal: 12, paddingVertical: 10,
-            borderRadius: 16, borderCurve: 'continuous', borderWidth: 1, borderColor: selected ? '#007aff' : c.separator,
-            backgroundColor: pressed ? c.pressed : c.group, flexDirection: 'row', alignItems: 'center', gap: 6 })}>
-          <View style={{ flex: 1 }}><Label size={15} color={selected ? '#007aff' : c.text}>{font.label}</Label></View>
-          {selected && <Icon name="checkmark" size={14} color="#007aff" />}
-        </Pressable>;
-      })}
+    <View style={{ backgroundColor: c.group, borderRadius: 24, borderCurve: 'continuous', borderWidth: 1, borderColor: c.separator }}>
+      <Host matchContents={{ vertical: true }} style={{ width: '100%', minHeight: 64 }}>
+        <Menu modifiers={[buttonStyle('plain'), accessibilityLabel(`${label} 선택, 현재 ${current.label}`)]}
+          label={<HStack spacing={6} modifiers={[padding({ horizontal: 12, vertical: 12 }), frame({ minHeight: 64 })]}>
+            <Text modifiers={[font({ size: 15 * fontScale }), foregroundStyle(c.text)]}>{current.label}</Text>
+            <Spacer />
+            <Image systemName="chevron.up.chevron.down" size={12 * fontScale} color={c.secondary} />
+          </HStack>}>
+          {availableFontChoices.map(choice => {
+            const selected = current.id === choice.id;
+            return <Button key={choice.id} label={choice.label} systemImage={selected ? 'checkmark' : undefined}
+              modifiers={[accessibilityLabel(`${label}: ${choice.label}`), ...(selected ? [accessibilityAddTraits(['isSelected'])] : [])]}
+              onPress={() => onChange(choice.id)} />;
+          })}
+        </Menu>
+      </Host>
     </View>
-    {unavailable && <Label size={14} color={c.secondary}>{`${learningFonts.find(font => font.id === value)?.label} · System으로 표시`}</Label>}
+    {unavailable && <Label size={14} color={c.secondary}>{`${current.label} · System으로 표시`}</Label>}
   </View>;
 }

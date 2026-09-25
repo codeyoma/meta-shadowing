@@ -4,6 +4,7 @@ import type { LearningPreference } from './learning-preference-section';
 
 export const learningPreferenceMenus = [
   { option: 'display', title: '학습 화면', icon: 'text.bubble.fill' },
+  { option: 'typography', title: '폰트 설정', icon: 'textformat' },
   { option: 'rate', title: '배속', icon: 'speaker.wave.2.fill' },
   { option: 'group', title: '다구간 학습', icon: 'square.grid.2x2.fill' },
   { option: 'wpm', title: '크레이지 스피킹', icon: 'speedometer' },

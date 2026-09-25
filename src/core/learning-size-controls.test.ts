@@ -8,6 +8,7 @@ import manifest from '../../assets/sample/manifest.json';
 import { createSession, createGroupedSession } from './session';
 import { nativeModules, nativeMotion } from '../test-support/native-render';
 import { nativeHooks } from '../test-support/native-hooks';
+import { nativeFontMenu, nativeFontMenuModifiers } from '../test-support/native-font-menu';
 
 test('size buttons and completed input apply immediately, independently, and retain the last rapid change', t => {
   const runtime = nativeHooks(); t.after(runtime.dispose);
@@ -17,15 +18,20 @@ test('size buttons and completed input apply immediately, independently, and ret
     'react-native-reanimated': nativeMotion, 'expo-font': { isLoaded: () => true }, 'expo-image': { Image: 'Image' },
     'expo-router': { usePathname: () => '/player-options' }, '@/native/tap-feedback': { tapFeedback() {} },
     '@react-native-community/slider': { __esModule: true, default: 'Slider' },
-    '@expo/ui/swift-ui': { Host: 'Host', Picker: 'Picker', Text: 'Text' },
-    '@expo/ui/swift-ui/modifiers': { pickerStyle: () => ({}), tag: () => ({}) },
+    '@expo/ui/swift-ui': { ...nativeFontMenu, Picker: 'Picker' },
+    '@expo/ui/swift-ui/modifiers': { ...nativeFontMenuModifiers, pickerStyle: () => ({}), tag: () => ({}) },
   });
   const { LearningPreferenceSection } = load('components/learning-preference-section.tsx');
   let saved = { originalTextSize: 20, translationTextSize: 18 };
   const changes: unknown[] = [];
   const onChange = (patch: Partial<typeof saved>) => { saved = { ...saved, ...patch }; changes.push(patch); return true; };
   runtime.render(React.createElement(LearningPreferenceSection, { option: 'display', settings: saved, onChange }));
+  assert(!runtime.flush().some(node => node.props.accessibilityLabel === '원문 폰트 크기'),
+    'Learning display only edits bubble/list layout');
+  runtime.render(React.createElement(LearningPreferenceSection, { option: 'typography', settings: saved, onChange }));
   const content = runtime.flush();
+  assert(!content.some(node => node.props.accessibilityLabel === '버블로 보기'),
+    'The separate font editor does not include the learning display picker');
   const fontHeading = content.findIndex(node => node.props.children === '폰트 설정');
   const originalLabel = content.findIndex(node => node.props.children === '원문 폰트 크기');
   assert(fontHeading >= 0 && fontHeading < originalLabel, 'Font settings has its own heading before the controls');
@@ -69,7 +75,7 @@ test('both real settings routes save immediately, share updates, reset, and reco
   t.after(() => { runtime.dispose(); sync.dispose(); db.close(); });
   profiles.saveValue('settings', JSON.stringify({ mode: 'manual', rate: 1.25, groupSize: 4 }));
   const alerts: string[] = [];
-  let params: Record<string, string> = { option: 'display' };
+  let params: Record<string, string> = {};
   const pack = { owned: true, packageKey: `${manifest.id}-v${manifest.version}`, manifest, language: 'english' };
   let appState = 'active', focusEntries = 0, focused = true;
   const navigation = { addListener: () => () => {}, isFocused: () => true };
@@ -85,7 +91,7 @@ test('both real settings routes save immediately, share updates, reset, and reco
         if (focused) { focusEntries++; return callback(); }
       }, [callback, focused]),
       useNavigation: () => navigation,
-      Stack: { Screen: 'Screen' }, router: { back() {} } },
+      Stack: { Screen: 'Screen' }, router: { back() {}, push(target: { params: Record<string, string> }) { params = target.params; } } },
     'expo-router/react-navigation': { useHeaderHeight: () => 50, useNavigationState: () => null, useIsFocused: () => true },
     expo: { requireNativeView: () => 'Video' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
@@ -100,13 +106,17 @@ test('both real settings routes save immediately, share updates, reset, and reco
     '@/native/video': {}, '@/../modules/learning-audio': { __esModule: true, default: null },
     '@/native/tap-feedback': { tapFeedback() {}, prepareLearningHaptics() {}, stopLearningHaptics() {} },
     '@react-native-community/slider': { __esModule: true, default: 'Slider' },
-    '@expo/ui/swift-ui': { Host: 'Host', Picker: 'Picker', Text: 'Text' },
-    '@expo/ui/swift-ui/modifiers': { pickerStyle: () => ({}), tag: () => ({}) },
+    '@expo/ui/swift-ui': { ...nativeFontMenu, Picker: 'Picker' },
+    '@expo/ui/swift-ui/modifiers': { ...nativeFontMenuModifiers, pickerStyle: () => ({}), tag: () => ({}) },
   });
   const settings = load('native/settings.ts') as typeof import('../native/settings');
+  const SettingsMenu = load('app/(tabs)/settings/learning.tsx').default;
   const SettingsScreen = load('app/(tabs)/settings/learning-detail.tsx').default;
   const OptionsScreen = load('app/player-options.tsx').default;
+  runtime.render(React.createElement(SettingsMenu));
+  runtime.find('폰트 설정').onPress();
   runtime.render(React.createElement(SettingsScreen));
+  assert(runtime.flush().some(node => node.type === 'Screen' && node.props.options?.title === '폰트 설정'));
   assert.equal(settings.readSettings().originalTextSize, undefined, 'Opening the editor does not migrate legacy appearance');
   runtime.find('원문 폰트 크기 늘리기').onPress();
   assert.equal(settings.readSettings().originalTextSize, 21);
@@ -125,8 +135,8 @@ test('both real settings routes save immediately, share updates, reset, and reco
   params = { profile: 'guest', authority: '0' };
   runtime.render(React.createElement(OptionsScreen));
   await new Promise(resolve => setImmediate(resolve));
-  runtime.find('학습 화면').onPress();
-  assert.equal(runtime.find('원문 폰트: Serif').accessibilityState.checked, true);
+  runtime.find('폰트 설정').onPress();
+  assert.equal(runtime.find('원문 폰트: Serif').systemImage, 'checkmark');
   runtime.find('원문 폰트: Rounded').onPress();
   runtime.find('원문 폰트: Georgia').onPress();
   assert.equal(settings.readSettings().originalTextFont, 'georgia');
@@ -147,7 +157,7 @@ test('both real settings routes save immediately, share updates, reset, and reco
   fail = true;
   runtime.find('원문 폰트: System').onPress();
   assert.equal(settings.readSettings().originalTextFont, 'georgia');
-  assert.equal(runtime.find('원문 폰트: Georgia').accessibilityState.checked, true);
+  assert.equal(runtime.find('원문 폰트: Georgia').systemImage, 'checkmark');
   runtime.find('번역 폰트 크기 늘리기').onPress();
   assert.equal(runtime.find('번역 폰트 크기').value, '12');
   assert.equal(settings.readSettings().translationTextSize, 12);
@@ -157,9 +167,10 @@ test('both real settings routes save immediately, share updates, reset, and reco
   assert.equal(runtime.find('원문 폰트 크기').value, '20');
   assert.equal(runtime.find('번역 폰트 크기').value, '18');
   runtime.render(null);
-  params = { option: 'display' };
+  runtime.render(React.createElement(SettingsMenu));
+  runtime.find('폰트 설정').onPress();
   runtime.render(React.createElement(SettingsScreen));
-  assert.equal(runtime.find('원문 폰트: Georgia').accessibilityState.checked, true);
+  assert.equal(runtime.find('원문 폰트: Georgia').systemImage, 'checkmark');
   runtime.find('폰트 초기화').onPress();
   assert.equal(settings.readSettings().originalTextFont, 'system');
   assert.equal(settings.readSettings().translationTextFont, 'system');

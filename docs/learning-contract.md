@@ -116,8 +116,9 @@ List mode renders only the current saved learning unit, with all its paired
 utterances in one left-aligned vertical list. It is not a scrollable lesson index;
 the separate all-sentences option remains the navigation surface. Long current
 content scrolls using the outer player screen, without an inner fixed-height list.
-The Settings and in-practice “학습 화면” editors share profile-wide original and
-translation size preferences. Integer sizes from 12 through 48 apply and save
+The Settings and in-practice menus offer a separate “폰트 설정” editor for
+profile-wide original and translation font and size preferences. “학습 화면”
+edits only the bubble/list layout. Integer sizes from 12 through 48 apply and save
 immediately, with one-unit minus/plus controls and numeric input committed when
 editing ends. Keystrokes remain drafts so invalid prefixes cannot be saved. Invalid drafts
 never replace a saved size. Reset writes 20/18 immediately; new empty profiles
