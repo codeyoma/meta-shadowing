@@ -44,6 +44,9 @@ import { PaidLearningAccess } from '@/core/paid-learning-access';
 import { useLearningMonitor } from '@/components/use-learning-monitor';
 import { useLessonRemote } from '@/components/use-lesson-remote';
 import { useLearningSettings } from '@/components/use-learning-settings';
+import { useLearningDictionary } from '@/components/use-learning-dictionary';
+import { visibleLookupWords } from '@/core/dictionary-words';
+import { dictionary as nativeDictionary } from '../../modules/learning-dictionary';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
 
@@ -87,8 +90,20 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const finishXpGain = useCallback((id: number) => setXpGain(current => current?.id === id ? null : current), []);
   const finishCelebration = useCallback(() => setCelebrating(false), []);
   const acting = useRef(false);
+  const unitKey = state ? `${state.runId}:${state.phrase}` : null;
+  const revealed = unitKey !== null && revealedKey === unitKey;
+  const words = useMemo(() => visibleLookupWords(state ? units[state.phrase] : undefined, stage, revealed,
+    text => nativeDictionary?.words(text) ?? []), [units, state?.phrase, stage, revealed]);
+  const dictionary = useLearningDictionary(() => ({
+    scope: `${profile.id}:${profile.authority}:${pack.packageKey}:${stage}:${unitKey}:${revealed}`,
+    player: engine.current, words,
+    allowed: !isRevealStage(stage) && !!state && state.phase !== 'complete' && !refreshing && !unavailable && !accessDenied && accessReady
+      && AppState.currentState === 'active' && mayUsePackage(pack) && (!paidGuard.current || paidGuard.current.allowed())
+      && getProgressSync().authorized(profile.authority, profile.id)
+      && !!engine.current && `${engine.current.state.runId}:${engine.current.state.phrase}` === unitKey,
+  }));
   const monitorKey = useLearningMonitor(`${profile.id}:${profile.authority}:${pack.packageKey}:${stage}`,
-    state?.phase === 'complete', unavailable || accessDenied, !refreshing && accessReady);
+    state?.phase === 'complete', unavailable || accessDenied, !refreshing && accessReady && !dictionary.blocked);
   useFocusEffect(useCallback(() => {
     let active = true;
     // A drawer return keeps this scope's paused frame mounted while reloading
@@ -97,6 +112,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     setBusy(false);
     setAccessReady(!isPaidDuo(pack));
     const access = isPaidDuo(pack) ? new PaidLearningAccess(paidAccessSource, () => {
+      dictionary.cancel();
       sentenceEntry.cancel(); engine.current?.pause();
       if (active) { setAccessDenied(true); setCelebrating(false); setXpGain(null); }
     }, allowed => {
@@ -187,6 +203,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         });
         engine.current = player;
         removeGuard = getProgressSync().beforeSwitch(() => {
+          dictionary.cancel();
           sentenceEntry.cancel();
           player.pause();
           if (player.error === 'save') throw Error('progress-cloud-storage');
@@ -212,19 +229,19 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   }, [stage, pack, lesson, profile.id, profile.authority, profile.suppressEntry, monitorKey, videoOwner]));
   const leave = () => { engine.current?.pause(); if (engine.current?.error !== 'save') { if (router.canGoBack()) router.back(); else router.replace('/lesson'); } };
   const openOptions = useCallback((option?: 'rate' | 'reveal') => {
-    if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
+    if (dictionary.isBlocked() || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
     if (stage && engine.current && engine.current.error !== 'save' && getProgressSync().authorized(profile.authority, profile.id)) router.push({ pathname: '/player-options', params: { stage, package: pack.packageKey, run: engine.current.state.runId, profile: profile.id, authority: profile.authority, monitorKey, ...(option ? { option } : {}) } });
   }, [pack, unavailable, stage, profile.authority, profile.id, monitorKey]);
   const openInfo = useCallback((kind: 'guide' | 'analysis') => {
-    if (!mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
+    if (dictionary.isBlocked() || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
     if (!stage || !engine.current || engine.current.error === 'save' || !getProgressSync().authorized(profile.authority, profile.id)) return;
     router.push({ pathname: '/player-info', params: { kind, stage, package: pack.packageKey, phrase: engine.current.state.phrase, authority: profile.authority } });
   }, [pack, unavailable, stage, profile.authority, profile.id]);
   async function act(point: ControlPressPoint, repeat = false) {
     const player = engine.current;
-    if (!player || refreshing || unavailable || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || acting.current || !getProgressSync().authorized(profile.authority, profile.id)) return;
+    if (dictionary.isBlocked() || AppState.currentState !== 'active' || !player || refreshing || unavailable || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || acting.current || !getProgressSync().authorized(profile.authority, profile.id)) return;
     acting.current = true; setBusy(true);
     const action = mainPlayerAction(player.state, player.error);
     gainOrigin.current = action === 'confirm' || action === 'next'
@@ -238,7 +255,9 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
         case 'resume': tapFeedback(); await player.resume(); break;
         case 'confirm':
           if (!player.state.running) await player.resume();
-          if (!mayUsePackage(pack)) {player.pause();return;}
+          if (dictionary.isBlocked() || AppState.currentState !== 'active' || engine.current !== player
+            || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed())
+            || !getProgressSync().authorized(profile.authority, profile.id)) { player.pause(); return; }
           await player.confirm(); break;
         case 'next': await player.choose('next'); break;
         case 'leave': tapFeedback(); leave(); break;
@@ -247,10 +266,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       }
     } finally { gainOrigin.current = null; acting.current = false; setBusy(false); }
   }
-  useLessonRemote(state, error, !refreshing && !busy && !unavailable && !accessDenied && accessReady,
+  useLessonRemote(state, error, !dictionary.blocked && !refreshing && !busy && !unavailable && !accessDenied && accessReady,
     monitorKey, () => void act({ x: 0, y: 0 }), () => void act({ x: 0, y: 0 }, true));
-  const unitKey = state ? `${state.runId}:${state.phrase}` : null;
-  const revealed = unitKey !== null && revealedKey === unitKey;
   const unitLabel = isGroupedStage(stage) ? '학습 묶음' : '학습 구간';
   const presented = presentLearningUnits(units, stage, revealed && state ? state.phrase : null);
   // A fresh header function on navigation rerenders can feed setOptions back
@@ -294,7 +311,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
               <Label muted>{state.phraseCount}개 {unitLabel}을 내 목소리로 연습했어요.</Label>
             </Card>
             : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} typography={textSettings ?? undefined} />
-            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} typography={textSettings ?? undefined} />}
+            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} typography={textSettings ?? undefined} onLookup={dictionary.lookup} />}
           </Animated.View>
         </View>
       </>}
@@ -303,7 +320,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       backgroundColor: c.background, paddingBottom: Math.max(insets.bottom, 14) }}>
       {isFirstWordStage(stage) && state.phase !== 'complete' && <Pressable feedback={false}
         accessibilityRole="button" accessibilityLabel={revealed ? '자막 숨기기' : '자막 보기'} accessibilityState={{ selected: revealed, expanded: revealed }}
-        onPress={() => setRevealedKey(revealed ? null : unitKey)}
+        onPress={() => { if (!dictionary.isBlocked()) setRevealedKey(revealed ? null : unitKey); }}
         style={({ pressed }) => ({ alignSelf: 'flex-end', minHeight: 44, paddingHorizontal: 14, paddingVertical: 8,
           flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center', borderRadius: 14,
           borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: pressed ? c.soft : c.card })}>
@@ -312,7 +329,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
       </Pressable>}
       {!isRevealStage(stage) && !unavailable && state.phase !== 'complete' && <CycleTimeline key={`${state.runId}:${state.phrase}`} state={state} duration={duration} animate={motionActive && !error} />}
       <View>
-        <PlayerControls action={mainPlayerAction(state, error)} repeat={canOfferRepeat(state, error)} busy={busy} blocked={refreshing}
+        <PlayerControls action={mainPlayerAction(state, error)} repeat={canOfferRepeat(state, error)} busy={busy} blocked={refreshing || dictionary.blocked}
           onMain={point => void act(point)} onRepeat={point => void act(point, true)} />
         {xpGain && motionActive && <XpGain key={xpGain.id} event={xpGain} onFinish={finishXpGain} />}
       </View>

@@ -1,0 +1,39 @@
+name: LearningDictionaryTests
+options:
+  deploymentTarget:
+    iOS: '26.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  DictionaryTestHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.learningdictionary.tests
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  LearningDictionaryTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - path: ../../modules/learning-dictionary/ios
+        excludes: [LearningDictionaryModule.swift]
+    dependencies:
+      - target: DictionaryTestHost
+      - sdk: UIKit.framework
+      - sdk: NaturalLanguage.framework
+schemes:
+  LearningDictionaryTests:
+    build:
+      targets:
+        DictionaryTestHost: all
+        LearningDictionaryTests: [test]
+    test:
+      targets: [LearningDictionaryTests]

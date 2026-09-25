@@ -158,6 +158,30 @@ unverified, unavailable, failed, or timed-out distribution checks remain locked.
 The map and direct player route use the same policy. Ownership and verified local
 installation remain required. Test access never writes completion records.
 
+## Word lookup — stages 1–10
+
+A single tap on a visible original or translated word opens Apple's system
+dictionary sheet. The player pauses and durably saves first; dismissal leaves
+the same unit, media position, cycles, speed, hint visibility and scroll position
+paused. Lookup never confirms practice or earns XP. Footer and headphone actions
+are blocked until the sheet is gone. Save failures use the existing recovery;
+presentation failures leave the saved learning state paused.
+
+Only fully visible words are eligible. Hidden hints have neither lookup handlers
+nor accessibility lookup actions. VoiceOver exposes per-word actions on the
+visible text, and dismissal returns focus to that text. Apple word tokenization
+handles scripts without spaces; punctuation and whitespace are not targets.
+Current fonts, sizes and line layout remain unchanged.
+
+Definitions depend on dictionaries installed in Settings > General > Dictionary.
+Missing results are normal and dismissible. The app does not extract, cache,
+republish or log definitions, and adds no dictionary service. Backgrounding,
+navigation and access/profile changes invalidate pending lookup. Existing voice
+capture may continue through this temporary sheet, but lookup starts no capture.
+Silent stages 11–16 remain unchanged; their lookup behavior belongs to #80.
+See [dictionary verification](learning-dictionary-verification.md) for measured
+results and remaining device acceptance.
+
 ## Original milestone boundary (historical)
 
 M1 implements subtitle shadowing (method 1, stages 1 and 2), a controlled spoken

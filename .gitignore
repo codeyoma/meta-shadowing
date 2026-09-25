@@ -10,6 +10,8 @@ android/
 !modules/learning-haptics/ios/
 !modules/learning-audio/ios/
 !modules/learning-fonts/ios/
+!modules/learning-dictionary/ios/
+tests/learning-dictionary/*.xcodeproj/
 tests/learning-fonts/*.xcodeproj/
 tests/learning-audio/*.xcodeproj/
 tests/storekit/*.xcodeproj/
