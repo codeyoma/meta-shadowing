@@ -40,7 +40,7 @@ export class ProgressProfiles {
   /** Only an empty local profile gets new defaults; existing appearance is not migrated. */
   initializeLearningSettings(): void {
     if (!this.current().hasData() && this.readValue('settings') === null && this.readValue('selection') === null) {
-      this.saveValue('settings', JSON.stringify(freshSettings()));
+      this.current().initializeSettings(JSON.stringify(freshSettings()));
     }
   }
   retire(id: string): void { this.stores.get(id)?.revoke(); this.stores.delete(id); }

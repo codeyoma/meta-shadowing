@@ -9,6 +9,12 @@
   reset to 20/18, and recover from a simulated local storage failure.
 - Rapid button taps retain the newest accepted value. Invalid numeric drafts
   cannot overwrite it. Minimum/maximum buttons are disabled at their bounds.
+- Malformed legacy preferences and injected SQLite/KV read failures do not block
+  root startup. Initialization failures produce a sanitized recovery alert after
+  mount, preserve existing values, and can recover after reopening the app.
+- Initial defaults persist without a legacy KV write or pending backup work,
+  including after account refresh and reopening SQLite. Real preference edits
+  still become pending and are never acknowledged by initialization.
 - Original/translation rendering uses the selected base sizes with accessibility
   scaling exactly once in bubble/list layouts. Silent stages retain language
   order and hide unrevealed words from accessibility and selection.
@@ -23,8 +29,11 @@
 
 These are local regression tests, not physical-device or live CloudKit evidence.
 
-On 2026-09-25, all 508 tests and TypeScript checking passed. The iOS bundle export
-and Debug simulator build also passed. The native build retains the existing
+On 2026-09-25, PR review regressions increased the suite to 513 tests. A clean,
+isolated `npm ci`, all tests, TypeScript checking, and the iOS bundle export passed.
+The clean install first reproduced CI's missing `react-dom/server` declarations;
+declaring `@types/react-dom` explicitly fixed it without weakening CI checks.
+The earlier Debug simulator build also passed. The native build retains the existing
 warning about the private local video preparation script having no output files.
 
 ## Simulator

@@ -41,6 +41,31 @@ test('new empty profiles use 20/18, while existing preferences and progress are 
   assert.deepEqual(progressed.settings.readSettings(), { mode: 'manual', rate: 1 });
 });
 
+test('untouched defaults stay out of pending backup work across account refresh and reopen', async t => {
+  const f = fixture(t);
+  f.profiles.initializeLearningSettings();
+  await f.sync.refreshAccount();
+  assert.equal(f.sync.getSnapshot().pending, false);
+  assert.equal(f.profiles.preferenceRevision(), 0);
+  const reopened = new ProgressProfiles(f.open, () => 'unused');
+  const relaunched = new ProgressSync(reopened, { stop: async () => {},
+    account: async () => ({ status: 'no-account' }) } as ProgressCloud);
+  t.after(() => relaunched.dispose());
+  reopened.initializeLearningSettings();
+  await relaunched.refreshAccount();
+  assert.equal(relaunched.getSnapshot().pending, false);
+  assert.deepEqual(JSON.parse(reopened.readValue('settings')!), {
+    mode: 'manual', rate: 1, originalTextSize: 20, translationTextSize: 18,
+  });
+  assert.equal(reopened.hasGuestData(), false);
+  const state = relaunched.getSnapshot();
+  relaunched.savePreference('settings', '{"mode":"manual","rate":1,"originalTextSize":21,"translationTextSize":18}',
+    state.authority, state.profile);
+  reopened.initializeLearningSettings();
+  assert.equal(relaunched.getSnapshot().pending, true, 'Initialization must never acknowledge a real edit');
+  assert.equal(reopened.hasGuestData(), true);
+});
+
 test('saved sizes round-trip through reopen and backup, preserving checkpoints and unrelated preferences', async t => {
   const f = fixture(t);
   f.profiles.saveValue('settings', '{"mode":"manual","rate":1.25,"groupSize":4}');

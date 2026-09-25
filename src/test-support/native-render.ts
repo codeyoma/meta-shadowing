@@ -17,6 +17,7 @@ export function nativeModules(adapters: Record<string, unknown>) {
     const module = { exports: {} };
     modules.set(path, module);
     const code = ts.transpileModule(readFileSync(path, 'utf8'), {
+      fileName: path,
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     runInNewContext(code, { module, exports: module.exports, console, setTimeout, clearTimeout, setInterval, clearInterval, performance, queueMicrotask,

@@ -1,4 +1,4 @@
-import { AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { openDatabaseSync } from 'expo-sqlite';
 import Storage from 'expo-sqlite/kv-store';
 import { randomUUID } from 'expo-crypto';
@@ -9,6 +9,7 @@ import { resolveSelection } from '@/core/catalog';
 import { books } from './catalog';
 
 let sync: ProgressSync | undefined;
+let settingsInitializationFailed = false;
 const keys = { settings: 'practice-settings-v1', selection: 'library-selection-v1' };
 export function getProgressSync(): ProgressSync {
   if (!sync) {
@@ -31,12 +32,22 @@ export function getProgressSync(): ProgressSync {
       return JSON.stringify(key === 'settings' ? decodeSettings(raw) : resolveSelection(books, JSON.parse(raw)));
     }, (key, value) => { Storage.setItemSync(keys[key], value); }, key => { Storage.removeItemSync(keys[key]); });
     sync = new ProgressSync(profiles, progressCloud, undefined, randomUUID);
-    if (sync.getSnapshot().learningAvailable) profiles.initializeLearningSettings();
+    try {
+      if (sync.getSnapshot().learningAvailable) profiles.initializeLearningSettings();
+    } catch {
+      // Preferences cannot prevent the root from mounting. Present only a safe
+      // recovery action after mount, without logging stored values or errors.
+      settingsInitializationFailed = true;
+    }
   }
   return sync;
 }
 export function startProgressSync() {
   const coordinator = getProgressSync();
+  if (settingsInitializationFailed) {
+    settingsInitializationFailed = false;
+    Alert.alert('설정을 초기화하지 못했어요', '저장 공간을 확인하고 앱을 다시 열어 주세요.');
+  }
   const account = progressCloud.addListener('accountChanged', () => { void coordinator.accountChanged(); });
   const network = progressCloud.addListener('networkAvailable', () => { void coordinator.networkAvailable(); });
   const lifecycle = AppState.addEventListener('change', state => {
