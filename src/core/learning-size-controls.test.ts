@@ -71,7 +71,7 @@ test('both real settings routes save immediately, share updates, reset, and reco
   const alerts: string[] = [];
   let params: Record<string, string> = { option: 'display' };
   const pack = { owned: true, packageKey: `${manifest.id}-v${manifest.version}`, manifest, language: 'english' };
-  let appState = 'active', focusEntries = 0;
+  let appState = 'active', focusEntries = 0, focused = true;
   const navigation = { addListener: () => () => {}, isFocused: () => true };
   const load = nativeModules({ react: runtime.hooks,
     'react-native': { View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', ScrollView: 'ScrollView',
@@ -81,7 +81,9 @@ test('both real settings routes save immediately, share updates, reset, and reco
       useColorScheme: () => 'light', useWindowDimensions: () => ({ fontScale: 1 }) },
     'react-native-reanimated': nativeMotion, 'expo-font': { isLoaded: () => true }, 'expo-image': { Image: 'Image' },
     'expo-router': { usePathname: () => '/player-options', useLocalSearchParams: () => params,
-      useFocusEffect: (callback: () => any) => runtime.hooks.useEffect(() => { focusEntries++; return callback(); }, [callback]),
+      useFocusEffect: (callback: () => any) => runtime.hooks.useEffect(() => {
+        if (focused) { focusEntries++; return callback(); }
+      }, [callback, focused]),
       useNavigation: () => navigation,
       Stack: { Screen: 'Screen' }, router: { back() {} } },
     'expo-router/react-navigation': { useHeaderHeight: () => 50, useNavigationState: () => null, useIsFocused: () => true },
@@ -171,10 +173,10 @@ test('both real settings routes save immediately, share updates, reset, and reco
   const PlayerScreen = load('app/player.tsx').default;
   const { ProgressProfile } = load('components/progress-profile.tsx');
   appState = 'background'; // Start paused; no elapsed timer/automatic entry alters the comparison.
-  for (const stage of [1, 7, 11, 15] as const) {
+  for (const stage of [1, 5, 7, 9, 11, 15] as const) {
     runtime.render(null);
     const input = { runId: `mounted-${stage}`, stage, mode: 'manual' as const, rate: 1.25 };
-    const checkpoint = { ...(stage === 7
+    const checkpoint = { ...(stage === 7 || stage === 9
       ? createGroupedSession({ ...input, sourcePhraseCount: manifest.phrases.length, groupSize: 4 })
       : createSession({ ...input, phraseCount: manifest.phrases.length })), phase: 'listening' as const, audioSeconds: 1.5 };
     profiles.current().journal.save(pack.packageKey, checkpoint, { language: 'english', book: manifest.id });
@@ -192,6 +194,24 @@ test('both real settings routes save immediately, share updates, reset, and reco
     assert(output.some(node => node.props.style?.fontSize === 48), `Stage ${stage} mounted text updates`);
     assert(output.some(node => node.props.style?.fontFamily === 'Georgia'), `Stage ${stage} mounted font updates`);
     assert.equal(alerts.length, 2);
+    if (stage === 5 || stage === 9) {
+      runtime.find('자막 보기').onPress();
+      assert.equal(runtime.find('자막 숨기기').accessibilityState.expanded, true);
+      focused = false; runtime.flush(); // The options route blurs, but does not unmount, the player.
+      settings.saveSettings({ ...settings.readSettings(), originalTextFont: 'rounded' }, 'guest', 0);
+      runtime.flush();
+      focused = true; runtime.flush();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(runtime.find('자막 숨기기').accessibilityState.expanded, true,
+        `Stage ${stage} menu return preserves explicitly revealed hints`);
+      assert.deepEqual(profiles.current().journal.load(pack.packageKey, stage, manifest.phrases.length), checkpoint);
+      focused = false; runtime.flush();
+      profiles.current().journal.save(pack.packageKey, { ...checkpoint, phrase: 1 }, { language: 'english', book: manifest.id });
+      focused = true; runtime.flush();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(runtime.find('자막 보기').accessibilityState.expanded, false,
+        'A different phrase must not inherit the previous answer reveal');
+    }
     settings.saveSettings({ ...settings.readSettings(), originalTextSize: 20, translationTextSize: 18 }, 'guest', 0);
   }
 });

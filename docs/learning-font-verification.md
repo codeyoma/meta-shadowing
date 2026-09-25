@@ -37,15 +37,43 @@ device. A native build without this module safely offers System only.
   accessibility scaling, and unchanged reference-label typography.
 - Mounted player regressions cover audio/grouped/reveal checkpoints without
   restarting the focus effect or changing phase, position, speed, cycles or XP.
+  First-word stages also exercise a real player blur/refocus boundary: a revealed
+  answer survives font editing for the same run and phrase, but not a new phrase.
 - The separate iOS test fixture validates the actual built-in catalog and uses
   UIKit/Core Text to lay out mixed Latin/Korean text at 12, 20, 48 and 150 points,
   with no missing-glyph boxes. The native fixture is included in CI.
+
+## Observed results (2026-09-25)
+
+- `npm run check`: 520 tests passed, zero failures; type checking passed. This
+  includes 495 core tests and 25 build/package checks after review fixes.
+- `npm run bundle:ios`: passed. The final Debug Simulator app also built and
+  launched with embedded JavaScript. One existing private-video preparation
+  script warning remained; no new font-module compiler warnings appeared.
+- Native font fixture on iPhone 18 Pro Simulator, iOS 27.0: two tests passed,
+  zero failures. Mixed-script layout ran at all four parameterized sizes.
+- Actual app: all six choices appeared; original Georgia and translation Apple
+  SD Gothic Neo updated the fixed preview independently at 20/18. Relaunch
+  retained them and stage 1 bubble text used them while navigation/counters
+  retained their existing typeface. Both editor routes were opened.
+- Actual app: font reset switched the preview to System while keeping 21/18;
+  size reset restored 20/18. Light appearance and the original system content
+  size were restored after dark/max-accessibility-size checks. At maximum
+  Dynamic Type, choices use wide scrollable rows instead of narrow columns.
+- Review: separate Standards and Spec reviews completed. The naming/shared
+  font-style cleanup and same-phrase reveal retention finding were fixed and
+  rechecked. These results are local, not a remote CI or physical-device pass.
 
 ## Acceptance boundaries
 
 Simulator testing is recorded separately from physical-device testing. Native
 Core Text tests do not by themselves prove the app's entire scrolling/layout
 matrix, VoiceOver operation, or physical-device behavior.
+
+The simulator observations above are a representative subset, not a completed
+visual matrix of every font, size, layout, and audio/video/silent stage. Automated
+rendering and checkpoint tests cover the wider state matrix; the remaining
+on-device interaction checks must still be recorded separately.
 
 Physical-iPhone font availability, mixed-text readability, both layouts, large
 Dynamic Type, audio/video and silent practice, and repeated menu changes remain

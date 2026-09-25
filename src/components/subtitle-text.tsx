@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Text, useWindowDimensions } from 'react-native';
-import { isLoaded } from 'expo-font';
+import { textFontStyle } from './text-font';
 import Animated, { cubicBezier, useReducedMotion } from 'react-native-reanimated';
 import { subtitleSpans } from '@/core/subtitle-mask';
 
@@ -14,11 +14,9 @@ export function SubtitleText({ text, masked, background, color, size, display = 
   const { fontScale } = useWindowDimensions();
   const reduced = useReducedMotion();
   const spans = useMemo(() => subtitleSpans(text), [text]);
-  const rounded = !fontFamily && display && isLoaded('Nunito_800ExtraBold');
   const accessibleText = masked ? spans.filter(span => span.hint).map(span => span.text).join(' … ') : text;
   return <Text accessible accessibilityLabel={accessibleText} selectable={!masked} allowFontScaling={false}
-    style={{ color, fontSize: size * fontScale, fontFamily: fontFamily ?? (rounded ? 'Nunito_800ExtraBold' : undefined),
-      fontWeight: fontFamily ? '400' : rounded ? undefined : weight,
+    style={{ color, fontSize: size * fontScale, ...textFontStyle(fontFamily, display, weight),
       lineHeight: size * fontScale * (display && !fontFamily ? 1.2 : 1.45), flexShrink: 1 }}>
     {spans.map((span, index) => <Animated.Text key={index} accessible={false} style={{
       color: masked && !span.hint ? background : color,

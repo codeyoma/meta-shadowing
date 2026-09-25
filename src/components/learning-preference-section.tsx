@@ -6,7 +6,7 @@ import { SettingsSection } from './settings-section';
 import { useSettingsColors } from './settings-row';
 import { SystemPicker } from './system-picker';
 import { FeedbackPressable } from './feedback-pressable';
-import { LearningTextSizeControl } from './learning-text-size-control';
+import { LearningTypographyControl } from './learning-typography-control';
 
 export type LearningPreference = 'display' | 'rate' | 'group' | 'wpm';
 
@@ -57,5 +57,5 @@ export function LearningPreferenceSection({ option, settings, onChange, activeGr
     <SystemPicker label="학습 화면" value={settings.speechView ?? 'bubble'}
       options={[{ value: 'bubble', label: '버블로 보기' }, { value: 'list', label: '리스트로 보기' }] as const}
       onChange={speechView => onChange({ speechView })} />
-  </SettingsSection><LearningTextSizeControl settings={settings} onChange={onChange} /></>;
+  </SettingsSection><LearningTypographyControl settings={settings} onChange={onChange} /></>;
 }

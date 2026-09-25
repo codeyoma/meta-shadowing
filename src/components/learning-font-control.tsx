@@ -1,4 +1,4 @@
-import { Pressable, View } from 'react-native';
+import { Pressable, View, useWindowDimensions } from 'react-native';
 import { learningFonts, type LearningFont } from '@/core/learning-fonts';
 import { availableFontChoices } from '@/native/learning-fonts';
 import { Icon, Label } from './ui';
@@ -8,6 +8,7 @@ export function LearningFontControl({ label, value, onChange }: {
   label: string; value?: LearningFont; onChange(value: LearningFont): boolean | void;
 }) {
   const c = useSettingsColors();
+  const { fontScale } = useWindowDimensions();
   const unavailable = value !== undefined && !availableFontChoices.some(font => font.id === value);
   return <View style={{ gap: 8 }}>
     <View style={{ paddingHorizontal: 8 }}><Label size={15} weight="600" color={c.secondary}>{label}</Label></View>
@@ -16,7 +17,7 @@ export function LearningFontControl({ label, value, onChange }: {
         const selected = (value ?? 'system') === font.id;
         return <Pressable key={font.id} accessibilityRole="radio" accessibilityLabel={`${label}: ${font.label}`}
           accessibilityState={{ checked: selected }} onPress={() => onChange(font.id)}
-          style={({ pressed }) => ({ flexGrow: 1, flexBasis: 100, minHeight: 48, paddingHorizontal: 12, paddingVertical: 10,
+          style={({ pressed }) => ({ flexGrow: 1, flexBasis: 100 * fontScale, maxWidth: '100%', minHeight: 48, paddingHorizontal: 12, paddingVertical: 10,
             borderRadius: 16, borderCurve: 'continuous', borderWidth: 1, borderColor: selected ? '#007aff' : c.separator,
             backgroundColor: pressed ? c.pressed : c.group, flexDirection: 'row', alignItems: 'center', gap: 6 })}>
           <View style={{ flex: 1 }}><Label size={15} color={selected ? '#007aff' : c.text}>{font.label}</Label></View>

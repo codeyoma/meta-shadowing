@@ -7,19 +7,20 @@ import type { Settings } from './settings';
 
 test('font taps update independent previews immediately; reset preserves sizes and failures preserve accepted choices', t => {
   const runtime = nativeHooks(); t.after(runtime.dispose);
+  let fontScale = 1;
   const load = nativeModules({ react: runtime.hooks,
     'react-native': { View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', StyleSheet: { hairlineWidth: 1 },
-      PlatformColor: (name: string) => name, useColorScheme: () => 'light', useWindowDimensions: () => ({ fontScale: 1 }) },
+      PlatformColor: (name: string) => name, useColorScheme: () => 'light', useWindowDimensions: () => ({ fontScale }) },
     'react-native-reanimated': nativeMotion, 'expo-font': { isLoaded: () => true }, 'expo-image': { Image: 'Image' },
     'expo-router': { usePathname: () => '/player-options' }, '@/native/tap-feedback': { tapFeedback() {} },
     '@/../modules/learning-fonts': { availableLearningFonts: () => ['system', 'rounded', 'serif', 'georgia'] },
   });
-  const { LearningTextSizeControl } = load('components/learning-text-size-control.tsx');
+  const { LearningTypographyControl } = load('components/learning-typography-control.tsx');
   let saved: Settings = { mode: 'manual', rate: 1.25, groupSize: 4, originalTextSize: 32, translationTextSize: 18 };
   let fail = false;
   function Editor() {
     const [settings, setSettings] = runtime.hooks.useState(saved);
-    return React.createElement(LearningTextSizeControl, { settings, onChange(patch: Partial<Settings>) {
+    return React.createElement(LearningTypographyControl, { settings, onChange(patch: Partial<Settings>) {
       if (fail) return false;
       saved = { ...saved, ...patch }; setSettings(saved); return true;
     } });
@@ -37,6 +38,11 @@ test('font taps update independent previews immediately; reset preserves sizes a
   assert.equal(preview.props.style.fontFamily, 'ui-serif');
   assert.equal(preview.props.style.fontSize, 32);
   assert.equal(runtime.find('원문 폰트: Serif').accessibilityState.checked, true);
+  fontScale = 3;
+  const choice = runtime.find('원문 폰트: Serif').style({ pressed: false });
+  assert.equal(choice.flexBasis, 300, 'Large accessibility text gets wider, wrapping choices');
+  assert.equal(choice.maxWidth, '100%', 'Even the widest choice stays inside its scroll container');
+  fontScale = 1;
   fail = true;
   runtime.find('원문 폰트: Rounded').onPress();
   assert.equal(runtime.find('원문 폰트: Serif').accessibilityState.checked, true);

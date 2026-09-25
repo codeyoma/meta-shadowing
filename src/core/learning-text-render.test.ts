@@ -19,7 +19,7 @@ const phrases = [{ text: 'Open the window.', translation: '창문을 여세요.'
 test('custom original and translation sizes apply once in both layouts without changing the unit label', () => {
   for (const view of ['bubble', 'list']) {
     const html = renderToStaticMarkup(React.createElement(SpeechContent, { phrases, active: 0, view,
-      textSizes: { originalTextSize: 32, translationTextSize: 21 } }));
+      typography: { originalTextSize: 32, translationTextSize: 21 } }));
     assert.match(html, /data-size="64"/);
     assert.match(html, /data-size="42"/);
     assert.match(html, /data-scaling="false"/);
@@ -34,7 +34,7 @@ test('silent stages use chosen sizes while retaining their reveal order, hidden 
     const before = JSON.stringify(state);
     for (const view of ['bubble', 'list']) {
       const html = renderToStaticMarkup(React.createElement(WordRevealContent, { state, view, phrase: phrases[0],
-        textSizes: { originalTextSize: 48, translationTextSize: 12 } }));
+        typography: { originalTextSize: 48, translationTextSize: 12 } }));
       assert.match(html, /data-size="24"/);
       assert.match(html, /data-selectable="false"/);
       assert.doesNotMatch(html, /aria-label="Open the window\.|aria-label="창문을 여세요\./);
@@ -51,7 +51,7 @@ test('silent stages use chosen sizes while retaining their reveal order, hidden 
 test('legacy sizes stay unchanged without preferences and masked text stays inaccessible at custom sizes', () => {
   assert.match(renderToStaticMarkup(React.createElement(SpeechContent, { phrases, active: 0, view: 'bubble' })), /data-size="58"/);
   const html = renderToStaticMarkup(React.createElement(SpeechContent, { active: 0, view: 'list',
-    phrases: [{ ...phrases[0], masked: true }], textSizes: { originalTextSize: 20, translationTextSize: 18 } }));
+    phrases: [{ ...phrases[0], masked: true }], typography: { originalTextSize: 20, translationTextSize: 18 } }));
   assert.match(html, /data-size="40"/);
   assert.match(html, /aria-label="Open"/);
   assert.doesNotMatch(html, /aria-label="Open the window/);

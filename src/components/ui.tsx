@@ -2,7 +2,7 @@ import type { PropsWithChildren } from 'react';
 import { Text, View, useColorScheme, useWindowDimensions, type TextStyle, type ViewStyle } from 'react-native';
 import { FeedbackPressable as Pressable } from './feedback-pressable';
 import { Image } from 'expo-image';
-import { isLoaded } from 'expo-font';
+import { textFontStyle } from './text-font';
 import Animated, { Easing, LinearTransition, ReduceMotion, useReducedMotion } from 'react-native-reanimated';
 import type { SFSymbol } from 'sf-symbols-typescript';
 import { palettes } from './theme';
@@ -17,10 +17,9 @@ export function Label({ children, size = 17, muted = false, weight = '500', colo
 }>) {
   const c = usePalette();
   const { fontScale } = useWindowDimensions();
-  const rounded = !fontFamily && display && isLoaded('Nunito_800ExtraBold');
   // Keep native measurement in sync when Dynamic Type changes with the screen open.
   return <Text selectable allowFontScaling={false} style={{ color: color ?? (muted ? c.secondary : c.text), fontSize: size * fontScale,
-    fontFamily: fontFamily ?? (rounded ? 'Nunito_800ExtraBold' : undefined), fontWeight: fontFamily ? '400' : rounded ? undefined : weight,
+    ...textFontStyle(fontFamily, display, weight),
     lineHeight: size * fontScale * (display ? 1.2 : 1.45), flexShrink: 1, textAlign: align }}>{children}</Text>;
 }
 

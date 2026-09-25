@@ -7,9 +7,9 @@ import type { LearningTypography } from '@/core/settings';
 import { learningFontFamily } from '@/native/learning-fonts';
 
 /** Hidden ink retains line wrapping; VoiceOver can read only words already revealed. */
-export function WordRevealContent({ phrase, state, view, textSizes }: {
+export function WordRevealContent({ phrase, state, view, typography }: {
   phrase?: { text: string; translation: string }; state: Session; view: 'bubble' | 'list';
-  textSizes?: LearningTypography;
+  typography?: LearningTypography;
 }) {
   const c = usePalette();
   const { fontScale } = useWindowDimensions();
@@ -22,11 +22,11 @@ export function WordRevealContent({ phrase, state, view, textSizes }: {
     gap: 16, backgroundColor: background, borderRadius: view === 'bubble' ? 24 : 14,
     borderBottomLeftRadius: view === 'bubble' ? 6 : 14, borderWidth: 1, borderColor: c.line }}>
     {shown.map((line, index) => {
-      const fontFamily = learningFontFamily(line.kind === 'target' ? textSizes?.originalTextFont : textSizes?.translationTextFont);
+      const fontFamily = learningFontFamily(line.kind === 'target' ? typography?.originalTextFont : typography?.translationTextFont);
       return <Text key={index} accessible selectable={false} allowFontScaling={false}
       accessibilityLabel={line.visibleText || '문장 표시 대기'}
-      style={{ fontSize: (line.kind === 'target' ? textSizes?.originalTextSize ?? 27 : textSizes?.translationTextSize ?? 20) * fontScale,
-        lineHeight: (line.kind === 'target' ? (textSizes?.originalTextSize ?? 27) * (fontFamily ? 1.45 : 35 / 27) : (textSizes?.translationTextSize ?? 20) * 29 / 20) * fontScale,
+      style={{ fontSize: (line.kind === 'target' ? typography?.originalTextSize ?? 27 : typography?.translationTextSize ?? 20) * fontScale,
+        lineHeight: (line.kind === 'target' ? (typography?.originalTextSize ?? 27) * (fontFamily ? 1.45 : 35 / 27) : (typography?.translationTextSize ?? 20) * 29 / 20) * fontScale,
         fontFamily, fontWeight: fontFamily ? '400' : line.kind === 'target' ? '700' : '500', color: c.heading, flexShrink: 1 }}>
       {line.spans.map((span, i) => <Text key={i} accessible={false}
         style={{ color: span.visible ? c.heading : background }}>{span.text}</Text>)}

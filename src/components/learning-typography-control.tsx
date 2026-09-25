@@ -48,7 +48,7 @@ function SizeInput({ label, value, onChange }: {
 }
 
 /** Each accepted edit is durable; there is no separate preview/save transaction. */
-export function LearningTextSizeControl({ settings, onChange }: {
+export function LearningTypographyControl({ settings, onChange }: {
   settings: LearningTypography;
   onChange(patch: Partial<Settings>): boolean | void;
 }) {

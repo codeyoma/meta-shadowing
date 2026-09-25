@@ -17,7 +17,7 @@ test('built-in font selection affects only active text, retains sizes and keeps 
   const phrases = [{ text: 'Open the window.', translation: '창문을 여세요.', masked: true }];
   for (const view of ['bubble', 'list']) {
     const nodes = runtime.render(React.createElement(SpeechContent, { phrases, active: 0, view,
-      textSizes: { originalTextSize: 32, translationTextSize: 18, originalTextFont: 'serif', translationTextFont: 'georgia' } }));
+      typography: { originalTextSize: 32, translationTextSize: 18, originalTextFont: 'serif', translationTextFont: 'georgia' } }));
     const target = nodes.find(node => node.props.accessibilityLabel === 'Open')!;
     assert.equal(target.props.style.fontFamily, 'ui-serif');
     assert.equal(target.props.style.fontSize, 64);
@@ -43,7 +43,7 @@ test('unavailable fonts fall back without overwriting choices and silent stages 
   const phrase = { text: 'Open the window.', translation: '창문을 여세요.' };
   const preferences = Object.freeze({ originalTextSize: 48, translationTextSize: 12,
     originalTextFont: 'serif', translationTextFont: 'georgia' });
-  const nodes = runtime.render(React.createElement(SpeechContent, { phrases: [phrase], active: 0, view: 'bubble', textSizes: preferences }));
+  const nodes = runtime.render(React.createElement(SpeechContent, { phrases: [phrase], active: 0, view: 'bubble', typography: preferences }));
   assert.equal(nodes.find(node => node.props.accessibilityLabel === phrase.text)!.props.style.fontFamily, 'system-ui');
   const legacy = runtime.render(React.createElement(SpeechContent, { phrases: [phrase], active: 0, view: 'bubble' }));
   assert.equal(legacy.find(node => node.props.accessibilityLabel === phrase.text)!.props.style.fontFamily, 'Nunito_800ExtraBold');
@@ -52,7 +52,7 @@ test('unavailable fonts fall back without overwriting choices and silent stages 
       phase: 'listening' as const, audioSeconds: 0.4 };
     const before = JSON.stringify(state);
     for (const view of ['bubble', 'list']) {
-      const content = runtime.render(React.createElement(WordRevealContent, { phrase, state, view, textSizes: preferences }));
+      const content = runtime.render(React.createElement(WordRevealContent, { phrase, state, view, typography: preferences }));
       const lines = content.filter(node => node.props.accessibilityLabel);
       assert.equal(lines.length, stage >= 15 ? 1 : 2);
       for (const line of lines) {
