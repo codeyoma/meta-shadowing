@@ -33,6 +33,8 @@ On iOS 27, the rebuilt app opened Apple's dictionary for a tapped original word
 and for a tapped Korean translation word. The system showed its normal missing
 content screen because no dictionary was installed. Closing returned to the same
 phrase and confirmation state without automatic playback or progression.
+Interactive downward dismissal of the sheet also returned to that same paused
+phrase without advancing its cycle.
 
 The app's Debug Simulator build completed. Build output also contains existing
 dependency warnings; this work does not claim a warning-free dependency tree.
@@ -41,8 +43,8 @@ dependency warnings; this work does not claim a warning-free dependency tree.
 
 - Real definitions and offline lookup with a downloaded dictionary, separately
   from the observed missing-dictionary result.
-- Interactive swipe dismissal, full VoiceOver operation/focus containment and
-  maximum accessibility text size on a physical iPhone.
+- Interactive swipe dismissal on a physical iPhone, full VoiceOver operation/
+  focus containment and maximum accessibility text size on that device.
 - Physical audio/video interruption, grouped member position, wired-headphone
   commands and voice monitoring while the dictionary is open.
 - A complete physical-device pass in both layouts and light/dark appearances.

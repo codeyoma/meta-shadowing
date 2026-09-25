@@ -10,7 +10,7 @@ test('visible words have tap and accessibility lookup without exposing hidden te
     .filter(s => s.isWordLike).map(s => ({ start: s.index, end: s.index + s.segment.length }));
   const load = nativeModules({ react: runtime.hooks,
     'expo-font': { isLoaded: () => false },
-    'react-native': { Text: 'Text', useWindowDimensions: () => ({ fontScale: 1.5 }), findNodeHandle: () => 1 },
+    'react-native': { Text: 'Text', View: 'View', useWindowDimensions: () => ({ fontScale: 1.5 }), findNodeHandle: () => 1 },
     'react-native-reanimated': { ...nativeMotion, default: { Text: 'Text' } },
     '@/../modules/learning-dictionary': { dictionary: { words: tokenize } },
   });
@@ -22,8 +22,13 @@ test('visible words have tap and accessibility lookup without exposing hidden te
   assert.deepEqual(words.map(n => n.props.children), ['Open', 'Close']);
   words[0]!.props.onPress();
   const parent = nodes.find(n => n.props.accessibilityActions)!;
-  assert.equal(parent.props.style.fontSize, 30);
-  assert.equal(parent.props.selectable, false);
+  assert.equal(parent.type, 'View', 'Native View retains custom actions; Fabric paragraph proxies do not');
+  assert.equal(parent.props.accessible, true);
+  const paragraph = nodes.find(n => n.type === 'Text' && n.props.allowFontScaling === false)!;
+  assert.equal(paragraph.props.style.fontSize, 30);
+  assert.equal(paragraph.props.selectable, false);
+  assert.equal(paragraph.props.accessible, false);
+  assert.equal(paragraph.props.accessibilityElementsHidden, true, 'Only the safe container label/actions enter VoiceOver');
   assert.equal(parent.props.accessibilityLabel, 'Open … Close');
   parent.props.onAccessibilityAction({ nativeEvent: { actionName: parent.props.accessibilityActions[1].name } });
   assert.deepEqual(looked, ['Open', 'Close']);

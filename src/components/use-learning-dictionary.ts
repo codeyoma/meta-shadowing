@@ -17,6 +17,8 @@ export function useLearningDictionary(context: () => DictionaryContext) {
   }, () => { if (lifetime.current.active) render(value => value + 1); }) : null);
   const scope = `${context().scope}:${lifetime.current.epoch}`;
   const cancel = () => { void controller?.cancel().catch(() => {}); };
+  const isCurrent = () => lifetime.current.active && AppState.currentState === 'active' && navigation.isFocused()
+    && `${latest.current().scope}:${lifetime.current.epoch}` === scope && latest.current().allowed;
   useEffect(() => {
     lifetime.current.active = true;
     const invalidate = () => { lifetime.current.epoch++; cancel(); render(value => value + 1); };
@@ -32,12 +34,10 @@ export function useLearningDictionary(context: () => DictionaryContext) {
     lookup: controller ? async (term: string, focus: number | null) => {
       try { await controller.lookup(scope, term); }
       catch {
-        if (lifetime.current.active && AppState.currentState === 'active' && navigation.isFocused()
-          && `${latest.current().scope}:${lifetime.current.epoch}` === scope && latest.current().allowed)
+        if (isCurrent())
           Alert.alert('사전을 열 수 없어요', '다시 눌러 주세요. 사전은 설정 > 일반 > 사전에서 추가할 수 있어요.');
       }
-      if (focus !== null && lifetime.current.active && AppState.currentState === 'active' && navigation.isFocused()
-        && `${latest.current().scope}:${lifetime.current.epoch}` === scope && latest.current().allowed && !controller.blocked)
+      if (focus !== null && isCurrent() && !controller.blocked)
         AccessibilityInfo.setAccessibilityFocus(focus);
     } : undefined };
 }

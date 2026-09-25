@@ -45,8 +45,7 @@ import { useLearningMonitor } from '@/components/use-learning-monitor';
 import { useLessonRemote } from '@/components/use-lesson-remote';
 import { useLearningSettings } from '@/components/use-learning-settings';
 import { useLearningDictionary } from '@/components/use-learning-dictionary';
-import { lookupSpans } from '@/core/dictionary-words';
-import { groupedSpeechBubbles } from '@/core/grouped-speech';
+import { visibleLookupWords } from '@/core/dictionary-words';
 import { dictionary as nativeDictionary } from '../../modules/learning-dictionary';
 
 const CONTENT_ENTER = FadeIn.duration(120).reduceMotion(ReduceMotion.System);
@@ -93,14 +92,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const acting = useRef(false);
   const unitKey = state ? `${state.runId}:${state.phrase}` : null;
   const revealed = unitKey !== null && revealedKey === unitKey;
-  const words = useMemo(() => {
-    const unit = state && units[state.phrase];
-    if (!unit || !nativeDictionary || isRevealStage(stage)) return new Set<string>();
-    return new Set(groupedSpeechBubbles(unit.members).flat().flatMap(pair => [
-      ...lookupSpans(pair.text, isFirstWordStage(stage) && !revealed, text => nativeDictionary!.words(text)),
-      ...lookupSpans(pair.translation, false, text => nativeDictionary!.words(text)),
-    ]).flatMap(span => span.term ? [span.term] : []));
-  }, [units, state?.phrase, stage, revealed]);
+  const words = useMemo(() => visibleLookupWords(state ? units[state.phrase] : undefined, stage, revealed,
+    text => nativeDictionary?.words(text) ?? []), [units, state?.phrase, stage, revealed]);
   const dictionary = useLearningDictionary(() => ({
     scope: `${profile.id}:${profile.authority}:${pack.packageKey}:${stage}:${unitKey}:${revealed}`,
     player: engine.current, words,
