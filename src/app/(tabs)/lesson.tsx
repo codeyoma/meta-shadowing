@@ -20,7 +20,7 @@ export default function Lesson() {
   const c = usePalette();
   const { selection } = useLibrary();
   const selectedBook = selectedPackage(selection.packageKey);
-  const { ready, allowed: access } = usePackageLearningStatus(selectedBook);
+  const { ready, accessBlocked, allowed: access } = usePackageLearningStatus(selectedBook);
   const { records, overview, bypass } = useBookRecords(selectedBook ?? null);
   function open(stage: number) {
     if (selectedBook && isVideoPackage(selectedBook) && !videoStageAvailable(stage)) return;
@@ -57,7 +57,7 @@ export default function Lesson() {
         disabled={!access || !overview} accessibilityState={{ disabled: !access || !overview }}
         onPress={() => open(overview!.current)} style={({ pressed }) => ({ padding: 14, minHeight: 66, gap: 12,
           flexDirection: 'row', alignItems: 'center', borderRadius: 16, backgroundColor: c.accent,
-          opacity: !ready || !overview ? 0.5 : pressed ? 0.75 : 1, boxShadow: `0 4px 0 ${c.accentPressed}` })}>
+          opacity: accessBlocked || !ready || !overview ? 0.5 : pressed ? 0.75 : 1, boxShadow: `0 4px 0 ${c.accentPressed}` })}>
         <View style={{ flex: 1, gap: 2 }}>
           <Label size={11} weight="800" color={c.onAccent}>STAGE {String(overview?.current ?? 1).padStart(2, '0')}</Label>
           <View style={{ alignSelf: 'flex-start' }}><MethodLabel stage={overview?.current ?? 1} onAccent /></View>
@@ -69,7 +69,10 @@ export default function Lesson() {
         </View>
       </Pressable>
     </View>
-    {ready === false && <Card><Label>레슨 설치가 필요해요.</Label><ActionButton title="도서 선택으로" onPress={() => router.navigate('/')} /></Card>}
+    {accessBlocked
+      ? <Card><Label>구매 내역을 확인할 수 없어요. 설정에서 구매 복원을 시도해 주세요. 자료와 학습 기록은 유지돼요.</Label>
+        <ActionButton title="구매 복원으로" onPress={() => router.navigate('/settings')} /></Card>
+      : ready === false && <Card><Label>레슨 설치가 필요해요.</Label><ActionButton title="도서 선택으로" onPress={() => router.navigate('/')} /></Card>}
     {records && overview && <StagePath records={records} current={overview.current} ready={access} bypass={bypass} onSelect={open} />}
   </ScrollView>;
 }

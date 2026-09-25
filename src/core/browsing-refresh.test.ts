@@ -8,6 +8,7 @@ import React from 'react';
 import ts from 'typescript';
 import { DatabaseSync } from 'node:sqlite';
 import { Journal } from './journal';
+import { PaidAccessStore } from './paid-access';
 import { palettes } from '../components/theme';
 
 const require = createRequire(import.meta.url);
@@ -41,10 +42,16 @@ function fixture() {
   let permitted = true;
   let selected = pack;
   let revision = 0;
+  let readAccess = async () => ({ allowed: permitted, revision });
   let monitorState = 'off';
   const monitorStatus = () => ({ state: monitorState, output: 'headphones', gain: 0.25 });
   const monitorListeners = new Set<(status: ReturnType<typeof monitorStatus>) => void>();
   const accessListeners = new Set<(value: { allowed: boolean; revision: number }) => void>();
+  const paidAccess = new PaidAccessStore({ read: () => readAccess(), listen: fn => {
+    accessListeners.add(fn); return () => { accessListeners.delete(fn); };
+  } });
+  void paidAccess.refresh();
+  const navigation: unknown[] = [];
   const appListeners = new Set<(state: string) => void>();
   const timers = new Set<() => void>();
   let render: () => unknown = () => null, output: unknown;
@@ -86,7 +93,8 @@ function fixture() {
       useColorScheme: () => 'light', AppState: { currentState: 'active', addEventListener: (_: string, fn: (state: string) => void) => {
         appListeners.add(fn); return { remove: () => appListeners.delete(fn) };
       } } },
-    'expo-router': { router: { navigate() {}, push() {} }, useFocusEffect: (fn: () => any) => effect(fn, [fn], true) },
+    'expo-router': { router: { navigate(path: unknown) { navigation.push(path); }, push(path: unknown) { navigation.push(path); } },
+      useFocusEffect: (fn: () => any) => effect(fn, [fn], true) },
     'expo-image': { Image: 'Image' },
     'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' },
       useReducedMotion: () => true, LayoutAnimationConfig: 'LayoutAnimationConfig', ReduceMotion: { System: 'system' },
@@ -95,13 +103,11 @@ function fixture() {
     '@/native/package': { isInstalled: () => verify(), installBundledPackage: () => install() },
     '@/native/package-storage': { readPackageStorage: () => readStorage(), removePackageMaterials: () => remove() },
     '@/native/catalog': { selectedPackage: () => selected, languages: [{ id: 'english', name: 'English' }] },
-    '@/native/paid-package': { isPaidDuo: (p: typeof pack) => p.manifest.id === 'duo-33', mayUsePackage: () => permitted,
+    '@/native/paid-package': { isPaidDuo: (p: typeof pack) => p.manifest.id === 'duo-33',
+      mayUsePackage: (p: typeof pack) => p.manifest.id !== 'duo-33' || paidAccess.getSnapshot().allowed,
       paidDuoActions: { status: () => readDelivery(), start: () => install() },
-      paidAccess: { getSnapshot: () => ({ allowed: permitted, revision }), refresh: async () => {},
-        subscribe: (fn: any) => { accessListeners.add(fn); return () => accessListeners.delete(fn); } },
-      paidAccessSource: { refresh: async () => ({ allowed: permitted, revision }), subscribe: (fn: any) => {
-        accessListeners.add(fn); return () => accessListeners.delete(fn);
-      } } },
+      paidAccess, paidAccessSource: { refresh: paidAccess.refresh,
+        subscribe: (fn: any) => paidAccess.subscribe(() => fn(paidAccess.getSnapshot())) } },
     '@/native/video-package': { videoPackageActions: { install: async () => {} } },
     '@/native/hosted-package': { hostedStatus: () => readDelivery(), downloadHostedSample: () => install() },
     '@/native/free-duo': { isFreeDuo: () => false },
@@ -163,7 +169,7 @@ function fixture() {
     return output;
   }
   return {
-    load, flush, nodes: () => nodes(flush()),
+    load, flush, navigation, nodes: () => nodes(flush()),
     mount(fn: () => unknown) { render = fn; dirty = true; return flush(); },
     async settle() { for (let i = 0; i < 15; i++) { await Promise.resolve(); flush(); } },
     blur() { focused = false; for (const e of effects.values()) if (e.focus) { e.cleanup?.(); e.cleanup = undefined; e.pending = true; } },
@@ -175,6 +181,8 @@ function fixture() {
     select(value: typeof pack) { selected = value; dirty = true; },
     revoke() { permitted = false; revision++; accessListeners.forEach(fn => fn({ allowed: false, revision })); dirty = true; },
     grant() { permitted = true; revision++; accessListeners.forEach(fn => fn({ allowed: true, revision })); dirty = true; },
+    failAccessCheck() { readAccess = async () => { throw Error('bridge-unavailable'); }; return paidAccess.refresh(); },
+    restoreAccess() { permitted = true; revision++; readAccess = async () => ({ allowed: permitted, revision }); return paidAccess.refresh(); },
     background() { appListeners.forEach(fn => fn('background')); dirty = true; },
     foreground() { appListeners.forEach(fn => fn('active')); dirty = true; },
     poll() { const pending = [...timers]; timers.clear(); for (const timer of pending) timer(); },
@@ -289,6 +297,51 @@ test('cached installation never grants revoked access and restored access update
     assert.equal(status.ready, true, 'Revocation does not delete downloaded files');
     assert.equal(status.allowed, false);
     f.grant(); f.flush(); assert.equal(status.allowed, true);
+  } finally { f.close(); }
+});
+
+for (const reason of ['revoked', 'check failed'] as const) {
+  test(`installed paid stages offer purchase recovery when access is ${reason}`, async () => {
+    const f = fixture();
+    try {
+      const paid = { ...pack, manifest: { ...pack.manifest, id: 'duo-33' } };
+      f.select(paid); f.delivery(async () => ({ phase: 'ready', progress: 1 }));
+      const Lesson = f.load(resolve(root, 'app/(tabs)/lesson.tsx')).default;
+      f.mount(Lesson); await f.settle();
+      const action = () => f.nodes().find(n => n.props.accessibilityLabel?.startsWith('Stage '))!.props;
+      assert.equal(action().disabled, false);
+      if (reason === 'revoked') f.revoke(); else await f.failAccessCheck();
+      await f.settle();
+      assert.equal(action().disabled, true);
+      assert.equal(action().style({ pressed: false }).opacity, 0.5,
+        'An entitlement failure must look blocked, not like a quiet file refresh');
+      assert.equal(f.nodes().find(n => n.type === 'StagePath')!.props.ready, false);
+      assert.ok(f.nodes().some(n => n.type === 'Label' && String(n.props.children).includes('구매')),
+        'Explain why the installed package cannot be studied');
+      assert.equal(f.nodes().some(n => n.props.title === '도서 선택으로'), false,
+        'An entitlement failure must not claim the installed files are missing');
+      action().onPress(); assert.equal(f.navigation.length, 0, 'Blocked actions must never open the player');
+      const recovery = f.nodes().find(n => n.props.title === '구매 복원으로');
+      assert.ok(recovery, 'Offer an explicit purchase-recovery action');
+      recovery.props.onPress(); assert.deepEqual(f.navigation, ['/settings']);
+      await f.restoreAccess(); await f.settle();
+      assert.equal(action().disabled, false); assert.equal(action().style({ pressed: false }).opacity, 1);
+      assert.equal(f.nodes().find(n => n.type === 'StagePath')!.props.ready, true);
+      assert.equal(f.nodes().some(n => n.props.title === '구매 복원으로'), false,
+        'Recovered access clears the notice without changing tabs');
+    } finally { f.close(); }
+  });
+}
+
+test('a purchase-access failure does not block an installed free package', async () => {
+  const f = fixture();
+  try {
+    const Lesson = f.load(resolve(root, 'app/(tabs)/lesson.tsx')).default;
+    f.mount(Lesson); await f.settle();
+    await f.failAccessCheck(); await f.settle();
+    const action = f.nodes().find(n => n.props.accessibilityLabel?.startsWith('Stage '))!.props;
+    assert.equal(action.disabled, false); assert.equal(action.style({ pressed: false }).opacity, 1);
+    assert.equal(f.nodes().some(n => n.props.title === '구매 복원으로'), false);
   } finally { f.close(); }
 });
 
@@ -416,6 +469,8 @@ test('confirmed missing files change the stage action only after verification fi
     f.background(); const pending = deferred<typeof installed>(); f.storage(() => pending.promise); f.foreground();
     assert.equal(f.nodes().some(n => n.props.title === '도서 선택으로'), false);
     assert.equal(f.nodes().find(n => n.props.accessibilityLabel?.startsWith('Stage '))!.props.disabled, true);
+    assert.equal(f.nodes().find(n => n.props.accessibilityLabel?.startsWith('Stage '))!.props.style({ pressed: false }).opacity, 1);
+    assert.equal(f.nodes().some(n => n.props.title === '구매 복원으로'), false);
     pending.resolve({ bytes: 0, installed: false, busy: false }); await f.settle();
     assert.equal(f.nodes().some(n => n.props.title === '도서 선택으로'), true);
     assert.equal(f.nodes().find(n => n.type === 'StagePath')!.props.ready, false);

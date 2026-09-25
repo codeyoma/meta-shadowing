@@ -15,7 +15,8 @@ export function usePackageLearningStatus(pack: LearningPackage | null) {
   const ready = failed ? false : storage?.installed ?? null;
   const deliveryBusy = !!delivery && ['downloading', 'installing', 'cancelling'].includes(delivery.phase);
   const checking = reading || changing || deliveryBusy || !!storage?.busy;
-  return { ready, checking, allowed: ready === true && !checking && permitted };
+  return { ready, checking, accessBlocked: !!pack && !permitted,
+    allowed: ready === true && !checking && permitted };
 }
 
 /** Direct information/options routes still verify before exposing source text. */
