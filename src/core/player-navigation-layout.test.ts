@@ -39,6 +39,7 @@ function layout(accessReady = true, unavailable = false, accessDenied = false, r
     Icon: 'Icon', Label: 'Label', Card: 'Card', ActionButton: 'ActionButton',
     Animated: { View: 'AnimatedView' }, SpeechContent: 'SpeechContent', WordRevealContent: 'WordRevealContent',
     videoOwner: video ? 'test-video' : null, LessonVideo: 'LessonVideo',
+    dictionary: { blocked: false, lookup: undefined, isBlocked: () => false },
     CycleTimeline: 'CycleTimeline', PlayerControls: 'PlayerControls',
     state: { stage: rapid ? 11 : 9, rate: 1.5, phrase: 1, phraseCount: 6, phase: 'listening', runId: 'test', ...(rapid ? { reveal: { speed: 3, wpm: 250 } } : {}) },
     stage: rapid ? 11 : 9, unavailable, accessReady, accessDenied, leave() {}, unitLabel: '학습 묶음', presented: [], speechView: 'list', units: [], textSettings: null,
@@ -141,6 +142,7 @@ test('menu return keeps the paused lesson visible while local revalidation disab
       setMotionActive() {}, setCelebrating() {}, setXpGain() {},
       setUnavailable: () => assert.fail('An obsolete initialization updated the screen'),
       prepareLearningHaptics() {}, stopLearningHaptics() {}, sentenceEntry: { cancel() {} },
+      dictionary: { cancel() {} },
       gainOrigin: { current: null }, clearInterval,
     });
     const cleanup = module.exports();
@@ -297,6 +299,7 @@ test('reauthorization restores paused player content without clearing unrelated 
   runInNewContext(code, {module, PaidLearningAccess, active:true,
     paidAccessSource: {refresh:async()=>({revision:1,allowed}),subscribe:()=>()=>{}},
     sentenceEntry:{cancel(){}},engine:{current:{pause(){pauses++;}}},
+    dictionary:{cancel(){}},
     setUnavailable(value:boolean){unavailable=value;},setAccessReady(value:boolean){accessReady=value;},
     setAccessDenied(value:boolean){accessDenied=value;},setCelebrating(){},setXpGain(){},
   });
