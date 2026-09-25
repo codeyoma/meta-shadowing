@@ -34,13 +34,13 @@ export default function Lesson() {
   const current = records?.find(record => record.stage === overview?.current);
   const resumed = current?.session && current.session.phase !== 'complete';
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}>
-    <View style={{ backgroundColor: '#243541', padding: 18, borderRadius: 26, gap: 14, borderCurve: 'continuous' }}>
+    <View style={{ backgroundColor: c.featuredCard, padding: 18, borderRadius: 26, gap: 14, borderCurve: 'continuous' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Image source={require('../../../assets/illustrations/morning-notes.png')} accessible={false}
           style={{ width: 52, height: 62, borderRadius: 12 }} contentFit="cover" />
         <View style={{ flex: 1, gap: 3 }}>
           <BookTags sentences={selectedBook.sentences} />
-          <Label size={11} weight="700" color="#b8c7d8">{selectedBook.sentences}문장 · 챕터 {selectedBook.chapters ?? '—'}</Label>
+          <Label size={11} weight="700" color={c.featuredSecondary}>{selectedBook.sentences}문장 · 챕터 {selectedBook.chapters ?? '—'}</Label>
           <Label size={22} display color="#ffffff">{selectedBook.title}</Label>
         </View>
         <Label size={17} display color={c.accent}>{overview ? `${overview.percent}%` : '—'}</Label>
@@ -48,10 +48,10 @@ export default function Lesson() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
       <View accessibilityRole="progressbar" accessibilityLabel="필수 반복을 완료한 스테이지"
         accessibilityValue={{ min: 0, max: 16, now: overview?.completed ?? 0 }}
-        style={{ flex: 1, height: 9, borderRadius: 5, backgroundColor: '#465661', overflow: 'hidden' }}>
+        style={{ flex: 1, height: 9, borderRadius: 5, backgroundColor: c.featuredTrack, overflow: 'hidden' }}>
         <View style={{ width: `${overview?.percent ?? 0}%`, height: '100%', backgroundColor: c.accent, borderRadius: 5 }} />
       </View>
-      <Label size={12} weight="700" color="#b8c7d8">{overview?.completed ?? '—'}/16</Label>
+      <Label size={12} weight="700" color={c.featuredSecondary}>{overview?.completed ?? '—'}/16</Label>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={`Stage ${overview?.current ?? 1} ${resumed ? '이어하기' : '학습 시작'}`}
         disabled={!access || !overview} accessibilityState={{ disabled: !access || !overview }}

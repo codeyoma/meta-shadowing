@@ -22,7 +22,7 @@ final class DictionaryPresentationTests: XCTestCase {
     XCTAssertTrue(sheet.view.accessibilityViewIsModal)
     XCTAssertEqual(sheet.modalPresentationStyle, .formSheet)
     let drawer = try XCTUnwrap(sheet.sheetPresentationController)
-    XCTAssertTrue(drawer.prefersGrabberVisible, "Use the learning drawer's visible drag handle")
+    XCTAssertTrue(drawer.prefersGrabberVisible, "Use UIKit's interactive grabber, like the learning menu")
     XCTAssertEqual(drawer.detents.map(\.identifier), [.large], "Open at the learning drawer's full height")
     let duplicate = expectation(description: "Duplicate rejected")
     presenter.present(id: "two", term: "door", from: root) { result in
@@ -52,8 +52,10 @@ final class DictionaryPresentationTests: XCTestCase {
     let library = try XCTUnwrap(sheet.children.first as? UIReferenceLibraryViewController)
     try await Task.sleep(for: .milliseconds(600))
     sheet.view.layoutIfNeeded()
+    XCTAssertFalse(sheet.isModalInPresentation, "The drawer must allow interactive dismissal")
+    XCTAssertFalse(library.isModalInPresentation, "The system child must not veto drawer dismissal")
     let resume = try XCTUnwrap(sheet.view.subviews.compactMap { $0 as? UIButton }.first)
-    XCTAssertEqual(library.view.frame.minY, 0, "Do not restore the duplicate top header")
+    XCTAssertEqual(library.view.frame.minY, 16, "Only reserve space for the handle, not a duplicate top header")
     XCTAssertEqual(library.view.frame.width, sheet.view.bounds.width)
     XCTAssertLessThanOrEqual(library.view.frame.maxY, resume.frame.minY - 16,
       "Dictionary content must not extend behind the fixed learning button")
@@ -82,5 +84,27 @@ final class DictionaryPresentationTests: XCTestCase {
     }
     XCTAssertEqual(failures, 2)
     XCTAssertNil(root.presentedViewController)
+  }
+
+  func testAccessibilityEscapeDismissesOnceAndAllowsAnotherLookup() async throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+    let window = UIWindow(windowScene: scene), root = UIViewController()
+    window.rootViewController = root; window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    let presenter = DictionaryPresenter()
+    for id in ["first", "again"] {
+      let done = expectation(description: "Escape dismissal \(id)")
+      presenter.present(id: id, term: "window", from: root) { result in
+        if case .failure = result { XCTFail("Dismissal must leave the next lookup usable") }
+        done.fulfill()
+      }
+      let sheet = try XCTUnwrap(root.presentedViewController)
+      sheet.view.layoutIfNeeded()
+      XCTAssertNil(sheet.view.subviews.first { $0.accessibilityLabel == "사전 닫기" },
+        "A custom release-only handle must not intercept the native drawer gesture")
+      XCTAssertTrue(sheet.accessibilityPerformEscape())
+      await fulfillment(of: [done], timeout: 5)
+      XCTAssertNil(root.presentedViewController)
+    }
   }
 }

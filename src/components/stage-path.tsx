@@ -27,9 +27,9 @@ export function StagePath({ records, current, ready, onSelect, bypass = false }:
   const rowHeight = Math.max(164, Math.ceil(94 + 70 * fontScale));
   return <View onLayout={e => { setWidth(e.nativeEvent.layout.width); setSelected(null); }}
     style={{ borderRadius: 28, borderWidth: 2, borderColor: c.line, overflow: 'hidden', paddingVertical: 30,
-      backgroundColor: c.background }}>
-    <View pointerEvents="none" accessible={false} style={{ position: 'absolute', inset: 0, opacity: 0.22,
-      experimental_backgroundImage: `linear-gradient(to bottom, ${levelColors.mint} 0%, ${levelColors.macaw} 50%, ${levelColors.beetle} 100%)` }} />
+      backgroundColor: c.card }}>
+    {!dark && <View pointerEvents="none" accessible={false} style={{ position: 'absolute', inset: 0, opacity: 0.22,
+      experimental_backgroundImage: `linear-gradient(to bottom, ${levelColors.mint} 0%, ${levelColors.macaw} 50%, ${levelColors.beetle} 100%)` }} />}
     {selected && <Pressable feedback={false} accessible={false} onPress={() => setSelected(null)}
       style={{ position: 'absolute', inset: 0 }} />}
     {records.map((record, i) => {
@@ -70,7 +70,7 @@ export function StagePath({ records, current, ready, onSelect, bypass = false }:
             <Icon name={!available ? 'lock.fill' : active ? 'play.fill' : complete ? 'checkmark' : 'speaker.wave.2.fill'}
               size={25} color={!available ? c.secondary : active ? '#000000' : complete ? c.onAccent : c.heading} />
             <View style={{ position: 'absolute', right: -7, top: -7, minWidth: 26, minHeight: 26, paddingHorizontal: 5,
-              borderRadius: 13, backgroundColor: '#042c60', alignItems: 'center', justifyContent: 'center' }}>
+              borderRadius: 13, backgroundColor: c.stageBadge, alignItems: 'center', justifyContent: 'center' }}>
               <Label size={12} weight="800" color="#ffffff">{record.stage}</Label>
             </View>
             </>}

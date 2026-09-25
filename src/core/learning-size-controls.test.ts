@@ -91,7 +91,7 @@ test('both real settings routes save immediately, share updates, reset, and reco
         if (focused) { focusEntries++; return callback(); }
       }, [callback, focused]),
       useNavigation: () => navigation,
-      Stack: { Screen: 'Screen' }, router: { back() {}, push(target: { params: Record<string, string> }) { params = target.params; } } },
+      Stack: { Screen: 'Screen', Toolbar: Object.assign('Toolbar', { Button: 'ToolbarButton' }) }, router: { back() {}, push(target: { params: Record<string, string> }) { params = target.params; } } },
     'expo-router/react-navigation': { useHeaderHeight: () => 50, useNavigationState: () => null, useIsFocused: () => true },
     expo: { requireNativeView: () => 'Video' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },

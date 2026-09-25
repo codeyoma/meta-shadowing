@@ -1,0 +1,16 @@
+diff --git a/node_modules/expo-modules-core/ios/Core/Views/SwiftUI/SystemMenuTouchGate.swift b/node_modules/expo-modules-core/ios/Core/Views/SwiftUI/SystemMenuTouchGate.swift
+index 5453df0..b5e4263 100644
+--- a/node_modules/expo-modules-core/ios/Core/Views/SwiftUI/SystemMenuTouchGate.swift
++++ b/node_modules/expo-modules-core/ios/Core/Views/SwiftUI/SystemMenuTouchGate.swift
+@@ -138,6 +138,11 @@ internal final class SystemMenuTouchGate: UIGestureRecognizer, UIGestureRecogniz
+ 
+   // MARK: - UIGestureRecognizer
+ 
++  // This is a touch filter, never a competing gesture. In particular it must not
++  // hold UIKit's interactive sheet pan waiting for the window-level gate to fail.
++  override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
++  override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
++
+   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+     super.touchesBegan(touches, with: event)
+     // Second chance in case React Native's handler received the touch before the delegate ran.

@@ -9,11 +9,11 @@ export function useSettingsColors() {
   return {
     background: dark ? palette.background : '#f2f3f5',
     sheet: dark ? palette.background : '#f2f3f5',
-    group: dark ? PlatformColor('secondarySystemGroupedBackground') : '#ffffff',
-    pressed: PlatformColor('tertiarySystemFill'),
+    group: dark ? palette.card : '#ffffff',
+    pressed: dark ? palette.soft : PlatformColor('tertiarySystemFill'),
     text: dark ? '#ffffff' : '#000000',
-    secondary: dark ? '#98989d' : '#8e8e93',
-    separator: dark ? '#38383a' : '#e5e5ea',
+    secondary: dark ? palette.secondary : '#8e8e93',
+    separator: dark ? palette.line : '#e5e5ea',
   };
 }
 

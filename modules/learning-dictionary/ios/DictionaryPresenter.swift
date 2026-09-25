@@ -18,19 +18,19 @@ final class DictionaryPresenter {
     let sheet = DictionarySheet(term: term)
     self.id = id; self.sheet = sheet; self.completion = completion; cancelling = false
     sheet.finished = { [weak self] in self?.finish(id: id) }
-    sheet.continueLearning = { [weak self] in self?.dismiss(id: id) }
+    sheet.continueLearning = { [weak self] in self?.dismiss(id: id, animated: true) }
     root.present(sheet, animated: true) { [weak self] in
       guard let self, self.id == id else { return }
       if self.cancelling { self.dismiss(id: id) }
     }
   }
 
-  func dismiss(id: String) {
+  func dismiss(id: String, animated: Bool = false) {
     guard self.id == id, let sheet else { return }
     cancelling = true
     if sheet.isBeingPresented { return } // Presentation completion performs this cancellation.
     if sheet.isBeingDismissed { return }
-    sheet.dismiss(animated: false) { [weak self] in self?.finish(id: id) }
+    sheet.dismiss(animated: animated) { [weak self] in self?.finish(id: id) }
   }
 
   func dismissCurrent() { if let id { dismiss(id: id) } }
@@ -54,7 +54,8 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
   init(term: String) {
     library = UIReferenceLibraryViewController(term: term)
     super.init(nibName: nil, bundle: nil)
-    // Match player-options' native formSheet, full-height detent and grabber.
+    // Use UIKit's interactive form sheet, like the learning options drawer.
+    // UIKit owns dragging, cancellation and the grabber; no release-only pan.
     modalPresentationStyle = .formSheet
     sheetPresentationController?.detents = [.large()]
     sheetPresentationController?.prefersGrabberVisible = true
@@ -64,7 +65,7 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    view.backgroundColor = .systemBackground
+    view.backgroundColor = UIColor { $0.userInterfaceStyle == .dark ? .black : .white }
     view.accessibilityViewIsModal = true
     addChild(library); view.addSubview(library.view); library.didMove(toParent: self)
     library.view.translatesAutoresizingMaskIntoConstraints = false
@@ -102,7 +103,7 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
     resume.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(resume)
     NSLayoutConstraint.activate([
-      library.view.topAnchor.constraint(equalTo: view.topAnchor),
+      library.view.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
       library.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       library.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       library.view.bottomAnchor.constraint(equalTo: resume.topAnchor, constant: -16),
@@ -111,6 +112,10 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
       resume.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
       resume.heightAnchor.constraint(greaterThanOrEqualToConstant: 54),
     ])
+  }
+  override func accessibilityPerformEscape() -> Bool {
+    continueLearning?()
+    return true
   }
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)

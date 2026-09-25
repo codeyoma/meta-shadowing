@@ -13,7 +13,10 @@ targets:
   DictionaryTestHost:
     type: application
     platform: iOS
-    sources: [Host]
+    sources:
+      - Host
+      - path: ../../modules/learning-dictionary/ios
+        excludes: [LearningDictionaryModule.swift]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.learningdictionary.tests
@@ -25,15 +28,23 @@ targets:
       - Tests
       - path: ../../modules/learning-dictionary/ios
         excludes: [LearningDictionaryModule.swift]
+      - path: ../../node_modules/expo-modules-core/ios/Core/Views/SwiftUI/SystemMenuTouchGate.swift
     dependencies:
       - target: DictionaryTestHost
       - sdk: UIKit.framework
       - sdk: NaturalLanguage.framework
+  DictionaryDrawerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: DictionaryTestHost
 schemes:
   LearningDictionaryTests:
     build:
       targets:
         DictionaryTestHost: all
         LearningDictionaryTests: [test]
+        DictionaryDrawerUITests: [test]
     test:
-      targets: [LearningDictionaryTests]
+      targets: [LearningDictionaryTests, DictionaryDrawerUITests]
