@@ -60,7 +60,7 @@ still need physical-device verification below.
 
 ## Physical iPhone: pending
 
-1. In Settings → 학습 설정 → 학습 화면, try original/translation 12 and 48,
+1. In Settings → 학습 설정 → 폰트 설정, try original/translation 12 and 48,
    one-unit buttons, direct numeric edits, invalid drafts, and reset to 20/18.
 2. Open the same editor from practice. Check immediate updates and close/reopen,
    then relaunch; no separate save action should be needed.

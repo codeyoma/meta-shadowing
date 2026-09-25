@@ -134,7 +134,10 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
           ? createGroupedSession({ runId: randomUUID(), stage, sourcePhraseCount: lesson.phrases.length, ...settings, groupSize: settings.groupSize ?? 2 })
           : createSession({ runId: randomUUID(), stage, phraseCount: lesson.phrases.length, ...settings });
         const runUnits = context.units(initial);
-        setUnits(runUnits); setRevealedKey(null); setUnavailable(false);
+        setUnits(runUnits);
+        // Returning from options preserves a reveal only for this exact run/unit.
+        setRevealedKey(key => key === `${initial.runId}:${initial.phrase}` ? key : null);
+        setUnavailable(false);
         const observeFeedback = createLearningFeedback(initial);
         const observeHaptics = createCycleHaptics(initial);
         const firstEntry = !opened.current;
@@ -290,8 +293,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
                 {methodNames[Math.ceil(state.stage / 2) - 1]} 학습을 마쳤어요.</Label>
               <Label muted>{state.phraseCount}개 {unitLabel}을 내 목소리로 연습했어요.</Label>
             </Card>
-            : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} textSizes={textSettings ?? undefined} />
-            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} textSizes={textSettings ?? undefined} />}
+            : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} typography={textSettings ?? undefined} />
+            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} typography={textSettings ?? undefined} />}
           </Animated.View>
         </View>
       </>}

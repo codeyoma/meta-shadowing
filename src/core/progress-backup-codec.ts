@@ -68,7 +68,7 @@ export function validateValue(key: unknown, value: unknown): string {
   if (typeof value !== 'string' || value.length > 2048) return reject();
   const parsed: unknown = JSON.parse(value);
   if (key === 'settings') {
-    const optional = ['speechView', 'groupSize', 'crazyWpm', 'originalTextSize', 'translationTextSize'].filter(key => parsed && typeof parsed === 'object' && Object.hasOwn(parsed, key));
+    const optional = ['speechView', 'groupSize', 'crazyWpm', 'originalTextSize', 'translationTextSize', 'originalTextFont', 'translationTextFont'].filter(key => parsed && typeof parsed === 'object' && Object.hasOwn(parsed, key));
     object(parsed, ['mode', 'rate', ...optional]);
     return JSON.stringify(decodeSettings(value));
   } else if (key === 'selection') {

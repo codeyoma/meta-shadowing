@@ -10,6 +10,8 @@ const root = resolve(import.meta.dirname, '..');
 
 /** Execute production components; substitute only the native/runtime boundaries. */
 export function nativeModules(adapters: Record<string, unknown>) {
+  // A native font catalog is a platform boundary, not evidence of UIKit rendering.
+  adapters = { '@/../modules/learning-fonts': { availableLearningFonts: () => ['system', 'rounded', 'serif', 'avenir-next', 'georgia', 'apple-sd-gothic-neo'] }, ...adapters };
   const modules = new Map<string, { exports: any }>();
   function load(file: string): any {
     const path = resolve(root, file);

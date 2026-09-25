@@ -1,10 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { runInNewContext } from 'node:vm';
 import React from 'react';
-import ts from 'typescript';
+import { nativeModules } from '../test-support/native-render';
 import { createSession } from './session';
 import * as reveal from './word-reveal';
 import { normalizeSpeakingSpeeds } from './speaking-speed';
@@ -20,12 +18,7 @@ const text = ({ children, accessibilityLabel, style, selectable }: React.PropsWi
   'data-size': style.fontSize, 'data-selectable': selectable }, children);
 
 function load<T>(file: string, adapters: Record<string, unknown>): T {
-  const compiled = ts.transpileModule(readFileSync(new URL(`../components/${file}.tsx`, import.meta.url), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
-  }).outputText;
-  const module = { exports: {} };
-  runInNewContext(compiled, { module, exports: module.exports, require: (id: string) => adapters[id] ?? require(id) });
-  return module.exports as T;
+  return nativeModules(adapters)(`components/${file}.tsx`) as T;
 }
 
 const { WordRevealContent: Content } = load<{ WordRevealContent: typeof WordRevealContent }>('word-reveal-content', {

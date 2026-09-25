@@ -29,7 +29,8 @@ function fixture(t: TestContext) {
 test('new empty profiles use 20/18, while existing preferences and progress are not migrated on read', t => {
   const fresh = fixture(t);
   fresh.profiles.initializeLearningSettings();
-  assert.deepEqual(fresh.settings.readSettings(), { mode: 'manual', rate: 1, originalTextSize: 20, translationTextSize: 18 });
+  assert.deepEqual(fresh.settings.readSettings(), { mode: 'manual', rate: 1, originalTextSize: 20, translationTextSize: 18,
+    originalTextFont: 'system', translationTextFont: 'system' });
   assert.equal(fresh.profiles.hasGuestData(), false, 'Untouched defaults are not guest work needing import consent');
   const existing = fixture(t);
   existing.profiles.saveValue('settings', '{"mode":"manual","rate":1.25}');
@@ -56,6 +57,7 @@ test('untouched defaults stay out of pending backup work across account refresh 
   assert.equal(relaunched.getSnapshot().pending, false);
   assert.deepEqual(JSON.parse(reopened.readValue('settings')!), {
     mode: 'manual', rate: 1, originalTextSize: 20, translationTextSize: 18,
+    originalTextFont: 'system', translationTextFont: 'system',
   });
   assert.equal(reopened.hasGuestData(), false);
   const state = relaunched.getSnapshot();
@@ -64,6 +66,15 @@ test('untouched defaults stay out of pending backup work across account refresh 
   reopened.initializeLearningSettings();
   assert.equal(relaunched.getSnapshot().pending, true, 'Initialization must never acknowledge a real edit');
   assert.equal(reopened.hasGuestData(), true);
+});
+
+test('pre-font untouched defaults stay unchanged and do not require guest-import consent', t => {
+  const f = fixture(t);
+  f.profiles.current().initializeSettings('{"mode":"manual","rate":1,"originalTextSize":20,"translationTextSize":18}');
+  f.profiles.initializeLearningSettings();
+  assert.equal(f.settings.readSettings().originalTextFont, undefined);
+  assert.equal(f.profiles.hasGuestData(), false);
+  assert.equal(f.profiles.current().pending(), false);
 });
 
 test('saved sizes round-trip through reopen and backup, preserving checkpoints and unrelated preferences', async t => {
@@ -75,16 +86,19 @@ test('saved sizes round-trip through reopen and backup, preserving checkpoints a
   await player.resume(); player.pause();
   const before = JSON.stringify(player.state);
   for (const originalTextSize of [21, 22, 23, 48]) {
-    assert.equal(f.settings.saveSettings({ ...f.settings.readSettings(), originalTextSize }, 'guest', 0), true);
+    assert.equal(f.settings.saveSettings({ ...f.settings.readSettings(), originalTextSize,
+      originalTextFont: 'rounded', translationTextFont: 'georgia' }, 'guest', 0), true);
   }
   assert.equal(JSON.stringify(player.state), before);
   const copy = fixture(t);
   copy.profiles.current().restoreBackup(f.profiles.current().exportBackup());
-  assert.deepEqual(copy.settings.readSettings(), { mode: 'manual', rate: 1.25, groupSize: 4, originalTextSize: 48 });
+  assert.deepEqual(copy.settings.readSettings(), { mode: 'manual', rate: 1.25, groupSize: 4, originalTextSize: 48,
+    originalTextFont: 'rounded', translationTextFont: 'georgia' });
   assert.equal(copy.profiles.current().journal.load('fixture-v1', 11, 2)?.audioSeconds, 0.8);
   assert.equal(copy.profiles.current().journal.progress.summary('english').xp, 0);
   const reopened = new ProgressProfiles(f.open, () => 'unused');
   assert.equal(JSON.parse(reopened.readValue('settings')!).originalTextSize, 48);
+  assert.equal(JSON.parse(reopened.readValue('settings')!).translationTextFont, 'georgia');
   f.fail(true);
   assert.throws(() => f.settings.saveSettings({ ...f.settings.readSettings(), originalTextSize: 12 }, 'guest', 0));
   assert.equal(f.settings.readSettings().originalTextSize, 48);
@@ -93,12 +107,14 @@ test('saved sizes round-trip through reopen and backup, preserving checkpoints a
 
 test('size changes stay profile-isolated and stale settings callbacks cannot save after switching', async t => {
   const f = fixture(t);
-  f.settings.saveSettings({ mode: 'manual', rate: 1, originalTextSize: 24 }, 'guest', 0);
+  f.settings.saveSettings({ mode: 'manual', rate: 1, originalTextSize: 24, originalTextFont: 'serif' }, 'guest', 0);
   f.sync.profiles.select(f.profiles.create());
   f.sync.changed();
-  assert.equal(f.settings.saveSettings({ mode: 'manual', rate: 1, originalTextSize: 48 }, 'guest', 0), false);
+  assert.equal(f.settings.saveSettings({ mode: 'manual', rate: 1, originalTextSize: 48, originalTextFont: 'rounded' }, 'guest', 0), false);
   assert.equal(f.settings.readSettings().originalTextSize, undefined);
+  assert.equal(f.settings.readSettings().originalTextFont, undefined);
   assert.equal(JSON.parse(f.profiles.readValue('settings', 'guest')!).originalTextSize, 24);
+  assert.equal(JSON.parse(f.profiles.readValue('settings', 'guest')!).originalTextFont, 'serif');
 });
 
 test('size edits leave media/reveal checkpoints and rewards unchanged across stage families', async t => {

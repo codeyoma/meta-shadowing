@@ -8,6 +8,7 @@ import manifest from '../../assets/sample/manifest.json';
 import { createSession, createGroupedSession } from './session';
 import { nativeModules, nativeMotion } from '../test-support/native-render';
 import { nativeHooks } from '../test-support/native-hooks';
+import { nativeFontMenu, nativeFontMenuModifiers } from '../test-support/native-font-menu';
 
 test('size buttons and completed input apply immediately, independently, and retain the last rapid change', t => {
   const runtime = nativeHooks(); t.after(runtime.dispose);
@@ -17,15 +18,20 @@ test('size buttons and completed input apply immediately, independently, and ret
     'react-native-reanimated': nativeMotion, 'expo-font': { isLoaded: () => true }, 'expo-image': { Image: 'Image' },
     'expo-router': { usePathname: () => '/player-options' }, '@/native/tap-feedback': { tapFeedback() {} },
     '@react-native-community/slider': { __esModule: true, default: 'Slider' },
-    '@expo/ui/swift-ui': { Host: 'Host', Picker: 'Picker', Text: 'Text' },
-    '@expo/ui/swift-ui/modifiers': { pickerStyle: () => ({}), tag: () => ({}) },
+    '@expo/ui/swift-ui': { ...nativeFontMenu, Picker: 'Picker' },
+    '@expo/ui/swift-ui/modifiers': { ...nativeFontMenuModifiers, pickerStyle: () => ({}), tag: () => ({}) },
   });
   const { LearningPreferenceSection } = load('components/learning-preference-section.tsx');
   let saved = { originalTextSize: 20, translationTextSize: 18 };
   const changes: unknown[] = [];
   const onChange = (patch: Partial<typeof saved>) => { saved = { ...saved, ...patch }; changes.push(patch); return true; };
   runtime.render(React.createElement(LearningPreferenceSection, { option: 'display', settings: saved, onChange }));
+  assert(!runtime.flush().some(node => node.props.accessibilityLabel === '원문 폰트 크기'),
+    'Learning display only edits bubble/list layout');
+  runtime.render(React.createElement(LearningPreferenceSection, { option: 'typography', settings: saved, onChange }));
   const content = runtime.flush();
+  assert(!content.some(node => node.props.accessibilityLabel === '버블로 보기'),
+    'The separate font editor does not include the learning display picker');
   const fontHeading = content.findIndex(node => node.props.children === '폰트 설정');
   const originalLabel = content.findIndex(node => node.props.children === '원문 폰트 크기');
   assert(fontHeading >= 0 && fontHeading < originalLabel, 'Font settings has its own heading before the controls');
@@ -69,9 +75,9 @@ test('both real settings routes save immediately, share updates, reset, and reco
   t.after(() => { runtime.dispose(); sync.dispose(); db.close(); });
   profiles.saveValue('settings', JSON.stringify({ mode: 'manual', rate: 1.25, groupSize: 4 }));
   const alerts: string[] = [];
-  let params: Record<string, string> = { option: 'display' };
+  let params: Record<string, string> = {};
   const pack = { owned: true, packageKey: `${manifest.id}-v${manifest.version}`, manifest, language: 'english' };
-  let appState = 'active', focusEntries = 0;
+  let appState = 'active', focusEntries = 0, focused = true;
   const navigation = { addListener: () => () => {}, isFocused: () => true };
   const load = nativeModules({ react: runtime.hooks,
     'react-native': { View: 'View', Text: 'Text', TextInput: 'TextInput', Pressable: 'Pressable', ScrollView: 'ScrollView',
@@ -81,9 +87,11 @@ test('both real settings routes save immediately, share updates, reset, and reco
       useColorScheme: () => 'light', useWindowDimensions: () => ({ fontScale: 1 }) },
     'react-native-reanimated': nativeMotion, 'expo-font': { isLoaded: () => true }, 'expo-image': { Image: 'Image' },
     'expo-router': { usePathname: () => '/player-options', useLocalSearchParams: () => params,
-      useFocusEffect: (callback: () => any) => runtime.hooks.useEffect(() => { focusEntries++; return callback(); }, [callback]),
+      useFocusEffect: (callback: () => any) => runtime.hooks.useEffect(() => {
+        if (focused) { focusEntries++; return callback(); }
+      }, [callback, focused]),
       useNavigation: () => navigation,
-      Stack: { Screen: 'Screen' }, router: { back() {} } },
+      Stack: { Screen: 'Screen' }, router: { back() {}, push(target: { params: Record<string, string> }) { params = target.params; } } },
     'expo-router/react-navigation': { useHeaderHeight: () => 50, useNavigationState: () => null, useIsFocused: () => true },
     expo: { requireNativeView: () => 'Video' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
@@ -98,13 +106,17 @@ test('both real settings routes save immediately, share updates, reset, and reco
     '@/native/video': {}, '@/../modules/learning-audio': { __esModule: true, default: null },
     '@/native/tap-feedback': { tapFeedback() {}, prepareLearningHaptics() {}, stopLearningHaptics() {} },
     '@react-native-community/slider': { __esModule: true, default: 'Slider' },
-    '@expo/ui/swift-ui': { Host: 'Host', Picker: 'Picker', Text: 'Text' },
-    '@expo/ui/swift-ui/modifiers': { pickerStyle: () => ({}), tag: () => ({}) },
+    '@expo/ui/swift-ui': { ...nativeFontMenu, Picker: 'Picker' },
+    '@expo/ui/swift-ui/modifiers': { ...nativeFontMenuModifiers, pickerStyle: () => ({}), tag: () => ({}) },
   });
   const settings = load('native/settings.ts') as typeof import('../native/settings');
+  const SettingsMenu = load('app/(tabs)/settings/learning.tsx').default;
   const SettingsScreen = load('app/(tabs)/settings/learning-detail.tsx').default;
   const OptionsScreen = load('app/player-options.tsx').default;
+  runtime.render(React.createElement(SettingsMenu));
+  runtime.find('폰트 설정').onPress();
   runtime.render(React.createElement(SettingsScreen));
+  assert(runtime.flush().some(node => node.type === 'Screen' && node.props.options?.title === '폰트 설정'));
   assert.equal(settings.readSettings().originalTextSize, undefined, 'Opening the editor does not migrate legacy appearance');
   runtime.find('원문 폰트 크기 늘리기').onPress();
   assert.equal(settings.readSettings().originalTextSize, 21);
@@ -114,12 +126,20 @@ test('both real settings routes save immediately, share updates, reset, and reco
   assert.equal(settings.readSettings().translationTextSize, 21);
   assert.equal(settings.readSettings().rate, 1.25);
   assert.equal(settings.readSettings().groupSize, 4);
+  runtime.find('원문 폰트: Serif').onPress();
+  runtime.find('번역 폰트: Apple SD Gothic Neo').onPress();
+  assert.equal(settings.readSettings().originalTextFont, 'serif');
+  assert.equal(settings.readSettings().translationTextFont, 'apple-sd-gothic-neo');
 
   runtime.render(null);
   params = { profile: 'guest', authority: '0' };
   runtime.render(React.createElement(OptionsScreen));
   await new Promise(resolve => setImmediate(resolve));
-  runtime.find('학습 화면').onPress();
+  runtime.find('폰트 설정').onPress();
+  assert.equal(runtime.find('원문 폰트: Serif').systemImage, 'checkmark');
+  runtime.find('원문 폰트: Rounded').onPress();
+  runtime.find('원문 폰트: Georgia').onPress();
+  assert.equal(settings.readSettings().originalTextFont, 'georgia');
   assert.equal(runtime.find('원문 폰트 크기').value, '21');
   runtime.find('원문 폰트 크기').onChangeText('48');
   assert.equal(runtime.find('원문 폰트 크기 늘리기').disabled, true, 'Bounds follow a valid draft before completion too');
@@ -135,31 +155,39 @@ test('both real settings routes save immediately, share updates, reset, and reco
   runtime.find('번역 폰트 크기').onEndEditing();
   assert.equal(runtime.find('번역 폰트 크기 줄이기').disabled, true);
   fail = true;
+  runtime.find('원문 폰트: System').onPress();
+  assert.equal(settings.readSettings().originalTextFont, 'georgia');
+  assert.equal(runtime.find('원문 폰트: Georgia').systemImage, 'checkmark');
   runtime.find('번역 폰트 크기 늘리기').onPress();
   assert.equal(runtime.find('번역 폰트 크기').value, '12');
   assert.equal(settings.readSettings().translationTextSize, 12);
-  assert.deepEqual(alerts, ['설정을 저장하지 못했어요']);
+  assert.deepEqual(alerts, ['설정을 저장하지 못했어요', '설정을 저장하지 못했어요']);
   fail = false;
   runtime.find('폰트 크기 초기화').onPress();
   assert.equal(runtime.find('원문 폰트 크기').value, '20');
   assert.equal(runtime.find('번역 폰트 크기').value, '18');
   runtime.render(null);
-  params = { option: 'display' };
+  runtime.render(React.createElement(SettingsMenu));
+  runtime.find('폰트 설정').onPress();
   runtime.render(React.createElement(SettingsScreen));
+  assert.equal(runtime.find('원문 폰트: Georgia').systemImage, 'checkmark');
+  runtime.find('폰트 초기화').onPress();
+  assert.equal(settings.readSettings().originalTextFont, 'system');
+  assert.equal(settings.readSettings().translationTextFont, 'system');
   assert.equal(runtime.find('원문 폰트 크기').value, '20');
   settings.saveSettings({ ...settings.readSettings(), originalTextSize: 35 }, 'guest', 0);
   assert.equal(runtime.find('원문 폰트 크기').value, '35', 'An already open editor follows external updates');
-  assert.equal(alerts.length, 1, 'Successful saves are quiet');
+  assert.equal(alerts.length, 2, 'Successful saves are quiet');
 
   // Keep the real route, subscription, player, journal and rendering mounted.
   // Only navigation/native playback boundaries are fixtures.
   const PlayerScreen = load('app/player.tsx').default;
   const { ProgressProfile } = load('components/progress-profile.tsx');
   appState = 'background'; // Start paused; no elapsed timer/automatic entry alters the comparison.
-  for (const stage of [1, 7, 11, 15] as const) {
+  for (const stage of [1, 5, 7, 9, 11, 15] as const) {
     runtime.render(null);
     const input = { runId: `mounted-${stage}`, stage, mode: 'manual' as const, rate: 1.25 };
-    const checkpoint = { ...(stage === 7
+    const checkpoint = { ...(stage === 7 || stage === 9
       ? createGroupedSession({ ...input, sourcePhraseCount: manifest.phrases.length, groupSize: 4 })
       : createSession({ ...input, phraseCount: manifest.phrases.length })), phase: 'listening' as const, audioSeconds: 1.5 };
     profiles.current().journal.save(pack.packageKey, checkpoint, { language: 'english', book: manifest.id });
@@ -168,13 +196,33 @@ test('both real settings routes save immediately, share updates, reset, and reco
     await new Promise(resolve => setImmediate(resolve));
     runtime.flush();
     const entries = focusEntries;
-    settings.saveSettings({ ...settings.readSettings(), originalTextSize: 48, translationTextSize: 48 }, 'guest', 0);
+    settings.saveSettings({ ...settings.readSettings(), originalTextSize: 48, translationTextSize: 48,
+      originalTextFont: 'serif', translationTextFont: 'georgia' }, 'guest', 0);
     const output = runtime.flush();
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(focusEntries, entries, `Stage ${stage} typography must not restart the focus/engine effect`);
     assert.deepEqual(profiles.current().journal.load(pack.packageKey, stage, manifest.phrases.length), checkpoint);
     assert(output.some(node => node.props.style?.fontSize === 48), `Stage ${stage} mounted text updates`);
-    assert.equal(alerts.length, 1);
+    assert(output.some(node => node.props.style?.fontFamily === 'Georgia'), `Stage ${stage} mounted font updates`);
+    assert.equal(alerts.length, 2);
+    if (stage === 5 || stage === 9) {
+      runtime.find('자막 보기').onPress();
+      assert.equal(runtime.find('자막 숨기기').accessibilityState.expanded, true);
+      focused = false; runtime.flush(); // The options route blurs, but does not unmount, the player.
+      settings.saveSettings({ ...settings.readSettings(), originalTextFont: 'rounded' }, 'guest', 0);
+      runtime.flush();
+      focused = true; runtime.flush();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(runtime.find('자막 숨기기').accessibilityState.expanded, true,
+        `Stage ${stage} menu return preserves explicitly revealed hints`);
+      assert.deepEqual(profiles.current().journal.load(pack.packageKey, stage, manifest.phrases.length), checkpoint);
+      focused = false; runtime.flush();
+      profiles.current().journal.save(pack.packageKey, { ...checkpoint, phrase: 1 }, { language: 'english', book: manifest.id });
+      focused = true; runtime.flush();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(runtime.find('자막 보기').accessibilityState.expanded, false,
+        'A different phrase must not inherit the previous answer reveal');
+    }
     settings.saveSettings({ ...settings.readSettings(), originalTextSize: 20, translationTextSize: 18 }, 'guest', 0);
   }
 });

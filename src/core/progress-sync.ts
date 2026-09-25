@@ -88,7 +88,10 @@ export class ProgressProfiles {
     const backup = validateProgressBackup(this.store('guest').exportBackup());
     if (Object.entries(backup.tables).some(([key, rows]) => key !== 'preferences' && rows.length > 0)) return true;
     const settings = this.readValue('settings', 'guest');
-    if (settings && settings !== '{"mode":"manual","rate":1}' && settings !== JSON.stringify(freshSettings())) return true;
+    // Untouched defaults from before font selection are not user-created work either.
+    if (settings && settings !== '{"mode":"manual","rate":1}'
+      && settings !== '{"mode":"manual","rate":1,"originalTextSize":20,"translationTextSize":18}'
+      && settings !== JSON.stringify(freshSettings())) return true;
     return this.readValue('selection', 'guest') !== null;
   }
   guestBackup(): string {

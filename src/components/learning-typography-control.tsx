@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { defaultTextSizes, isLearningTextSize, type Settings } from '@/core/settings';
+import { defaultTextSizes, defaultTextFonts, isLearningTextSize, type Settings, type LearningTypography } from '@/core/settings';
 import { Icon, Label } from './ui';
 import { SettingsSection } from './settings-section';
 import { useSettingsColors } from './settings-row';
+import { LearningFontControl } from './learning-font-control';
+import { learningFontFamily } from '@/native/learning-fonts';
 
 function SizeInput({ label, value, onChange }: {
   label: string; value: number; onChange(value: number): boolean | void;
@@ -46,14 +48,19 @@ function SizeInput({ label, value, onChange }: {
 }
 
 /** Each accepted edit is durable; there is no separate preview/save transaction. */
-export function LearningTextSizeControl({ settings, onChange }: {
-  settings: Settings | Pick<Settings, 'originalTextSize' | 'translationTextSize'>;
+export function LearningTypographyControl({ settings, onChange }: {
+  settings: LearningTypography;
   onChange(patch: Partial<Settings>): boolean | void;
 }) {
   const c = useSettingsColors();
   const [reset, setReset] = useState(0);
   return <View style={{ gap: 20, paddingTop: 12 }}>
     <View style={{ paddingHorizontal: 16 }}><Label size={18} weight="600" color={c.secondary}>폰트 설정</Label></View>
+    <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+      <LearningFontControl label="원문 폰트" value={settings.originalTextFont} onChange={originalTextFont => onChange({ originalTextFont })} />
+      <LearningFontControl label="번역 폰트" value={settings.translationTextFont} onChange={translationTextFont => onChange({ translationTextFont })} />
+    </View>
+    <View style={{ paddingHorizontal: 8 }}><Label size={14} color={c.secondary}>일부 폰트의 한글은 시스템 글꼴로 표시돼요.</Label></View>
     <View style={{ flexDirection: 'row', gap: 12 }}>
       <SizeInput key={`original-${reset}`} label="원문 폰트 크기" value={settings.originalTextSize ?? defaultTextSizes.originalTextSize}
         onChange={originalTextSize => onChange({ originalTextSize })} />
@@ -61,9 +68,18 @@ export function LearningTextSizeControl({ settings, onChange }: {
         onChange={translationTextSize => onChange({ translationTextSize })} />
     </View>
     <SettingsSection>
-      <Label size={settings.originalTextSize ?? defaultTextSizes.originalTextSize} color={c.text}>A little practice every day helps me speak clearly and feel more confident.</Label>
-      <Label size={settings.translationTextSize ?? defaultTextSizes.translationTextSize} color={c.text}>매일 조금씩 연습하면 더 또렷하고 자신 있게 말할 수 있어요.</Label>
+      <Label size={settings.originalTextSize ?? defaultTextSizes.originalTextSize} fontFamily={learningFontFamily(settings.originalTextFont)} color={c.text}>A little practice every day helps me speak clearly and feel more confident.</Label>
+      <Label size={settings.translationTextSize ?? defaultTextSizes.translationTextSize} fontFamily={learningFontFamily(settings.translationTextFont)} color={c.text}>매일 조금씩 연습하면 더 또렷하고 자신 있게 말할 수 있어요.</Label>
     </SettingsSection>
+    <Pressable accessibilityRole="button" accessibilityLabel="폰트 초기화"
+      onPress={() => onChange({ ...defaultTextFonts })}
+      style={({ pressed }) => ({ minHeight: 48, paddingHorizontal: 16, paddingVertical: 12,
+        flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1, borderColor: c.separator, borderRadius: 16, borderCurve: 'continuous',
+        backgroundColor: pressed ? c.pressed : c.group })}>
+      <Icon name="arrow.counterclockwise" size={18} color="#007aff" />
+      <Label size={16} weight="600" align="center" color="#007aff">폰트 초기화</Label>
+    </Pressable>
     <Pressable accessibilityRole="button" accessibilityLabel="폰트 크기 초기화" onPress={() => {
       if (onChange({ ...defaultTextSizes }) !== false) setReset(value => value + 1);
     }} style={({ pressed }) => ({ minHeight: 48, paddingHorizontal: 16, paddingVertical: 12,

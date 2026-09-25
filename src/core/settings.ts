@@ -1,7 +1,12 @@
+import { isLearningFont, type LearningFont } from './learning-fonts';
+
 export type Settings = { mode: 'manual'; rate: number; speechView?: 'bubble' | 'list'; groupSize?: 2 | 3 | 4;
-  crazyWpm?: [number, number, number, number]; originalTextSize?: number; translationTextSize?: number };
+  crazyWpm?: [number, number, number, number]; originalTextSize?: number; translationTextSize?: number;
+  originalTextFont?: LearningFont; translationTextFont?: LearningFont };
+export type LearningTypography = Pick<Settings, 'originalTextSize' | 'translationTextSize' | 'originalTextFont' | 'translationTextFont'>;
 export const defaultTextSizes = { originalTextSize: 20, translationTextSize: 18 } as const;
-export function freshSettings(): Settings { return { mode: 'manual', rate: 1, ...defaultTextSizes }; }
+export const defaultTextFonts = { originalTextFont: 'system', translationTextFont: 'system' } as const;
+export function freshSettings(): Settings { return { mode: 'manual', rate: 1, ...defaultTextSizes, ...defaultTextFonts }; }
 export function isLearningTextSize(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 12 && value <= 48;
 }
@@ -32,6 +37,12 @@ export function decodeSettings(json: string | null): Settings {
   for (const key of ['originalTextSize', 'translationTextSize'] as const) {
     if (key in value) {
       if (!isLearningTextSize(value[key])) throw Error('Invalid learning text size.');
+      result[key] = value[key];
+    }
+  }
+  for (const key of ['originalTextFont', 'translationTextFont'] as const) {
+    if (key in value) {
+      if (!isLearningFont(value[key])) throw Error('Invalid learning font.');
       result[key] = value[key];
     }
   }
