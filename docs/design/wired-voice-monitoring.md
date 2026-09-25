@@ -1,7 +1,15 @@
 # Wired voice monitoring — approved design
 
-Owner approval: 2026-09-21. First milestone is an on-device native feasibility
-prototype, not a release-ready microphone feature.
+Owner approval: 2026-09-21. The first milestone was an on-device native feasibility
+prototype. The amendments below define the current feature scope.
+
+Release amendment, 2026-09-25: the owner confirmed physical-device monitoring
+works and designated learning monitoring as a normal feature in Debug and
+Release. Both the native capability and learning drawer are independent of
+`DEBUG`/`__DEV__`. The separate diagnostic lab stays development-only. Wired-only
+routing, permission, session ownership, interruption handling and 4x gain remain
+unchanged. The drawer describes live wired-earphone monitoring instead of a
+development-build restriction.
 
 Owner amendment, 2026-09-21: the owner reports successful simultaneous sample
 playback and live headset monitoring on the physical iPhone. The screenshot
@@ -13,7 +21,8 @@ screen lock. The amended behavior needs a new physical acceptance test.
 
 Second owner amendment, 2026-09-21: the owner confirmed the corrected switch
 works and approved 3x microphone amplification plus the learning-options menu
-for all sixteen stages. This remains development-only. Previous 2x/lab-only
+for all sixteen stages. That milestone was development-only; the Release
+amendment above supersedes that restriction. Previous 2x/lab-only
 boundaries below describe the initial milestones, not the latest target.
 
 Latest owner amendment, 2026-09-21: microphone gain is now 4x. In an eligible

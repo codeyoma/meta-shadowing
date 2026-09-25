@@ -157,8 +157,8 @@ unavailable even after their predecessor is complete.
 
 ## Audio cycle contract (M1)
 
-- Development-only live voice monitoring starts automatically in an eligible
-  foreground lesson when wired headphones connect, or on entry already connected,
+- Live voice monitoring is available in Debug and Release. It starts automatically
+  in an eligible foreground lesson when wired headphones connect, or on entry already connected,
   after microphone permission. Manual OFF is retained until unplug/replug or a
   new lesson. Menus/background/lock preserve existing capture; they do not start
   new capture in the background. Exit, completion, access loss, interruption or

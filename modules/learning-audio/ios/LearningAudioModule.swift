@@ -42,6 +42,7 @@ public class LearningAudioModule: Module {
 
   public func definition() -> ModuleDefinition {
     Name("LearningAudio")
+    Constant("monitoringSupported") { VoiceMonitorPolicy.monitoringSupported }
     Events("onMonitorStatus", "onLessonRemotePress", "onVideoStatus")
     Constant("localVideoManifest") { self.videoPackage.json }
     Constant("localVideoManifestInvalid") { self.videoPackage.manifestInvalid }
@@ -56,7 +57,7 @@ public class LearningAudioModule: Module {
         guard self.monitorLifetime.isOpen else { promise.reject("video-unavailable", "Video is unavailable."); return }
         let controller = LessonVideoPlayer.shared
         self.videoOwner = owner
-        controller.reserve(owner: owner, generation: generation)
+        controller.reserve(owner: owner, generation: generation, position: position)
         controller.onStatus = { [weak self] status in
           guard let self, self.monitorLifetime.isOpen else { return }
           self.sendEvent("onVideoStatus", status)
@@ -76,13 +77,16 @@ public class LearningAudioModule: Module {
             try await controller.prepare(url: url, segments: segments,
               position: position, rate: rate, owner: owner, generation: generation)
             promise.resolve()
-          } catch { promise.reject("video-unavailable", "Video could not be prepared.") }
+          } catch {
+            let code = controller.matches(owner, generation) ? "video-unavailable" : "video-cancelled"
+            promise.reject(code, "Video could not be prepared.")
+          }
         }
       }
     }.runOnQueue(.main)
     AsyncFunction("videoPlay") { (owner: String, generation: Int) in
       MainActor.assumeIsolated {
-        guard self.monitorLifetime.isOpen, UIApplication.shared.applicationState == .active else { return }
+        guard self.monitorLifetime.isOpen else { return }
         LessonVideoPlayer.shared.play(owner: owner, generation: generation)
       }
     }.runOnQueue(.main)

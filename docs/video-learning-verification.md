@@ -1,5 +1,139 @@
 # Video learning verification
 
+## Monitoring controls and shared browsing state — 2026-09-25
+
+The review follow-up makes the actual learning switch use the native capability,
+not `__DEV__`. A production-JavaScript component test exercises manual OFF/ON and
+explicit re-enable after interruption. Native route and permission guards remain
+unchanged; the owner's Release-feature amendment is recorded in the monitoring
+design and learning contract.
+
+Library and stage screens now subscribe to shared material snapshots instead of
+checking installation on each tab focus. Regression tests cover remounts, slow
+reads, download completion/failure/cancellation, deletion, entitlement revocation,
+foreground reconciliation and stale responses. Direct learning routes retain
+fresh native authorization and file checks.
+
+`npm run check` passed 468 core tests, 25 build/package checks and TypeScript.
+The production iOS JavaScript export passed. Native macOS Release tests passed
+40 functions / 47 executions, with no failures or skips. These follow-up changes
+have not been installed on the physical iPhone; the owner-reported device
+acceptance below applies to the earlier installed build, not this revision.
+
+## Standalone build regressions — 2026-09-25
+
+The owner reported a missing learning-monitoring menu and a brief source-opening
+frame before each video cycle. An offline Debug binary bundled production-mode
+JavaScript, so the JavaScript development flag incorrectly hid native monitoring.
+The bridge now reads the native monitoring capability. A subsequent owner
+amendment makes learning monitoring available in Release as well as Debug; the
+learning drawer no longer gates on JavaScript development mode. Wired-route and
+permission checks remain unchanged. The separate diagnostic lab is still gated.
+
+Native video preparation now loads and seeks a separate paused player before
+binding it to the presentation layer. The previous positioned player stays bound
+during preparation. A cancelled preparation cannot publish or start its candidate.
+Menu pause still retains the current frame; disposal clears it.
+
+The generated-media presentation regression failed on all three preparations
+before the fix and passed afterward. It observes the actual attached player layer
+through initial preparation and repeated cycles, including pause and disposal.
+The original local-media diagnostic also passed all three cycles after the fix.
+These checks verify presentation ordering and exact seek position, not a
+pixel-by-pixel recording of the physical screen.
+
+`npm run check` passed 454 core tests, 25 build/package checks and TypeScript.
+Native macOS tests passed 39 functions / 46 executions, and iOS 26.5 Simulator
+tests passed 41 functions / 48 executions with no failures or skips. The standalone iPhone
+Debug build passed, was installed in place, and launched. All three learning
+databases matched their pre-installation backups before first launch. The owner
+confirmed that voice monitoring works on the updated phone build. After the latest
+in-place installation, the owner reported testing everything on the phone with no
+issues, accepting the video cycle transitions and combined checklist below.
+The standalone simulator app also built and launched. Its learning menu visibly
+contains the restored monitoring action with production-mode bundled JavaScript.
+
+## Interruptions and wired controls (#70) — 2026-09-24
+
+Native video now retires the current preparation/playback generation on app
+inactivity, background entry, audio interruption, physical route change, or media
+services loss/reset. This includes a pending seek between grouped members. The
+pause event carries the old generation and the selected-time checkpoint; pending
+initial preparation retains its requested offset. Recovery notifications do not
+play, confirm, or reactivate microphone capture. A fresh explicit Resume is needed.
+The existing menu pause path, wired-monitoring lifecycle, and single/double-press
+action gates remain authoritative. Playback session category setup is not treated
+as an earphone disconnect.
+If JavaScript's AppState pause arrives first, it retains the latest 25 ms position
+sample and ignores the retired native event. Checkpoints are sampled, not a claim
+of exact-frame interruption timing. Both event orders are regression tested.
+Native cancellation also has a distinct adapter error code, so a rejection that
+arrives before its pause event does not display a spurious audio error.
+
+Regression coverage uses generated video/audio, native notifications, the actual
+Player/video adapter, and SQLite-backed progress. It covers interruption during
+preparation and member seeks, duplicate/stale callbacks, checkpoint preservation,
+explicit resume, unavailable headset actions, one-shot confirmation, and Repeat
+adding exactly two cycles. Monitoring and remote-command policy tests remain in
+the regression suite. These tests do not prove physical microphone continuity,
+EarPods command delivery, or ownership against another music app.
+
+Automated JavaScript verification: `npm run check` passed 452 core tests,
+25 build/package checks and TypeScript. `EXPO_NO_DOTENV=1 npm run bundle:ios`
+passed. Native macOS tests passed 38 functions / 45 executions. The iOS 26.5
+Simulator suite passed 40 functions / 47 executions, with no failures or skips.
+The iOS-specific tests cover native lifecycle notifications and preparation/seek
+cancellation. Notifications are isolated from the test host's own lifecycle;
+posting synthetic system events globally caused an initial runner cleanup stall.
+These are generated-media automated results, not physical-device observations.
+The full arm64 iOS Simulator Debug app build also passed. Existing SDK and native
+warnings remain; this is not a warning-free build or physical listening test.
+
+### Combined physical-device checklist — owner-reported pass, 2026-09-25
+
+The owner tested the latest installed build and reported no issues across all
+checks. The checked outcomes below record that acceptance, not independent agent
+observation or instrumented measurements. The build also includes the restored
+monitoring menu, video presentation fix, and updated stage-map appearance.
+
+Use an internal build containing the updated native module and an installed local
+video package. A JavaScript reload alone is insufficient. Preserve existing app
+data. Start with low system volume; the microphone path has 4x gain. Use Apple
+USB-C EarPods and let the owner grant microphone permission. Record build, stage,
+group size, observed result and any reproduction steps without device/account
+identifiers. Repeat the interruption cases both inside a phrase and near a grouped
+member boundary. Do not infer a pass from simulator results.
+
+- [x] Stages 1–6 and 7–10: open each learning menu during video playback. Original
+  video/audio pause at the same phrase/group; enabled monitoring remains audible.
+  Closing the menu stays paused. Explicit Resume continues the saved position.
+- [x] Switch apps, return, then lock/unlock. Original video/audio stay paused,
+  including near member transitions. Existing monitoring continues under its
+  existing rules; returning alone starts neither original playback nor new capture.
+- [x] With a music app paused beforehand, single-press EarPods during original
+  playback: no skip, confirmation, XP, or playback in the music app. After the
+  original ends, single-press performs exactly the displayed Confirm/Next action.
+  On a paused unfinished phrase it performs Resume. Check with monitoring ON/OFF.
+- [x] Double-press before the third-cycle decision: no Repeat or skip. At the
+  permitted third-cycle decision: exactly two additional cycles, same phrase/group,
+  no duplicate confirmation/XP. Rapid duplicate input cannot add more cycles.
+- [x] Press during a menu, app switch, lock, loading or an error: no learning
+  action. After return and explicit resume, controls work without stale actions.
+- [x] Unplug during playback/seek: original playback and monitoring stop. Reconnect
+  respects the existing foreground/manual-off connection rules; video stays paused.
+  Bluetooth, AirPlay and unapproved USB routes never enable voice monitoring.
+- [x] Interrupt with a call or another audio app, then dismiss/return: video remains
+  paused; monitoring follows its existing interruption-off rule. Resume only by
+  explicit action. No stale video end, phrase advance, or duplicate XP appears.
+- [x] Permission denied or a pending permission prompt followed by backgrounding
+  does not start capture. Manual OFF remains off on the same connection. Lesson
+  exit/completion releases monitoring and transport ownership. Silent stages 11–16
+  remain text-only and retain their existing guarded headset behavior.
+
+Physical-device outcomes for #70: **passed per owner report on the latest build**.
+This acceptance is separate from earlier monitoring and #67 offline checks.
+The consolidated device-validation issue is unchanged.
+
 ## Silent stages 11–16 implementation — 2026-09-24
 
 - #69 enables the remaining six stages for the same installed video package.

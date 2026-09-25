@@ -5,13 +5,18 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { videoPlayback } from './video-playback';
 import type { nativeVideo } from '../native/video';
+import { Player } from './player';
+import { createSession } from './session';
 
 // Exercise the real adapter; only native SDK/audio-session boundaries are replaced.
-function fixture() {
+function fixture(preparationError?: string) {
   const preparations: unknown[][] = [];
   let plays = 0;
   const native = {
-    async videoPrepare(...args: unknown[]) { preparations.push(args); },
+    async videoPrepare(...args: unknown[]) {
+      preparations.push(args);
+      if (preparationError) throw Object.assign(Error('Native preparation rejected.'), { code: preparationError });
+    },
     async videoPlay() { plays++; }, async videoPause() {},
     addListener() { return { remove() {} }; },
   };
@@ -27,6 +32,23 @@ function fixture() {
   } });
   return { create: module.exports.nativeVideo, preparations, plays: () => plays };
 }
+
+test('a native cancellation rejection arriving before its status event is a pause, not an audio failure', async () => {
+  for (const code of ['video-cancelled', 'video-unavailable']) {
+    const f = fixture(code);
+    let player: Player;
+    const port = f.create('owner', undefined, d => player.audioEnded(d), () => player.audioFailed(),
+      () => player.pause(), [1], [[0]]);
+    player = new Player(createSession({ runId: 'race', stage: 1, phraseCount: 1, rate: 1, mode: 'manual' }),
+      port, () => {}, () => 0, () => {});
+    await player.resume();
+    assert.equal(player.state.running, false);
+    assert.equal(player.state.confirmed, 0);
+    assert.equal(f.plays(), 0);
+    assert.equal(player.error, code === 'video-cancelled' ? null : 'audio');
+    player.dispose();
+  }
+});
 
 test('video adapter prepares saved source members and restores their combined final frame without playing', async () => {
   const f = fixture();

@@ -102,11 +102,6 @@ export function hostedDownloadError(error: unknown, status: DeliveryStatus | nul
     : '연결과 저장 공간을 확인하고 다시 다운로드해 주세요. 검증을 마치기 전에는 학습을 시작할 수 없어요.';
 }
 
-/** Keep the delivery phase and measured installation view in one refresh boundary. */
-export async function refreshHostedMaterial(refreshDelivery: () => Promise<void>, refreshStorage: () => Promise<void>) {
-  await Promise.all([refreshDelivery(), refreshStorage()]);
-}
-
 export function canRetryStorageRead(failed: boolean, busy: boolean) {
   return failed && !busy;
 }

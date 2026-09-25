@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, useWindowDimensions } from 'react-native';
+import { View, useColorScheme, useWindowDimensions } from 'react-native';
 import { FeedbackPressable as Pressable } from './feedback-pressable';
 import { canOpenStage, stageComplete, stageStars, type StageRecord } from '@/core/stage-overview';
 import { Icon, Label, usePalette } from './ui';
@@ -19,6 +19,7 @@ export function StagePath({ records, current, ready, onSelect, bypass = false }:
   records: readonly StageRecord[]; current: number; ready: boolean; onSelect(stage: number): void; bypass?: boolean;
 }) {
   const c = usePalette();
+  const dark = useColorScheme() === 'dark';
   const [width, setWidth] = useState(0);
   const [selected, setSelected] = useState<StageAnchor | null>(null);
   useFocusEffect(useCallback(() => () => setSelected(null), []));
@@ -39,8 +40,8 @@ export function StagePath({ records, current, ready, onSelect, bypass = false }:
       const x = width * offsets[i % 4]!;
       const nextX = width * offsets[(i + 1) % 4]!;
       const label = !available ? isPlayableStage(record.stage) ? '이전 스테이지 완료 후 열림' : '준비 중' : record.session && record.session.phase !== 'complete' ? '이어하기' : complete ? '다시 학습' : '학습 시작';
-      const fill = !available ? c.card : active ? c.accent : complete ? c.bee : c.card;
-      const edge = !available ? c.outline : active ? c.accentPressed : complete ? c.fox : c.accentPressed;
+      const fill = !available ? c.stageFill : active ? c.accent : complete ? c.bee : c.stageFill;
+      const edge = active ? c.accentPressed : dark ? fill : c.outline;
       return <View key={record.stage} pointerEvents="box-none" style={{ height: rowHeight }}>
         {i < records.length - 1 && width > 0 && <View pointerEvents="none" accessible={false}
           style={{ position: 'absolute', inset: 0 }}>

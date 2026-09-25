@@ -1,8 +1,80 @@
 import AVFoundation
 import Foundation
 import Testing
+#if os(iOS)
+import UIKit
+#endif
 
-struct LessonVideoTests {
+@Suite(.serialized) struct LessonVideoTests {
+  @Test @MainActor func preparationNeverPresentsTheSourceOpeningBeforeTheRequestedPhrase() async throws {
+    let url = try await movie()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let video = LessonVideoPlayer()
+    let layer = AVPlayerLayer()
+    video.attach(layer)
+    defer { video.dispose(owner: "presentation") }
+    for generation in 1...3 {
+      video.reserve(owner: "presentation", generation: generation)
+      var finished = false
+      let preparation = Task { @MainActor in
+        defer { finished = true }
+        try await video.prepare(url: url, segments: [.init(start: 1, end: 2)], position: 0.2,
+          rate: 1, owner: "presentation", generation: generation)
+      }
+      var exposedOpening = false
+      while !finished {
+        if layer.player?.currentItem?.status == .readyToPlay,
+          (layer.player?.currentTime().seconds ?? 0) < 1.19 { exposedOpening = true }
+        try await Task.sleep(for: .milliseconds(1))
+      }
+      try await preparation.value
+      #expect(!exposedOpening)
+      #expect(layer.player === video.player)
+      #expect(abs(video.player.currentTime().seconds - 1.2) < 0.01)
+      #expect(video.player.rate == 0)
+    }
+    video.pause(owner: "presentation")
+    #expect(layer.player?.currentItem != nil)
+    #expect(abs((layer.player?.currentTime().seconds ?? 0) - 1.2) < 0.01)
+    video.dispose(owner: "presentation")
+    #expect(layer.player?.currentItem == nil)
+  }
+  #if os(iOS)
+  @Test @MainActor func interruptionRetiresReservedPreparationAndRequiresANewExplicitRequest() async throws {
+    let url = try await movie()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let notifications = NotificationCenter()
+    let video = LessonVideoPlayer(lifecycleNotifications: notifications)
+    defer { video.dispose(owner: "pending") }
+    var events: [[String: Any]] = []
+    video.onStatus = { events.append($0) }
+    video.reserve(owner: "pending", generation: 1, position: 0.3)
+    notifications.post(name: UIApplication.willResignActiveNotification, object: nil)
+    notifications.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+    #expect(events.count == 1)
+    #expect(events.first?["position"] as? Double == 0.3)
+    #expect(events.first?["generation"] as? Int == 1)
+    await #expect(throws: (any Error).self) {
+      try await video.prepare(url: url, segments: [.init(start: 1, end: 2)], position: 0.3,
+        rate: 1, owner: "pending", generation: 1)
+    }
+    video.reserve(owner: "pending", generation: 3, position: 0.3)
+    try await video.prepare(url: url, segments: [.init(start: 1, end: 2)], position: 0.3,
+      rate: 1, owner: "pending", generation: 3)
+    notifications.post(name: AVAudioSession.routeChangeNotification, object: nil,
+      userInfo: [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.categoryChange.rawValue])
+    #expect(video.matches("pending", 3))
+    #expect(video.player.rate == 0)
+    #expect(abs(video.player.currentTime().seconds - 1.3) < 0.01)
+    video.play(owner: "pending", generation: 3)
+    #expect(video.player.rate == 1)
+    notifications.post(name: AVAudioSession.mediaServicesWereLostNotification, object: nil)
+    #expect(video.player.rate == 0)
+    #expect(events.filter { $0["phase"] as? String == "paused" }.count == 2)
+    video.play(owner: "pending", generation: 3)
+    #expect(video.player.rate == 0)
+  }
+  #endif
   @Test(arguments: [1, 2])
   @MainActor func roundedNativeEndpointsStillAdvanceAndEnableConfirmation(count: Int) async throws {
     let url = try await movie()
@@ -21,12 +93,13 @@ struct LessonVideoTests {
     #expect(!events.contains("paused"))
     #expect(abs(video.player.currentTime().seconds - (count == 1 ? 0.6 : 2.4)) < 0.0001)
   }
-  @Test(arguments: ["pause", "replace", "fail"])
+  @Test(arguments: ["pause", "replace", "fail", "inactive", "interruption", "route", "reset"])
   @MainActor func pendingMemberSeekCannotCompleteOrRestartRetiredPlayback(action: String) async throws {
     let url = try await movie()
     defer { try? FileManager.default.removeItem(at: url) }
     var continuation: CheckedContinuation<Bool, Never>?
-    let video = LessonVideoPlayer(transitionSeek: { _, _ in
+    let notifications = NotificationCenter()
+    let video = LessonVideoPlayer(lifecycleNotifications: notifications, transitionSeek: { _, _ in
       await withCheckedContinuation { continuation = $0 }
     })
     defer { video.dispose(owner: video.owner) }
@@ -44,6 +117,30 @@ struct LessonVideoTests {
     for _ in 0..<3 { NotificationCenter.default.post(name: .AVPlayerItemDidPlayToEndTime, object: oldItem) }
     #expect(!events.contains { $0["phase"] as? String == "ended" })
     if action == "pause" { video.pause(owner: "group") }
+    #if os(iOS)
+    if action == "inactive" { notifications.post(name: UIApplication.willResignActiveNotification, object: nil) }
+    if action == "interruption" {
+      notifications.post(name: AVAudioSession.interruptionNotification, object: nil,
+        userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
+    }
+    if action == "route" {
+      notifications.post(name: AVAudioSession.routeChangeNotification, object: nil,
+        userInfo: [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue])
+    }
+    if action == "reset" { notifications.post(name: AVAudioSession.mediaServicesWereResetNotification, object: nil) }
+    if ["inactive", "interruption", "route", "reset"].contains(action) {
+      let paused = events.filter { $0["phase"] as? String == "paused" }
+      #expect(paused.count == 1)
+      #expect(paused.last?["generation"] as? Int == 1)
+      #expect(abs((paused.last?["position"] as? Double ?? 0) - 0.2) < 0.000001)
+      notifications.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+      notifications.post(name: AVAudioSession.interruptionNotification, object: nil,
+        userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue,
+          AVAudioSessionInterruptionOptionKey: AVAudioSession.InterruptionOptions.shouldResume.rawValue])
+    }
+    #else
+    if ["inactive", "interruption", "route", "reset"].contains(action) { video.pause(owner: "group") }
+    #endif
     if action == "replace" {
       video.reserve(owner: "new", generation: 2)
       try await video.prepare(url: url, segments: [.init(start: 1, end: 1.5)], position: 0, rate: 1, owner: "new", generation: 2)

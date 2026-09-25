@@ -16,6 +16,7 @@ test('learning text and labeled controls remain readable in both appearances', (
     const pairs = [
       ['body', p.text, p.background], ['secondary', p.secondary, p.background],
       ['card', p.text, p.card], ['heading', p.heading, p.background],
+      ['stage icon', p.heading, p.stageFill],
       ['primary button', p.onAccent, p.accent], ['selected option', p.heading, p.selection],
       ['secondary button', p.link, p.card], ['destructive action', p.danger, p.background],
     ];

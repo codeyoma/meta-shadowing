@@ -60,9 +60,9 @@ test('automatic capture waits for foreground, eligible learning and an observed 
   assert.deepEqual(f.calls, ['suspend', 'enable']);
 });
 
-test('automatic capture never runs in Release, the lab, or with denied/unknown permission', async () => {
-  for (const [development, route] of [[false, 'player'], [true, 'monitoring-lab']] as const) {
-    const f = fixture(), lab = new VoiceMonitorLab(f.port, f.lease, development, route);
+test('automatic capture never runs without capability, in the lab, or with denied/unknown permission', async () => {
+  for (const [supported, route] of [[false, 'player'], [true, 'monitoring-lab']] as const) {
+    const f = fixture(), lab = new VoiceMonitorLab(f.port, f.lease, supported, route);
     await lab.navigationChanged({ routes: [{ name: route }] });
     await lab.automaticChanged(monitorStatus(), activeLearning);
     assert.equal(f.calls.length, 0);
@@ -203,11 +203,11 @@ test('close cancels native permission without waiting for its response or reacti
   assert.deepEqual(f.calls.slice(-2), ['stop', 'restore']);
 });
 
-test('Release is inert and a failed suspend never enables capture', async () => {
-  const f = fixture(), release = new VoiceMonitorLab(f.port, f.lease, false);
-  await assert.rejects(release.open(), /development/);
-  await assert.rejects(release.enable(), /development/);
-  await release.close();
+test('unavailable capability is inert and a failed suspend never enables capture', async () => {
+  const f = fixture(), unavailable = new VoiceMonitorLab(f.port, f.lease, false);
+  await assert.rejects(unavailable.open(), /unavailable/);
+  await assert.rejects(unavailable.enable(), /unavailable/);
+  await unavailable.close();
   assert.equal(f.calls.length, 0);
   f.lease.suspend = async () => { throw Error('suspend failed'); };
   const lab = new VoiceMonitorLab(f.port, f.lease, true);
@@ -229,11 +229,11 @@ test('restore failure is retryable but closed lab cannot restart monitoring', as
   assert.equal(attempts, 2);
 });
 
-test('compact learning menu stays quiet during normal monitoring without changing control gates', () => {
+test('compact learning menu describes the wired feature without changing control gates', () => {
   for (const state of ['off', 'requesting', 'monitoring'] as const) {
     const compact = monitorPresentation(true, state, 'headphones', 'compact');
     const full = monitorPresentation(true, state, 'headphones');
-    assert.equal(compact.message, '');
+    assert.equal(compact.message, '유선이어폰 사용시 실시간으로 내 목소리를 모니터링 할 수 있어요');
     assert.equal(compact.canEnable, full.canEnable);
     assert.equal(compact.canPlay, full.canPlay);
   }
@@ -250,7 +250,7 @@ test('compact learning menu retains permission, connection and failure recovery 
   assert.equal(monitorPresentation(false, 'off', 'headphones', 'compact').available, false);
 });
 
-test('presentation gates Release and describes denied or unsupported routes', () => {
+test('presentation gates unavailable capability and describes denied or unsupported routes', () => {
   assert.equal(monitorPresentation(false, 'off', 'headphones').available, false);
   assert.equal(monitorPresentation(true, 'off', 'unsupported').canEnable, false);
   assert.match(monitorPresentation(true, 'denied', 'headphones').message, /마이크/);

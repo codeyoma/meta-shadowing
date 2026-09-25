@@ -19,7 +19,7 @@ final class VoiceMonitorEngine: VoiceMonitorHardware {
   var onInactive: (() -> Void)?
   var running: Bool { graph?.isRunning == true }
 
-  init(allowed: Bool = VoiceMonitorPolicy.developmentBuild,
+  init(allowed: Bool = VoiceMonitorPolicy.monitoringSupported,
        packages: URL = URL.documentsDirectory.appendingPathComponent("lesson-packages")) {
     self.allowed = allowed
     files = MonitorSampleFiles(packages: packages)
@@ -198,7 +198,7 @@ final class VoiceMonitorService {
   private var invalidationVersion = 0
   var onChange: (([String: Any]) -> Void)?
   init(lifetime: MonitorLifetime) {
-    controller = VoiceMonitorController(hardware: engine, allowed: VoiceMonitorPolicy.developmentBuild, defaults: .standard, lifetime: lifetime)
+    controller = VoiceMonitorController(hardware: engine, allowed: VoiceMonitorPolicy.monitoringSupported, defaults: .standard, lifetime: lifetime)
     engine.onInvalidation = { [weak self] in
       guard let self else { return }
       self.invalidationVersion += 1

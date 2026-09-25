@@ -5,7 +5,7 @@ final class LessonVideoView: ExpoView {
   private let videoLayer = AVPlayerLayer()
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
-    videoLayer.player = LessonVideoPlayer.shared.player
+    LessonVideoPlayer.shared.attach(videoLayer)
     videoLayer.videoGravity = .resizeAspect
     layer.addSublayer(videoLayer)
     clipsToBounds = true

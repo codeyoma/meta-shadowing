@@ -9,6 +9,8 @@ import { LearningContext } from './learning-context';
 import { readVideoPackage } from './video-package';
 import { presentLearningUnits } from './learning-presentation';
 import { decodeSettings } from './settings';
+import { lessonRemoteSnapshot, takeLessonRemoteAction } from './lesson-remote';
+import { mainPlayerAction } from './player-presentation';
 
 function fixture() {
   let listener: (s: VideoStatus) => void = () => {};
@@ -22,6 +24,42 @@ function fixture() {
     listener({ owner: 'test', generation, phase, position, duration: 2.5 });
   } };
 }
+test('native interruption during preparation cancels resume without an audio error or late autoplay', async () => {
+  const f = fixture();
+  let resolve!: () => void, generation = 0, plays = 0, player: Player;
+  f.bridge.prepare = (_owner, token) => { generation = token; return new Promise<void>(done => { resolve = done; }); };
+  f.bridge.play = () => plays++;
+  const port = videoPlayback('test', f.bridge, d => player.audioEnded(d), () => player.audioFailed(), () => player.pause());
+  player = new Player(createSession({ runId: 'preparing', stage: 1, phraseCount: 2, rate: 1, mode: 'manual' }),
+    port, () => {}, () => 0, () => {});
+  const pending = player.resume();
+  f.emit('paused', 0, generation);
+  resolve();
+  await pending;
+  assert.equal(plays, 0);
+  assert.equal(player.error, null);
+  assert.equal(player.state.running, false);
+  assert.equal(player.state.confirmed, 0);
+  f.emit('ended', 2.5, generation);
+  assert.equal(player.state.confirmed, 0);
+  player.dispose();
+});
+test('AppState pause arriving first retains the latest sampled checkpoint and rejects late native events', async () => {
+  const f = fixture();
+  let player: Player;
+  const port = videoPlayback('test', f.bridge, d => player.audioEnded(d), () => player.audioFailed(), () => player.pause());
+  player = new Player(createSession({ runId: 'app-state-first', stage: 1, phraseCount: 2, rate: 1, mode: 'manual' }),
+    port, () => {}, () => 0, () => {});
+  await player.resume();
+  f.emit('playing', 0.75);
+  player.pause();
+  f.emit('paused', 0.76); f.emit('ended', 2.5);
+  assert.equal(player.state.audioSeconds, 0.75);
+  assert.equal(player.state.running, false);
+  assert.equal(player.state.confirmed, 0);
+  assert.equal(player.error, null);
+  player.dispose();
+});
 test('decision entry restores its paused video frame without playback or additional credits', async () => {
   let frames = 0, plays = 0, saves = 0;
   const port = { async prepare() {}, play() { plays++; }, pause() {}, position: () => 0, dispose() {},
@@ -85,7 +123,7 @@ test('a partial video failure pauses without confirmation and obsolete events ca
   f.emit('failed', 0, firstGeneration);
   assert.equal(player.error, null);
 });
-test('video confirmations persist five repeat credits once and restore without additional rewards', async () => {
+test('wired video actions persist exactly five repeat credits and ignore unavailable or duplicate presses', async () => {
   const db = new DatabaseSync(':memory:');
   try {
     const journal = new Journal({ exec: sql => db.exec(sql),
@@ -100,16 +138,30 @@ test('video confirmations persist five repeat credits once and restore without a
     const port = videoPlayback('test', f.bridge, d => player.audioEnded(d), () => player.audioFailed(), () => player.pause());
     player = new Player(initial, port, context.createWriter(initial), () => 1000, () => {});
     await player.resume();
-    f.emit('playing', 0.75); player.pause();
+    const snapshot = (ready = true) => ({ owner: 'lesson', ...lessonRemoteSnapshot(player.state, player.error, ready) });
+    const playing = snapshot();
+    assert.equal(takeLessonRemoteAction(playing, { ...playing, action: 'main' }), null);
+    assert.equal(takeLessonRemoteAction(playing, { ...playing, action: 'repeat' }), null);
+    f.emit('playing', 0.75); f.emit('paused', 0.75);
     assert.equal(context.load(1)?.audioSeconds, 0.75);
     assert.equal(journal.progress.summary('english').xp, 0);
+    const hidden = snapshot(false);
+    assert.equal(takeLessonRemoteAction(hidden, { ...hidden, action: 'main' }), null);
+    const paused = snapshot();
+    assert.equal(mainPlayerAction(player.state, player.error), 'resume');
+    assert.equal(takeLessonRemoteAction(paused, { ...paused, action: 'main' }), 'main');
     await player.resume();
     for (let cycle = 0; cycle < 5; cycle++) {
       f.emit('ended', 2.5);
       assert.equal(journal.progress.summary('english').xp, cycle);
+      const gate = snapshot(), action = cycle === 2 ? 'repeat' : 'main';
+      if (cycle !== 2) assert.equal(takeLessonRemoteAction(gate, { ...gate, action: 'repeat' }), null);
+      assert.equal(takeLessonRemoteAction(gate, { ...gate, action }), action);
+      assert.equal(takeLessonRemoteAction(gate, { ...gate, action }), null);
       if (cycle === 2) await player.choose('repeat');
       else if (cycle === 4) await player.choose('next');
       else await player.confirm();
+      assert.equal(player.state.planned, cycle < 2 ? 3 : 5);
     }
     assert.equal(journal.progress.summary('english').xp, 5);
     assert.equal(context.completions(1), 1);
