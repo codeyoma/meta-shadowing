@@ -4,7 +4,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { playableStage, isPlayableStage } from '@/core/catalog';
 import { canOpenStage } from '@/core/stage-overview';
 import { LearningContext } from '@/core/learning-context';
-import { loadCurrentAnalysis } from '@/core/current-analysis';
+import { currentAnalysisSession, loadCurrentAnalysis } from '@/core/current-analysis';
 import type { AnalysisSentence } from '@/core/sentence-analysis';
 import { selectedPackage } from '@/native/catalog';
 import { getJournal } from '@/native/journal';
@@ -30,11 +30,11 @@ export function PlayerAnalysis() {
     setResult(null);
     if (!valid || !pack || !stage) return;
     const context = new LearningContext(pack, getJournal());
+    const scope = { stage, phrase: Number(params.phrase), run: params.run };
     const authorized = () => active && mayUsePackage(pack) && getProgressSync().authorized(profile.authority, profile.id);
     const unsubscribe = getProgressSync().subscribe(() => {
       try {
-        const saved = authorized() ? context.load(stage) : null;
-        if (saved?.runId === params.run && saved.phrase === Number(params.phrase)) return;
+        if (currentAnalysisSession(context, scope, authorized)) return;
       } catch { /* Unreadable checkpoints must remove already displayed source text. */ }
       active = false;
       setResult({ key: identity, sentences: null });
@@ -48,7 +48,7 @@ export function PlayerAnalysis() {
           if (active) setResult({ key: identity, sentences: null });
           return;
         }
-        const sentences = await loadCurrentAnalysis(context, { stage, phrase: Number(params.phrase), run: params.run },
+        const sentences = await loadCurrentAnalysis(context, scope,
           authorized, () => readInstalledSyntax(pack));
         if (authorized()) setResult({ key: identity, sentences });
       } catch { if (active) setResult({ key: identity, sentences: null }); }

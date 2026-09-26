@@ -8,18 +8,21 @@ import { syntaxFixture, syntaxPhrases } from '../test-support/syntax-fixture';
 
 test('sentence menu opens the selected POS detail and Back returns without selecting another learning unit', t => {
   const runtime = nativeHooks(); t.after(runtime.dispose);
-  let closes = 0;
+  let closes = 0, haptics = 0;
   const load = nativeModules({ react: runtime.hooks, 'react-native-reanimated': nativeMotion,
     'react-native': { ScrollView: 'ScrollView', View: 'View', Text: 'Text', Pressable: 'Pressable',
-      useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale: 1 }) },
-    'expo-image': { Image: 'Image' }, 'expo-haptics': {}, 'expo-font': { isLoaded: () => false },
-    expo: { requireOptionalNativeModule: () => null, requireNativeModule: () => ({}) },
-    'expo-router': { Stack: { Screen: 'Screen', Toolbar: Object.assign('Toolbar', { Button: 'ToolbarButton' }) } },
+      AppState: { currentState: 'active' }, useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale: 1 }) },
+    'expo-image': { Image: 'Image' }, 'expo-haptics': { ImpactFeedbackStyle: { Light: 'light' },
+      impactAsync: async () => { haptics++; } }, 'expo-font': { isLoaded: () => false },
+    expo: { requireOptionalNativeModule: () => null, requireNativeModule: () => ({ isEnabled: () => true }) },
+    'expo-router': { usePathname: () => '/player-info',
+      Stack: { Screen: 'Screen', Toolbar: Object.assign('Toolbar', { Button: 'ToolbarButton' }) } },
   });
   const { AnalysisBrowser } = load('components/analysis-browser.tsx');
   const sentences = readSentenceAnalysis(JSON.stringify(syntaxFixture()), syntaxPhrases, 'en', [0]);
   runtime.render(React.createElement(AnalysisBrowser, { sentences, onClose: () => closes++ }));
   runtime.find('문장 2 분석: Fish swim.').onPress();
+  assert.equal(haptics, 1, 'Sentence selection follows normal enabled-button feedback');
   const nodes = runtime.flush();
   assert.ok(nodes.some(n => n.props.children === 'Fish swim.'));
   assert.ok(nodes.some(n => n.props.children === '명사'));

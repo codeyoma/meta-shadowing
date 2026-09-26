@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ScrollView, View, Pressable } from 'react-native';
+import { ScrollView, View } from 'react-native';
+import { FeedbackPressable as Pressable } from './feedback-pressable';
 import { Stack } from 'expo-router';
 import { Icon, Label, usePalette } from './ui';
 import { partOfSpeechName, type AnalysisSentence } from '@/core/sentence-analysis';
