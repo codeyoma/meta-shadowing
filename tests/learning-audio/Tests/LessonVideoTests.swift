@@ -101,12 +101,16 @@ import UIKit
     #expect(video.player.rate == 0)
     let heldTime = video.player.currentTime().seconds
     let expectedEnd = count == 1 ? 0.6 : 2.4
-    // The synthetic movie is 30 fps. AVPlayer's stopped clock may overshoot
-    // by milliseconds; selected-time completion above must still be exact.
+    // The synthetic movie is 30 fps. AVPlayer's stopped clock may settle
+    // by milliseconds after pause; selected-time completion must still be exact.
     #expect(heldTime >= expectedEnd - 1.0 / 60000)
     #expect(heldTime < expectedEnd + 1.0 / 30)
     try await Task.sleep(for: .milliseconds(100))
-    #expect(abs(video.player.currentTime().seconds - heldTime) < 1.0 / 60000)
+    let settledTime = video.player.currentTime().seconds
+    #expect(video.player.rate == 0)
+    #expect(settledTime >= expectedEnd - 1.0 / 60000)
+    #expect(settledTime < expectedEnd + 1.0 / 30)
+    #expect(abs(settledTime - heldTime) < 1.0 / 30)
     #expect(events.filter { $0["phase"] as? String == "ended" }.count == 1)
   }
   @Test(arguments: ["pause", "replace", "fail", "inactive", "interruption", "route", "reset"])
@@ -194,7 +198,10 @@ import UIKit
       if time > 1.85 && time < 2.3 { #expect(video.player.rate == 1.5) }
       try await Task.sleep(for: .milliseconds(10))
     }
-    #expect(events.filter { $0["phase"] as? String == "ended" }.count == 1)
+    // Numeric fixture state only: CI summaries must not expose asset URLs or device metadata.
+    let phases = events.compactMap { $0["phase"] as? String }
+    #expect(events.filter { $0["phase"] as? String == "ended" }.count == 1,
+      "phases=\(phases), time=\(video.player.currentTime().seconds), end=\(item.forwardPlaybackEndTime.seconds), rate=\(video.player.rate), control=\(video.player.timeControlStatus.rawValue), itemStatus=\(item.status.rawValue)")
     #expect(!events.contains { $0["phase"] as? String == "paused" })
     #expect(abs((events.last?["duration"] as? Double ?? 0) - 1) < 0.000001)
     #expect(abs(video.player.currentTime().seconds - 2.4) < 0.05)
