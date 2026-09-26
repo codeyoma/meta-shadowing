@@ -68,9 +68,11 @@ test('invalidating a pending sheet blocks repeated taps until dismissal and reje
   assert.equal(player.state.confirmed, 0);
 });
 
-test('save and presentation failures keep learning paused and expose recovery without earning progress', async () => {
+for (const stage of [6, 11, 13, 15] as const)
+test(`stage ${stage} save and presentation failures preserve progress and expose recovery`, async () => {
   let saved: Session | undefined, failSave = false, failPresentation = true, presentations = 0;
-  const player = new Player(createSession({ runId: 'failure', stage: 6, phraseCount: 2, mode: 'manual', rate: 1.5 }),
+  const player = new Player({ ...createSession({ runId: 'failure', stage, phraseCount: 2, mode: 'manual', rate: 1.5 }),
+    ...(stage >= 11 ? { phase: 'speaking' as const } : {}) },
     { prepare: async () => {}, play() {}, pause() {}, position: () => 2.5, dispose() {} },
     s => { if (failSave) throw Error('disk'); saved = structuredClone(s); }, () => 0, () => {});
   await player.resume();
@@ -84,7 +86,8 @@ test('save and presentation failures keep learning paused and expose recovery wi
   failSave = false; player.retrySave();
   await assert.rejects(dictionary.lookup('unit', 'word'), /native/);
   assert.equal(dictionary.blocked, false);
-  assert.equal(saved?.audioSeconds, 2.5);
+  assert.equal(saved?.audioSeconds, stage >= 11 ? 0 : 2.5);
+  if (stage >= 11) assert.equal(saved?.phase, 'speaking');
   assert.equal(saved?.confirmed, 0);
   assert.equal(saved?.running, false);
   failPresentation = false;

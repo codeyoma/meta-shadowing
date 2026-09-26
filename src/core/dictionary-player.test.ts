@@ -6,12 +6,18 @@ import { ProgressProfiles, ProgressSync } from './progress-sync';
 import type { ProgressCloud } from '../../modules/progress-cloud';
 import manifest from '../../assets/sample/manifest.json';
 import { createGroupedSession, createSession } from './session';
-import { isFirstWordStage, isGroupedStage } from './catalog';
+import { isFirstWordStage, isGroupedStage, isRevealStage } from './catalog';
 import { nativeModules, nativeMotion } from '../test-support/native-render';
 import { nativeHooks } from '../test-support/native-hooks';
 
-for (const stage of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const)
-test(`stage ${stage} lookup blocks controls, preserves progress and hints, and rejects background callbacks`, async t => {
+for (const stage of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as const)
+for (const incomplete of isRevealStage(stage) ? [false, true] : [false])
+test(`stage ${stage} ${incomplete ? 'unfinished reveal ignores lookup' : 'lookup preserves progress and rejects background callbacks'}`, async t => {
+  let milliseconds = 0;
+  if (incomplete) {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] });
+    t.mock.method(performance, 'now', () => milliseconds);
+  }
   const runtime = nativeHooks(), db = new DatabaseSync(':memory:');
   const profiles = new ProgressProfiles(() => ({ exec: sql => db.exec(sql),
     run: (sql, ...args) => { db.prepare(sql).run(...args); },
@@ -20,7 +26,7 @@ test(`stage ${stage} lookup blocks controls, preserves progress and hints, and r
   }), () => 'profile');
   const sync = new ProgressSync(profiles, { stop: async () => {} } as ProgressCloud);
   t.after(() => { runtime.dispose(); sync.dispose(); db.close(); });
-  let appState = 'background', plays = 0, finish: (() => void) | undefined;
+  let appState = 'background', plays = 0, permitted = true, finish: (() => void) | undefined;
   let ended: ((duration: number) => void) | undefined;
   const appListeners = new Set<(state: string) => void>(), lookups: string[] = [], alerts: string[] = [];
   let remote: ((event: unknown) => void) | undefined;
@@ -30,7 +36,8 @@ test(`stage ${stage} lookup blocks controls, preserves progress and hints, and r
   const checkpoint = { ...(isGroupedStage(stage)
     ? createGroupedSession({ ...initial, sourcePhraseCount: manifest.phrases.length, groupSize: 2 })
     : createSession({ ...initial, phraseCount: manifest.phrases.length })),
-    phase: 'listening' as const, audioSeconds: 1.5 };
+    phase: isRevealStage(stage) && !incomplete ? 'speaking' as const : 'listening' as const,
+    audioSeconds: isRevealStage(stage) ? 0 : 1.5 };
   profiles.current().journal.save(pack.packageKey, checkpoint, { language: 'english', book: manifest.id });
   const saved = () => profiles.current().journal.load(pack.packageKey, stage, manifest.phrases.length);
   const navigation = { addListener: () => () => {}, isFocused: () => true };
@@ -56,9 +63,10 @@ test(`stage ${stage} lookup blocks controls, preserves progress and hints, and r
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
     '@/native/progress-sync': { getProgressSync: () => sync, startProgressSync: () => () => {} },
     '@/native/catalog': { selectedPackage: () => pack }, '@/native/package': { isInstalled: async () => true },
-    '@/native/paid-package': { isPaidDuo: () => false, mayUsePackage: () => true },
+    '@/native/paid-package': { isPaidDuo: () => false, mayUsePackage: () => permitted },
     '@/native/stage-access': { testStageAccess: async () => true }, '@/native/voice-monitor': { learningMonitorSupported: false, learningMonitor: () => undefined },
     '@/native/audio': { nativeAudio: (_: unknown, onEnd: typeof ended) => {
+      assert(!isRevealStage(stage), 'Silent lookup must never allocate native audio');
       ended = onEnd;
       return { prepare: async () => {}, play() { plays++; }, pause() {}, position: () => 1.5, dispose() {} };
     } },
@@ -77,17 +85,84 @@ test(`stage ${stage} lookup blocks controls, preserves progress and hints, and r
   await new Promise(resolve => setImmediate(resolve));
   runtime.flush();
   appState = 'active'; appListeners.forEach(fn => fn(appState)); runtime.flush();
+  if (incomplete) {
+    const assertInert = () => {
+      const before = saved();
+      for (const node of runtime.flush()) {
+        if (node.type === 'Text') node.props.onPress?.();
+        node.props.onAccessibilityAction?.({ nativeEvent: { actionName: 'lookup-0' } });
+      }
+      assert.deepEqual(saved(), before, 'A word touch cannot write or pause the checkpoint');
+      assert.deepEqual(lookups, []);
+      assert(!runtime.flush().some(n => n.props.accessibilityActions?.length), 'No lookup actions before Next');
+    };
+    assertInert(); // Paused, incomplete: enabled Play is not enabled Next.
+    runtime.find('이어하기').onPress({ nativeEvent: { pageX: 0, pageY: 0 } });
+    await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+    for (let step = 0; step < 2; step++) {
+      const delta = stage >= 15 ? 750 : 2100;
+      milliseconds += delta; t.mock.timers.tick(delta); runtime.flush();
+      assert.equal(runtime.find('음성 재생 중').disabled, true);
+      assert.equal(saved()?.audioSeconds, milliseconds / 1000);
+      assertInert(); // Includes the first/second-language boundary.
+    }
+    milliseconds += 20000; t.mock.timers.tick(20000); runtime.flush();
+    assert.equal(runtime.find('다음 문장 또는 학습 마치기').disabled, false);
+    assert.deepEqual(lookups, [], 'Ignored touches must never queue a later lookup');
+    assert.equal(saved()?.confirmed, 0);
+    const term = stage >= 15 ? '아침' : 'window';
+    runtime.flush().find(n => n.props.children === term && n.props.onPress)!.props.onPress();
+    assert.deepEqual(lookups, [term]);
+    finish?.(); await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+    assert.equal(runtime.find('다음 문장 또는 학습 마치기').disabled, false);
+    assert.equal(saved()?.confirmed, 0);
+    assert.equal(plays, 0);
+    return;
+  }
   if (isFirstWordStage(stage)) runtime.find('자막 보기').onPress();
   const nodes = runtime.flush();
-  const word = nodes.find(node => node.props.children === 'window' && node.props.onPress);
+  const term = stage >= 15 ? '아침' : 'window';
+  const word = nodes.find(node => node.props.children === term && node.props.onPress);
   assert.ok(word, 'The revealed original word is a tap target');
   await new Promise(resolve => setImmediate(resolve));
   const queuedRevision = remoteRevision;
   word.props.onPress();
   remote?.({ owner: 'test-id', revision: queuedRevision, action: 'main' });
-  assert.deepEqual(lookups, ['window']);
+  assert.deepEqual(lookups, [term]);
   const frozen = saved();
   assert.deepEqual(frozen, checkpoint);
+  if (isRevealStage(stage)) {
+    assert.equal(runtime.find('다음 문장 또는 학습 마치기').disabled, true);
+    assert(!nodes.some(n => n.props.accessibilityLabel === '두 번 더 연습'));
+    if (stage >= 15) assert(!nodes.some(n => n.props.children === 'window'));
+    finish?.(); await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+    assert.equal(runtime.find('다음 문장 또는 학습 마치기').disabled, false);
+    assert.deepEqual(saved(), checkpoint);
+    const line = runtime.flush().find(n => n.props.accessibilityActions?.some((a: any) => a.label === `${term} 사전 찾기`))!;
+    const action = line.props.accessibilityActions.find((a: any) => a.label === `${term} 사전 찾기`);
+    line.props.onAccessibilityAction({ nativeEvent: { actionName: action.name } });
+    assert.deepEqual(lookups, [term, term]);
+    appState = 'background'; appListeners.forEach(fn => fn(appState));
+    await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+    appState = 'active'; appListeners.forEach(fn => fn(appState)); runtime.flush();
+    word.props.onPress();
+    assert.equal(lookups.length, 2, 'A pre-background callback must not revive lookup');
+    assert.deepEqual(saved(), checkpoint);
+    assert.equal(plays, 0);
+    const latestWord = runtime.flush().find(n => n.props.children === term && n.props.onPress)!;
+    permitted = false;
+    latestWord.props.onPress();
+    assert.equal(lookups.length, 2, 'Revoked access rejects even a previously rendered word');
+    assert.deepEqual(saved(), checkpoint);
+    permitted = true;
+    runtime.find('다음 문장 또는 학습 마치기').onPress({ nativeEvent: { pageX: 0, pageY: 0 } });
+    latestWord.props.onPress();
+    assert.equal(lookups.length, 2, 'Busy advancement rejects the old completed word immediately');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(saved()?.phrase, 1);
+    assert(!runtime.flush().some(n => n.type === 'Text' && n.props.onPress), 'The next unfinished phrase disables lookup');
+    return;
+  }
   runtime.find('이어하기').onPress?.({ nativeEvent: { pageX: 0, pageY: 0 } });
   assert.equal(plays, 0, 'The footer cannot play behind the dictionary');
   finish?.(); await new Promise(resolve => setImmediate(resolve)); runtime.flush();

@@ -2,14 +2,18 @@ import { subtitleSpans } from './subtitle-mask';
 import { isFirstWordStage, isRevealStage, type PlayableStage } from './catalog';
 import { groupedSpeechBubbles } from './grouped-speech';
 import type { LearningUnit } from './learning-units';
+import { revealLines } from './word-reveal';
 
 export type WordRange = { start: number; end: number };
 export type WordTokenizer = (text: string) => readonly WordRange[];
 export type LookupSpan = { text: string; hint: boolean; term?: string };
 
 /** Revalidate requests against the current unit, using the renderer's visible spans. */
-export function visibleLookupWords(unit: LearningUnit | undefined, stage: PlayableStage, revealed: boolean, tokenize: WordTokenizer): ReadonlySet<string> {
-  if (!unit || isRevealStage(stage)) return new Set();
+export function visibleLookupWords(unit: LearningUnit | undefined, stage: PlayableStage, revealed: boolean, tokenize: WordTokenizer,
+  revealComplete = false): ReadonlySet<string> {
+  if (!unit || (isRevealStage(stage) && !revealComplete)) return new Set();
+  if (isRevealStage(stage)) return new Set(revealLines(unit, stage)
+    .flatMap(line => lookupSpans(line.text, false, tokenize)).flatMap(span => span.term ? [span.term] : []));
   return new Set(groupedSpeechBubbles(unit.members).flat().flatMap(pair => [
     ...lookupSpans(pair.text, isFirstWordStage(stage) && !revealed, tokenize),
     ...lookupSpans(pair.translation, false, tokenize),
