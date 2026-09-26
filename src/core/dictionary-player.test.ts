@@ -12,7 +12,8 @@ import { nativeHooks } from '../test-support/native-hooks';
 
 for (const stage of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as const)
 for (const incomplete of isRevealStage(stage) ? [false, true] : [false])
-test(`stage ${stage} ${incomplete ? 'unfinished reveal ignores lookup' : 'lookup preserves progress and rejects background callbacks'}`, async t => {
+for (const entry of stage === 5 || (incomplete && [11, 13, 15].includes(stage)) ? ['dictionary', 'analysis'] : ['dictionary'])
+test(`stage ${stage} ${entry === 'analysis' ? 'analysis opens before source reveal completes' : incomplete ? 'unfinished reveal ignores lookup' : 'lookup preserves progress and rejects background callbacks'}`, async t => {
   let milliseconds = 0;
   if (incomplete) {
     t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] });
@@ -29,6 +30,7 @@ test(`stage ${stage} ${incomplete ? 'unfinished reveal ignores lookup' : 'lookup
   let appState = 'background', plays = 0, permitted = true, finish: (() => void) | undefined;
   let ended: ((duration: number) => void) | undefined;
   const appListeners = new Set<(state: string) => void>(), lookups: string[] = [], alerts: string[] = [];
+  const routes: { pathname: string; params: Record<string, unknown> }[] = [];
   let remote: ((event: unknown) => void) | undefined;
   let remoteRevision = '';
   const pack = { owned: true, packageKey: `${manifest.id}-v${manifest.version}`, manifest, language: 'english' };
@@ -57,10 +59,11 @@ test(`stage ${stage} ${incomplete ? 'unfinished reveal ignores lookup' : 'lookup
     'expo-font': { isLoaded: () => true }, 'expo-image': { Image: 'Image' },
     'expo-router': { usePathname: () => '/player', useLocalSearchParams: () => ({ stage: String(stage), package: pack.packageKey }),
       useFocusEffect: (fn: () => any) => runtime.hooks.useEffect(fn, [fn]), useNavigation: () => navigation,
-      Stack: { Screen: 'Screen' }, router: { back() {}, push() {} } },
+      Stack: { Screen: entry === 'analysis' ? ({ options }: any) => options.header?.() ?? null : 'Screen' },
+      router: { back() {}, push: (route: typeof routes[number]) => routes.push(route) } },
     'expo-router/react-navigation': { useHeaderHeight: () => 50, useNavigationState: () => null, useIsFocused: () => true },
     expo: { requireNativeView: () => 'Video' }, 'expo-crypto': { randomUUID: () => 'test-id' },
-    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
     '@/native/progress-sync': { getProgressSync: () => sync, startProgressSync: () => () => {} },
     '@/native/catalog': { selectedPackage: () => pack }, '@/native/package': { isInstalled: async () => true },
     '@/native/paid-package': { isPaidDuo: () => false, mayUsePackage: () => permitted },
@@ -85,6 +88,39 @@ test(`stage ${stage} ${incomplete ? 'unfinished reveal ignores lookup' : 'lookup
   await new Promise(resolve => setImmediate(resolve));
   runtime.flush();
   appState = 'active'; appListeners.forEach(fn => fn(appState)); runtime.flush();
+  if (entry === 'analysis') {
+    runtime.find('이어하기').onPress({ nativeEvent: { pageX: 0, pageY: 0 } });
+    await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+    assert.equal(runtime.find('음성 재생 중').disabled, true);
+    assert.ok(!runtime.flush().some(n => n.props.accessibilityLabel === '다음 문장 또는 학습 마치기'));
+    const before = saved()!;
+    if (stage === 13) { milliseconds += 125; db.exec('PRAGMA query_only = ON'); }
+    runtime.find('문장 분석 열기').onPress();
+    if (stage === 13) {
+      assert.deepEqual(routes, [], 'Failed pause checkpoint must prevent opening analysis');
+      assert.deepEqual(saved(), before);
+      db.exec('PRAGMA query_only = OFF');
+    } else {
+      assert.equal(routes.length, 1);
+      assert.deepEqual(structuredClone(routes[0]), { pathname: '/player-info', params: { kind: 'analysis', stage,
+        package: pack.packageKey, phrase: 0, run: 'lookup', profile: sync.getSnapshot().profile,
+        authority: sync.getSnapshot().authority } });
+      assert.equal(saved()?.running, false);
+      for (const field of ['runId', 'phrase', 'confirmed', 'planned', 'phase'] as const)
+        assert.equal(saved()?.[field], before[field]);
+      const paused = saved(), playsAtOpen = plays;
+      await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+      assert.deepEqual(saved(), paused);
+      assert.equal(plays, playsAtOpen, 'Analysis does not automatically resume playback');
+      assert.equal(runtime.find('이어하기').disabled, false);
+      permitted = false;
+      runtime.find('문장 분석 열기').onPress();
+      assert.equal(routes.length, 1, 'Revoked package access rejects even a rendered analysis icon');
+    }
+    assert.equal(profiles.current().journal.progress.summary('english').xp, 0);
+    assert.deepEqual(lookups, [], 'Analysis must not open the word dictionary');
+    return;
+  }
   if (incomplete) {
     const assertInert = () => {
       const before = saved();

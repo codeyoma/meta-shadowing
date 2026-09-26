@@ -18,20 +18,27 @@ final class DictionaryPresentationTests: XCTestCase {
       finishes += 1; dismissed.fulfill()
     }
     let sheet = try XCTUnwrap(root.presentedViewController)
+    let navigation = try XCTUnwrap(sheet as? UINavigationController)
+    let content = try XCTUnwrap(navigation.viewControllers.first)
+    content.loadViewIfNeeded()
     let lifecycle = DismissalLifecycleObserver()
-    sheet.addChild(lifecycle); sheet.view.addSubview(lifecycle.view); lifecycle.didMove(toParent: sheet)
-    XCTAssertTrue(sheet.children.contains { $0 is UIReferenceLibraryViewController })
+    content.addChild(lifecycle); content.view.addSubview(lifecycle.view); lifecycle.didMove(toParent: content)
+    XCTAssertTrue(content.children.contains { $0 is UIReferenceLibraryViewController })
+    XCTAssertNil(content.title, "Only Apple's dictionary should display the lookup term")
+    XCTAssertNil(content.navigationItem.rightBarButtonItem, "Do not duplicate Apple's close control")
+    XCTAssertTrue(navigation.isNavigationBarHidden, "Do not reserve space for an empty app-owned header")
     XCTAssertTrue(sheet.view.accessibilityViewIsModal)
     XCTAssertEqual(sheet.modalPresentationStyle, .formSheet)
     let drawer = try XCTUnwrap(sheet.sheetPresentationController)
     XCTAssertTrue(drawer.prefersGrabberVisible, "Use UIKit's interactive grabber, like the learning menu")
+    XCTAssertEqual(drawer.preferredCornerRadius, 32)
     XCTAssertEqual(drawer.detents.map(\.identifier), [.large], "Open at the learning drawer's full height")
     let duplicate = expectation(description: "Duplicate rejected")
     presenter.present(id: "two", term: "door", from: root) { result in
       if case .success = result { XCTFail("A second presentation must not open") }
       duplicate.fulfill()
     }
-    let resume = try XCTUnwrap(sheet.view.subviews.compactMap { $0 as? UIButton }.first)
+    let resume = try XCTUnwrap(content.view.subviews.compactMap { $0 as? UIButton }.first)
     XCTAssertEqual(resume.accessibilityLabel, "학습 이어하기")
     resume.sendActions(for: .touchUpInside) // Includes dismissal during the presentation animation.
     await fulfillment(of: [dismissed, duplicate], timeout: 5)
@@ -52,19 +59,25 @@ final class DictionaryPresentationTests: XCTestCase {
       done.fulfill()
     }
     let sheet = try XCTUnwrap(root.presentedViewController)
-    let library = try XCTUnwrap(sheet.children.first as? UIReferenceLibraryViewController)
+    let navigation = try XCTUnwrap(sheet as? UINavigationController)
+    let content = try XCTUnwrap(navigation.viewControllers.first)
+    content.loadViewIfNeeded()
+    let library = try XCTUnwrap(content.children.first as? UIReferenceLibraryViewController)
     try await Task.sleep(for: .milliseconds(600))
     sheet.view.layoutIfNeeded()
     XCTAssertFalse(sheet.isModalInPresentation, "The drawer must allow interactive dismissal")
     XCTAssertFalse(library.isModalInPresentation, "The system child must not veto drawer dismissal")
-    let resume = try XCTUnwrap(sheet.view.subviews.compactMap { $0 as? UIButton }.first)
-    XCTAssertEqual(library.view.frame.minY, 16, "Only reserve space for the handle, not a duplicate top header")
-    XCTAssertEqual(library.view.frame.width, sheet.view.bounds.width)
+    let resume = try XCTUnwrap(content.view.subviews.compactMap { $0 as? UIButton }.first)
+    XCTAssertEqual(library.view.frame.minY, content.view.safeAreaLayoutGuide.layoutFrame.minY,
+      "The system dictionary must start at the safe area without an extra app-owned header")
+    XCTAssertEqual(library.view.frame.width, content.view.bounds.width)
     XCTAssertLessThanOrEqual(library.view.frame.maxY, resume.frame.minY - 16,
       "Dictionary content must not extend behind the fixed learning button")
     XCTAssertEqual(resume.frame.minX, 16, accuracy: 0.5)
-    XCTAssertEqual(resume.frame.maxX, sheet.view.bounds.maxX - 16, accuracy: 0.5)
-    XCTAssertEqual(resume.frame.maxY, sheet.view.safeAreaLayoutGuide.layoutFrame.maxY - 16, accuracy: 0.5)
+    XCTAssertEqual(resume.frame.maxX, content.view.bounds.maxX - 16, accuracy: 0.5)
+    XCTAssertEqual(resume.frame.maxY,
+      content.view.bounds.maxY - max(16, content.view.safeAreaInsets.bottom) - 4, accuracy: 0.5,
+      "Match the menu footer's safe-area padding and four-point button shadow space")
     XCTAssertGreaterThanOrEqual(resume.frame.height, 54)
     library.dismiss(animated: false)
     await fulfillment(of: [done], timeout: 5)
@@ -84,8 +97,11 @@ final class DictionaryPresentationTests: XCTestCase {
         done.fulfill()
       }
       let sheet = try XCTUnwrap(root.presentedViewController)
+      let navigation = try XCTUnwrap(sheet as? UINavigationController)
+      let content = try XCTUnwrap(navigation.viewControllers.first)
+      content.loadViewIfNeeded()
       let lifecycle = DismissalLifecycleObserver()
-      sheet.addChild(lifecycle); sheet.view.addSubview(lifecycle.view); lifecycle.didMove(toParent: sheet)
+      content.addChild(lifecycle); content.view.addSubview(lifecycle.view); lifecycle.didMove(toParent: content)
       XCTAssertTrue(sheet.isBeingPresented)
       if userFirst { XCTAssertTrue(sheet.accessibilityPerformEscape()) }
       presenter.dismissCurrent()

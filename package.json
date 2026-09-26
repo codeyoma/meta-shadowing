@@ -17,7 +17,7 @@
     "prepare:audio": "node scripts/prepare-test-audio.mjs",
     "package:apple-sample": "node scripts/package-apple-sample.mjs",
     "package:free-duo": "node scripts/package-free-duo.mjs",
-    "test:free-duo": "node --test scripts/free-duo.test.cjs",
+    "test:free-duo": "node --test scripts/free-duo.test.cjs && tsx --test scripts/free-duo-syntax.test.ts",
     "test:paid-duo": "node --test scripts/duo-archive.test.cjs scripts/paid-duo.test.cjs",
     "package:paid-duo": "node scripts/package-paid-duo.mjs"
   },

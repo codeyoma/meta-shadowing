@@ -77,6 +77,11 @@ actor PackageDownload {
     running.cancel()
   }
 
+  func syntax(_ package: DeliveryPackage) throws -> String? {
+    guard running == nil && !removing else { throw DeliveryError.busy }
+    return try installation.syntax(package)
+  }
+
   func storage(_ package: DeliveryPackage) throws -> MaterialStorage {
     guard [LibraryMaterial.hosted, LibraryMaterial.freeDuo, LibraryMaterial.paidDuo].contains(package.key) else { throw DeliveryError.invalidPackage }
     return try MaterialStorage(bytes: installation.materialBytes(package.key),

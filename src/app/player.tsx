@@ -240,7 +240,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
     if (dictionary.isBlocked() || !mayUsePackage(pack) || (paidGuard.current && !paidGuard.current.allowed()) || unavailable) return;
     engine.current?.pause();
     if (!stage || !engine.current || engine.current.error === 'save' || !getProgressSync().authorized(profile.authority, profile.id)) return;
-    router.push({ pathname: '/player-info', params: { kind, stage, package: pack.packageKey, phrase: engine.current.state.phrase, authority: profile.authority } });
+    router.push({ pathname: '/player-info', params: { kind, stage, package: pack.packageKey, phrase: engine.current.state.phrase,
+      run: engine.current.state.runId, profile: profile.id, authority: profile.authority } });
   }, [pack, unavailable, stage, profile.authority, profile.id]);
   async function act(point: ControlPressPoint, repeat = false) {
     const player = engine.current;

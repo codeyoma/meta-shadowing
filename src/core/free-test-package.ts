@@ -6,7 +6,7 @@ export function readFreeTestPackage(json: unknown): FreeTestPackage | null {
   if (typeof json !== 'string') return null;
   try {
     const m = JSON.parse(json);
-    if (m.id !== 'duo-33-free-test' || m.version !== 1 || typeof m.title !== 'string'
+    if (m.id !== 'duo-33-free-test' || ![1, 2].includes(m.version) || typeof m.title !== 'string'
       || !Array.isArray(m.phrases) || !m.phrases.length || m.phrases.length > 1000
       || new Set(m.phrases.map((p: {file: string}) => p.file)).size !== m.phrases.length
       || m.phrases.some((p: {file: string;bytes: number;sha256: string;text: string;translation: string}) =>

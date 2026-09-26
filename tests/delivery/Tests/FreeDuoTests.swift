@@ -4,17 +4,60 @@ import Testing
 import AVFAudio
 
 struct FreeDuoTests {
+  @Test func syntaxEditionCoexistsWithLegacyWithoutChangingItsIdentity() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let bytes = Data("fixture".utf8)
+    let hash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    let legacy = DeliveryPackage(key: "duo-33-free-test-v1", files: ["manifest.json", "audio/one.m4a"]
+      .map { .init(file: $0, bytes: bytes.count, sha256: hash) })
+    let upgraded = DeliveryPackage(key: "duo-33-free-test-v2", files: legacy.files + [
+      .init(file: "syntax.json", bytes: bytes.count, sha256: hash)
+    ])
+    let installer = PackageInstallation(root: root)
+    try installer.install(legacy) { _ in bytes }
+    let fingerprint = root.appendingPathComponent(".identity-duo-33-free-test-v1")
+    let before = try Data(contentsOf: fingerprint)
+    try installer.install(upgraded) { _ in bytes }
+    #expect(try installer.isInstalled(legacy))
+    #expect(try installer.isInstalled(upgraded))
+    #expect(try installer.syntax(legacy) == nil)
+    #expect(try installer.syntax(upgraded) == "fixture")
+    #expect(try Data(contentsOf: fingerprint) == before)
+    try Data("corrupt".utf8).write(to: root.appendingPathComponent("duo-33-free-test-v2/syntax.json"))
+    #expect(throws: DeliveryError.unavailable) { try installer.syntax(upgraded) }
+    #expect(try installer.isInstalled(legacy))
+  }
+  @Test func syntaxReadRequiresVerifiedInstallationAndPinnedBytes() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let bytes = Data("{\"fixture\":true}".utf8)
+    let hash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    let package = DeliveryPackage(key: LibraryMaterial.freeDuo, files: ["manifest.json", "syntax.json", "audio/one.m4a"]
+      .map { .init(file: $0, bytes: bytes.count, sha256: hash) })
+    let installer = PackageInstallation(root: root)
+    let download = PackageDownload(installation: installer, transport: nil)
+    await #expect(throws: (any Error).self) { try await download.syntax(package) }
+    try installer.install(package) { _ in bytes }
+    #expect(try await download.syntax(package) == String(decoding: bytes, as: UTF8.self))
+    try Data("corrupt".utf8).write(to: root.appendingPathComponent(package.key).appendingPathComponent("syntax.json"))
+    await #expect(throws: (any Error).self) { try await download.syntax(package) }
+  }
   @Test(.enabled(if: ProcessInfo.processInfo.environment["DUO_PREPARED_PATH"] != nil))
   func preparedAudioInstallsAndDecodesOfflineAndCorruptionIsRejected() throws {
     let source = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["DUO_PREPARED_PATH"]))
     let manifestData = try Data(contentsOf: source.appendingPathComponent("manifest.json"))
-    struct Manifest: Decodable { let phrases: [DeliveryPackage.Entry] }
+    struct Manifest: Decodable {
+      let version: Int
+      let phrases: [DeliveryPackage.Entry]
+      let metadata: [DeliveryPackage.Entry]?
+    }
     let manifest = try JSONDecoder().decode(Manifest.self, from: manifestData)
     #expect(manifest.phrases.count == 560)
     let hash = SHA256.hash(data: manifestData).map { String(format: "%02x", $0) }.joined()
-    let package = DeliveryPackage(key: "duo-33-free-test-v1", files: [
+    let package = DeliveryPackage(key: "duo-33-free-test-v\(manifest.version)", files: [
       .init(file: "manifest.json", bytes: manifestData.count, sha256: hash)
-    ] + manifest.phrases)
+    ] + manifest.phrases + (manifest.metadata ?? []))
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let installer = PackageInstallation(root: root)
@@ -26,6 +69,7 @@ struct FreeDuoTests {
     #expect(try !installer.isInstalled(package))
     try installer.install(package) { try Data(contentsOf: source.appendingPathComponent($0)) }
     #expect(try installer.isInstalled(package))
+    if manifest.version == 2 { #expect(try installer.syntax(package) != nil) }
     // Open only the published local installation; no network or source fallback.
     for entry in manifest.phrases {
       let audio = try AVAudioFile(forReading: root.appendingPathComponent(package.key).appendingPathComponent(entry.file))

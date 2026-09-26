@@ -15,7 +15,7 @@ public final class PackageDeliveryModule: Module {
     let info = Bundle.main.infoDictionary ?? [:]
     guard let id = info["PaidDuoAssetPackID"] as? String,
       id.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", options: .regularExpression) != nil,
-      ![LibraryMaterial.freeDuo, "delivery-diagnostic-v1", info["SampleAssetPackID"] as? String ?? ""].contains(id),
+      !(LibraryMaterial.freeDuoVersions + ["delivery-diagnostic-v1", info["SampleAssetPackID"] as? String ?? ""]).contains(id),
       let group = info["BAAppGroupID"] as? String, !group.isEmpty else { return nil }
     return id
   }
@@ -151,6 +151,20 @@ public final class PackageDeliveryModule: Module {
       do {
         let value = try await Self.freeDuoDownload.status(Self.freeDuoDescriptor())
         return ["phase": value.phase, "progress": value.progress]
+      } catch { throw Self.sanitize(error) }
+    }
+    AsyncFunction("sentenceSyntax") { (key: String) async throws -> String? in
+      do {
+        if key == LibraryMaterial.freeDuo {
+          return try await Self.freeDuoDownload.syntax(Self.freeDuoDescriptor())
+        }
+        guard key == LibraryMaterial.paidDuo else { return nil }
+        let access = await PackageAccess.shared.refresh()
+        guard access.allowed else { throw DeliveryError.unauthorized }
+        let text = try await Self.paidDownload.syntax(Self.paidDescriptor())
+        let current = await PackageAccess.shared.refresh()
+        guard current.allowed && current.revision == access.revision else { throw DeliveryError.unauthorized }
+        return text
       } catch { throw Self.sanitize(error) }
     }
     AsyncFunction("freeDuoStart") { () async throws in

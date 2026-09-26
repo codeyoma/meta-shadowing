@@ -63,7 +63,7 @@ with first-word hints. Stages 11–16 use silent word reveal as specified below.
   Normal interruption retains partial-word timing. Completed reveal passes stay
   visible on reentry, unlike the audio-stage replay-on-entry behavior.
 - Hidden words are excluded from the text accessibility label and selection.
-  The analysis placeholder respects the same reveal boundary. All-sentences
+  The explicit analysis screen can disclose the full target text at any time. All-sentences
   navigation remains an explicit separate reference/navigation surface.
 - Backups retain the new stage checkpoints and speed metadata. Older app
   versions cannot read these newly supported stages: update all syncing devices.
@@ -149,8 +149,31 @@ the size-reset control is the explicit 20/18 reset. See
 [size verification](learning-text-size-verification.md).
 Revealing never plays, pauses, confirms, or changes
 cycles. Reveal state resets when the unit/run changes and on player re-entry.
-Analysis derives the current saved unit and always retains hints in hint stages;
-it cannot expose full subtitles through a direct route. Analysis remains a placeholder.
+Analysis derives the current saved unit, including ordered source members for grouped
+practice. Owner update for #84 explicitly permits full target-language reference
+text even during incomplete reveal or hint-only practice. The learning screen's
+own visibility and dictionary-tap gates remain unchanged. Analysis requires the
+current profile, run, unit, stage access and installed package authorization.
+
+## Sentence analysis — #84
+
+The analysis icon pauses/checkpoints and opens a sentence menu for the current
+learning unit. Each grammatical sentence opens a target-text/POS detail; Back
+returns to the menu and Close leaves learning paused. This reference interaction
+never confirms practice, awards XP or changes the learning cursor.
+
+Read installed syntax offline through the native delivery boundary. Pinned bytes,
+schema/language, source identities, normalized source alignment, UTF16 offsets,
+token coverage and sentence-local dependency indices are verified before display.
+Use the analysis text for offsets rather than the manifest's whitespace layout.
+Absent, corrupt, incompatible or unauthorized analysis has a dismissible unavailable
+state. No network analysis service or inferred phrase spans are introduced.
+
+Newly prepared internal free test packages may include pinned syntax metadata;
+existing immutable installations are not silently rewritten or re-fingerprinted.
+The synthetic development lab exercises the shared list/detail UI without granting
+access to any real package. Interactive relation graphs and embedded dictionary
+content remain separate #85 and #86 work.
 
 App Store stage access still requires three real predecessor completions.
 Development and verified TestFlight builds may select any implemented stage;
@@ -178,14 +201,18 @@ Missing results are normal and dismissible. The app does not extract, cache,
 republish or log definitions, and adds no dictionary service. Backgrounding,
 navigation and access/profile changes invalidate pending lookup. Existing voice
 capture may continue through this temporary sheet, but lookup starts no capture.
-The owner-approved presentation (2026-09-26) retains Apple's dictionary interface
-inside a native full-height form sheet, with the system grabber and Apple's close
-control. The fixed bottom “학습 이어하기” action also dismisses to the same paused
-lesson. UIKit owns drag tracking, cancellation and dismissal animation. There is
-no duplicate app-owned header, custom pan recognizer or private system-view
-modification. Dragging the word-title/close row is not a required interaction;
-use the native grabber for downward swipe dismissal. This supersedes the earlier
-request to make that entire header draggable.
+The owner-amended presentation (2026-09-26) retains Apple's dictionary interface
+inside a native full-height form sheet with the system grabber. The app-owned
+navigation bar is hidden: the owner removed both its duplicate controls and the
+remaining empty header space. Only Apple's title and close control remain.
+Dragging the system grabber dismisses the sheet; cancelling a short drag leaves
+it open. A thin adaptive gray outline follows the
+sheet's upper edge and rounded corners without intercepting touches.
+The fixed bottom “학습 이어하기”
+action also dismisses to the same paused lesson. UIKit owns drag tracking,
+cancellation and dismissal animation. No custom pan recognizer or private
+system-view modification is used. This supersedes the added navigation-header
+drag surface; it does not change gesture behavior inside Apple's own title row.
 Silent stages 11–16 enable lookup only after the complete phrase has finished
 revealing and the existing Next action is enabled. Busy, error, foreground,
 access and current-unit checks are revalidated before presentation. Incomplete
@@ -318,6 +345,11 @@ unavailable even after their predecessor is complete.
 - Player navigation opens a native options drawer instead of immediately going
   back. It pauses/checkpoints first and offers speed, return, and a Cardinal
   “스테이지로 돌아가기” action. Closing the drawer never automatically resumes.
+  The drawer body uses an iOS native stack for menu-to-option push/pop transitions,
+  with platform timing and interactive back swipe. The outer header and bottom
+  actions remain fixed. Reduced Motion uses a fade. Back returns to the menu;
+  close and continue dismiss the entire drawer, including from a nested option.
+  A directly opened speed editor returns to the menu without dismissing the sheet.
   The header shows sentence progress and position, not XP. The counter is aligned
   to the right content margin; native text measurement reserves both digit slots
   from the total phrase count with tabular numerals, so the track stays the same
@@ -328,7 +360,8 @@ unavailable even after their predecessor is complete.
   in the #57 UI refinement, the level and analysis actions pause/checkpoint and
   open native drawers. The guide identifies the level and method; detailed
   guidance is intentionally empty for now. The analysis drawer shows the current
-  phrase/translation and an explicit not-ready message; analysis remains deferred.
+  sentence menu and target-text/POS detail described in #84 above when installed
+  syntax is available; missing analysis has an explicit unavailable message.
   Closing either drawer never resumes playback or confirms a cycle.
   Tapping the speed indicator pauses/checkpoints and opens the drawer directly at
   the speed editor; the options icon still opens the complete options menu.

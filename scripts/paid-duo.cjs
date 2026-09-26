@@ -35,7 +35,7 @@ function configurePaidDuo(plist, env, root) {
   if (env.APPLE_PAID_DUO_ENABLED !== '1') return;
   const asset=env.APPLE_PAID_DUO_ASSET_PACK_ID?.trim(), product=env.APPLE_BOOK_PRODUCT_ID?.trim();
   if (!asset || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(asset) || !product || !env.APPLE_ASSET_APP_GROUP
-    || [env.APPLE_SAMPLE_ASSET_PACK_ID,'duo-33-free-test-v1','delivery-diagnostic-v1'].includes(asset)) throw Error('Invalid paid delivery configuration.');
+    || [env.APPLE_SAMPLE_ASSET_PACK_ID,'duo-33-free-test-v1','duo-33-free-test-v2','delivery-diagnostic-v1'].includes(asset)) throw Error('Invalid paid delivery configuration.');
   const base=path.join(root,'private/paid-duo'), raw=regular(path.join(base,'manifest.json'),20_000_000);
   if(JSON.parse(regular(path.join(base,'AssetPack.json'),1_000_000)).assetPackID!==asset) throw Error('Immutable asset mapping changed.');
   const manifest=JSON.parse(raw);

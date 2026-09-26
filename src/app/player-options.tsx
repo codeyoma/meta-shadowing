@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppState, ScrollView, View } from 'react-native';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Alert, AppState, PlatformColor, ScrollView, View } from 'react-native';
+import { Stack, router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { randomUUID } from 'expo-crypto';
 import { ActionButton } from '@/components/ui';
@@ -31,11 +32,15 @@ import { LearningMonitorControls } from '@/components/learning-monitor-controls'
 import { learningMonitorSupported, learningMonitor } from '@/native/voice-monitor';
 import { isGroupSize } from '@/core/learning-units';
 import { useLearningSettings } from '@/components/use-learning-settings';
+import { LearningOptionsStack, backToLearningOptions, type LearningOptionsNavigation } from '@/components/learning-options-stack';
 
 export default function PlayerOptionsScreen() {
   const profile = useProgressProfile();
   const c = useSettingsColors();
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const sheetNavigation = useNavigation();
+  const optionsNavigation = useRef<LearningOptionsNavigation | null>(null);
   const { stage: param, package: key, option, run, profile: boundProfile, authority, monitorKey } = useLocalSearchParams<{ stage: string; package: string; option?: string; run?: string; profile?: string; authority?: string; monitorKey?: string }>();
   const stage = playableStage(param);
   const pack = selectedPackage(key);
@@ -82,7 +87,7 @@ export default function PlayerOptionsScreen() {
       const next = jumpToSourcePhrase(saved, sourceIndex);
       context.save(next);
       sentenceEntry.request({ profile: `${profile.id}:${profile.authority}`, packageKey: pack.packageKey, stage, runId: next.runId, phrase: next.phrase });
-      router.back();
+      sheetNavigation.goBack();
     } catch {
       sentenceEntry.cancel();
       if (currentGeneration === generation.current) Alert.alert('문장을 선택할 수 없어요', '학습 기록과 레슨 설치 상태를 확인하고 다시 시도해 주세요.');
@@ -143,47 +148,53 @@ export default function PlayerOptionsScreen() {
   }
   return <View style={{ flex: 1, backgroundColor: c.sheet }}>
     <Stack.Screen options={{ title: selected === 'monitor' ? '내 목소리 듣기' : selected === 'reveal' ? '스피킹 속도' : selected === 'sentences' ? '전체 문장' : learningPreferenceMenus.find(menu => menu.option === selected)?.title ?? '학습 옵션',
-      headerTransparent: true, headerBlurEffect: 'none',
+      headerTransparent: true, headerBlurEffect: 'none', sheetCornerRadius: 32,
       headerStyle: { backgroundColor: 'transparent' }, headerTintColor: c.text,
       contentStyle: { backgroundColor: c.sheet } }} />
     <Stack.Toolbar placement="left">
       <Stack.Toolbar.Button icon="chevron.left" accessibilityLabel="학습 옵션으로 돌아가기" hidden={!selected}
-        tintColor={c.text} onPress={() => setSelected(null)} />
+        tintColor={c.text} onPress={() => backToLearningOptions(optionsNavigation.current)} />
     </Stack.Toolbar>
     <Stack.Toolbar placement="right">
       <Stack.Toolbar.Button icon="xmark" accessibilityLabel="옵션 닫기" tintColor={c.text}
-        onPress={() => { generation.current++; sentenceEntry.cancel(); router.back(); }} />
+        onPress={() => { generation.current++; sentenceEntry.cancel(); sheetNavigation.goBack(); }} />
     </Stack.Toolbar>
     {/* Keep the sheet's native scroll-frame correction separate from the fixed footer. */}
-    <View collapsable={false} style={{ flex: 1 }}>
-      {selected === 'sentences' ? <SentenceMenu sections={sections} currentUnit={checkpoint?.phrase ?? -1}
+    <View collapsable={false} style={{ flex: 1, paddingTop: headerHeight }}>
+      <LearningOptionsStack initialPage={selected} navigationRef={optionsNavigation} onPageChange={setSelected} backgroundColor={c.sheet}>
+      {page => page === 'sentences' ? <SentenceMenu sections={sections} currentUnit={checkpoint?.phrase ?? -1}
         disabled={selecting || !checkpoint || !scopeValid()} onSelect={index => void selectSentence(index)} />
-      : <ScrollView key={selected ?? 'menu'} contentInsetAdjustmentBehavior="automatic" automaticallyAdjustKeyboardInsets keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16 }}>
-        {selected === null ? <><View style={{ borderRadius: 24, overflow: 'hidden' }}>
+      : <ScrollView contentInsetAdjustmentBehavior="automatic" automaticallyAdjustKeyboardInsets keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16 }}>
+        {page === null ? <><View style={{ borderRadius: 24, overflow: 'hidden' }}>
           <SettingsRow title="전체 문장" icon="list.bullet" iconColor="#007aff" disclosure disabled={!checkpoint}
-            onPress={() => setSelected('sentences')} /></View>
-          <LearningPreferenceMenu onSelect={option => setSelected(stage && isRevealStage(stage) && option === 'rate' ? 'reveal' : option)}
+            onPress={() => optionsNavigation.current?.navigate('sentences')} /></View>
+          <LearningPreferenceMenu onSelect={option => optionsNavigation.current?.navigate(stage && isRevealStage(stage) && option === 'rate' ? 'reveal' : option)}
             silent={!!stage && isRevealStage(stage)} disabled={!settings} rateDisabled={rate === null} />
           {learningMonitorSupported && <View style={{ borderRadius: 24, overflow: 'hidden' }}>
             <SettingsRow title="내 목소리 듣기" icon="mic.fill" iconColor="#007aff" disclosure
               disabled={!learningMonitor(monitorKey) || !checkpoint || !scopeValid()}
-              onPress={() => setSelected('monitor')} />
+              onPress={() => optionsNavigation.current?.navigate('monitor')} />
           </View>}</>
-          : selected === 'monitor' ? <LearningMonitorControls sessionKey={monitorKey}
+          : page === 'monitor' ? <LearningMonitorControls sessionKey={monitorKey}
             allowed={!!checkpoint && checkpoint.phase !== 'complete' && !!scopeValid()} />
-          : selected === 'reveal' ? stage && isRevealStage(stage) && settings && checkpoint?.reveal && scopeValid()
+          : page === 'reveal' ? stage && isRevealStage(stage) && settings && checkpoint?.reveal && scopeValid()
             && <><RevealSpeedControl reveal={checkpoint.reveal} speeds={settings.crazyWpm} onChange={changeSpeed} />
               <LearningPreferenceSection key={`reveal-wpm-${revision}`} option="wpm"
                 settings={settings} onChange={changePreference} /></>
-          : settings && <LearningPreferenceSection key={`${selected}-${revision}`} option={selected}
+          : settings && <LearningPreferenceSection key={`${page}-${revision}`} option={page}
           activeGroup={checkpoint?.version === 2}
           settings={{ ...settings, rate: rate ?? settings.rate,
             groupSize: checkpoint?.version === 2 ? checkpoint.groupSize : settings.groupSize }} onChange={changePreference} />}
       </ScrollView>}
+      </LearningOptionsStack>
     </View>
     <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: Math.max(16, insets.bottom), gap: 16 }}>
       <ActionButton title="스테이지로 돌아가기" icon="rectangle.portrait.and.arrow.right" iconMirrored tone="cardinal" secondary onPress={() => { generation.current++; sentenceEntry.cancel(); router.dismissTo('/lesson'); }} />
-      <ActionButton title="학습 이어하기" icon="play.fill" onPress={() => { generation.current++; sentenceEntry.cancel(); router.back(); }} />
+      <ActionButton title="학습 이어하기" icon="play.fill" onPress={() => { generation.current++; sentenceEntry.cancel(); sheetNavigation.goBack(); }} />
+    </View>
+    {/* Match the dictionary's upper outline without covering native header gestures. */}
+    <View pointerEvents="none" accessible={false} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 32, overflow: 'hidden' }}>
+      <View style={{ height: 64, borderRadius: 32, borderWidth: 1, borderColor: PlatformColor('systemGray3') }} />
     </View>
   </View>;
 }

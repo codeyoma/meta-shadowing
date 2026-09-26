@@ -116,6 +116,9 @@ test('video fills the screen width with square corners while text and controls k
 function descendants(node: unknown): Element[] {
   if (Array.isArray(node)) return node.flatMap(descendants);
   if (!React.isValidElement<Record<string, unknown>>(node)) return [];
+  if (node.type === 'LearningOptionsStack') {
+    return [node, ...descendants((node.props.children as (page: unknown) => unknown)(node.props.initialPage))];
+  }
   return [node, ...descendants(node.props.children)];
 }
 
@@ -171,6 +174,8 @@ test('silent speed sheet exposes shared WPM editing only for authorized stages 1
     runInNewContext(code, { module, exports: {}, require, View: 'View', ScrollView: 'ScrollView', Stack: { Screen: 'Screen', Toolbar: Object.assign('Toolbar', { Button: 'ToolbarButton' }) },
       HeaderButton: 'HeaderButton', ActionButton: 'ActionButton', RevealSpeedControl: 'RevealSpeedControl',
       LearningPreferenceSection: 'LearningPreferenceSection', selected: 'reveal', c: {}, insets: { bottom: 0 },
+      LearningOptionsStack: 'LearningOptionsStack', optionsNavigation: { current: null }, setSelected() {}, headerHeight: 50,
+      PlatformColor: (name: string) => name,
       settings, checkpoint: { reveal: { speed: 2, wpm: 200 } }, stage, isRevealStage, revision: 0,
       scopeValid: () => authorized, changeSpeed: () => assert.fail('Editing presets changed the current run'),
       changePreference: (patch: unknown) => patches.push(patch),
@@ -204,6 +209,9 @@ test('drawer uses native icon buttons and keeps back and close actions distinct'
       HeaderButton: 'HeaderButton', ActionButton: 'ActionButton', SettingsRow: 'SettingsRow',
       LearningPreferenceMenu: 'LearningPreferenceMenu', SentenceMenu: 'SentenceMenu',
       learningPreferenceMenus: [], learningMonitorSupported: false, settings: null, checkpoint: null,
+      LearningOptionsStack: 'LearningOptionsStack', optionsNavigation: { current: {} }, headerHeight: 50,
+      PlatformColor: (name: string) => name, backToLearningOptions: () => actions.push('back'),
+      sheetNavigation: { goBack: () => actions.push('dismiss') },
       c: { text: '#fff' }, insets: { bottom: 0 }, sections: [], selecting: false, stage: 1, rate: 1,
       isRevealStage, scopeValid: () => true, setSelected: (value: unknown) => { assert.equal(value, null); actions.push('back'); },
       tapFeedback: () => assert.fail('Learning-options navigation stays silent'), sentenceEntry: { cancel: () => actions.push('cancel') },

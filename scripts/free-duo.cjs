@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const key = 'duo-33-free-test-v1';
+const syntaxKey = 'duo-33-free-test-v2';
 const hash = data => createHash('sha256').update(data).digest('hex');
 
 function parseDuo(source, phraseCount, sectionCount) {
@@ -40,21 +41,36 @@ function configureFreeDuo(plist, env, root) {
   if (env.APPLE_BUILD_CHANNEL !== 'internal' || !env.APPLE_ASSET_APP_GROUP) {
     throw Error('Free DUO requires the explicit internal build channel and configured Apple delivery.');
   }
-  const bytes = fs.readFileSync(path.join(root, 'private/free-duo/manifest.json'));
+  const directory = path.join(root, fs.existsSync(path.join(root, 'private/free-duo-v2')) ? 'private/free-duo-v2' : 'private/free-duo');
+  const bytes = fs.readFileSync(path.join(directory, 'manifest.json'));
   const manifest = JSON.parse(bytes);
-  if (manifest.id !== 'duo-33-free-test' || manifest.version !== 1 || !manifest.phrases?.length
+  const metadata = manifest.metadata ?? [];
+  if (!Array.isArray(metadata) || metadata.length > 1
+      || (manifest.version === 1 && metadata.length !== 0)) throw Error('Invalid free syntax metadata.');
+  for (const entry of metadata) {
+    if (entry.file !== 'syntax.json' || !Number.isSafeInteger(entry.bytes) || entry.bytes < 1
+      || entry.bytes > 20_000_000 || !/^[a-f0-9]{64}$/.test(entry.sha256)) throw Error('Invalid free syntax metadata.');
+    const file = path.join(directory, entry.file);
+    if (!fs.lstatSync(file).isFile()) throw Error('Invalid free syntax file.');
+    const data = fs.readFileSync(file);
+    if (data.length !== entry.bytes || hash(data) !== entry.sha256) throw Error('Prepared syntax changed.');
+  }
+  if (manifest.id !== 'duo-33-free-test' || ![1, 2].includes(manifest.version)
+      || (manifest.version === 2 && metadata.length !== 1) || !manifest.phrases?.length
       || manifest.phrases.length > 1000 || new Set(manifest.phrases.map(p => p.file)).size !== manifest.phrases.length
       || manifest.phrases.some(p => !/^audio\/[a-z0-9-]+\.m4a$/.test(p.file) || !Number.isSafeInteger(p.bytes)
         || p.bytes <= 0 || p.bytes > 50_000_000 || !/^[a-f0-9]{64}$/.test(p.sha256)
         || typeof p.text !== 'string' || !p.text || typeof p.translation !== 'string' || !p.translation)) {
     throw Error('Prepare the immutable free-test package before prebuild.');
   }
-  Object.assign(plist, { FreeDuoEnabled: true, FreeDuoAssetPackID: key,
+  const packageKey = manifest.version === 2 ? syntaxKey : key;
+  Object.assign(plist, { FreeDuoEnabled: true, FreeDuoAssetPackID: packageKey,
     FreeDuoManifest: bytes.toString('utf8'),
-    FreeDuoDescriptor: JSON.stringify({ key, files: [
+    FreeDuoDescriptor: JSON.stringify({ key: packageKey, files: [
       { file: 'manifest.json', bytes: bytes.length, sha256: hash(bytes) },
       ...manifest.phrases.map(({file, bytes, sha256}) => ({file, bytes, sha256})),
+      ...metadata,
     ] }),
   });
 }
-module.exports = { parseDuo, audioEntries, configureFreeDuo, hash, key };
+module.exports = { parseDuo, audioEntries, configureFreeDuo, hash, key, syntaxKey };

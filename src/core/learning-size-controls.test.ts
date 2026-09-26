@@ -8,6 +8,7 @@ import manifest from '../../assets/sample/manifest.json';
 import { createSession, createGroupedSession } from './session';
 import { nativeModules, nativeMotion } from '../test-support/native-render';
 import { nativeHooks } from '../test-support/native-hooks';
+import { nativeOptionsStack } from '../test-support/native-options-stack';
 import { nativeFontMenu, nativeFontMenuModifiers } from '../test-support/native-font-menu';
 
 test('size buttons and completed input apply immediately, independently, and retain the last rapid change', t => {
@@ -93,6 +94,7 @@ test('both real settings routes save immediately, share updates, reset, and reco
       useNavigation: () => navigation,
       Stack: { Screen: 'Screen', Toolbar: Object.assign('Toolbar', { Button: 'ToolbarButton' }) }, router: { back() {}, push(target: { params: Record<string, string> }) { params = target.params; } } },
     'expo-router/react-navigation': { useHeaderHeight: () => 50, useNavigationState: () => null, useIsFocused: () => true },
+    'expo-router/native-stack': nativeOptionsStack(runtime.hooks),
     expo: { requireNativeView: () => 'Video' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ bottom: 0 }) },
     'expo-crypto': { randomUUID: () => 'test-id' },
