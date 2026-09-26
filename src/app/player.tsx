@@ -92,12 +92,15 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
   const acting = useRef(false);
   const unitKey = state ? `${state.runId}:${state.phrase}` : null;
   const revealed = unitKey !== null && revealedKey === unitKey;
+  const revealLookupReady = !!state && mainPlayerAction(state, error) === 'next' && !busy && !refreshing && !acting.current;
   const words = useMemo(() => visibleLookupWords(state ? units[state.phrase] : undefined, stage, revealed,
-    text => nativeDictionary?.words(text) ?? []), [units, state?.phrase, stage, revealed]);
+    text => nativeDictionary?.words(text) ?? [], revealLookupReady), [units, state?.phrase, stage, revealed, revealLookupReady]);
   const dictionary = useLearningDictionary(() => ({
     scope: `${profile.id}:${profile.authority}:${pack.packageKey}:${stage}:${unitKey}:${revealed}`,
     player: engine.current, words,
-    allowed: !isRevealStage(stage) && !!state && state.phase !== 'complete' && !refreshing && !unavailable && !accessDenied && accessReady
+    allowed: (!isRevealStage(stage) || (revealLookupReady && !acting.current && !!engine.current
+      && mainPlayerAction(engine.current.state, engine.current.error) === 'next'))
+      && !!state && state.phase !== 'complete' && !refreshing && !unavailable && !accessDenied && accessReady
       && AppState.currentState === 'active' && mayUsePackage(pack) && (!paidGuard.current || paidGuard.current.allowed())
       && getProgressSync().authorized(profile.authority, profile.id)
       && !!engine.current && `${engine.current.state.runId}:${engine.current.state.phrase}` === unitKey,
@@ -310,8 +313,9 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
                 {methodNames[Math.ceil(state.stage / 2) - 1]} 학습을 마쳤어요.</Label>
               <Label muted>{state.phraseCount}개 {unitLabel}을 내 목소리로 연습했어요.</Label>
             </Card>
-            : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} typography={textSettings ?? undefined} />
-            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} typography={textSettings ?? undefined} onLookup={dictionary.lookup} />}
+            : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} typography={textSettings ?? undefined}
+                onLookup={revealLookupReady ? dictionary.lookup : undefined} />
+            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} typography={textSettings ?? undefined} onLookup={dictionary.lookup} />}
           </Animated.View>
         </View>
       </>}

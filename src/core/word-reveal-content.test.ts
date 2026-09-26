@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import React from 'react';
-import { nativeModules } from '../test-support/native-render';
+import { nativeModules, nativeMotion } from '../test-support/native-render';
 import { createSession } from './session';
 import * as reveal from './word-reveal';
 import { normalizeSpeakingSpeeds } from './speaking-speed';
@@ -23,6 +23,8 @@ function load<T>(file: string, adapters: Record<string, unknown>): T {
 
 const { WordRevealContent: Content } = load<{ WordRevealContent: typeof WordRevealContent }>('word-reveal-content', {
   'react-native': { View: container, Text: text, useWindowDimensions: () => ({ fontScale: 2 }) },
+  'react-native-reanimated': nativeMotion,
+  'expo-font': { isLoaded: () => true },
   './ui': { usePalette: () => ({ card: '#ffffff', blueSoft: '#aabbcc', heading: '#000000' }) },
   '@/core/word-reveal': reveal,
 });

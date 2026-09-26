@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { nativeHooks } from '../test-support/native-hooks';
 import { nativeModules, nativeMotion } from '../test-support/native-render';
+import { createSession } from './session';
 
 test('visible words have tap and accessibility lookup without exposing hidden text or changing layout', async () => {
   const runtime = nativeHooks(), looked: string[] = [];
@@ -42,6 +43,42 @@ test('visible words have tap and accessibility lookup without exposing hidden te
   runtime.dispose();
 });
 
+test('silent lookup preserves typography and language order, with no hidden-target fallback', () => {
+  const runtime = nativeHooks();
+  const load = nativeModules({ react: runtime.hooks,
+    'react-native': { Text: 'Text', View: 'View', useColorScheme: () => 'dark',
+      useWindowDimensions: () => ({ fontScale: 2 }), findNodeHandle: () => 1 },
+    'react-native-reanimated': { ...nativeMotion, default: { View: 'View', Text: 'Text' } },
+    'expo-font': { isLoaded: () => true }, 'expo-image': { Image: 'Image' },
+    'expo-router': { usePathname: () => '/player' }, '@/native/tap-feedback': { tapFeedback() {} },
+    '@/../modules/learning-dictionary': { dictionary: { words: (text: string) =>
+      Array.from(new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text)).filter(s => s.isWordLike)
+        .map(s => ({ start: s.index, end: s.index + s.segment.length })) } },
+  });
+  const { WordRevealContent } = load('components/word-reveal-content.tsx');
+  for (const stage of [11, 12, 13, 14, 15, 16] as const) for (const view of ['bubble', 'list']) {
+    const looked: string[] = [];
+    const props = { view, phrase: { text: 'Open window.', translation: '창문 열어요.' },
+      state: { ...createSession({ runId: 'text', stage, phraseCount: 2, mode: 'manual', rate: 1 }), phase: 'speaking' },
+      typography: { originalTextSize: 48, translationTextSize: 12, originalTextFont: 'georgia', translationTextFont: 'serif' },
+      onLookup: async (word: string) => { looked.push(word); } };
+    const nodes = runtime.render(React.createElement(WordRevealContent, props));
+    const words = nodes.filter(n => n.type === 'Text' && n.props.onPress);
+    assert.deepEqual(words.map(n => n.props.children), stage <= 12 ? ['Open', 'window', '창문', '열어요']
+      : stage <= 14 ? ['창문', '열어요', 'Open', 'window'] : ['창문', '열어요']);
+    assert(nodes.some(n => n.props.style?.fontSize === 24 && n.props.style.lineHeight === 34.8));
+    if (stage < 15) assert(nodes.some(n => n.props.style?.fontSize === 96 && n.props.style.fontFamily === 'Georgia'));
+    words[0]!.props.onPress();
+    assert.equal(looked.length, 1);
+    const unfinished = runtime.render(React.createElement(WordRevealContent, { ...props,
+      state: { ...props.state, phase: 'listening', audioSeconds: 0.4 } }));
+    assert(!unfinished.some(n => n.props.onPress || n.props.accessibilityActions?.length));
+    words[0]!.props.onPress();
+    assert.equal(looked.length, 1, 'Unmounted completed-text callbacks cannot lookup in a new reveal');
+  }
+  runtime.dispose();
+});
+
 test('both layouts keep grouped dialogue and translations tappable with the chosen typography', () => {
   const runtime = nativeHooks(), looked: string[] = [];
   const load = nativeModules({ react: runtime.hooks,
@@ -68,6 +105,7 @@ test('both layouts keep grouped dialogue and translations tappable with the chos
     assert.equal(words.includes('there'), !masked);
     assert(words.includes('친구') && words.includes('문을'));
     assert(!words.includes('Other'));
+    if (view === 'list') assert(!nodes.some(n => n.props.style?.borderLeftWidth), 'The current-unit card has no accent bar');
     assert(nodes.some(n => n.props.style?.fontSize === 96 && n.props.style.fontFamily === 'Georgia'));
     assert(nodes.some(n => n.props.style?.fontSize === 24 && n.props.style.fontFamily === 'ui-serif'));
     nodes.find(n => n.props.children === '문을')!.props.onPress();

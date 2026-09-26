@@ -158,7 +158,7 @@ unverified, unavailable, failed, or timed-out distribution checks remain locked.
 The map and direct player route use the same policy. Ownership and verified local
 installation remain required. Test access never writes completion records.
 
-## Word lookup — stages 1–10
+## Word lookup — stages 1–16
 
 A single tap on a visible original or translated word opens Apple's system
 dictionary sheet. The player pauses and durably saves first; dismissal leaves
@@ -186,7 +186,17 @@ no duplicate app-owned header, custom pan recognizer or private system-view
 modification. Dragging the word-title/close row is not a required interaction;
 use the native grabber for downward swipe dismissal. This supersedes the earlier
 request to make that entire header draggable.
-Silent stages 11–16 remain unchanged; their lookup behavior belongs to #80.
+Silent stages 11–16 enable lookup only after the complete phrase has finished
+revealing and the existing Next action is enabled. Busy, error, foreground,
+access and current-unit checks are revalidated before presentation. Incomplete
+reveals, including paused reveals and a finished first language while the second
+is still appearing, have no word handlers or accessibility lookup actions.
+Touches neither pause the silent clock nor write progress or queue lookup.
+Stages 11–14 retain their original language order and expose both visible
+languages; stages 15–16 expose translation only, never the hidden original.
+Dictionary dismissal preserves the completed phrase, S level and WPM with Next
+still available. It never starts playback, confirms a cycle or earns XP. The next
+phrase begins with lookup disabled again. No native media transport is created.
 See [dictionary verification](learning-dictionary-verification.md) for measured
 results and remaining device acceptance.
 

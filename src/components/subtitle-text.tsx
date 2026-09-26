@@ -10,10 +10,11 @@ const REVEAL_EASING = cubicBezier(0.23, 1, 0.32, 1);
 
 /** Stable native text layout: reveal changes ink only, never characters or sizing. */
 export type WordLookup = (term: string, focus: number | null) => Promise<void>;
-export function SubtitleText({ text, masked, background, color, size, display = false, weight = '500', fontFamily, onLookup }: {
+export function SubtitleText({ text, masked, background, color, size, display = false, weight = '500', fontFamily, onLookup, lineHeight }: {
   text: string; masked: boolean; background: string; color: string; size: number;
   display?: boolean; weight?: '400' | '500' | '700'; fontFamily?: string;
   onLookup?: WordLookup;
+  lineHeight?: number;
 }) {
   const { fontScale } = useWindowDimensions();
   const reduced = useReducedMotion();
@@ -31,7 +32,7 @@ export function SubtitleText({ text, masked, background, color, size, display = 
   const content = <Text accessible={!enabled} accessibilityElementsHidden={enabled}
     accessibilityLabel={enabled ? undefined : accessibleText} selectable={!masked && !enabled} allowFontScaling={false}
     style={{ color, fontSize: size * fontScale, ...textFontStyle(fontFamily, display, weight),
-      lineHeight: size * fontScale * (display && !fontFamily ? 1.2 : 1.45), flexShrink: 1 }}>
+      lineHeight: (lineHeight ?? size * (display && !fontFamily ? 1.2 : 1.45)) * fontScale, flexShrink: 1 }}>
     {spans.map((span, index) => <Animated.Text key={index} accessible={false}
       onPress={span.term ? () => lookup(span) : undefined} suppressHighlighting style={{
       color: masked && !span.hint ? background : color,

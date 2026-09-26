@@ -16,14 +16,17 @@ const { SpeechContent } = load('components/speech-content.tsx');
 const { WordRevealContent } = load('components/word-reveal-content.tsx');
 const phrases = [{ text: 'Open the window.', translation: '창문을 여세요.' }];
 
-test('custom original and translation sizes apply once in both layouts without changing the unit label', () => {
+test('custom text sizes apply once in both layouts without a current-unit caption or number', () => {
   for (const view of ['bubble', 'list']) {
     const html = renderToStaticMarkup(React.createElement(SpeechContent, { phrases, active: 0, view,
       typography: { originalTextSize: 32, translationTextSize: 21 } }));
     assert.match(html, /data-size="64"/);
     assert.match(html, /data-size="42"/);
     assert.match(html, /data-scaling="false"/);
-    if (view === 'list') assert.match(html, /data-size="26"[^>]*>1 · 현재 학습 구간/);
+    if (view === 'list') {
+      assert.doesNotMatch(html, />1<\/span>|data-size="26"/);
+      assert.doesNotMatch(html, /현재 학습/);
+    }
   }
 });
 
