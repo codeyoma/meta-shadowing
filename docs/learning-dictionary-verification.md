@@ -207,6 +207,32 @@ updates the behavior contract and verification record without changing the UI
 or learning state. The native suite retains its fixed-action dismissal/reopen
 UI test and system-sheet, accessibility-escape and one-shot completion checks.
 
+## PR review follow-up — 2026-09-26
+
+The early user-dismissal path now retains its animation choice until presentation
+finishes. Background or shutdown cancellation takes priority and stays
+non-animated, regardless of request order. A child lifecycle observer in the
+native tests reproduced the lost animation before the fix; it checks UIKit's
+actual dismissal lifecycle rather than an internal state flag.
+
+The touch-gate review was checked against the installed Expo 57.0.18 source.
+Its menu filtering explicitly excludes touches through `ignore(_:for:)` in both
+the event delegate and `touchesBegan`; the gate then fails recognition. It does
+not depend on winning recognizer prevention. That path is unchanged, and the
+existing popup-detection limitation above remains open.
+
+The failed CI assertion was in the separate rounded video-endpoint test:
+AVPlayer's stopped media clock differed by about 1.6 milliseconds, exceeding the
+old 0.1-millisecond assertion. The 30-fps fixture now allows less than one frame
+of forward clock deviation while still requiring exact selected-time completion,
+one ended event, no pause/failure event, stopped playback, and a stable held
+position. Video playback code and CI checks are not disabled or bypassed.
+
+Fresh local verification passes: `npm run check` (518 core tests, 25 package/
+build checks and TypeScript), all 42 audio/video tests on iOS 26.5, and all 12
+dictionary tests on iOS 27. The latter includes the deferred-animation regression,
+lifecycle-cancellation priority, and fixed-action dismissal/reopening UI test.
+
 ## References
 
 - [Apple system dictionary controller](https://developer.apple.com/documentation/uikit/uireferencelibraryviewcontroller)

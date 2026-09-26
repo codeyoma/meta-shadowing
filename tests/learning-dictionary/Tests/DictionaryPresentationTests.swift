@@ -18,6 +18,8 @@ final class DictionaryPresentationTests: XCTestCase {
       finishes += 1; dismissed.fulfill()
     }
     let sheet = try XCTUnwrap(root.presentedViewController)
+    let lifecycle = DismissalLifecycleObserver()
+    sheet.addChild(lifecycle); sheet.view.addSubview(lifecycle.view); lifecycle.didMove(toParent: sheet)
     XCTAssertTrue(sheet.children.contains { $0 is UIReferenceLibraryViewController })
     XCTAssertTrue(sheet.view.accessibilityViewIsModal)
     XCTAssertEqual(sheet.modalPresentationStyle, .formSheet)
@@ -35,6 +37,7 @@ final class DictionaryPresentationTests: XCTestCase {
     await fulfillment(of: [dismissed, duplicate], timeout: 5)
     XCTAssertNil(root.presentedViewController)
     XCTAssertEqual(finishes, 1)
+    XCTAssertEqual(lifecycle.dismissalAnimated, true, "A user dismissal requested during opening must remain animated")
   }
 
   func testMissingTermAndSystemChildDismissalRemainRecoverable() async throws {
@@ -66,6 +69,31 @@ final class DictionaryPresentationTests: XCTestCase {
     library.dismiss(animated: false)
     await fulfillment(of: [done], timeout: 5)
     XCTAssertNil(root.presentedViewController)
+  }
+
+  func testLifecycleCancellationOverridesDeferredUserAnimation() async throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+    let window = UIWindow(windowScene: scene), root = UIViewController()
+    window.rootViewController = root; window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    let presenter = DictionaryPresenter()
+    for userFirst in [true, false] {
+      let done = expectation(description: "Lifecycle dismissal")
+      presenter.present(id: "pending", term: "window", from: root) { result in
+        if case .failure = result { XCTFail("Presentation failed") }
+        done.fulfill()
+      }
+      let sheet = try XCTUnwrap(root.presentedViewController)
+      let lifecycle = DismissalLifecycleObserver()
+      sheet.addChild(lifecycle); sheet.view.addSubview(lifecycle.view); lifecycle.didMove(toParent: sheet)
+      XCTAssertTrue(sheet.isBeingPresented)
+      if userFirst { XCTAssertTrue(sheet.accessibilityPerformEscape()) }
+      presenter.dismissCurrent()
+      if !userFirst { XCTAssertTrue(sheet.accessibilityPerformEscape()) }
+      await fulfillment(of: [done], timeout: 5)
+      XCTAssertEqual(lifecycle.dismissalAnimated, false)
+      XCTAssertNil(root.presentedViewController)
+    }
   }
 
   func testDetachedPresentationAndShutdownRejectFurtherContent() async throws {
@@ -106,5 +134,14 @@ final class DictionaryPresentationTests: XCTestCase {
       await fulfillment(of: [done], timeout: 5)
       XCTAssertNil(root.presentedViewController)
     }
+  }
+}
+
+@MainActor
+private final class DismissalLifecycleObserver: UIViewController {
+  var dismissalAnimated: Bool?
+  override func viewWillDisappear(_ animated: Bool) {
+    super.viewWillDisappear(animated)
+    dismissalAnimated = animated
   }
 }

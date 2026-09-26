@@ -58,3 +58,10 @@ The current font popup can pass an outside tap to a size stepper with both the
 original and patched arbitration. That separate behavior is recorded in
 `docs/learning-dictionary-verification.md`; this patch does not expand the
 upstream context-menu detector or claim to fix every popup presentation.
+
+In this pinned Expo version, active-menu filtering uses
+`handler.ignore(touch, for: event)` from both the event delegate and
+`touchesBegan`. The gate then sets its own state to `.failed`; it does not
+recognize successfully and win against React Native's recognizer. The patch
+leaves that filtering path unchanged. Restoring gesture prevention is therefore
+not a replacement for fixing a popup that the upstream detector does not see.

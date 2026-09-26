@@ -81,17 +81,33 @@ import UIKit
     defer { try? FileManager.default.removeItem(at: url) }
     let video = LessonVideoPlayer()
     defer { video.dispose(owner: "rounded") }
-    var events: [String] = []
-    video.onStatus = { events.append($0["phase"] as? String ?? "") }
+    var events: [[String: Any]] = []
+    video.onStatus = { events.append($0) }
     let segments: [VideoSegmentTimeline.Segment] = [.init(start: 0.2, end: 0.600008), .init(start: 1.8, end: 2.400008)]
     video.reserve(owner: "rounded", generation: 1)
     try await video.prepare(url: url, segments: Array(segments.prefix(count)), position: 0, rate: 3, owner: "rounded", generation: 1)
     video.play(owner: "rounded", generation: 1)
     let deadline = ContinuousClock.now + .seconds(3)
-    while !events.contains("ended") && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
-    #expect(events.filter { $0 == "ended" }.count == 1)
-    #expect(!events.contains("paused"))
-    #expect(abs(video.player.currentTime().seconds - (count == 1 ? 0.6 : 2.4)) < 0.0001)
+    while !events.contains(where: { $0["phase"] as? String == "ended" }) && ContinuousClock.now < deadline {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    let ended = events.filter { $0["phase"] as? String == "ended" }
+    #expect(ended.count == 1)
+    #expect(!events.contains { ["paused", "failed"].contains($0["phase"] as? String ?? "") })
+    let completion = try #require(ended.first)
+    let expectedDuration = count == 1 ? 0.400008 : 1.000016
+    #expect(abs((try #require(completion["position"] as? Double)) - expectedDuration) < 0.000001)
+    #expect(abs((try #require(completion["duration"] as? Double)) - expectedDuration) < 0.000001)
+    #expect(video.player.rate == 0)
+    let heldTime = video.player.currentTime().seconds
+    let expectedEnd = count == 1 ? 0.6 : 2.4
+    // The synthetic movie is 30 fps. AVPlayer's stopped clock may overshoot
+    // by milliseconds; selected-time completion above must still be exact.
+    #expect(heldTime >= expectedEnd - 1.0 / 60000)
+    #expect(heldTime < expectedEnd + 1.0 / 30)
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(abs(video.player.currentTime().seconds - heldTime) < 1.0 / 60000)
+    #expect(events.filter { $0["phase"] as? String == "ended" }.count == 1)
   }
   @Test(arguments: ["pause", "replace", "fail", "inactive", "interruption", "route", "reset"])
   @MainActor func pendingMemberSeekCannotCompleteOrRestartRetiredPlayback(action: String) async throws {
