@@ -315,7 +315,7 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
             </Card>
             : isRevealStage(stage) ? <WordRevealContent phrase={units[state.phrase]} state={state} view={speechView} typography={textSettings ?? undefined}
                 onLookup={revealLookupReady ? dictionary.lookup : undefined} />
-            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} unitLabel={unitLabel} typography={textSettings ?? undefined} onLookup={dictionary.lookup} />}
+            : <SpeechContent phrases={presented} active={state.phrase} view={speechView} typography={textSettings ?? undefined} onLookup={dictionary.lookup} />}
           </Animated.View>
         </View>
       </>}

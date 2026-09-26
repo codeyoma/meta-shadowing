@@ -233,6 +233,19 @@ build checks and TypeScript), all 42 audio/video tests on iOS 26.5, and all 12
 dictionary tests on iOS 27. The latter includes the deferred-animation regression,
 lifecycle-cancellation priority, and fixed-action dismissal/reopening UI test.
 
+## Owner acceptance and closure — 2026-09-26
+
+After the remaining native checklist was explained, the owner confirmed that it
+works and explicitly requested closing #79. Record native/device acceptance as
+owner-reported, not as additional agent-observed runs. This includes the reported
+lookup, dismissal, state preservation and accessibility/typography checks.
+
+PR #82 has merged into `dev`. The approved system-sheet design and the removal
+of the duplicate setup header supersede earlier presentation requests. Apple's
+dictionary management interface remains available. Historical observations
+above are retained for traceability; this confirmation does not claim a new code
+fix or an independently reproduced resolution of the live Dynamic Type finding.
+
 ## References
 
 - [Apple system dictionary controller](https://developer.apple.com/documentation/uikit/uireferencelibraryviewcontroller)

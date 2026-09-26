@@ -6,8 +6,8 @@ import type { LearningTypography } from '@/core/settings';
 import { learningFontFamily } from '@/native/learning-fonts';
 
 /** Display only the active unit; the player owns scrolling for long content. */
-export function SpeechContent({ phrases, active, view, unitLabel = '학습 구간', typography, onLookup }: {
-  phrases: readonly { text: string; translation: string; masked?: boolean; members?: { text: string; translation: string }[] }[]; active: number; view: 'bubble' | 'list'; unitLabel?: string;
+export function SpeechContent({ phrases, active, view, typography, onLookup }: {
+  phrases: readonly { text: string; translation: string; masked?: boolean; members?: { text: string; translation: string }[] }[]; active: number; view: 'bubble' | 'list';
   typography?: LearningTypography;
   onLookup?: WordLookup;
 }) {
@@ -33,9 +33,7 @@ export function SpeechContent({ phrases, active, view, unitLabel = '학습 구�
       </View>)}</View>
     </View>)}
   </View>;
-  return <View style={{ padding: 16, gap: 8, borderRadius: 14, backgroundColor: c.blueSoft,
-    borderLeftWidth: 3, borderLeftColor: c.blue }}>
-      <Label size={13} muted>{active + 1} · 현재 {unitLabel}</Label>
+  return <View style={{ padding: 16, gap: 8, borderRadius: 14, backgroundColor: c.blueSoft }}>
       <View style={{ gap: 16 }}>{bubbles.flat().map((member, memberIndex) => <View key={memberIndex} style={{ gap: 8 }}>
         <SubtitleText onLookup={onLookup} text={member.text} masked={!!phrase.masked} size={typography?.originalTextSize ?? 24}
           weight="700" color={c.heading} background={c.blueSoft} fontFamily={learningFontFamily(typography?.originalTextFont)} />

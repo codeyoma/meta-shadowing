@@ -105,6 +105,7 @@ test('both layouts keep grouped dialogue and translations tappable with the chos
     assert.equal(words.includes('there'), !masked);
     assert(words.includes('친구') && words.includes('문을'));
     assert(!words.includes('Other'));
+    if (view === 'list') assert(!nodes.some(n => n.props.style?.borderLeftWidth), 'The current-unit card has no accent bar');
     assert(nodes.some(n => n.props.style?.fontSize === 96 && n.props.style.fontFamily === 'Georgia'));
     assert(nodes.some(n => n.props.style?.fontSize === 24 && n.props.style.fontFamily === 'ui-serif'));
     nodes.find(n => n.props.children === '문을')!.props.onPress();

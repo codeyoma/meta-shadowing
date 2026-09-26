@@ -46,13 +46,17 @@ These native smoke checks used the dark bubble layout. The active-reveal timing
 matrix and alternate layouts are established by automated tests, not by these
 three native smoke checks.
 
-## Remaining device acceptance
+## Owner-reported native acceptance — 2026-09-26
 
-The earlier #79 physical-phone approval does not establish #80 acceptance.
-Physical iPhone stages 11, 13 and 15, full spoken VoiceOver operation and focus
-restoration, offline/missing results, both appearances and maximum Dynamic Type
-remain separate manual checks. Automated host fixtures do not prove native
-layout, actual spoken output or dictionary installation behavior.
+After receiving the remaining #80 native checklist, the owner reported that all
+listed checks work: touches during incomplete reveal, both layouts and appearances,
+large text, VoiceOver lookup and focus return, offline/missing results, and
+background/relaunch state preservation. Record these as owner-confirmed manual
+acceptance, separate from the agent's Simulator smoke checks above. This is a new
+#80 confirmation, not an inference from the earlier #79 phone approval.
+
+Automated host fixtures do not prove native layout, spoken output or dictionary
+installation behavior. Device/OS details and individual recordings were not supplied.
 
 The inherited #79 live Dynamic Type sheet-footer limitation remains recorded in
 `learning-dictionary-verification.md`; this change does not claim to fix it.
