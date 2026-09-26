@@ -125,7 +125,8 @@ test(`stage ${stage} ${incomplete ? 'unfinished reveal ignores lookup' : 'lookup
       assert.equal(saved()?.phase, 'listening');
       db.exec('PRAGMA query_only = OFF');
       runtime.find('오류 복구 후 이어하기').onPress({ nativeEvent: { pageX: 0, pageY: 0 } });
-      await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+      await new Promise(resolve => setImmediate(resolve));
+      t.mock.timers.tick(0); runtime.flush(); // Flush an endpoint saved just before the ended callback.
     }
     assert.equal(runtime.find('다음 문장 또는 학습 마치기').disabled, false);
     assert.deepEqual(lookups, [], 'Ignored touches must never queue a later lookup');
