@@ -20,6 +20,9 @@ provide the same relationships without relying on color or decorative arrows.
   source links retain identity without invented transitive connections.
 - The actual browser component supports token selection, selected accessibility
   state, relationship descriptions, Back, selection reset and Close.
+- A review found insufficient top clearance for the highest arrow label at large
+  Dynamic Type sizes. A red/green component regression checks label bounds at
+  font scales 1, 1.5 and 3; the clearance now scales with the label.
 - The real analysis route with SQLite preserves its entire checkpoint and XP
   through graph selection and sentence navigation. Existing authorization and
   reveal-independent entry tests remain in the full suite.
@@ -27,6 +30,8 @@ provide the same relationships without relying on color or decorative arrows.
   the production validator and relation projection. It passed for 560 source
   entries, 811 sentences and all 8,795 token selections, with no skipped test.
   This is actual-package verification, separate from public synthetic fixtures.
+- After the review fix, `npm run check` passed all 577 tests and TypeScript;
+  `npm run bundle:ios` completed successfully.
 
 To repeat the private check without committing source content:
 
@@ -45,6 +50,8 @@ and root relationships. Horizontal dragging exposed later tokens. Selecting
 another word changed the relation card. At accessibility-extra-extra-extra-large,
 vertical and horizontal scrolling and selection still worked; explanation text
 wrapped. The original `large` content-size setting was restored afterward.
+After the clearance fix, the highest subject label was also visually confirmed
+fully visible at the maximum accessibility text size, then the size was restored.
 
 Native semantic snapshots expose labeled word buttons, and component tests verify
 selected state. This is not a claim of a full spoken VoiceOver session or a new

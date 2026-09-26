@@ -8,10 +8,10 @@ import { syntaxFixture, syntaxPhrases } from '../test-support/syntax-fixture';
 
 test('sentence menu opens the selected POS detail and Back returns without selecting another learning unit', t => {
   const runtime = nativeHooks(); t.after(runtime.dispose);
-  let closes = 0, haptics = 0;
+  let closes = 0, haptics = 0, fontScale = 1;
   const load = nativeModules({ react: runtime.hooks, 'react-native-reanimated': nativeMotion,
     'react-native': { ScrollView: 'ScrollView', View: 'View', Text: 'Text', Pressable: 'Pressable',
-      AppState: { currentState: 'active' }, useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale: 1 }) },
+      AppState: { currentState: 'active' }, useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale }) },
     'expo-image': { Image: 'Image' }, 'expo-haptics': { ImpactFeedbackStyle: { Light: 'light' },
       impactAsync: async () => { haptics++; } }, 'expo-font': { isLoaded: () => false },
     expo: { requireOptionalNativeModule: () => null, requireNativeModule: () => ({ isEnabled: () => true }) },
@@ -30,6 +30,19 @@ test('sentence menu opens the selected POS detail and Back returns without selec
   runtime.find('단어 1: Fish, 명사').onPress();
   assert.equal(runtime.find('단어 1: Fish, 명사').accessibilityState.selected, true);
   assert.ok(runtime.find('swim → Fish: 주어 (NSUBJ)'));
+  runtime.find('단어 1: Fish, 명사').onLayout({ nativeEvent: { layout: { x: 0, width: 150 } } });
+  runtime.find('단어 2: swim, 동사').onLayout({ nativeEvent: { layout: { x: 162, width: 150 } } });
+  for (fontScale of [1, 1.5, 3]) {
+    const graph = runtime.flush().find(n => n.props.accessibilityElementsHidden)!;
+    const lanes = React.Children.toArray(graph.props.children) as React.ReactElement<any>[];
+    assert.equal(lanes.length, 1);
+    for (const lane of lanes) {
+      const label = React.Children.toArray(lane.props.children)[1] as React.ReactElement<any>;
+      assert.ok(lane.props.style.top + label.props.style.top >= 0,
+        `Relation label must stay inside the scroll content at font scale ${fontScale}`);
+    }
+  }
+  fontScale = 1;
   assert.equal(closes, 0);
   runtime.find('문장 목록으로 돌아가기').onPress();
   assert.ok(runtime.find('문장 1 분석: Birds fly.'));

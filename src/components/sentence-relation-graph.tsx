@@ -11,7 +11,8 @@ export function SentenceRelationGraph({ sentence }: { sentence: AnalysisSentence
   const [selected, setSelected] = useState<number | null>(null);
   const [centers, setCenters] = useState<Record<number, number>>({});
   const relations = relationsForToken(sentence, selected);
-  const height = relations.edges.length * 48 * fontScale + 24;
+  const labelClearance = 24 * fontScale;
+  const height = relations.edges.length * 48 * fontScale + labelClearance;
   return <View style={{ gap: 16 }}>
     <Label size={24}>{sentence.text}</Label>
     <Label size={14} muted>좌우로 밀어 모든 단어를 볼 수 있어요.</Label>
@@ -23,7 +24,7 @@ export function SentenceRelationGraph({ sentence }: { sentence: AnalysisSentence
             const head = centers[edge.head], dependent = centers[edge.dependent];
             if (head === undefined || dependent === undefined) return null;
             const left = Math.min(head, dependent), width = Math.abs(head - dependent);
-            const top = (relations.edges.length - lane - 1) * 48 * fontScale + 24;
+            const top = (relations.edges.length - lane - 1) * 48 * fontScale + labelClearance;
             return <View key={edge.dependent} style={{ position: 'absolute', left, width, top, bottom: 4 }}>
               <View style={{ position: 'absolute', inset: 0, borderTopWidth: 2, borderLeftWidth: 2,
                 borderRightWidth: 2, borderColor: c.link, borderTopLeftRadius: 12, borderTopRightRadius: 12 }} />
