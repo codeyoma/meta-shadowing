@@ -45,22 +45,81 @@ final class DictionaryPresenter {
   }
 }
 
-/** Hosts Apple's interface without reading or copying its definition content. */
+/** Presents the system dictionary without an additional app-owned header. */
 @MainActor
-private final class DictionarySheet: UIViewController, UIAdaptivePresentationControllerDelegate {
+private final class DictionarySheet: UINavigationController, UIAdaptivePresentationControllerDelegate {
   var finished: (() -> Void)?
   var continueLearning: (() -> Void)?
-  private let library: UIReferenceLibraryViewController
+  private let topBorder = CAShapeLayer()
+  private let cornerRadius: CGFloat = 32
 
   init(term: String) {
-    library = UIReferenceLibraryViewController(term: term)
-    super.init(nibName: nil, bundle: nil)
+    let content = DictionaryContent(term: term)
+    super.init(rootViewController: content)
+    content.continueLearning = { [weak self] in self?.continueLearning?() }
+    // Apple's dictionary supplies the only title and close control. Keep no empty header space.
+    setNavigationBarHidden(true, animated: false)
     // Use UIKit's interactive form sheet, like the learning options drawer.
     // UIKit owns dragging, cancellation and the grabber; no release-only pan.
     modalPresentationStyle = .formSheet
     sheetPresentationController?.detents = [.large()]
     sheetPresentationController?.prefersGrabberVisible = true
+    sheetPresentationController?.preferredCornerRadius = cornerRadius
     presentationController?.delegate = self
+  }
+  required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    view.backgroundColor = .systemBackground
+    view.accessibilityViewIsModal = true
+    view.accessibilityIdentifier = "dictionary.sheet"
+    topBorder.fillColor = UIColor.clear.cgColor
+    topBorder.lineWidth = 1
+    registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: DictionarySheet, _: UITraitCollection) in
+      self.view.setNeedsLayout()
+    }
+  }
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    // Outline only the sheet's upper edge. A decorative layer never intercepts UIKit's pan gesture.
+    let bounds = view.bounds.insetBy(dx: 0.5, dy: 0.5)
+    let radius = min(cornerRadius, bounds.width / 2)
+    let path = UIBezierPath()
+    path.move(to: CGPoint(x: bounds.minX, y: bounds.minY + radius))
+    path.addArc(withCenter: CGPoint(x: bounds.minX + radius, y: bounds.minY + radius),
+      radius: radius, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
+    path.addLine(to: CGPoint(x: bounds.maxX - radius, y: bounds.minY))
+    path.addArc(withCenter: CGPoint(x: bounds.maxX - radius, y: bounds.minY + radius),
+      radius: radius, startAngle: .pi * 1.5, endAngle: .pi * 2, clockwise: true)
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    topBorder.path = path.cgPath
+    topBorder.strokeColor = UIColor.systemGray3.resolvedColor(with: traitCollection).cgColor
+    view.layer.addSublayer(topBorder)
+    CATransaction.commit()
+  }
+  override func accessibilityPerformEscape() -> Bool {
+    continueLearning?()
+    return true
+  }
+  override func viewDidDisappear(_ animated: Bool) {
+    super.viewDidDisappear(animated)
+    if presentingViewController == nil || isBeingDismissed { finished?() }
+  }
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { finished?() }
+}
+
+/** Hosts Apple's unmodified interface and a fixed learning action below it. */
+@MainActor
+private final class DictionaryContent: UIViewController {
+  var continueLearning: (() -> Void)?
+  private let library: UIReferenceLibraryViewController
+  private var resumeBottomConstraint: NSLayoutConstraint?
+
+  init(term: String) {
+    library = UIReferenceLibraryViewController(term: term)
+    super.init(nibName: nil, bundle: nil)
   }
   required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
 
@@ -103,24 +162,27 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
     }
     resume.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(resume)
+    // Match player-options: max(16, bottom safe area), plus ActionButton's 4-point shadow space.
+    let resumeBottom = resume.bottomAnchor.constraint(equalTo: view.bottomAnchor,
+      constant: -(max(16, view.safeAreaInsets.bottom) + 4))
+    resumeBottomConstraint = resumeBottom
     NSLayoutConstraint.activate([
-      library.view.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
+      library.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
       library.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       library.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       library.view.bottomAnchor.constraint(equalTo: resume.topAnchor, constant: -16),
       resume.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
       resume.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-      resume.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+      resumeBottom,
       resume.heightAnchor.constraint(greaterThanOrEqualToConstant: 54),
     ])
+  }
+  override func viewSafeAreaInsetsDidChange() {
+    super.viewSafeAreaInsetsDidChange()
+    resumeBottomConstraint?.constant = -(max(16, view.safeAreaInsets.bottom) + 4)
   }
   override func accessibilityPerformEscape() -> Bool {
     continueLearning?()
     return true
   }
-  override func viewDidDisappear(_ animated: Bool) {
-    super.viewDidDisappear(animated)
-    if presentingViewController == nil || isBeingDismissed { finished?() }
-  }
-  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { finished?() }
 }

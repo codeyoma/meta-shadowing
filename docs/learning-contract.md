@@ -178,14 +178,18 @@ Missing results are normal and dismissible. The app does not extract, cache,
 republish or log definitions, and adds no dictionary service. Backgrounding,
 navigation and access/profile changes invalidate pending lookup. Existing voice
 capture may continue through this temporary sheet, but lookup starts no capture.
-The owner-approved presentation (2026-09-26) retains Apple's dictionary interface
-inside a native full-height form sheet, with the system grabber and Apple's close
-control. The fixed bottom “학습 이어하기” action also dismisses to the same paused
-lesson. UIKit owns drag tracking, cancellation and dismissal animation. There is
-no duplicate app-owned header, custom pan recognizer or private system-view
-modification. Dragging the word-title/close row is not a required interaction;
-use the native grabber for downward swipe dismissal. This supersedes the earlier
-request to make that entire header draggable.
+The owner-amended presentation (2026-09-26) retains Apple's dictionary interface
+inside a native full-height form sheet with the system grabber. The app-owned
+navigation bar is hidden: the owner removed both its duplicate controls and the
+remaining empty header space. Only Apple's title and close control remain.
+Dragging the system grabber dismisses the sheet; cancelling a short drag leaves
+it open. A thin adaptive gray outline follows the
+sheet's upper edge and rounded corners without intercepting touches.
+The fixed bottom “학습 이어하기”
+action also dismisses to the same paused lesson. UIKit owns drag tracking,
+cancellation and dismissal animation. No custom pan recognizer or private
+system-view modification is used. This supersedes the added navigation-header
+drag surface; it does not change gesture behavior inside Apple's own title row.
 Silent stages 11–16 enable lookup only after the complete phrase has finished
 revealing and the existing Next action is enabled. Busy, error, foreground,
 access and current-unit checks are revalidated before presentation. Incomplete
@@ -318,6 +322,11 @@ unavailable even after their predecessor is complete.
 - Player navigation opens a native options drawer instead of immediately going
   back. It pauses/checkpoints first and offers speed, return, and a Cardinal
   “스테이지로 돌아가기” action. Closing the drawer never automatically resumes.
+  The drawer body uses an iOS native stack for menu-to-option push/pop transitions,
+  with platform timing and interactive back swipe. The outer header and bottom
+  actions remain fixed. Reduced Motion uses a fade. Back returns to the menu;
+  close and continue dismiss the entire drawer, including from a nested option.
+  A directly opened speed editor returns to the menu without dismissing the sheet.
   The header shows sentence progress and position, not XP. The counter is aligned
   to the right content margin; native text measurement reserves both digit slots
   from the total phrase count with tabular numerals, so the track stays the same

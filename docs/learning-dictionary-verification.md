@@ -246,6 +246,70 @@ dictionary management interface remains available. Historical observations
 above are retained for traceability; this confirmation does not claim a new code
 fix or an independently reproduced resolution of the live Dynamic Type finding.
 
+## Menu-style header amendment — 2026-09-26
+
+The owner explicitly approved an additional app-owned native header after the
+Apple title-row drag limitation was reproduced again. The sheet now uses a
+`UINavigationController` with the lookup term and a native close item, matching
+the learning-options navigation mechanism. The unmodified Apple dictionary,
+including its own title/close row, remains below it. The bottom learning action
+remains outside the dictionary content and within the safe area. No definition
+extraction, private-subview modification or custom pan/animation is introduced.
+
+An automated UI regression covers a short cancelled drag, full downward drag
+from the new header, completed dismissal, reopening and the new close item.
+The original Apple header failed the preceding drag reproduction. The new
+header passes with a screen-relative full drag; a shorter fixed-distance gesture
+on the tall Simulator can cancel rather than dismiss, as controlled by UIKit.
+All 13 native tests pass, including Apple's child dismissal, fixed learning
+action, accessibility escape, deferred user animation and lifecycle cancellation.
+`npm run check` and the app's Debug Simulator build also pass. These results do
+not constitute new physical-device acceptance. Historical no-extra-header
+decisions above are superseded by this explicit amendment.
+
+The rebuilt Expo app was also checked with installed internal test material in
+dark appearance. Dragging the new header dismissed the dictionary and returned
+to the same source position and unconfirmed first cycle, with playback paused.
+The original Apple title row remains separate and is not the new drag surface.
+
+### Empty drag header refinement
+
+The owner subsequently requested removal of the duplicate controls and approved
+keeping the app-owned navigation bar empty. Apple's title and close control are
+now the only word header; the empty bar above remains the native drag surface.
+A one-point adaptive gray outline follows the sheet's upper edge and rounded
+corners. It is a decorative layer, not a gesture handler or a modification of
+Apple's dictionary content. The fixed learning action remains unchanged.
+The UI test now checks that the drag bar has no title or buttons and exercises
+drag cancellation, full dismissal, reopening and the fixed learning action.
+All 13 native tests pass after this refinement, and the Debug Simulator app
+build succeeds. In the rebuilt app, the single Apple header and gray upper
+outline were visually confirmed in dark appearance. Both dragging the empty
+header and tapping Apple's close control returned to the same paused lesson
+position. These checks do not add physical-device acceptance for this refinement.
+
+### Remove the empty header
+
+The owner then requested removal of the remaining empty header. The app-owned
+navigation bar is now hidden, so the dictionary starts at the content safe area
+without navigation-bar spacing. Apple's title and close control, the gray upper
+outline, system grabber and fixed learning action remain. The grabber is now the
+supported drag surface; this supersedes the empty navigation-bar drag test above
+and does not claim that Apple's own title row supports dragging.
+All 13 native tests pass with the updated grabber gesture, including cancellation,
+dismissal and reopening. The Debug Simulator app builds and runs successfully;
+the rebuilt app visually confirms that the extra header space is gone while the
+outline, Apple header and fixed learning action remain.
+
+### Align the learning action with the menu footer
+
+The dictionary footer now uses the same bottom spacing as the learning-options
+menu: the larger of 16 points and the bottom safe-area inset, plus four points
+for the button's lower shadow. It no longer adds 16 points on top of the safe
+area. The constraint updates when safe-area insets change; dictionary content
+still ends above the fixed button. The native layout assertion checks this
+menu-equivalent positioning.
+
 ## References
 
 - [Apple system dictionary controller](https://developer.apple.com/documentation/uikit/uireferencelibraryviewcontroller)
