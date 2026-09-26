@@ -161,6 +161,9 @@ The analysis icon pauses/checkpoints and opens a sentence menu for the current
 learning unit. Each grammatical sentence opens a target-text/POS detail; Back
 returns to the menu and Close leaves learning paused. This reference interaction
 never confirms practice, awards XP or changes the learning cursor.
+List-to-detail navigation uses the same native push/pop transition as learning
+options. The parent sheet retains one header, synchronized after button or native
+edge-swipe back navigation. Reduced Motion uses a fade instead of sliding.
 
 Read installed syntax offline through the native delivery boundary. Pinned bytes,
 schema/language, source identities, normalized source alignment, UTF16 offsets,
@@ -172,8 +175,27 @@ state. No network analysis service or inferred phrase spans are introduced.
 Newly prepared internal free test packages may include pinned syntax metadata;
 existing immutable installations are not silently rewritten or re-fingerprinted.
 The synthetic development lab exercises the shared list/detail UI without granting
-access to any real package. Interactive relation graphs and embedded dictionary
-content remain separate #85 and #86 work.
+access to any real package. The #85 detail shows a horizontally scrollable token
+graph. All non-root relationships appear as quadratic curves before selection.
+Transparent word-length controls show no visible ordinal or card border.
+The direction explanation stays above the graph; redundant scrolling and self-arrow
+instructions are omitted. Each word's POS appears in Korean with a lowercase English
+name beneath it. A non-interactive horizontal position indicator remains visible
+while the graph overflows, including when idle, and hides when all content fits.
+Selecting a token uses the primary accent for that word, link color for its direct
+head/dependents, and dims other curves to gray; selecting
+it again restores the overview. Display arrows run from dependent to head, with
+source relation labels and Korean explanations below the selected word. The source
+head/dependent data stays unchanged. Labels describe the starting word's role;
+subject, object and auxiliary relations are not described as modifiers. Token
+indices preserve repeated-word identity. ROOT has no self-arrow; unknown labels
+retain their source label identity without an inferred grammatical classification.
+Relation abbreviations use lowercase in the presentation, including root; stored
+labels are unchanged. Selected-word details omit the redundant connection heading.
+Sentence changes clear selection. Word buttons expose selected state and connected
+status for accessibility; text and graph scroll at large Dynamic Type sizes.
+These reference interactions have no learning-state write capability. No phrase
+spans or cross-sentence edges are inferred. Embedded dictionary content remains #86.
 
 App Store stage access still requires three real predecessor completions.
 Development and verified TestFlight builds may select any implemented stage;
