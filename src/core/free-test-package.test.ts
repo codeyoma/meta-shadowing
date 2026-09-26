@@ -17,4 +17,6 @@ test('free catalog accepts only the native-enabled test identity with valid pinn
   assert.equal(pack?.manifest.id, 'duo-33-free-test');
   assert.equal(pack?.delivery, 'appleHosted');
   assert.equal(pack?.language, 'english');
+  assert.equal(read(JSON.stringify({ ...manifest, version: 2 }))?.manifest.version, 2);
+  assert.equal(read(JSON.stringify({ ...manifest, version: 3 })), null);
 });

@@ -5,10 +5,14 @@ import Foundation
 enum LibraryMaterial {
   static let bundled = "morning-notes-v1"
   static let hosted = "hosted-morning-notes-v1"
-  static let freeDuo = "duo-33-free-test-v1"
+  static let freeDuoVersions = ["duo-33-free-test-v1", "duo-33-free-test-v2"]
+  static let freeDuo: String = {
+    let configured = Bundle.main.object(forInfoDictionaryKey: "FreeDuoAssetPackID") as? String
+    return freeDuoVersions.first(where: { $0 == configured }) ?? freeDuoVersions[0]
+  }()
   static let paidDuo = "duo-33-v1"
   static func validate(_ key: String) throws {
-    guard [bundled, hosted, freeDuo, paidDuo].contains(key) else { throw DeliveryError.invalidPackage }
+    guard ([bundled, hosted, paidDuo] + freeDuoVersions).contains(key) else { throw DeliveryError.invalidPackage }
   }
 }
 

@@ -10,7 +10,8 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const input = process.argv[2];
 if (!input || process.argv.length !== 3) throw Error('Supply the DUO source directory.');
 const source = fs.realpathSync(input);
-const output = path.join(root, 'private/free-duo');
+const hasSyntax = fs.existsSync(path.join(source, 'text-syntax.json'));
+const output = path.join(root, hasSyntax ? 'private/free-duo-v2' : 'private/free-duo');
 if (fs.existsSync(output)) throw Error('Prepared version already exists; do not overwrite an immutable pack.');
 const info = JSON.parse(fs.readFileSync(path.join(source, 'info.json'), 'utf8'));
 if (Number(info.phrase) !== 560 || Number(info.section) !== 45 || info.language !== 'en') throw Error('Unexpected DUO metadata.');
@@ -41,12 +42,12 @@ for (const [i, name] of entries.entries()) {
 fs.unlinkSync(path.join(staging, 'input.mp3'));
 if (syntax) fs.writeFileSync(path.join(staging, 'syntax.json'), syntax);
 fs.writeFileSync(path.join(staging, 'manifest.json'), JSON.stringify({
-  id: 'duo-33-free-test', version: 1, title: 'DUO 3.3 · 무료 테스트', phrases, ...(syntax ? { metadata } : {}),
+  id: 'duo-33-free-test', version: syntax ? 2 : 1, title: 'DUO 3.3 · 무료 테스트', phrases, ...(syntax ? { metadata } : {}),
 }));
 fs.writeFileSync(path.join(staging, 'AssetPack.json'), JSON.stringify({
-  assetPackID: helpers.key, downloadPolicy: { onDemand: {} }, platforms: ['iOS'],
+  assetPackID: syntax ? helpers.syntaxKey : helpers.key, downloadPolicy: { onDemand: {} }, platforms: ['iOS'],
   fileSelectors: [{ file: 'manifest.json' }, ...phrases.map(({file}) => ({file})), ...metadata.map(({file}) => ({file}))],
 }));
 run('xcrun', ['ba-package', 'AssetPack.json', '-o', 'DuoFreeTest.aar'], { cwd: staging });
 fs.renameSync(staging, output);
-console.log('Prepared 560 phrases / 45 sections and DuoFreeTest.aar under ignored private/free-duo. Nothing uploaded.');
+console.log(`Prepared 560 phrases / 45 sections and DuoFreeTest.aar for version ${syntax ? 2 : 1}. Nothing uploaded.`);

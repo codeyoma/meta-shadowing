@@ -35,17 +35,23 @@ Normal player reveal and dictionary eligibility do not change.
 - The existing private source analysis passes the production validator against all
   560 package entries: 811 grammatical sentences and 8,795 tokens. No private text
   or payload is committed or included in test output.
-- `npm run check` passes: 572 tests and TypeScript checking. Native delivery tests
-  pass with 29 passed and one optional private-audio test skipped.
+- `npm run check` passes: 573 tests and TypeScript checking. Native delivery tests
+  pass with 31 passed, including the private v2 audio/analysis test, and none skipped.
 
 ## Actual-package integration boundary
 
-The currently prepared/installed legacy free test package has no pinned syntax
-file. It remains untouched: adding a file to an already fingerprinted immutable
-version is not a valid upgrade. Reading the source file successfully does not
-prove installed DUO analysis works. A newly prepared installation with approved
-syntax metadata must be tested separately; publishing a changed descriptor over
-an existing pinned identity will correctly require a compatible package version.
-No paid delivery, TestFlight upload, ownership bypass or physical-device acceptance
-is claimed by the synthetic checks. Physical VoiceOver and maximum Dynamic Type
-remain distinct from automated component checks.
+On 2026-09-26, the existing source `text-syntax.json` was included byte-for-byte as
+`syntax.json` in the separate free-test v2 package. The legacy v1 remains untouched;
+its old checkpoint is still present. No checkpoint migration or database reset was
+performed. The new binary pins v2, and the production native installer verified
+all 562 files (manifest, 560 audio files, and syntax) in the Simulator container.
+The optional native test independently decoded all 560 installed audio files and
+verified syntax availability; corrupted payloads were rejected. A synthetic
+coexistence test verifies v1 identity and files survive v2 installation/corruption.
+
+The actual DUO v2 player at stage 11 opened its sentence list, and selecting the
+sentence displayed its target text and per-word POS detail in dark appearance.
+This is local Simulator installation, not proof of an Apple-hosted download,
+paid delivery, TestFlight upload, or physical-device acceptance. Physical VoiceOver
+and maximum Dynamic Type remain distinct from these checks. Relation arrows and
+the embedded dictionary remain scoped to #85 and #86.

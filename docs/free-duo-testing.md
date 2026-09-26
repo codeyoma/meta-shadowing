@@ -16,8 +16,25 @@ npm run package:free-duo -- '<DUO source directory>'
 The source must contain the expected `info.json`, `text.txt` and `audio.zip`.
 The tool validates 560 phrase blocks / 45 sections, preserves multiline dialogue,
 allowlists numbered MP3 entries, converts them to AAC/M4A, pins sizes and SHA-256,
-and writes `private/free-duo/DuoFreeTest.aar`. It does not upload anything. Existing
+and writes `private/free-duo/DuoFreeTest.aar` when no analysis is supplied. If the
+source includes `text-syntax.json`, it writes the new version to
+`private/free-duo-v2/DuoFreeTest.aar`, with the unchanged analysis bytes pinned as
+`syntax.json`. It does not upload anything. Existing
 prepared output is never overwritten; changed content needs a new version and pins.
+
+To add analysis to an already prepared v1 without re-encoding its audio:
+
+```sh
+node scripts/free-duo-syntax.mjs '<path to text-syntax.json>'
+```
+
+This verifies all 560 source entries with the production analysis parser and all
+legacy audio digests, then creates `private/free-duo-v2`. It refuses to replace an
+existing output. The internal build selects v2 when that directory exists and
+requires valid syntax pins; otherwise it retains the legacy v1 configuration.
+Rebuild the native binary so its manifest, descriptor, and asset-pack ID agree.
+V1 materials and checkpoints are not rewritten or migrated. V2 starts separate
+version-scoped learning progress; book-level award identity remains unchanged.
 
 ## Build the internal app
 
@@ -29,7 +46,8 @@ Keep the existing registered Apple App Group and sample delivery configuration.
 Rebuild the native app after prebuild; a Metro reload cannot change its pins.
 The internal build embeds only the test manifest, not the audio archive. Library
 shows `DUO 3.3 · 무료 테스트`. Download, cancellation, validation, retry and removal
-use a dedicated native download actor and `duo-33-free-test-v1` installation.
+use a dedicated native download actor and the configured immutable installation
+(`duo-33-free-test-v1`, or `duo-33-free-test-v2` with analysis).
 Existing sample/progress keys are preserved. Material deletion does not delete
 learning records. The current player supports stages 1–2; this does not implement
 the deferred learning methods.
@@ -41,7 +59,7 @@ operation and expose no free catalog manifest. This guard is **not paid DRM**.
 ## Actual delivery
 
 - **Internal TestFlight:** upload the archive as Apple-hosted asset pack
-  `duo-33-free-test-v1`, wait until ready for internal testing, then upload/install
+  using the configured version's asset-pack ID, wait until ready for internal testing, then upload/install
   the separately built internal app. App and asset uploads are separate actions.
 - **Xcode device / simulator:** configure Apple's Background Assets local test
   server and Development Overrides. A directly installed build does not get

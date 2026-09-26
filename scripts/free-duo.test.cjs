@@ -51,6 +51,15 @@ test('normal prebuild strips stale free content and internal build requires expl
   fs.writeFileSync(path.join(root, 'private/free-duo/syntax.json'), syntax);
   configureFreeDuo(result, { APPLE_FREE_DUO_TEST: '1', APPLE_BUILD_CHANNEL: 'internal', APPLE_ASSET_APP_GROUP: 'group.example.test' }, root);
   assert.equal(JSON.parse(result.FreeDuoDescriptor).files.at(-1).file, 'syntax.json');
+  fs.mkdirSync(path.join(root, 'private/free-duo-v2'));
+  fs.writeFileSync(path.join(root, 'private/free-duo-v2/manifest.json'), JSON.stringify({ ...manifest, version: 2 }));
+  fs.writeFileSync(path.join(root, 'private/free-duo-v2/syntax.json'), syntax);
+  configureFreeDuo(result, { APPLE_FREE_DUO_TEST: '1', APPLE_BUILD_CHANNEL: 'internal', APPLE_ASSET_APP_GROUP: 'group.example.test' }, root);
+  assert.equal(result.FreeDuoAssetPackID, 'duo-33-free-test-v2');
+  assert.equal(JSON.parse(result.FreeDuoDescriptor).key, 'duo-33-free-test-v2');
+  assert.equal(JSON.parse(result.FreeDuoDescriptor).files.at(-1).sha256, manifest.metadata[0].sha256);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'private/free-duo/manifest.json'))).version, 1);
+  fs.writeFileSync(path.join(root, 'private/free-duo-v2/syntax.json'), 'corrupt');
   fs.writeFileSync(path.join(root, 'private/free-duo/syntax.json'), 'corrupt');
   assert.throws(() => configureFreeDuo({}, { APPLE_FREE_DUO_TEST: '1', APPLE_BUILD_CHANNEL: 'internal', APPLE_ASSET_APP_GROUP: 'group.example.test' }, root));
   assert.throws(() => configureFreeDuo({}, { APPLE_FREE_DUO_TEST: '1', APPLE_BUILD_CHANNEL: 'production' }, root));

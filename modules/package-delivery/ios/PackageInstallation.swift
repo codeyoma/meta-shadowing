@@ -91,7 +91,7 @@ struct PackageInstallation: Sendable {
       Set(package.files.map(\.file)).count == package.files.count,
       package.files.contains(where: { $0.file == "manifest.json" }),
       package.files.allSatisfy({ entry in
-        (entry.file == "manifest.json" || (package.key == LibraryMaterial.freeDuo && entry.file == "syntax.json" && entry.bytes <= 20_000_000) || (package.key == LibraryMaterial.paidDuo && ["cover.jpg", "info.json", "text.txt", "syntax.json"].contains(entry.file)) || entry.file.range(of: "^audio/[a-z0-9-]+\\.m4a$", options: .regularExpression) != nil)
+        (entry.file == "manifest.json" || (LibraryMaterial.freeDuoVersions.contains(package.key) && entry.file == "syntax.json" && entry.bytes <= 20_000_000) || (package.key == LibraryMaterial.paidDuo && ["cover.jpg", "info.json", "text.txt", "syntax.json"].contains(entry.file)) || entry.file.range(of: "^audio/[a-z0-9-]+\\.m4a$", options: .regularExpression) != nil)
           && entry.bytes > 0 && entry.bytes <= 50_000_000
           && entry.sha256.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil
       }) else { throw DeliveryError.invalidPackage }
