@@ -33,9 +33,9 @@ export function StageStartPopover({ anchor, width, onClose, onStart }: {
         <FeedbackPressable accessibilityRole="button" accessibilityLabel={`Stage ${anchor.stage} ${anchor.label}`}
           onPress={() => { onClose(); onStart(anchor.stage); }}
           style={({ pressed }) => ({ minHeight: 48, paddingVertical: 12, paddingHorizontal: 16,
-            borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff',
-            transform: [{ translateY: pressed ? 3 : 0 }], boxShadow: pressed ? 'none' : '0 3px 0 rgba(255,255,255,0.5)' })}>
-          <Label size={16} weight="800" color="#c75a00">{anchor.label}</Label>
+            borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.card,
+            transform: [{ translateY: pressed ? 3 : 0 }], boxShadow: pressed ? 'none' : `0 3px 0 ${c.stageActionEdge}` })}>
+          <Label size={16} weight="800" color={c.stageActionText}>{anchor.label}</Label>
         </FeedbackPressable>
       </Animated.View>;
 }

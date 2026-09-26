@@ -50,7 +50,7 @@ export function ActionButton({ title, onPress, secondary = false, disabled = fal
       style={({ pressed }) => ({ minHeight: 54, paddingVertical: 13, paddingHorizontal: 18,
         borderRadius: 16, borderCurve: 'continuous', flexDirection: 'row', gap: 10,
         alignItems: 'center', justifyContent: 'center', transform: [{ translateY: pressed ? 4 : 0 }],
-        backgroundColor: disabled ? c.disabled : tone === 'cardinal' ? '#ffffff' : secondary ? c.card : c.accent,
+        backgroundColor: disabled ? c.disabled : tone === 'cardinal' || secondary ? c.card : c.accent,
         borderWidth: secondary ? 2 : 0, borderColor: c.line,
         boxShadow: pressed || disabled ? 'none' : `0 4px 0 ${secondary || tone === 'cardinal' ? c.line : c.accentPressed}` })}>
       {icon && <View style={iconMirrored ? { transform: [{ scaleX: -1 }] } : undefined}><Icon name={icon} color={ink} /></View>}

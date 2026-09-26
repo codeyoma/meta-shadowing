@@ -34,3 +34,34 @@ enough. On react-native-screens or React Native upgrades, check the native asset
 loading path and repeat a standalone Release cold launch with the original
 mascot. Verify all browsing tabs remain visible and tappable and the mascot
 remains inert. Remove the patch only when the upstream path respects image size.
+
+# Native sheet dragging and Expo popup menus
+
+The expo-modules-core 57.0.18 window-level `SystemMenuTouchGate` accepts all
+events, even when no context menu is open. In the app, this prevents UIKit's
+dictionary form sheet from dragging interactively. Disabling only that gate
+restored the native gesture; changing detents or removing dictionary content
+did not fix it.
+
+The versioned patch makes the gate a non-competing observer: it can neither
+prevent nor be prevented by another recognizer. Its existing event filtering and
+protection against React Native press-through remain in place while a menu is
+open. The dictionary uses UIKit's grabber instead of an app-owned
+release-only drag handler. Rebuild the native client after applying this patch.
+
+The learning-dictionary native fixture compiles the installed gate source and
+tests non-competing gesture behavior and menu detection. On Expo
+upgrades, repeat dictionary/menu drawer dragging and font-popup selection/outside
+tap checks before removing or updating the patch.
+
+The current font popup can pass an outside tap to a size stepper with both the
+original and patched arbitration. That separate behavior is recorded in
+`docs/learning-dictionary-verification.md`; this patch does not expand the
+upstream context-menu detector or claim to fix every popup presentation.
+
+In this pinned Expo version, active-menu filtering uses
+`handler.ignore(touch, for: event)` from both the event delegate and
+`touchesBegan`. The gate then sets its own state to `.failed`; it does not
+recognize successfully and win against React Native's recognizer. The patch
+leaves that filtering path unchanged. Restoring gesture prevention is therefore
+not a replacement for fixing a popup that the upstream detector does not see.

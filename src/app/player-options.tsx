@@ -3,7 +3,7 @@ import { Alert, AppState, ScrollView, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { randomUUID } from 'expo-crypto';
-import { ActionButton, HeaderButton } from '@/components/ui';
+import { ActionButton } from '@/components/ui';
 import { LearningPreferenceSection, type LearningPreference } from '@/components/learning-preference-section';
 import { SettingsRow, useSettingsColors } from '@/components/settings-row';
 import { LearningPreferenceMenu, learningPreferenceMenus } from '@/components/learning-preference-menu';
@@ -143,11 +143,17 @@ export default function PlayerOptionsScreen() {
   }
   return <View style={{ flex: 1, backgroundColor: c.sheet }}>
     <Stack.Screen options={{ title: selected === 'monitor' ? '내 목소리 듣기' : selected === 'reveal' ? '스피킹 속도' : selected === 'sentences' ? '전체 문장' : learningPreferenceMenus.find(menu => menu.option === selected)?.title ?? '학습 옵션',
-      headerLeft: selected ? () => <HeaderButton title="학습 옵션으로 돌아가기" icon="chevron.left" onPress={() => setSelected(null)} /> : undefined,
       headerTransparent: true, headerBlurEffect: 'none',
       headerStyle: { backgroundColor: 'transparent' }, headerTintColor: c.text,
-      contentStyle: { backgroundColor: c.sheet },
-      headerRight: () => <HeaderButton title="옵션 닫기" icon="xmark" onPress={() => { generation.current++; sentenceEntry.cancel(); router.back(); }} /> }} />
+      contentStyle: { backgroundColor: c.sheet } }} />
+    <Stack.Toolbar placement="left">
+      <Stack.Toolbar.Button icon="chevron.left" accessibilityLabel="학습 옵션으로 돌아가기" hidden={!selected}
+        tintColor={c.text} onPress={() => setSelected(null)} />
+    </Stack.Toolbar>
+    <Stack.Toolbar placement="right">
+      <Stack.Toolbar.Button icon="xmark" accessibilityLabel="옵션 닫기" tintColor={c.text}
+        onPress={() => { generation.current++; sentenceEntry.cancel(); router.back(); }} />
+    </Stack.Toolbar>
     {/* Keep the sheet's native scroll-frame correction separate from the fixed footer. */}
     <View collapsable={false} style={{ flex: 1 }}>
       {selected === 'sentences' ? <SentenceMenu sections={sections} currentUnit={checkpoint?.phrase ?? -1}

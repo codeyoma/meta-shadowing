@@ -168,7 +168,7 @@ test('silent speed sheet exposes shared WPM editing only for authorized stages 1
     const patches: unknown[] = [];
     const settings = { crazyWpm: [150, 200, 250, 350] };
     const module = { exports: undefined as unknown as () => Element };
-    runInNewContext(code, { module, exports: {}, require, View: 'View', ScrollView: 'ScrollView', Stack: { Screen: 'Screen' },
+    runInNewContext(code, { module, exports: {}, require, View: 'View', ScrollView: 'ScrollView', Stack: { Screen: 'Screen', Toolbar: Object.assign('Toolbar', { Button: 'ToolbarButton' }) },
       HeaderButton: 'HeaderButton', ActionButton: 'ActionButton', RevealSpeedControl: 'RevealSpeedControl',
       LearningPreferenceSection: 'LearningPreferenceSection', selected: 'reveal', c: {}, insets: { bottom: 0 },
       settings, checkpoint: { reveal: { speed: 2, wpm: 200 } }, stage, isRevealStage, revision: 0,
@@ -185,6 +185,41 @@ test('silent speed sheet exposes shared WPM editing only for authorized stages 1
       assert.deepEqual(patches, [patch]);
       assert.ok(nodes.findIndex(node => node.type === 'RevealSpeedControl') < nodes.indexOf(editor));
     }
+  }
+});
+
+test('drawer uses native icon buttons and keeps back and close actions distinct', () => {
+  const source = ts.createSourceFile('player-options.tsx', readFileSync(new URL('../app/player-options.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const screen = source.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === 'PlayerOptionsScreen')!;
+  const returned = screen.body!.statements.find(ts.isReturnStatement)!.expression!;
+  const code = ts.transpileModule(`module.exports = () => (${returned.getText(source)});`, {
+    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  for (const selected of [null, 'sentences']) {
+    const actions: string[] = [];
+    const generation = { current: 0 };
+    const module = { exports: undefined as unknown as () => Element };
+    runInNewContext(code, { module, exports: {}, require, selected, generation,
+      View: 'View', ScrollView: 'ScrollView', Stack: { Screen: 'Screen', Toolbar: Object.assign('Toolbar', { Button: 'ToolbarButton' }) },
+      HeaderButton: 'HeaderButton', ActionButton: 'ActionButton', SettingsRow: 'SettingsRow',
+      LearningPreferenceMenu: 'LearningPreferenceMenu', SentenceMenu: 'SentenceMenu',
+      learningPreferenceMenus: [], learningMonitorSupported: false, settings: null, checkpoint: null,
+      c: { text: '#fff' }, insets: { bottom: 0 }, sections: [], selecting: false, stage: 1, rate: 1,
+      isRevealStage, scopeValid: () => true, setSelected: (value: unknown) => { assert.equal(value, null); actions.push('back'); },
+      tapFeedback: () => assert.fail('Learning-options navigation stays silent'), sentenceEntry: { cancel: () => actions.push('cancel') },
+      router: { back: () => actions.push('dismiss') },
+    });
+    const nodes = descendants(module.exports());
+    const close = nodes.find(n => n.type === 'ToolbarButton' && n.props.accessibilityLabel === '옵션 닫기');
+    assert.ok(close, 'Use the native icon toolbar item, not a padded custom glass item');
+    assert.equal(close.props.icon, 'xmark');
+    const back = nodes.find(n => n.type === 'ToolbarButton' && n.props.accessibilityLabel === '학습 옵션으로 돌아가기');
+    assert.equal(back?.props.hidden, !selected);
+    assert.equal(back?.props.icon, 'chevron.left');
+    if (selected) { (back!.props.onPress as () => void)(); assert.deepEqual(actions, ['back']); actions.length = 0; }
+    (close.props.onPress as () => void)();
+    assert.deepEqual(actions, ['cancel', 'dismiss']);
+    assert.equal(generation.current, 1);
   }
 });
 

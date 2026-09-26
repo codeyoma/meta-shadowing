@@ -6,7 +6,7 @@ final class DictionaryPresenter {
   private var id: String?
   private var sheet: DictionarySheet?
   private var completion: ((Result<Void, Error>) -> Void)?
-  private var cancelling = false
+  private var pendingDismissalAnimated: Bool?
   private var closed = false
 
   func present(id: String, term: String, from root: UIViewController?, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -16,21 +16,22 @@ final class DictionaryPresenter {
       DictionaryWords.ranges(term) == [NSRange(location: 0, length: (term as NSString).length)]
     else { completion(.failure(Failure.unavailable)); return }
     let sheet = DictionarySheet(term: term)
-    self.id = id; self.sheet = sheet; self.completion = completion; cancelling = false
+    self.id = id; self.sheet = sheet; self.completion = completion; pendingDismissalAnimated = nil
     sheet.finished = { [weak self] in self?.finish(id: id) }
-    sheet.continueLearning = { [weak self] in self?.dismiss(id: id) }
+    sheet.continueLearning = { [weak self] in self?.dismiss(id: id, animated: true) }
     root.present(sheet, animated: true) { [weak self] in
       guard let self, self.id == id else { return }
-      if self.cancelling { self.dismiss(id: id) }
+      if let animated = self.pendingDismissalAnimated { self.dismiss(id: id, animated: animated) }
     }
   }
 
-  func dismiss(id: String) {
+  func dismiss(id: String, animated: Bool = false) {
     guard self.id == id, let sheet else { return }
-    cancelling = true
+    // Background/shutdown cancellation stays immediate, even after a user close.
+    pendingDismissalAnimated = (pendingDismissalAnimated ?? true) && animated
     if sheet.isBeingPresented { return } // Presentation completion performs this cancellation.
     if sheet.isBeingDismissed { return }
-    sheet.dismiss(animated: false) { [weak self] in self?.finish(id: id) }
+    sheet.dismiss(animated: pendingDismissalAnimated == true) { [weak self] in self?.finish(id: id) }
   }
 
   func dismissCurrent() { if let id { dismiss(id: id) } }
@@ -39,7 +40,7 @@ final class DictionaryPresenter {
   private func finish(id: String) {
     guard self.id == id else { return }
     let done = completion
-    self.id = nil; sheet = nil; completion = nil; cancelling = false
+    self.id = nil; sheet = nil; completion = nil; pendingDismissalAnimated = nil
     done?(.success(()))
   }
 }
@@ -54,7 +55,8 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
   init(term: String) {
     library = UIReferenceLibraryViewController(term: term)
     super.init(nibName: nil, bundle: nil)
-    // Match player-options' native formSheet, full-height detent and grabber.
+    // Use UIKit's interactive form sheet, like the learning options drawer.
+    // UIKit owns dragging, cancellation and the grabber; no release-only pan.
     modalPresentationStyle = .formSheet
     sheetPresentationController?.detents = [.large()]
     sheetPresentationController?.prefersGrabberVisible = true
@@ -64,7 +66,7 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    view.backgroundColor = .systemBackground
+    view.backgroundColor = UIColor { $0.userInterfaceStyle == .dark ? .black : .white }
     view.accessibilityViewIsModal = true
     addChild(library); view.addSubview(library.view); library.didMove(toParent: self)
     library.view.translatesAutoresizingMaskIntoConstraints = false
@@ -102,7 +104,7 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
     resume.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(resume)
     NSLayoutConstraint.activate([
-      library.view.topAnchor.constraint(equalTo: view.topAnchor),
+      library.view.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
       library.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       library.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       library.view.bottomAnchor.constraint(equalTo: resume.topAnchor, constant: -16),
@@ -111,6 +113,10 @@ private final class DictionarySheet: UIViewController, UIAdaptivePresentationCon
       resume.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
       resume.heightAnchor.constraint(greaterThanOrEqualToConstant: 54),
     ])
+  }
+  override func accessibilityPerformEscape() -> Bool {
+    continueLearning?()
+    return true
   }
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)

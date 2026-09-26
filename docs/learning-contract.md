@@ -178,6 +178,14 @@ Missing results are normal and dismissible. The app does not extract, cache,
 republish or log definitions, and adds no dictionary service. Backgrounding,
 navigation and access/profile changes invalidate pending lookup. Existing voice
 capture may continue through this temporary sheet, but lookup starts no capture.
+The owner-approved presentation (2026-09-26) retains Apple's dictionary interface
+inside a native full-height form sheet, with the system grabber and Apple's close
+control. The fixed bottom “학습 이어하기” action also dismisses to the same paused
+lesson. UIKit owns drag tracking, cancellation and dismissal animation. There is
+no duplicate app-owned header, custom pan recognizer or private system-view
+modification. Dragging the word-title/close row is not a required interaction;
+use the native grabber for downward swipe dismissal. This supersedes the earlier
+request to make that entire header draggable.
 Silent stages 11–16 remain unchanged; their lookup behavior belongs to #80.
 See [dictionary verification](learning-dictionary-verification.md) for measured
 results and remaining device acceptance.

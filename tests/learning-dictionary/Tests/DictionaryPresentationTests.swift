@@ -18,11 +18,13 @@ final class DictionaryPresentationTests: XCTestCase {
       finishes += 1; dismissed.fulfill()
     }
     let sheet = try XCTUnwrap(root.presentedViewController)
+    let lifecycle = DismissalLifecycleObserver()
+    sheet.addChild(lifecycle); sheet.view.addSubview(lifecycle.view); lifecycle.didMove(toParent: sheet)
     XCTAssertTrue(sheet.children.contains { $0 is UIReferenceLibraryViewController })
     XCTAssertTrue(sheet.view.accessibilityViewIsModal)
     XCTAssertEqual(sheet.modalPresentationStyle, .formSheet)
     let drawer = try XCTUnwrap(sheet.sheetPresentationController)
-    XCTAssertTrue(drawer.prefersGrabberVisible, "Use the learning drawer's visible drag handle")
+    XCTAssertTrue(drawer.prefersGrabberVisible, "Use UIKit's interactive grabber, like the learning menu")
     XCTAssertEqual(drawer.detents.map(\.identifier), [.large], "Open at the learning drawer's full height")
     let duplicate = expectation(description: "Duplicate rejected")
     presenter.present(id: "two", term: "door", from: root) { result in
@@ -35,6 +37,7 @@ final class DictionaryPresentationTests: XCTestCase {
     await fulfillment(of: [dismissed, duplicate], timeout: 5)
     XCTAssertNil(root.presentedViewController)
     XCTAssertEqual(finishes, 1)
+    XCTAssertEqual(lifecycle.dismissalAnimated, true, "A user dismissal requested during opening must remain animated")
   }
 
   func testMissingTermAndSystemChildDismissalRemainRecoverable() async throws {
@@ -52,8 +55,10 @@ final class DictionaryPresentationTests: XCTestCase {
     let library = try XCTUnwrap(sheet.children.first as? UIReferenceLibraryViewController)
     try await Task.sleep(for: .milliseconds(600))
     sheet.view.layoutIfNeeded()
+    XCTAssertFalse(sheet.isModalInPresentation, "The drawer must allow interactive dismissal")
+    XCTAssertFalse(library.isModalInPresentation, "The system child must not veto drawer dismissal")
     let resume = try XCTUnwrap(sheet.view.subviews.compactMap { $0 as? UIButton }.first)
-    XCTAssertEqual(library.view.frame.minY, 0, "Do not restore the duplicate top header")
+    XCTAssertEqual(library.view.frame.minY, 16, "Only reserve space for the handle, not a duplicate top header")
     XCTAssertEqual(library.view.frame.width, sheet.view.bounds.width)
     XCTAssertLessThanOrEqual(library.view.frame.maxY, resume.frame.minY - 16,
       "Dictionary content must not extend behind the fixed learning button")
@@ -64,6 +69,31 @@ final class DictionaryPresentationTests: XCTestCase {
     library.dismiss(animated: false)
     await fulfillment(of: [done], timeout: 5)
     XCTAssertNil(root.presentedViewController)
+  }
+
+  func testLifecycleCancellationOverridesDeferredUserAnimation() async throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+    let window = UIWindow(windowScene: scene), root = UIViewController()
+    window.rootViewController = root; window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    let presenter = DictionaryPresenter()
+    for userFirst in [true, false] {
+      let done = expectation(description: "Lifecycle dismissal")
+      presenter.present(id: "pending", term: "window", from: root) { result in
+        if case .failure = result { XCTFail("Presentation failed") }
+        done.fulfill()
+      }
+      let sheet = try XCTUnwrap(root.presentedViewController)
+      let lifecycle = DismissalLifecycleObserver()
+      sheet.addChild(lifecycle); sheet.view.addSubview(lifecycle.view); lifecycle.didMove(toParent: sheet)
+      XCTAssertTrue(sheet.isBeingPresented)
+      if userFirst { XCTAssertTrue(sheet.accessibilityPerformEscape()) }
+      presenter.dismissCurrent()
+      if !userFirst { XCTAssertTrue(sheet.accessibilityPerformEscape()) }
+      await fulfillment(of: [done], timeout: 5)
+      XCTAssertEqual(lifecycle.dismissalAnimated, false)
+      XCTAssertNil(root.presentedViewController)
+    }
   }
 
   func testDetachedPresentationAndShutdownRejectFurtherContent() async throws {
@@ -82,5 +112,36 @@ final class DictionaryPresentationTests: XCTestCase {
     }
     XCTAssertEqual(failures, 2)
     XCTAssertNil(root.presentedViewController)
+  }
+
+  func testAccessibilityEscapeDismissesOnceAndAllowsAnotherLookup() async throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+    let window = UIWindow(windowScene: scene), root = UIViewController()
+    window.rootViewController = root; window.makeKeyAndVisible()
+    defer { window.isHidden = true }
+    let presenter = DictionaryPresenter()
+    for id in ["first", "again"] {
+      let done = expectation(description: "Escape dismissal \(id)")
+      presenter.present(id: id, term: "window", from: root) { result in
+        if case .failure = result { XCTFail("Dismissal must leave the next lookup usable") }
+        done.fulfill()
+      }
+      let sheet = try XCTUnwrap(root.presentedViewController)
+      sheet.view.layoutIfNeeded()
+      XCTAssertNil(sheet.view.subviews.first { $0.accessibilityLabel == "사전 닫기" },
+        "A custom release-only handle must not intercept the native drawer gesture")
+      XCTAssertTrue(sheet.accessibilityPerformEscape())
+      await fulfillment(of: [done], timeout: 5)
+      XCTAssertNil(root.presentedViewController)
+    }
+  }
+}
+
+@MainActor
+private final class DismissalLifecycleObserver: UIViewController {
+  var dismissalAnimated: Bool?
+  override func viewWillDisappear(_ animated: Bool) {
+    super.viewWillDisappear(animated)
+    dismissalAnimated = animated
   }
 }
