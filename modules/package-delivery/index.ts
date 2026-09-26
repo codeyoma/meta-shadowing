@@ -9,6 +9,7 @@ export type DiagnosticStatus = DeliveryStatus & {
   observedProgress: number;
 };
 interface PackageDelivery {
+  sentenceSyntax?(key: string): Promise<string | null>;
   readonly paidDuoManifest?: string | null;
   paidDuoAccess?(): Promise<{revision:number;allowed:boolean}>;
   paidDuoStatus?(): Promise<DeliveryStatus>;

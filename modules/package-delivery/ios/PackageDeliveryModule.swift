@@ -153,6 +153,20 @@ public final class PackageDeliveryModule: Module {
         return ["phase": value.phase, "progress": value.progress]
       } catch { throw Self.sanitize(error) }
     }
+    AsyncFunction("sentenceSyntax") { (key: String) async throws -> String? in
+      do {
+        if key == LibraryMaterial.freeDuo {
+          return try await Self.freeDuoDownload.syntax(Self.freeDuoDescriptor())
+        }
+        guard key == LibraryMaterial.paidDuo else { return nil }
+        let access = await PackageAccess.shared.refresh()
+        guard access.allowed else { throw DeliveryError.unauthorized }
+        let text = try await Self.paidDownload.syntax(Self.paidDescriptor())
+        let current = await PackageAccess.shared.refresh()
+        guard current.allowed && current.revision == access.revision else { throw DeliveryError.unauthorized }
+        return text
+      } catch { throw Self.sanitize(error) }
+    }
     AsyncFunction("freeDuoStart") { () async throws in
       do { try await Self.freeDuoDownload.start(Self.freeDuoDescriptor()) }
       catch { throw Self.sanitize(error) }

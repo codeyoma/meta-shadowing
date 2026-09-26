@@ -1,69 +1,25 @@
-import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { selectedPackage } from '@/native/catalog';
-import { playableStage, isPlayableStage, isGroupedStage, isFirstWordStage, isRevealStage } from '@/core/catalog';
-import { revealLines, visibleReveal } from '@/core/word-reveal';
-import { LearningContext } from '@/core/learning-context';
-import { presentLearningUnits } from '@/core/learning-presentation';
-import { canOpenStage } from '@/core/stage-overview';
-import { getJournal } from '@/native/journal';
-import { isInstalled } from '@/native/package';
-import { testStageAccess } from '@/native/stage-access';
-import { useProgressProfile } from '@/components/progress-profile';
-import { getProgressSync } from '@/native/progress-sync';
-import { Card, HeaderButton, Label } from '@/components/ui';
+import { playableStage, isGroupedStage, isFirstWordStage, isRevealStage } from '@/core/catalog';
+import { HeaderButton, Label } from '@/components/ui';
 import { methodNames } from '@/components/method-label';
-import { usePackageLearningAccess } from '@/components/use-package-learning-access';
-import { mayUsePackage } from '@/native/paid-package';
+import { PlayerAnalysis } from '@/components/player-analysis';
 
 export default function PlayerInfo() {
-  const profile = useProgressProfile();
-  const { kind, stage: rawStage, package: key, phrase: rawPhrase, authority } = useLocalSearchParams<{
-    kind: string; stage: string; package: string; phrase: string; authority?: string;
+  const { kind } = useLocalSearchParams<{ kind: string }>();
+  return kind === 'analysis' ? <PlayerAnalysis /> : <LearningGuide />;
+}
+
+function LearningGuide() {
+  const { kind, stage: rawStage, package: key } = useLocalSearchParams<{
+    kind: string; stage: string; package: string;
   }>();
   const stage = playableStage(rawStage), pack = selectedPackage(key);
-  const access = usePackageLearningAccess(pack);
-  const index = Number(rawPhrase);
-  const contentKey = `${profile.id}:${profile.authority}:${key}:${stage}:${rawPhrase}`;
-  const [result, setResult] = useState<{ key: string; text: string; translation: string } | null>(null);
-  const content = access && profile.available && Number(authority) === profile.authority && result?.key === contentKey ? result : null;
-  useEffect(() => {
-    let active = true;
-    setResult(null);
-    void (async () => {
-      try {
-        if (!access || !pack || !stage || !await isInstalled(pack)) return;
-        const bypass = await testStageAccess();
-        if (!active || !mayUsePackage(pack) || Number(authority) !== profile.authority || !getProgressSync().authorized(profile.authority, profile.id)) return;
-        const context = new LearningContext(pack, getJournal());
-        const predecessor = stage - 1;
-        if (!canOpenStage(stage, isPlayableStage(predecessor)
-          ? [{ stage: predecessor, count: context.completions(predecessor), session: null }] : [], bypass)) return;
-        const saved = context.load(stage);
-        if (!saved || !Number.isSafeInteger(index) || index !== saved.phrase) return;
-        // Analysis never carries subtitle reveal state across route boundaries.
-        const unit = presentLearningUnits(context.units(saved), stage, null)[index];
-        if (unit && saved.reveal) {
-          const lines = visibleReveal(revealLines(unit, stage), saved.audioSeconds, saved.reveal.wpm,
-            ['speaking', 'decision', 'complete'].includes(saved.phase));
-          // Preserve timed visibility and language order; never expose a hidden answer here.
-          setResult({ key: contentKey, text: lines.map(line => line.visibleText).filter(Boolean).join('\n'), translation: '' });
-        } else if (unit) setResult({ key: contentKey, ...unit });
-      } catch { /* Missing or incompatible content stays hidden. */ }
-    })();
-    return () => { active = false; };
-  }, [pack, stage, index, profile.id, profile.authority, profile.available, contentKey, authority, access]);
-  const analysis = kind === 'analysis';
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 20 }}>
-    <Stack.Screen options={{ title: analysis ? '문장 분석' : '학습 가이드',
+    <Stack.Screen options={{ title: '학습 가이드',
       headerRight: () => <HeaderButton title="닫기" icon="xmark" feedback={false} onPress={() => router.back()} /> }} />
-    {!pack || !stage || (kind !== 'guide' && !analysis) ? <Label muted>학습 정보를 열 수 없어요.</Label>
-      : analysis ? <>
-        {content && <Card><Label size={25} display>{content.text}</Label>{!!content.translation && <Label muted>{content.translation}</Label>}</Card>}
-        {isFirstWordStage(stage) && <Label muted>전체 자막은 학습 화면의 ‘자막 보기’에서 확인할 수 있어요.</Label>}
-        <Label muted>문장 분석은 준비 중이에요.</Label>
-      </> : <>
+    {!pack || !stage || kind !== 'guide' ? <Label muted>학습 정보를 열 수 없어요.</Label> : <>
         <Label size={25} display>메타쉐도잉 Lv {Math.ceil(stage / 2)}</Label>
         <Label size={20}>{methodNames[Math.ceil(stage / 2) - 1]}</Label>
         <Label muted>{isRevealStage(stage)

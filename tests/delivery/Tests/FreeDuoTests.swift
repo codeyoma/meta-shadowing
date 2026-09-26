@@ -4,6 +4,21 @@ import Testing
 import AVFAudio
 
 struct FreeDuoTests {
+  @Test func syntaxReadRequiresVerifiedInstallationAndPinnedBytes() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let bytes = Data("{\"fixture\":true}".utf8)
+    let hash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    let package = DeliveryPackage(key: LibraryMaterial.freeDuo, files: ["manifest.json", "syntax.json", "audio/one.m4a"]
+      .map { .init(file: $0, bytes: bytes.count, sha256: hash) })
+    let installer = PackageInstallation(root: root)
+    let download = PackageDownload(installation: installer, transport: nil)
+    await #expect(throws: (any Error).self) { try await download.syntax(package) }
+    try installer.install(package) { _ in bytes }
+    #expect(try await download.syntax(package) == String(decoding: bytes, as: UTF8.self))
+    try Data("corrupt".utf8).write(to: root.appendingPathComponent(package.key).appendingPathComponent("syntax.json"))
+    await #expect(throws: (any Error).self) { try await download.syntax(package) }
+  }
   @Test(.enabled(if: ProcessInfo.processInfo.environment["DUO_PREPARED_PATH"] != nil))
   func preparedAudioInstallsAndDecodesOfflineAndCorruptionIsRejected() throws {
     let source = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["DUO_PREPARED_PATH"]))

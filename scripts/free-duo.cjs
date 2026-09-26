@@ -42,6 +42,16 @@ function configureFreeDuo(plist, env, root) {
   }
   const bytes = fs.readFileSync(path.join(root, 'private/free-duo/manifest.json'));
   const manifest = JSON.parse(bytes);
+  const metadata = manifest.metadata ?? [];
+  if (!Array.isArray(metadata) || metadata.length > 1) throw Error('Invalid free syntax metadata.');
+  for (const entry of metadata) {
+    if (entry.file !== 'syntax.json' || !Number.isSafeInteger(entry.bytes) || entry.bytes < 1
+      || entry.bytes > 20_000_000 || !/^[a-f0-9]{64}$/.test(entry.sha256)) throw Error('Invalid free syntax metadata.');
+    const file = path.join(root, 'private/free-duo', entry.file);
+    if (!fs.lstatSync(file).isFile()) throw Error('Invalid free syntax file.');
+    const data = fs.readFileSync(file);
+    if (data.length !== entry.bytes || hash(data) !== entry.sha256) throw Error('Prepared syntax changed.');
+  }
   if (manifest.id !== 'duo-33-free-test' || manifest.version !== 1 || !manifest.phrases?.length
       || manifest.phrases.length > 1000 || new Set(manifest.phrases.map(p => p.file)).size !== manifest.phrases.length
       || manifest.phrases.some(p => !/^audio\/[a-z0-9-]+\.m4a$/.test(p.file) || !Number.isSafeInteger(p.bytes)
@@ -54,6 +64,7 @@ function configureFreeDuo(plist, env, root) {
     FreeDuoDescriptor: JSON.stringify({ key, files: [
       { file: 'manifest.json', bytes: bytes.length, sha256: hash(bytes) },
       ...manifest.phrases.map(({file, bytes, sha256}) => ({file, bytes, sha256})),
+      ...metadata,
     ] }),
   });
 }
