@@ -26,9 +26,16 @@ test('sentence menu opens the selected POS detail and Back returns without selec
   const nodes = runtime.flush();
   assert.ok(nodes.some(n => n.props.children === 'Fish swim.'));
   assert.ok(nodes.some(n => n.props.children === '명사'));
+  assert.ok(nodes.some(n => n.props.children === '단어를 선택하면 연결 관계를 볼 수 있어요.'));
+  runtime.find('단어 1: Fish, 명사').onPress();
+  assert.equal(runtime.find('단어 1: Fish, 명사').accessibilityState.selected, true);
+  assert.ok(runtime.find('swim → Fish: 주어 (NSUBJ)'));
   assert.equal(closes, 0);
   runtime.find('문장 목록으로 돌아가기').onPress();
   assert.ok(runtime.find('문장 1 분석: Birds fly.'));
+  runtime.find('문장 1 분석: Birds fly.').onPress();
+  assert.equal(runtime.find('단어 1: Birds, 명사').accessibilityState.selected, false);
+  assert.ok(runtime.flush().some(n => n.props.children === '단어를 선택하면 연결 관계를 볼 수 있어요.'));
   runtime.find('분석 닫기').onPress();
   assert.equal(closes, 1);
 });

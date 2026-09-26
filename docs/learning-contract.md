@@ -172,8 +172,15 @@ state. No network analysis service or inferred phrase spans are introduced.
 Newly prepared internal free test packages may include pinned syntax metadata;
 existing immutable installations are not silently rewritten or re-fingerprinted.
 The synthetic development lab exercises the shared list/detail UI without granting
-access to any real package. Interactive relation graphs and embedded dictionary
-content remain separate #85 and #86 work.
+access to any real package. The #85 detail shows a horizontally scrollable token
+graph. Selecting a token highlights only its direct head/dependents, with arrows
+from head to dependent, source relation labels and Korean explanations. Token
+indices preserve repeated-word identity. ROOT has no self-arrow; unknown labels
+retain their source spelling without an inferred grammatical classification.
+Sentence changes clear selection. Word buttons expose selected state and connected
+status for accessibility; text and graph scroll at large Dynamic Type sizes.
+These reference interactions have no learning-state write capability. No phrase
+spans or cross-sentence edges are inferred. Embedded dictionary content remains #86.
 
 App Store stage access still requires three real predecessor completions.
 Development and verified TestFlight builds may select any implemented stage;

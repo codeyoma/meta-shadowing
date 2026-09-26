@@ -3,7 +3,8 @@ import { ScrollView, View } from 'react-native';
 import { FeedbackPressable as Pressable } from './feedback-pressable';
 import { Stack } from 'expo-router';
 import { Icon, Label, usePalette } from './ui';
-import { partOfSpeechName, type AnalysisSentence } from '@/core/sentence-analysis';
+import type { AnalysisSentence } from '@/core/sentence-analysis';
+import { SentenceRelationGraph } from './sentence-relation-graph';
 
 export function AnalysisBrowser({ sentences, onClose }: {
   sentences: readonly AnalysisSentence[]; onClose(): void;
@@ -14,16 +15,7 @@ export function AnalysisBrowser({ sentences, onClose }: {
   return <>
     <ScrollView key={sentence?.id ?? 'list'} contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ padding: 16, gap: 16 }}>
-      {sentence ? <>
-        <Label size={24}>{sentence.text}</Label>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-          {sentence.tokens.map((token, index) => <View key={index} accessible
-            accessibilityLabel={`${token.text}, ${partOfSpeechName(token.pos)}`}
-            style={{ backgroundColor: c.card, borderRadius: 16, borderCurve: 'continuous', padding: 16, gap: 4 }}>
-            <Label size={21}>{token.text}</Label><Label size={14} muted>{partOfSpeechName(token.pos)}</Label>
-          </View>)}
-        </View>
-      </> : <>
+      {sentence ? <SentenceRelationGraph key={`${sentence.id}:${sentence.text}`} sentence={sentence} /> : <>
         <Label muted>분석할 문장을 선택하세요.</Label>
         {sentences.map((item, index) => <Pressable key={item.id} accessibilityRole="button"
           accessibilityLabel={`문장 ${index + 1} 분석: ${item.text}`} onPress={() => setSelected(item.id)}

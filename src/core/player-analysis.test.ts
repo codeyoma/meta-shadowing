@@ -61,7 +61,11 @@ test('analysis route fails closed on invalid entry, missing data, stale sessions
   };
   await open();
   runtime.find('문장 2 분석: Fish swim.').onPress();
-  assert.ok(runtime.find('Fish, 명사'));
+  runtime.find('단어 1: Fish, 명사').onPress();
+  assert.ok(runtime.find('swim → Fish: 주어 (NSUBJ)'));
+  runtime.find('문장 목록으로 돌아가기').onPress();
+  runtime.find('문장 1 분석: Birds fly.').onPress();
+  runtime.find('단어 2: fly, 동사').onPress();
   assert.deepEqual(journal.load(pack.packageKey, 11, 1), checkpoint);
   assert.equal(journal.progress.summary('english').xp, 0);
   params = { ...params, stage: '999' }; await open(); unavailable();
