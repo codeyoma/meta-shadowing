@@ -21,7 +21,7 @@ const descriptions: Record<string, readonly [string, string]> = {
   DET: ['한정사', '명사가 가리키는 대상을 한정합니다.'],
   NN: ['명사 수식', '명사가 다른 명사의 의미를 구체화합니다.'],
   POSS: ['소유 수식', '중심어와 소유 관계를 나타냅니다.'],
-  PREP: ['전치사 수식', '전치사를 통해 중심어에 추가 정보를 연결합니다.'],
+  PREP: ['전치사 수식', '이 전치사로 시작하는 구가 중심어의 의미를 수식합니다.'],
   POBJ: ['전치사 목적어', '전치사 등에 이어지는 명사구의 중심어입니다.'],
   PCOMP: ['전치사 보어절', '절이 전치사의 의미를 보충합니다.'],
   CCOMP: ['보충절', '절이 중심어의 의미를 보충합니다.'],
@@ -38,21 +38,21 @@ const descriptions: Record<string, readonly [string, string]> = {
   P: ['문장 부호', '문장의 구조나 경계를 표시하는 부호입니다.'],
 };
 
-/** Arrows point from the head to its dependent; identity is the sentence-local token index. */
+/** Preserve source head/dependent identities; presentation draws dependent-to-head arrows. */
 export function relationsForToken(sentence: AnalysisSentence, selected: number | null) {
   const edges: WordRelation[] = [];
   const connected = new Set<number>();
   const token = selected === null || !Number.isSafeInteger(selected) || selected < 0 ? undefined : sentence.tokens[selected];
-  if (token) {
-    connected.add(selected!);
+  if (token || selected === null) {
+    if (token) connected.add(selected!);
     sentence.tokens.forEach((dependent, index) => {
       if (!Number.isSafeInteger(dependent.head) || dependent.head < 0 || dependent.head >= sentence.tokens.length
         || dependent.head === index || dependent.relation === 'ROOT'
-        || (index !== selected && dependent.head !== selected)) return;
+        || (selected !== null && index !== selected && dependent.head !== selected)) return;
       const [name, explanation] = Object.hasOwn(descriptions, dependent.relation) ? descriptions[dependent.relation]!
         : ['기타 관계', '이 관계는 원본 분석 라벨로 표시합니다.'];
       edges.push({ head: dependent.head, dependent: index, label: dependent.relation, name, explanation });
-      connected.add(dependent.head); connected.add(index);
+      if (selected !== null) { connected.add(dependent.head); connected.add(index); }
     });
   }
   return { edges, connected: [...connected].sort((a, b) => a - b), root: token?.relation === 'ROOT' && token.head === selected };

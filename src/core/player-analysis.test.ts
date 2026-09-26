@@ -8,6 +8,7 @@ import { createSession } from './session';
 import { nativeHooks } from '../test-support/native-hooks';
 import { nativeModules, nativeMotion } from '../test-support/native-render';
 import { syntaxFixture, syntaxPhrases } from '../test-support/syntax-fixture';
+import { nativeOptionsStack } from '../test-support/native-options-stack';
 
 test('analysis route fails closed on invalid entry, missing data, stale sessions and storage failure', async t => {
   const runtime = nativeHooks(), db = new DatabaseSync(':memory:');
@@ -31,6 +32,8 @@ test('analysis route fails closed on invalid entry, missing data, stale sessions
     profile: sync.getSnapshot().profile, authority: String(sync.getSnapshot().authority) };
   let payload: string | null = JSON.stringify(syntaxFixture()), permitted = true, closes = 0;
   const load = nativeModules({ react: runtime.hooks, 'react-native-reanimated': nativeMotion,
+    'expo-router/native-stack': nativeOptionsStack(runtime.hooks),
+    'expo-router/react-navigation': { useIsFocused: () => true },
     'react-native': { ScrollView: 'ScrollView', View: 'View', Text: 'Text', Pressable: 'Pressable',
       AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
       useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale: 1 }) },
@@ -62,7 +65,7 @@ test('analysis route fails closed on invalid entry, missing data, stale sessions
   await open();
   runtime.find('문장 2 분석: Fish swim.').onPress();
   runtime.find('단어 1: Fish, 명사').onPress();
-  assert.ok(runtime.find('swim → Fish: 주어 (NSUBJ)'));
+  assert.ok(runtime.find('Fish → swim: 주어 (nsubj)'));
   runtime.find('문장 목록으로 돌아가기').onPress();
   runtime.find('문장 1 분석: Birds fly.').onPress();
   runtime.find('단어 2: fly, 동사').onPress();

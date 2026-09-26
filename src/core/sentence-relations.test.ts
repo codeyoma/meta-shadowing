@@ -18,13 +18,14 @@ test('selecting a repeated word retains token identity and only its direct head-
   assert.match(result.edges[0]!.explanation, /대상/);
 });
 
-test('root selection includes punctuation but no self arrow, and no selection has no relationships', () => {
+test('overview includes every relationship; root selection excludes self arrows', () => {
   const result = relationsForToken(sentence, 1);
   assert.equal(result.root, true);
   assert.deepEqual(result.edges.map(e => [e.head, e.dependent]), [[1, 0], [1, 2], [1, 3]]);
   assert.equal(result.edges[0]!.name, '주어');
   assert.equal(result.edges[2]!.name, '문장 부호');
-  assert.deepEqual(relationsForToken(sentence, null), { edges: [], connected: [], root: false });
+  assert.deepEqual(relationsForToken(sentence, null).edges.map(e => [e.head, e.dependent]), [[1, 0], [1, 2], [1, 3]]);
+  assert.deepEqual(relationsForToken(sentence, null).connected, []);
 });
 
 test('unknown labels remain intact; invalid and cross-sentence heads never produce an arrow', () => {

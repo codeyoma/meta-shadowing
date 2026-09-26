@@ -70,7 +70,13 @@ export function readSentenceAnalysis(raw: string, phrases: readonly { text: stri
   return sourceIndices.flatMap(i => result.get(i)!);
 }
 
-export function partOfSpeechName(tag: string): string {
+export function partOfSpeechName(tag: string, language: 'ko' | 'en' = 'ko'): string {
+  if (language === 'en') {
+    const names: Record<string, string> = { ADJ: 'adjective', ADP: 'preposition', ADV: 'adverb', CONJ: 'conjunction',
+      DET: 'determiner', NOUN: 'noun', NUM: 'numeral', PRON: 'pronoun', PRT: 'particle', PUNCT: 'punctuation',
+      VERB: 'verb', X: 'other', UNKNOWN: 'unknown' };
+    return Object.hasOwn(names, tag) ? names[tag]! : tag.toLowerCase();
+  }
   const names: Record<string, string> = { ADJ: '형용사', ADP: '전치사', ADV: '부사', CONJ: '접속사',
     DET: '한정사', NOUN: '명사', NUM: '수사', PRON: '대명사', PRT: '불변화사', PUNCT: '문장 부호',
     VERB: '동사', X: '기타', UNKNOWN: '품사 정보 없음' };
