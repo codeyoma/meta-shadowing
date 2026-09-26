@@ -45,7 +45,8 @@ function configureFreeDuo(plist, env, root) {
   const bytes = fs.readFileSync(path.join(directory, 'manifest.json'));
   const manifest = JSON.parse(bytes);
   const metadata = manifest.metadata ?? [];
-  if (!Array.isArray(metadata) || metadata.length > 1) throw Error('Invalid free syntax metadata.');
+  if (!Array.isArray(metadata) || metadata.length > 1
+      || (manifest.version === 1 && metadata.length !== 0)) throw Error('Invalid free syntax metadata.');
   for (const entry of metadata) {
     if (entry.file !== 'syntax.json' || !Number.isSafeInteger(entry.bytes) || entry.bytes < 1
       || entry.bytes > 20_000_000 || !/^[a-f0-9]{64}$/.test(entry.sha256)) throw Error('Invalid free syntax metadata.');

@@ -32,6 +32,9 @@ This verifies all 560 source entries with the production analysis parser and all
 legacy audio digests, then creates `private/free-duo-v2`. It refuses to replace an
 existing output. The internal build selects v2 when that directory exists and
 requires valid syntax pins; otherwise it retains the legacy v1 configuration.
+Build configuration rejects syntax metadata on v1; only v2 may publish the
+syntax entry, and v2 must contain it. A rejected configuration publishes no free
+manifest or descriptor, preventing changed metadata from reusing the v1 identity.
 Rebuild the native binary so its manifest, descriptor, and asset-pack ID agree.
 V1 materials and checkpoints are not rewritten or migrated. V2 starts separate
 version-scoped learning progress; book-level award identity remains unchanged.
