@@ -106,7 +106,27 @@ test(`stage ${stage} ${incomplete ? 'unfinished reveal ignores lookup' : 'lookup
       assert.equal(saved()?.audioSeconds, milliseconds / 1000);
       assertInert(); // Includes the first/second-language boundary.
     }
-    milliseconds += 20000; t.mock.timers.tick(20000); runtime.flush();
+    appState = 'background'; appListeners.forEach(fn => fn(appState)); runtime.flush();
+    assertInert(); // A paused partial word remains ineligible.
+    appState = 'active'; appListeners.forEach(fn => fn(appState)); runtime.flush();
+    runtime.find('이어하기').onPress({ nativeEvent: { pageX: 0, pageY: 0 } });
+    await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+    // Public sample: ten English words plus five Korean units, or Korean only,
+    // at S1's 150 WPM: 6 seconds for paired lines and 2 seconds for Korean only.
+    const remaining = (stage >= 15 ? 2000 : 6000) - milliseconds - 1;
+    milliseconds += remaining; t.mock.timers.tick(remaining); runtime.flush();
+    assert.equal(runtime.find('음성 재생 중').disabled, true);
+    assertInert();
+    if (stage % 2 === 0) db.exec('PRAGMA query_only = ON');
+    milliseconds++; t.mock.timers.tick(1); runtime.flush();
+    if (stage % 2 === 0) {
+      assertInert(); // Completed ink is not enough when the checkpoint failed.
+      assert.equal(runtime.find('오류 복구 후 이어하기').disabled, false);
+      assert.equal(saved()?.phase, 'listening');
+      db.exec('PRAGMA query_only = OFF');
+      runtime.find('오류 복구 후 이어하기').onPress({ nativeEvent: { pageX: 0, pageY: 0 } });
+      await new Promise(resolve => setImmediate(resolve)); runtime.flush();
+    }
     assert.equal(runtime.find('다음 문장 또는 학습 마치기').disabled, false);
     assert.deepEqual(lookups, [], 'Ignored touches must never queue a later lookup');
     assert.equal(saved()?.confirmed, 0);

@@ -14,6 +14,9 @@ clock and local progress store; native host APIs and time are test boundaries.
 - Stages 11–16 reject touches and accessibility actions during paused or active
   incomplete reveals, including the first/second-language boundary. Elapsed
   partial-word timing continues; no rejected request opens later.
+- Boundary tests stop one millisecond before completion, then cross the exact
+  completion deadline. Separate even-stage cases fail the real SQLite write at
+  completion and require recovery before any lookup target becomes available.
 - Completed reveals support word touch and accessible activation. Dismissal
   keeps Next available and preserves the checkpoint. Background invalidation,
   revoked access and a callback during advancement cannot revive lookup.
@@ -33,7 +36,15 @@ AppDelegate warnings remain; no new native code is introduced by #80.
 - Stage 11: an original word opens a real installed Apple dictionary result.
   The fixed learning action dismisses to the same phrase with Next available.
 - Stage 13: translation appears before the original. A translated word opens
-  a real installed dictionary result; Apple's close control is available.
+  a real installed dictionary result; Apple's close control returns to the same
+  paired phrase and enabled Next action.
+- Stage 15: only translation is visible and accessible. A translated word opens
+  a real installed dictionary result. The fixed learning action returns to the
+  same translation-only phrase and enabled Next action.
+
+These native smoke checks used the dark bubble layout. The active-reveal timing
+matrix and alternate layouts are established by automated tests, not by these
+three native smoke checks.
 
 ## Remaining device acceptance
 
