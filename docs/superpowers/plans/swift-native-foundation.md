@@ -106,8 +106,8 @@ phase and SwiftUI task cancellation to that API. Views receive narrow values.
 - [x] Ignore generated output and local identity; document reproduction commands and safe simulator selection.
 - [x] Update active guidance while preserving reference CI and remote protections.
 - [x] Run both complete Swift suites, all new UI tests, `npm run check` and `git diff --check`; inspect the exact staging scope.
-- [ ] Commit only #93 files to the current branch. Run the `code-review` Standards and Spec axes against the pinned baseline; fix findings and rerun affected tests before a final corrective commit if needed.
-- [ ] Update #93 with verified results and limitations. Do not mark feature parity, physical services, performance gains or public distribution complete.
+- [x] Commit only #93 files and complete independent Standards and Spec reviews against the pinned baseline. Both axes reported zero findings.
+- [x] Update #93 with verified local results and limitations. The issue remains open pending publication/integration; feature parity, physical services and distribution are not marked complete.
 
 ## Review status
 

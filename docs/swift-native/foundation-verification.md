@@ -59,3 +59,21 @@ lessons, account identifiers or signing information.
 Exact reproduction commands are in [the native guide](../../native-ios/README.md).
 Raw build logs, result bundles and screenshots stay in ignored local output;
 machine paths, simulator IDs and account metadata are not published here.
+
+## Independent review
+
+Two fresh read-only reviewers inspected the committed #93 scope against the pinned
+baseline: Standards reported zero violations or actionable smell findings; Spec
+reported zero missing, incorrect or out-of-scope requirements. Neither reviewer
+claimed to rerun the tests; the execution evidence above comes from local runs.
+
+## Execution decisions
+
+- Additional storage-isolation and error-preservation cases were retained when
+  they passed immediately after scoped seeding. No artificial regression was
+  introduced to produce RED. Their sensitivity was not separately demonstrated
+  by a failing-first cycle; the seeding and validation tracer tests did have RED.
+- The metadata notice and accessibility diagnostics were recorded instead of
+  changing system frameworks or adding an unneeded App Intents dependency.
+  If that classification is wrong, an accessibility issue could remain; no claim
+  is made that these diagnostics are resolved. There are no deferred minor review findings.
