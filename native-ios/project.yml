@@ -25,7 +25,14 @@ targets:
   MetaShadowingNative:
     type: application
     platform: iOS
-    sources: [App]
+    sources:
+      - path: App
+      - path: ../assets/brand/talking-pup-512.webp
+        buildPhase: resources
+      - path: ../assets/brand/talking-pup-still.png
+        buildPhase: resources
+      - path: ../assets/brand/launch-wordmark.png
+        buildPhase: resources
     dependencies:
       - package: LearningDomain
       - package: AppFoundation

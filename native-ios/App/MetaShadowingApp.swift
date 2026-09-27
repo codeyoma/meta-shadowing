@@ -24,10 +24,10 @@ struct MetaShadowingApp: App {
             if let root = Self.probeRoot {
                 SyntheticLearningProbeView(root: root)
             } else {
-                RootView(bootstrap: bootstrap)
+                LaunchGateView(bootstrap: bootstrap)
             }
             #else
-            RootView(bootstrap: bootstrap)
+            LaunchGateView(bootstrap: bootstrap)
             #endif
         }
     }
