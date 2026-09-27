@@ -1,21 +1,24 @@
 # Standalone Swift iOS foundation
 
-This is the #93 development shell, not a feature-complete replacement app. It
-displays one synthetic lesson and three sentence pairs using SwiftUI. It does not
-play media, award XP, import old progress, purchase content or contact cloud services.
+This includes the #93 development shell and #94 learning/storage foundation, not
+a feature-complete replacement app. The normal UI displays one synthetic lesson
+and three sentence pairs. A Debug probe exercises real SQLite confirmation and
+relaunch. It does not play media, purchase content or contact cloud services.
 The Expo app remains the behavioral reference until the later migration tickets land.
 
 ## Ownership and isolation
 
-- `LearningDomain`: immutable, Sendable preview values and strict schema validation.
-- `AppFoundation`: an actor-owned local workspace and a main-actor observable bootstrap.
+- `LearningDomain`: Sendable values, sixteen-stage rules, reward receipts and backup validation.
+- `LearningPersistence`: profile-isolated, actor-owned transactional system SQLite.
+- `AppFoundation`: local workspaces, committed-state controller and observable bootstrap.
 - `App`: the composition root, native navigation and scene lifecycle integration.
 - `Tests/AppUITests`: launch, navigation, foreground, relaunch, Dynamic Type and retry.
 
 Only the app root constructs the workspace, under Application Support's
 `SwiftNativeFoundation/v1/library.json`. No reference directories are scanned.
 Missing content seeds a public-safe fixture; corrupt or inaccessible content fails
-without resetting it. There is no learning-progress schema yet; #94 owns that work.
+without resetting it. The learning store uses a separate injected namespace;
+see [the W3 consumer contract](../docs/swift-native/learning-storage-contract.md).
 
 The bootstrap owns one cancellable load task. Inactivity cancels pending work,
 while generation checks reject late results from non-cooperative loaders. A ready
@@ -49,6 +52,7 @@ locally; IDs must not be committed or posted in issues.
 ```sh
 xcodegen generate --spec native-ios/project.yml
 swift test --package-path native-ios/Packages/LearningDomain
+swift test --package-path native-ios/Packages/LearningPersistence
 swift test --package-path native-ios/Packages/AppFoundation
 
 NATIVE_SIM_ID="$(xcrun simctl create 'MetaShadowing Native W2 iOS 27' \
@@ -78,6 +82,7 @@ bash native-ios/scripts/verify-native-product.sh \
 XcodeBuildMCP can run the same scheme with the dedicated simulator selected.
 The Debug-only `--ui-test-fail-first-load` argument injects one synthetic load
 failure for retry testing. It does not edit storage and is absent from Release.
+`--ui-test-learning-storage` opens the synthetic W3 storage probe in Debug only.
 The large-text UI test uses the largest accessibility text category.
 
 The product check inspects resources, all embedded Mach-O dependencies/symbols,
@@ -115,7 +120,7 @@ is not run by hosted CI. Required check names and branch protections are unchang
 their app-check implementations now validate Swift. Local success does not claim
 a hosted CI result.
 
-W3–W8 still own learning behavior, media, finished UI/launch animation and haptics,
+W4–W8 still own media, finished UI/launch animation and haptics,
 Apple services, delivery, and replacement/release acceptance. No performance
 benchmarks or improvement targets are required. Physical-device replacement,
 account access and public distribution require separate authorization.

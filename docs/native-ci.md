@@ -10,8 +10,8 @@ Expo reference CI lane; the reference source remains available for migration.
 | Required check | Evidence |
 | --- | --- |
 | `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
-| `ci-quality` | Swift Testing suites in `LearningDomain` and `AppFoundation` |
-| `ci-native-tests` | Debug XCUITest: navigation, foreground/relaunch, accessibility text size and failure/retry |
+| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence` and `AppFoundation` |
+| `ci-native-tests` | Debug XCUITest: navigation, foreground/relaunch, accessibility text size, failure/retry and SQLite confirmation/relaunch |
 | `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
 
 The generic branch-policy script still uses Node 24 without npm installation.
@@ -42,7 +42,7 @@ runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
 These checks require XcodeGen, `jq` and `rg`; missing build tools are installed
 with Homebrew. Toolchain versions are printed for reproducibility.
 
-Actions are SHA-pinned, repository tokens are read-only, and checkout credentials
+Actions are SHA-pinned, Swift CI tokens are read-only, and checkout credentials
 are not persisted. All jobs have timeouts and no path-based skipping. No signing
 credentials, Apple accounts, private lessons or hosted data are needed. UI result
 summaries expose test failures without exporting complete simulator logs or
@@ -58,12 +58,38 @@ TestFlight or submit an App Store release. Feature PRs target `dev`.
 
 ## Coverage limits
 
-The current Swift app is the #93 synthetic foundation, not the completed rewrite.
+The current Swift app includes the #93 synthetic foundation and #94 learning/storage
+domain, not the completed rewrite.
 Green Swift CI proves only the implemented package/app boundaries. It no longer
 provides regression evidence for the Expo reference or its StoreKit, CloudKit,
 delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
-not deleted. #94–#99 must add the corresponding Swift tests as features migrate.
+not deleted. #95–#99 must add the corresponding Swift tests as features migrate.
 
 Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains
 future work. Performance benchmarks are not an acceptance requirement.
+
+## Closing completed issues after dev merge
+
+Feature PRs use one standalone `Closes #<number>` line per fully verified issue.
+Use `Refs #<number>` for partial work. PR creation does not close issues. GitHub's
+normal closing keywords target the default branch, while this repository integrates
+features into `dev`; a separate `close-merged-issues.yml` workflow handles that case.
+
+The workflow runs trusted code only on pushes to `dev`. It enumerates the complete
+pushed commit range and associated PR pages, then checks merged status, merge SHA,
+internal repository identity, `codex/*` source and `dev` destination. Only explicit
+same-repository closure lines qualify. Code/quoted examples, foreign issues and
+issue numbers that actually identify PRs are ignored. Already closed issues make
+reruns idempotent. Incomplete comparisons fail without closing issues.
+The parser deliberately supports only a conservative Markdown subset. A line
+combining backticks with HTML, comment or blockquote markers disables automatic
+closure for the entire PR body; close the issues manually after verifying such a
+merge. Ambiguous examples must never be interpreted as completion instructions.
+
+Only this separate job receives `issues: write`; checkout credentials are not
+persisted, PR text is never executed, and no privileged `pull_request_target`
+workflow is used. Runs are not canceled by a later push. Node regression tests use
+mock GitHub responses and do not change remote issues. The workflow becomes active
+only after it is merged into `dev`; local tests are not evidence of remote closure.
+No ruleset, default branch, release approval or merge permission is changed.

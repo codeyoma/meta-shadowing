@@ -31,6 +31,7 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: node --test scripts/check-branch-policy.test.mjs
+      - run: node --test scripts/close-merged-issues.test.mjs
       - run: node scripts/check-branch-policy.mjs < "$GITHUB_EVENT_PATH"
 
   ci-quality:
@@ -51,6 +52,8 @@ jobs:
         run: swift test --package-path native-ios/Packages/LearningDomain
       - name: Test app foundation
         run: swift test --package-path native-ios/Packages/AppFoundation
+      - name: Test transactional learning storage
+        run: swift test --package-path native-ios/Packages/LearningPersistence
 
   ci-native-tests:
     name: ci-native-tests

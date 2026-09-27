@@ -1,6 +1,26 @@
 import XCTest
 
 final class NativeFoundationUITests: XCTestCase {
+    @MainActor func testSyntheticLearningSurvivesRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-learning-storage", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let xp = app.staticTexts["probe-xp"]
+        XCTAssertTrue(xp.waitForExistence(timeout: 15))
+        XCTAssertEqual(xp.label, "XP: 0")
+        app.buttons["probe-finish-reveal"].tap()
+        XCTAssertEqual(xp.label, "XP: 0")
+        app.buttons["probe-confirm"].tap()
+        XCTAssertTrue(xp.wait(for: \.label, toEqual: "XP: 3", timeout: 5))
+        XCTAssertEqual(app.staticTexts["probe-confirmed"].label, "Confirmed phrases: 1")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(xp.waitForExistence(timeout: 15))
+        XCTAssertEqual(xp.label, "XP: 3")
+        XCTAssertEqual(app.staticTexts["probe-confirmed"].label, "Confirmed phrases: 1")
+        XCTAssertEqual(app.staticTexts["probe-paused"].label, "Paused")
+    }
+
     @MainActor func testLibraryDetailForegroundAndRelaunch() {
         let app = XCUIApplication()
         app.launch()
