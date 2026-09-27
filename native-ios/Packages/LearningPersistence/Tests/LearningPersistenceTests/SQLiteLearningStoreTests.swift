@@ -25,6 +25,75 @@ func speaking(_ store: SQLiteLearningStore, _ snapshot: LearningSnapshot) async 
 }
 
 @Suite struct SQLiteLearningStoreTests {
+    @Test(arguments: [false, true], [LearningEvent.resume, .position(0.2)])
+    func staleSameRunWriterCannotRegressCheckpoint(separateConnection: Bool, event: LearningEvent) async throws {
+        let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let currentStore = store(root), staleStore = separateConnection ? store(root) : currentStore
+        let p = try plan(stage: 1)
+        let initial = try await currentStore.open(plan: p, preferences: .fresh, writerID: UUID())
+        let running = try await currentStore.apply(command(initial, .resume)).snapshot
+        var stale = try await staleStore.open(plan: p, preferences: .fresh, writerID: UUID())
+        if case .position = event { stale = try await staleStore.apply(command(stale, .resume)).snapshot }
+        let ended = try await currentStore.apply(command(running, .playbackEnded)).snapshot
+        let confirmed = try await currentStore.apply(command(ended, .confirm))
+        #expect(confirmed.snapshot.session.current.confirmed == 1)
+        #expect(confirmed.earnedXP == 1)
+        let before = try await currentStore.inspect(profileID: "guest")
+
+        await #expect(throws: LearningStoreError.staleWriter) { try await staleStore.apply(command(stale, event)) }
+        #expect(try await currentStore.inspect(profileID: "guest") == before)
+        let reopened = try await store(root).open(plan: p, preferences: .fresh, writerID: UUID())
+        #expect(reopened.session.current.confirmed == 1)
+        #expect(reopened.progress.xp == 1)
+        #expect(!reopened.session.running)
+    }
+
+    @Test func staleSameRunConfirmationCannotReplaceNewerCycles() async throws {
+        let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let target = store(root), p = try plan(stage: 1)
+        let initial = try await target.open(plan: p, preferences: .fresh, writerID: UUID())
+        let firstEnd = try await speaking(target, initial)
+        let other = try await target.open(plan: p, preferences: .fresh, writerID: UUID())
+        let resumeRequest = command(other, .resume)
+        let staleReceipt = try await target.apply(resumeRequest)
+        let stale = staleReceipt.snapshot
+        let request = command(firstEnd, .confirm)
+        let first = try await target.apply(request)
+        let secondEnd = try await speaking(target, first.snapshot)
+        _ = try await target.apply(command(secondEnd, .confirm))
+        let before = try await target.inspect(profileID: "guest")
+
+        await #expect(throws: LearningStoreError.staleWriter) { try await target.apply(command(stale, .confirm)) }
+        let duplicate = try await target.apply(request)
+        #expect(duplicate.disposition == .duplicate && duplicate.earnedXP == 0)
+        #expect(duplicate.snapshot == first.snapshot)
+        let staleDuplicate = try await target.apply(resumeRequest)
+        #expect(staleDuplicate.disposition == .duplicate && staleDuplicate.earnedXP == 0)
+        #expect(staleDuplicate.snapshot == staleReceipt.snapshot)
+        #expect(try await target.inspect(profileID: "guest") == before)
+        let reopened = try await store(root).open(plan: p, preferences: .fresh, writerID: UUID())
+        #expect(reopened.session.current.confirmed == 2)
+        #expect(reopened.progress.xp == 2)
+    }
+
+    @Test func sameRunPositionConflictRequiresReopeningLatestCheckpoint() async throws {
+        let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let target = store(root), p = try plan(stage: 1)
+        let initial = try await target.open(plan: p, preferences: .fresh, writerID: UUID())
+        let running = try await target.apply(command(initial, .resume)).snapshot
+        let stale = try await target.open(plan: p, preferences: .fresh, writerID: UUID())
+        let saved = try await target.apply(command(running, .position(5)))
+        await #expect(throws: LearningStoreError.staleWriter) { try await target.apply(command(stale, .resume)) }
+
+        let reopened = try await target.open(plan: p, preferences: .fresh, writerID: UUID())
+        #expect(reopened.session.positionSeconds == 5 && reopened.session.current.confirmed == 0)
+        let resumed = try await target.apply(command(reopened, .resume))
+        #expect(resumed.backupRevision == saved.backupRevision)
+        let advanced = try await target.apply(command(resumed.snapshot, .position(6)))
+        #expect(advanced.snapshot.session.positionSeconds == 6 && advanced.earnedXP == 0)
+        #expect(try await store(root).open(plan: p, preferences: .fresh, writerID: UUID()).session.positionSeconds == 6)
+    }
+
     @Test func lifecyclePauseCannotPromoteAnOlderLearningSelection() async throws {
         let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
         let target = store(root), firstPlan = try plan()

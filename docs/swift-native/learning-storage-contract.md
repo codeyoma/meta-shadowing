@@ -34,6 +34,14 @@ return their original committed snapshot and zero newly earned XP; a conflicting
 payload or stale writer/version is rejected. No-op events do not increment backup
 revision. Revoke profile leases before replacing the active profile.
 
+Writers sharing a run also compare their paused durable predecessor with the
+current checkpoint inside the write transaction. A changed checkpoint, including
+an imported same-run checkpoint, rejects the command with `staleWriter` before
+any writes. Reopen with a new writer ID to recover the latest paused checkpoint;
+retrying the stale command cannot replace newer progress. Duplicate committed
+commands still return their original receipt. Process-local running state is
+excluded from this comparison, so an ordinary resume/pause remains valid.
+
 `LearningController.send`, `receive`, `retrySave` and `deactivate` serialize the
 interaction boundary. A failed save leaves displayed progress unchanged, stops
 accepted transport, and retains the command for retry. Retry is idempotent and
@@ -122,7 +130,9 @@ legacy/modern backups. Fixture generation uses fixed public data and dates.
 Real SQLite tests exercise reopen, profile isolation, lost replies, stale writers,
 read-only/busy/corrupt/future stores, every write boundary, import rollback and
 acknowledgement. Connection lifecycle tests cover rejection after close, repeated
-close and committed data after reopening. Controller tests cover committed
+close and committed data after reopening. Same-run writer tests cover stale
+resume, position and confirmation saves, separate SQLite connections, imported
+checkpoints and reopening the latest saved state. Controller tests cover committed
 publication, retry without autoplay, deactivation and old/live transport callbacks.
 
 On the dedicated iOS 27 Simulator, Debug `--ui-test-learning-storage` opens the
@@ -137,7 +147,7 @@ Type and load-retry tests remain in the suite.
 Verified on Xcode 27 / Swift 6.4, using a dedicated iOS 27 Simulator and the
 fictional CI identity. These are local results, not claims about hosted CI:
 
-- LearningDomain: 53 tests passed; LearningPersistence: 20 passed;
+- LearningDomain: 53 tests passed; LearningPersistence: 24 passed;
   AppFoundation: 20 passed. No failures or skips.
 - Independent TypeScript oracle: fixture `--check` passed.
 - XCUITest: all 4 tests passed, including confirmation/relaunch persistence.

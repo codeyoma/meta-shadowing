@@ -13,6 +13,21 @@ extension SQLiteLearningStore {
             }
             guard prior.handle == command.handle, prior.writerVersion == command.expectedVersion,
                   prior.writerVersion < Int64.max else { throw LearningStoreError.staleWriter }
+            let bindings: [SQLValue] = [.text(prior.handle.scope.packageKey), .integer(Int64(prior.handle.scope.stage))]
+            let occupant = try db.query("SELECT run,state FROM checkpoints WHERE package=? AND stage=?", bindings).first
+            if let occupant, occupant["run"]?.text == prior.session.plan.runID {
+                let saved: LearningSession
+                if occupant["state"]?.data != nil { saved = try decode(LearningSession.self, occupant["state"]) }
+                else {
+                    guard let imported = try importedBackup(db).checkpoint(for: prior.session.plan) else { throw LearningStoreError.corrupt }
+                    saved = imported
+                }
+                // Compare the durable predecessor inside the write transaction. Running is process-local.
+                let expected = try prior.session.validatedForRestore(expected: prior.handle.scope, sourceCount: prior.session.plan.sourceCount)
+                guard try saved.validatedForRestore(expected: prior.handle.scope, sourceCount: prior.session.plan.sourceCount) == expected else {
+                    throw LearningStoreError.staleWriter
+                }
+            }
             let transition = try LearningReducer.reduce(prior.session, event: command.event)
             if transition.session == prior.session {
                 return CommitReceipt(snapshot: prior, backupRevision: try revision(db), earnedXP: 0, disposition: .ignored)
@@ -23,8 +38,6 @@ extension SQLiteLearningStore {
             let state = transition.session
             let handle = LearningHandle(writerID: prior.handle.writerID, scope: prior.handle.scope, planID: state.plan.runID)
             try writeLedger(nextLedger, db: db)
-            let bindings: [SQLValue] = [.text(handle.scope.packageKey), .integer(Int64(handle.scope.stage))]
-            let occupant = try db.query("SELECT run,state FROM checkpoints WHERE package=? AND stage=?", bindings).first
             let earnedPractice = transition.completed || !transition.confirmedSources.isEmpty
             let ownsSlot = occupant == nil || occupant?["run"]?.text == prior.session.plan.runID
             var changed = nextLedger != ledger

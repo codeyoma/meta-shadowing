@@ -4,6 +4,28 @@ import Testing
 @testable import LearningPersistence
 
 @Suite struct LearningBackupStorageTests {
+    @Test func importedSameRunCheckpointRejectsStaleWriter() async throws {
+        let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let local = store(root.appending(path: "local")), remote = store(root.appending(path: "remote"))
+        let p = try plan(stage: 1)
+        let initial = try await local.open(plan: p, preferences: .fresh, writerID: UUID())
+        let stale = try await speaking(local, initial)
+        _ = try await remote.mergeBackup(local.exportBackup(profileID: "guest").payload, profileID: "guest")
+        let remoteInitial = try await remote.open(plan: p, preferences: .fresh, writerID: UUID())
+        let resumed = try await remote.apply(command(remoteInitial, .resume)).snapshot
+        _ = try await remote.apply(command(resumed, .confirm))
+        _ = try await local.mergeBackup(remote.exportBackup(profileID: "guest").payload, profileID: "guest")
+        let before = try await local.inspect(profileID: "guest")
+
+        await #expect(throws: LearningStoreError.staleWriter) { try await local.apply(command(stale, .confirm)) }
+        #expect(try await local.inspect(profileID: "guest") == before)
+        let reopened = try await local.open(plan: p, preferences: .fresh, writerID: UUID())
+        #expect(reopened.session.current.confirmed == 1 && reopened.progress.xp == 1)
+        let nextEnd = try await speaking(local, reopened)
+        let next = try await local.apply(command(nextEnd, .confirm))
+        #expect(next.snapshot.session.current.confirmed == 2 && next.earnedXP == 1)
+    }
+
     @Test func clearingImportedLibrarySelectionProducesAClockedEmptySelection() async throws {
         let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
         let source = store(root.appending(path: "source")), target = store(root.appending(path: "target"))
