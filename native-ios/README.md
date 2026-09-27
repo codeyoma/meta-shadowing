@@ -84,11 +84,36 @@ The product check inspects resources, all embedded Mach-O dependencies/symbols,
 the deployment minimum and signed entitlements. This is a local W2 guard, not an
 App Store security review or evidence of later service functionality.
 
+## Hosted Swift CI
+
+GitHub Actions now validates only the standalone Swift app. It uses the
+GitHub-hosted `xcode-27` public-preview runner, explicitly selects Xcode 27.0,
+and runs UI tests on iOS 27.0. The deployment minimum remains iOS 26.0.
+
+`project-ci.yml` includes the local app specification and replaces only its
+configuration files with `Config/CI.xcconfig`. This uses a fictional,
+unsigned simulator identity and never reads or overwrites `Local.xcconfig`.
+No Apple account, provisioning profile, npm dependency or Expo generation is needed.
+
+```sh
+bash native-ios/scripts/test-ci-configuration.sh
+xcodegen generate --spec native-ios/project-ci.yml
+```
+
+The configuration test generates a disposable copy without local configuration
+and checks the resolved Debug/Release identity, signing and compiler settings.
+Generating the CI project replaces only the ignored generated Xcode project;
+run `xcodegen generate --spec native-ios/project.yml` to return to local settings.
+Package tests, Debug UI tests, Debug/Release builds and product checks use the
+same commands above. CI supplies disposable build/result paths. See
+[the CI guide](../docs/native-ci.md) for the required jobs and coverage limits.
+
 ## Reference checks and remaining work
 
-`npm run check` still verifies the untouched Expo reference. Existing GitHub CI
-jobs and branch protections remain unchanged. The standalone Swift commands above
-are a separate local lane; local success does not claim a hosted CI run.
+`npm run check` remains available manually for the untouched Expo reference, but
+is not run by hosted CI. Required check names and branch protections are unchanged;
+their app-check implementations now validate Swift. Local success does not claim
+a hosted CI result.
 
 W3–W8 still own learning behavior, media, finished UI/launch animation and haptics,
 Apple services, delivery, and replacement/release acceptance. No performance

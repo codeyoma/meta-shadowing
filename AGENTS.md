@@ -5,7 +5,10 @@
   verification; retain the iOS 26.0 deployment minimum. Swift 6 concurrency,
   native interaction conventions and explicit lifecycle ownership are required.
 - The Expo / React Native / TypeScript app remains the behavioral reference.
-  Keep its CI lane and product behavior intact during migration. Do not restore
+  Keep its source and product behavior intact as a reference during migration.
+  Per the owner's CI cutover decision, hosted app checks cover only `native-ios/`;
+  do not restore Expo bundling, prebuild, npm checks or reference-module CI jobs.
+  Preserve required check names, branch policy and human release approval. Do not restore
   old PWA, Next.js, browser-storage, HTML-audio, backend, or admin implementation.
 - #93 provides only the isolated synthetic Swift shell. Domain, media, complete
   UI, Apple services and release parity belong to later tickets. Do not claim a

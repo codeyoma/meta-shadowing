@@ -60,6 +60,15 @@ Exact reproduction commands are in [the native guide](../../native-ios/README.md
 Raw build logs, result bundles and screenshots stay in ignored local output;
 machine paths, simulator IDs and account metadata are not published here.
 
+### Subsequent CI scope decision
+
+After the W2 verification above, the owner approved replacing the Expo reference
+CI lane with Swift-only app checks in PR #100. The historical results above are
+unchanged. The current workflow and coverage boundaries are documented in
+[the CI guide](../native-ci.md); hosted results must be checked on the current PR
+commit and are not inferred from this local report. Required check names and
+human release approval are retained.
+
 ## Independent review
 
 Two fresh read-only reviewers inspected the committed #93 scope against the pinned

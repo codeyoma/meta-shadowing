@@ -1,0 +1,5 @@
+// Fictional simulator-only identity. No Apple account or signing is required.
+// Do not include Local.xcconfig: CI must not depend on private machine settings.
+NATIVE_APP_BUNDLE_IDENTIFIER = com.example.metashadowing.ci
+DEVELOPMENT_TEAM =
+CODE_SIGNING_ALLOWED = NO

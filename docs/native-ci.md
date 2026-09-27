@@ -1,61 +1,69 @@
-# Native pull-request checks
+# Swift pull-request checks
 
-## Standalone Swift migration lane
+`.github/workflows/ci.yml` validates the standalone app in `native-ios/` on PRs
+into `dev`/`main`, pushes to those branches and manual dispatch. PR checkout uses
+GitHub's merge candidate, not only the head. The owner approved replacing the
+Expo reference CI lane; the reference source remains available for migration.
 
-`native-ios/` now provides the #93 standalone Swift foundation. Its local Swift
-package tests, XcodeGen builds, iOS 27 UI tests and product inspection are documented
-in [the native guide](../native-ios/README.md). The deployment minimum remains
-iOS 26.0. Use an isolated simulator; do not replace the reference installation.
+## Required checks
 
-This lane does not replace any hosted check below. The Expo reference workflow,
-runtime pins and branch protections remain unchanged. Local Swift verification
-is not hosted CI evidence; integrating a required Swift CI check is later work.
-
-## Expo reference lane
-
-The iPhone-first branch replaces web deployment and Supabase CI with native
-validation. `.github/workflows/ci.yml` runs on PRs into `dev`/`main` and pushes
-to those branches. PR checkout uses GitHub's merge candidate, not only the head.
-
-| Required native check | Evidence |
+| Required check | Evidence |
 | --- | --- |
-| `ci-branch-policy` | Allowed internal feature/release routes and executable policy regression tests |
-| `ci-quality` | Locked npm install, domain and real SQLite tests, TypeScript, iOS JavaScript/assets export |
-| `ci-native-tests` | Real StoreKitTest purchase/query/update scenarios and native CloudKit transport/storage fixtures on iOS Simulator |
-| `ci-ios-build` | Fresh Expo iOS generation, pods, and standalone Release Simulator build including native modules |
+| `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
+| `ci-quality` | Swift Testing suites in `LearningDomain` and `AppFoundation` |
+| `ci-native-tests` | Debug XCUITest: navigation, foreground/relaunch, accessibility text size and failure/retry |
+| `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
 
-Linux jobs use Node 24; native jobs use the standard `macos-26` runner and
-Xcode 26.6. [Runner toolchain inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md).
-Native fixture tests explicitly select the iOS 26.5 runtime rather than the first
-installed iOS 26 device. The initial hosted run selected 26.4.1 and failed StoreKit
-test actions; Apple documents the configuration-selection fix in
-[iOS 26.5 release notes](https://developer.apple.com/documentation/ios-ipados-release-notes/ios-ipados-26_5-release-notes).
-This pins the test harness, not the app's iOS 26.0 deployment minimum. Test result
-summaries expose assertion failures without dumping account/device metadata.
-Actions are pinned to commit SHAs, tokens are read-only, checkout credentials
-are not persisted, and private local environment files are not loaded. No
-signing credentials, Apple accounts, private lessons or hosted data are needed.
-Jobs are bounded, fail on failed commands, and have no path-based skipping.
+The generic branch-policy script still uses Node 24 without npm installation.
+It is repository governance, not an Expo application check. Hosted checks no
+longer install npm dependencies, run TypeScript/JavaScript application tests,
+export Expo bundles, run Expo prebuild/CocoaPods or test reference native modules.
 
-## Protection migration
+## Toolchain and isolation
 
-For `dev`, replace obsolete `ci-browser`/`ci-database` requirements with
-`ci-native-tests`/`ci-ios-build` only after the new jobs pass on the current PR.
-Keep `ci-branch-policy`, `ci-quality`, strict up-to-date checking, GitHub Actions
-as the expected source, required conversation resolution, and all other rules.
-Do not create dummy passing checks or add bypass actors. Read back the live
-ruleset after applying it; a committed workflow alone does not change rulesets.
+Swift jobs use the standard arm64 `xcode-27` GitHub-hosted runner (currently a
+public preview), with `/Applications/Xcode_27.0.app/Contents/Developer` selected
+explicitly. UI tests require the iOS 27.0 runtime and fail if it is unavailable;
+they never fall back to an older simulator. The app still targets iOS 26.0+.
+See the [official runner inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md).
+The narrow actionlint label extension recognizes this official preview label;
+it does not configure a self-hosted runner or suppress other workflow checks.
 
-This PR does not change `main` protections. Its legacy check requirements must
-be migrated during a separately authorized native release preparation. The
-workflow retains `release-approval` on PRs into `main`, after all native checks,
-using the existing human-approval environment. It does not merge, deploy, upload
-to TestFlight or submit an App Store release.
+XcodeGen generates `native-ios/project-ci.yml`, which includes the normal app
+specification and overrides only its config-file references. The checked-in CI
+config contains a fictional simulator identity and disables signing. It does
+not include, create or overwrite private `Local.xcconfig`. A regression test
+generates a disposable copy without that local file and verifies the resolved
+identity, compiler, deployment and signing settings for both configurations.
 
-## Limits
+UI tests run in Debug because the retry test uses a Debug-only failure injection.
+Both Debug and Release products are inspected for JavaScript resources, excluded
+runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
+These checks require XcodeGen, `jq` and `rg`; missing build tools are installed
+with Homebrew. Toolchain versions are printed for reproducibility.
 
-Local StoreKitTest and CloudKit fixtures do not prove live sandbox purchases,
-CloudKit container/signing, physical-device account switching, hosted content
-delivery or complete UI behavior. #45/#49 and later iPhone acceptance gates
-remain open until their real-service evidence exists. Android is future work;
-these checks do not claim Android support.
+Actions are SHA-pinned, repository tokens are read-only, and checkout credentials
+are not persisted. All jobs have timeouts and no path-based skipping. No signing
+credentials, Apple accounts, private lessons or hosted data are needed. UI result
+summaries expose test failures without exporting complete simulator logs or
+result bundles. Local reproduction commands are in [the native guide](../native-ios/README.md).
+
+## Branch and release protection
+
+The four required job names are preserved. This CI replacement does not change
+remote rulesets, bypass actors, up-to-date requirements or conversation resolution.
+`release-approval` still depends on all four checks for PRs into `main` and uses
+the existing human-approval environment. It does not merge, deploy, upload to
+TestFlight or submit an App Store release. Feature PRs target `dev`.
+
+## Coverage limits
+
+The current Swift app is the #93 synthetic foundation, not the completed rewrite.
+Green Swift CI proves only the implemented package/app boundaries. It no longer
+provides regression evidence for the Expo reference or its StoreKit, CloudKit,
+delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
+not deleted. #94–#99 must add the corresponding Swift tests as features migrate.
+
+Simulator CI does not prove real purchases, account switching, CloudKit signing,
+hosted delivery, physical-device behavior or release parity. Android remains
+future work. Performance benchmarks are not an acceptance requirement.
