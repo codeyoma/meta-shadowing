@@ -7,6 +7,10 @@ public struct LearningControllerState: Equatable, Sendable {
     public let saveFailed: Bool
     public let active: Bool
     public let requests: [TransportRequest]
+    public let feedback: [CommittedLearningFeedback]
+    public var withoutEffects: Self {
+        Self(snapshot: snapshot, paused: paused, saveFailed: saveFailed, active: active, requests: [], feedback: [])
+    }
 }
 
 public actor LearningController {
@@ -19,12 +23,16 @@ public actor LearningController {
     private var lifetime = UUID()
     private var transport: TransportToken?
     private var bufferedEnd: LearningCallback?
+    private var unpublishedFeedback: [CommittedLearningFeedback] = []
     public init(store: any LearningStore, snapshot: LearningSnapshot) { self.store = store; committed = snapshot }
     public var state: LearningControllerState { result() }
 
-    private func result(_ requests: [TransportRequest] = []) -> LearningControllerState {
+    private func result(_ requests: [TransportRequest] = [], feedback: [CommittedLearningFeedback] = []) -> LearningControllerState {
         LearningControllerState(snapshot: committed, paused: !active || failed || !committed.session.running,
-            saveFailed: failed, active: active, requests: requests)
+            saveFailed: failed, active: active, requests: requests, feedback: feedback)
+    }
+    private func takeFeedback() -> [CommittedLearningFeedback] {
+        let events = unpublishedFeedback; unpublishedFeedback.removeAll(); return events
     }
     private func token(for snapshot: LearningSnapshot) -> TransportToken {
         TransportToken(writerID: snapshot.handle.writerID, planID: snapshot.handle.planID, unit: snapshot.session.unit,
@@ -55,6 +63,11 @@ public actor LearningController {
         do {
             var receipt = try await store.apply(command)
             guard active, generation == lifetime else { return result() }
+            if receipt.disposition == .applied || (retrying && receipt.disposition == .duplicate),
+               let feedback = CommittedLearningFeedback.observed(command: command, before: before.session, after: receipt.snapshot.session),
+               !unpublishedFeedback.contains(where: { $0.commandID == feedback.commandID }) {
+                unpublishedFeedback.append(feedback)
+            }
             if retrying && receipt.snapshot.session.running {
                 let pause = LearningCommand(handle: receipt.snapshot.handle, id: UUID(), expectedVersion: receipt.snapshot.writerVersion, event: .pause)
                 pending = pause
@@ -65,7 +78,7 @@ public actor LearningController {
             if retrying {
                 bufferedEnd = nil
                 let stop = transport ?? token(for: committed); transport = nil
-                return result([TransportRequest(token: stop, intent: .stop)])
+                return result([TransportRequest(token: stop, intent: .stop)], feedback: takeFeedback())
             }
             guard receipt.disposition == .applied else { return await drainEnd() }
             let transition = try LearningReducer.reduce(before.session, event: command.event)
@@ -93,15 +106,15 @@ public actor LearningController {
                     let next = LearningCommand(handle: committed.handle, id: UUID(), expectedVersion: committed.writerVersion, event: continuation)
                     let started = await commit(next, retrying: false)
                     return LearningControllerState(snapshot: started.snapshot, paused: started.paused,
-                        saveFailed: started.saveFailed, active: started.active, requests: requests + started.requests)
+                        saveFailed: started.saveFailed, active: started.active, requests: requests + started.requests, feedback: started.feedback)
                 }
             }
             if bufferedEnd != nil {
                 let drained = await drainEnd()
                 return LearningControllerState(snapshot: drained.snapshot, paused: drained.paused,
-                    saveFailed: drained.saveFailed, active: drained.active, requests: requests + drained.requests)
+                    saveFailed: drained.saveFailed, active: drained.active, requests: requests + drained.requests, feedback: drained.feedback)
             }
-            return result(requests)
+            return result(requests, feedback: takeFeedback())
         } catch {
             guard active, generation == lifetime else { return result() }
             busy = false; failed = true; bufferedEnd = nil
@@ -117,6 +130,7 @@ public actor LearningController {
     public func deactivate() async {
         guard active else { return }
         active = false; lifetime = UUID(); transport = nil; pending = nil; busy = false; bufferedEnd = nil
+        unpublishedFeedback.removeAll()
         await store.revoke(profileID: committed.handle.scope.profileID)
     }
 }

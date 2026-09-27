@@ -14,6 +14,7 @@ public struct LearningMediaState: Sendable {
 /// Serializes durable actions while stopping time-sensitive output synchronously.
 @MainActor public final class LearningMediaCoordinator {
     public var onChange: (@MainActor (LearningMediaState) -> Void)?
+    public var onFeedback: (@MainActor (CommittedLearningFeedback) -> Void)?
     private let controller: LearningController
     private let catalog: MediaAssetCatalog
     private let authorize: @Sendable (LearningScope) async -> Bool
@@ -105,7 +106,7 @@ public struct LearningMediaState: Sendable {
         closed = true; stopOutput(); driver?.dispose(); driver = nil
         reveal.onEvent = nil; audioSession?.close()
         await controller.deactivate()
-        committed = await controller.state; publish(); onChange = nil
+        committed = await controller.state; publish(); onChange = nil; onFeedback = nil
     }
 
     private func command(_ event: LearningEvent) -> LearningCommand {
@@ -118,9 +119,10 @@ public struct LearningMediaState: Sendable {
         for waiter in waiters { waiter.resume() }
     }
     private func accept(_ result: LearningControllerState, expected: UUID) {
-        committed = result
+        committed = result.withoutEffects
         if result.saveFailed { stopOutput(); return }
         guard !closed, !closing, expected == generation, context.actionable, pendingPause == nil else { return }
+        for feedback in result.feedback { onFeedback?(feedback) }
         for request in result.requests { execute(request) }
     }
     @discardableResult private func stopOutput() -> MediaPosition? {
