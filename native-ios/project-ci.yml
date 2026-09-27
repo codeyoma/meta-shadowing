@@ -1,0 +1,7 @@
+# Share the app, packages, tests and compiler settings with local development.
+# Only replace the private identity config for a clean, unsigned CI checkout.
+include:
+  - project.yml
+configFiles:
+  Debug: Config/CI.xcconfig
+  Release: Config/CI.xcconfig
