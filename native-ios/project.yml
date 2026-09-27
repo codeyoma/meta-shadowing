@@ -19,6 +19,8 @@ packages:
     path: Packages/LearningDomain
   AppFoundation:
     path: Packages/AppFoundation
+  LearningMedia:
+    path: Packages/LearningMedia
 targets:
   MetaShadowingNative:
     type: application
@@ -27,6 +29,7 @@ targets:
     dependencies:
       - package: LearningDomain
       - package: AppFoundation
+      - package: LearningMedia
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER)
@@ -38,6 +41,18 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+  NativeMediaIntegrationTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests/MediaIntegrationTests]
+    dependencies:
+      - target: MetaShadowingNative
+      - package: LearningMedia
+      - package: LearningDomain
+      - package: AppFoundation
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).mediatests
   NativeFoundationUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -53,5 +68,6 @@ schemes:
       targets:
         MetaShadowingNative: all
         NativeFoundationUITests: [test]
+        NativeMediaIntegrationTests: [test]
     test:
-      targets: [NativeFoundationUITests]
+      targets: [NativeFoundationUITests, NativeMediaIntegrationTests]
