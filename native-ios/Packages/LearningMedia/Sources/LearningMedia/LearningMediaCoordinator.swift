@@ -104,7 +104,7 @@ public struct LearningMediaState: Sendable {
         scheduleDrain()
         if let drainTask { await drainTask.value }
         closed = true; stopOutput(); driver?.dispose(); driver = nil
-        reveal.onEvent = nil; audioSession?.close()
+        reveal.onEvent = nil; await audioSession?.shutdown()
         await controller.deactivate()
         committed = await controller.state; publish(); onChange = nil; onFeedback = nil
     }
@@ -230,7 +230,11 @@ public struct LearningMediaState: Sendable {
                 try await driver.prepare(.init(token: token, sources: sources, positionSeconds: position, rate: rate))
                 guard self.valid(current, token), await self.authorize(plan.scope) else { throw MediaFailure.accessDenied }
                 guard self.valid(current, token) else { throw MediaFailure.cancelled }
-                if !frameOnly { try self.audioSession?.acquirePlayback(); try driver.play(token: token) }
+                if !frameOnly {
+                    try await self.audioSession?.acquirePlayback()
+                    guard self.valid(current, token) else { throw MediaFailure.cancelled }
+                    try driver.play(token: token)
+                }
                 self.phase = frameOnly ? .paused : .playing
                 self.preparation = nil; self.publish()
             } catch {

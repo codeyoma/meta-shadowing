@@ -83,6 +83,7 @@ public actor SQLiteLearningStore: LearningStore {
     public func revoke(profileID: String) {
         leases = leases.filter { $0.value.handle.scope.profileID != profileID }
     }
+    public func revoke(writerID: UUID) { leases.removeValue(forKey: writerID) }
     func readLedger(_ db: SQLiteConnection) throws -> RewardLedger {
         let runs = try db.query("SELECT state FROM reward_runs").map { try decode(RewardRun.self, $0["state"]) }
         let completed = try db.query("SELECT state FROM completions").map { try decode(CompletionReceipt.self, $0["state"]) }

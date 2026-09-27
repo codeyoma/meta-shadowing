@@ -9,6 +9,7 @@ import UIKit
     private var graph: AVAudioEngine?
     private var voice: VoiceMonitorVoicePath?
     private var closed = false
+    private var generation = UUID()
     public var onInvalidation: (@MainActor () -> Void)?
     public var running: Bool { graph?.isRunning == true }
     public init(session: LessonAudioSession) { self.session = session }
@@ -36,11 +37,13 @@ import UIKit
         guard !closed, outputs == [.headphones], UIApplication.shared.applicationState == .active else { return false }
         return await AVAudioApplication.requestRecordPermission()
     }
-    public func start(gain: Float) throws {
+    public func start(gain: Float) async throws {
         guard !closed, permission == .granted, outputs == [.headphones], UIApplication.shared.applicationState == .active else { throw MediaFailure.accessDenied }
         stop()
+        let current = generation
         do {
-            try session.acquireMonitoring()
+            try await session.acquireMonitoring()
+            guard !closed, current == generation, UIApplication.shared.applicationState == .active else { throw MediaFailure.cancelled }
             let audio = AVAudioSession.sharedInstance()
             let inputs = audio.availableInputs ?? []
             guard outputs == [.headphones],
@@ -60,9 +63,10 @@ import UIKit
             next.prepare(); try next.start()
             guard graph === next, next.isRunning, outputs == [.headphones], UIApplication.shared.applicationState == .active else { throw MediaFailure.cancelled }
             path.setGain(gain)
-        } catch { stop(); throw error }
+        } catch { if current == generation { stop() }; throw error }
     }
     public func stop() {
+        generation = UUID()
         observation.stop(); voice?.setGain(0); graph?.stop()
         graph = nil; voice = nil; session.releaseMonitoring()
     }

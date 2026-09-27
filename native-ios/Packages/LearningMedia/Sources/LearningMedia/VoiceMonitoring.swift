@@ -8,7 +8,7 @@ public enum MicrophonePermission: Sendable { case undetermined, denied, granted 
     var permission: MicrophonePermission { get }
     var running: Bool { get }
     func requestPermission() async -> Bool
-    func start(gain: Float) throws
+    func start(gain: Float) async throws
     func stop()
     func setGain(_ gain: Float)
 }
@@ -83,8 +83,14 @@ public enum MicrophonePermission: Sendable { case undetermined, denied, granted 
         }
         guard granted else { state = .denied; return }
         guard context.actionable, hardware.outputs == [.headphones] else { state = .blocked; return }
-        do { try hardware.start(gain: gain); state = hardware.running ? .monitoring : .failed }
-        catch { hardware.stop(); state = .failed }
+        do {
+            try await hardware.start(gain: gain)
+            guard !closed, reservation == version else { return }
+            state = hardware.running ? .monitoring : .failed
+        } catch {
+            guard !closed, reservation == version else { return }
+            hardware.stop(); state = .failed
+        }
     }
     public func interrupted() { invalidation += 1; attempted = true; disable(suppress: true) }
     public func setGain(_ value: Float) {

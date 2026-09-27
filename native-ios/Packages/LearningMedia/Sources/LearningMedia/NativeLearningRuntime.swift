@@ -1,0 +1,89 @@
+#if os(iOS)
+import AppFoundation
+import LearningDomain
+import Observation
+import UIKit
+
+/// One mounted lesson owns all OS resources. Call close before replacing its writer.
+@MainActor @Observable public final class NativeLearningRuntime {
+    public private(set) var state: LearningMediaState
+    public private(set) var monitorState: VoiceMonitoring.State = .off
+    public private(set) var feedbackCount = 0
+    public let coordinator: LearningMediaCoordinator
+    public let monitoring: VoiceMonitoring
+    @ObservationIgnored private let graph: VoiceMonitorEngine
+    @ObservationIgnored private let remote: LessonRemoteControl
+    @ObservationIgnored private let haptics = NativeHapticPlayer()
+    @ObservationIgnored private var lifecycle: LessonLifecycleObserver?
+    @ObservationIgnored private var context: LessonInteractionContext
+    @ObservationIgnored private var closed = false
+
+    public init(controller: LearningController, initial: LearningControllerState, catalog: MediaAssetCatalog,
+                authorize: @escaping @Sendable (LearningScope) async -> Bool,
+                makeTransport: @escaping @MainActor ([MediaSource]) -> any MediaTransport) {
+        let session = LessonAudioSession()
+        graph = VoiceMonitorEngine(session: session)
+        monitoring = VoiceMonitoring(hardware: graph, defaults: .standard)
+        remote = LessonRemoteControl(session: session)
+        coordinator = LearningMediaCoordinator(controller: controller, initial: initial, catalog: catalog,
+            authorize: authorize, makeTransport: makeTransport, audioSession: session)
+        state = coordinator.state
+        context = .init(foreground: UIApplication.shared.applicationState == .active, complete: initial.snapshot.session.phase == .complete)
+        coordinator.onChange = { [weak self] in self?.updated($0) }
+        coordinator.onFeedback = { [weak self] event in
+            guard let self, !self.closed else { return }
+            self.feedbackCount += 1
+            switch event.kind {
+            case let .cycle(cycle): if let pattern = HapticPattern.cycle(cycle) { self.haptics.play(pattern) }
+            case .repeatChoice: self.haptics.play(.repeatChoice)
+            }
+        }
+        monitoring.onChange = { [weak self] in guard let self else { return }; self.monitorState = self.monitoring.state }
+        graph.onInvalidation = { [weak self] in self?.monitoring.interrupted() }
+        remote.onPress = { [weak self] event in Task { @MainActor in
+            guard let self, !self.closed else { return }; _ = await self.coordinator.receiveRemote(event)
+        } }
+        lifecycle = LessonLifecycleObserver { [weak self] in self?.handle($0) }
+        Task { @MainActor [weak self] in
+            guard let self, !self.closed else { return }
+            try? await self.remote.begin(self.coordinator.remoteState.owner)
+            if !self.closed { self.refreshRemote() }
+        }
+        applyContext()
+    }
+    public func setMenuOpen(_ open: Bool) { context.menuOpen = open; applyContext() }
+    public func setAccess(_ access: Bool) { context.access = access; applyContext() }
+    public func suspend() { coordinator.suspend(.inactivity); haptics.stop() }
+    public func close() async {
+        guard !closed else { return }
+        closed = true; lifecycle?.close(); lifecycle = nil
+        monitoring.close(); graph.close(); remote.close(); haptics.stop()
+        await coordinator.close()
+    }
+    private func updated(_ state: LearningMediaState) {
+        self.state = state
+        let complete = state.controller.snapshot.session.phase == .complete
+        if complete != context.complete { context.complete = complete; applyContext() }
+        refreshRemote()
+    }
+    private func applyContext() {
+        guard !closed else { return }
+        coordinator.setContext(context); monitoring.update(context); refreshRemote()
+        if !context.actionable { haptics.stop() }
+    }
+    private func refreshRemote() {
+        let gate = coordinator.remoteState
+        remote.update(owner: gate.owner, revision: gate.revision, actionable: gate.mainAction != nil,
+            repeatable: gate.repeatable, playing: gate.playing)
+    }
+    private func handle(_ event: LessonLifecycleEvent) {
+        guard !closed else { return }
+        switch event {
+        case .active: context.foreground = true; applyContext()
+        case .inactive: context.foreground = false; applyContext()
+        case .routeChanged: coordinator.suspend(.routeChange); monitoring.routeChanged(); haptics.stop()
+        case .interrupted, .reset: coordinator.suspend(.interruption); monitoring.interrupted(); haptics.stop()
+        }
+    }
+}
+#endif

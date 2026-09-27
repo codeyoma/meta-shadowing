@@ -76,6 +76,7 @@ public protocol LearningStore: Actor {
     func preferences(profileID: String) async throws -> ProfilePreferences
     func savePreferences(_ value: ProfilePreferences, profileID: String) async throws -> Int64
     func revoke(profileID: String) async
+    func revoke(writerID: UUID) async
     func exportBackup(profileID: String) async throws -> BackupSnapshot
     func mergeBackup(_ data: Data, profileID: String) async throws -> BackupSnapshot
     func restoreIntoEmptyProfile(_ data: Data, profileID: String) async throws -> BackupSnapshot

@@ -19,9 +19,10 @@ import UIKit
             MainActor.assumeIsolated { self?.foregroundSince = ProcessInfo.processInfo.systemUptime }
         }
     }
-    public func begin(_ owner: String) throws {
+    public func begin(_ owner: String) async throws {
         guard !closed else { throw MediaFailure.cancelled }
-        try session.setRemoteOwnership(true)
+        try await session.setRemoteOwnership(true)
+        guard !closed else { try? await session.setRemoteOwnership(false); throw MediaFailure.cancelled }
         state.begin(owner)
         guard targets.isEmpty else { return }
         let center = MPRemoteCommandCenter.shared()
@@ -62,7 +63,7 @@ import UIKit
         if owned { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil }
         if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
         foregroundObserver = nil; onPress = nil
-        if owned { try? session.setRemoteOwnership(false) }
+        if owned { Task { try? await session.setRemoteOwnership(false) } }
     }
 }
 #endif

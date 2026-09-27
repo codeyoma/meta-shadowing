@@ -131,6 +131,6 @@ public actor LearningController {
         guard active else { return }
         active = false; lifetime = UUID(); transport = nil; pending = nil; busy = false; bufferedEnd = nil
         unpublishedFeedback.removeAll()
-        await store.revoke(profileID: committed.handle.scope.profileID)
+        await store.revoke(writerID: committed.handle.writerID)
     }
 }

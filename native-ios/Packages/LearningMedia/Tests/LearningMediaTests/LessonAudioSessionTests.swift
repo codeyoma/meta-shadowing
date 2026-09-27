@@ -4,26 +4,44 @@ import LearningMedia
 @MainActor final class AudioSessionFixture: AudioSessionHardware {
     var mode: LessonAudioMode?
     var active = false
-    func configure(_ mode: LessonAudioMode) throws { self.mode = mode }
-    func activate() throws { active = true }
-    func deactivate() { active = false }
+    var gate: CheckedContinuation<Void, Never>?
+    var suspendActivation = false
+    func apply(_ mode: LessonAudioMode?) async throws {
+        if mode != nil, suspendActivation { await withCheckedContinuation { gate = $0 } }
+        self.mode = mode; active = mode != nil
+    }
 }
 
 @MainActor struct LessonAudioSessionTests {
-    @Test func playbackCleanupDoesNotDeactivateLiveMonitoring() throws {
+    @Test func playbackCleanupDoesNotDeactivateLiveMonitoring() async throws {
         let hardware = AudioSessionFixture()
         let session = LessonAudioSession(hardware: hardware)
-        try session.acquirePlayback()
-        try session.acquireMonitoring()
+        try await session.acquirePlayback()
+        try await session.acquireMonitoring()
         session.releasePlayback()
         #expect(hardware.active)
         #expect(hardware.mode == .monitoring)
-        try session.acquirePlayback()
+        try await session.acquirePlayback()
         session.releaseMonitoring()
+        try await eventually { hardware.mode == .playback }
         #expect(hardware.active)
         #expect(hardware.mode == .playback)
         session.close(); session.close()
-        #expect(!hardware.active)
-        #expect(throws: MediaFailure.cancelled) { try session.acquireMonitoring() }
+        try await eventually { !hardware.active }
+        await #expect(throws: MediaFailure.cancelled) { try await session.acquireMonitoring() }
+    }
+    @Test func releaseDuringActivationCannotAcquireStalePlayback() async throws {
+        let hardware = AudioSessionFixture(), session = LessonAudioSession(hardware: AudioSessionFixture())
+        session.close()
+        hardware.suspendActivation = true
+        let owner = LessonAudioSession(hardware: hardware)
+        let request = Task { try await owner.acquirePlayback() }
+        try await eventually { hardware.gate != nil }
+        owner.releasePlayback()
+        hardware.gate?.resume(); hardware.gate = nil
+        do { try await request.value; Issue.record("Retired activation succeeded") }
+        catch { #expect(error as? MediaFailure == .cancelled) }
+        try await eventually { !hardware.active }
+        owner.close()
     }
 }

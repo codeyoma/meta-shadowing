@@ -35,6 +35,7 @@ actor FailingStore: LearningStore {
     func preferences(profileID: String) async throws -> ProfilePreferences { try await underlying.preferences(profileID: profileID) }
     func savePreferences(_ value: ProfilePreferences, profileID: String) async throws -> Int64 { try await underlying.savePreferences(value, profileID: profileID) }
     func revoke(profileID: String) async { await underlying.revoke(profileID: profileID) }
+    func revoke(writerID: UUID) async { await underlying.revoke(writerID: writerID) }
     func exportBackup(profileID: String) async throws -> BackupSnapshot { try await underlying.exportBackup(profileID: profileID) }
     func mergeBackup(_ data: Data, profileID: String) async throws -> BackupSnapshot { try await underlying.mergeBackup(data, profileID: profileID) }
     func restoreIntoEmptyProfile(_ data: Data, profileID: String) async throws -> BackupSnapshot { try await underlying.restoreIntoEmptyProfile(data, profileID: profileID) }
@@ -48,6 +49,17 @@ func command(_ snapshot: LearningSnapshot, _ event: LearningEvent) -> LearningCo
     LearningCommand(handle: snapshot.handle, id: UUID(), expectedVersion: snapshot.writerVersion, event: event)
 }
 @Suite struct LearningControllerTests {
+    @Test func deactivationRevokesOnlyItsOwnedWriter() async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SQLiteLearningStore(root: root), plan = try syntheticPlan()
+        let first = try await store.open(plan: plan, preferences: .fresh, writerID: UUID())
+        let old = LearningController(store: store, snapshot: first)
+        let next = try await store.open(plan: plan, preferences: .fresh, writerID: UUID())
+        await old.deactivate()
+        let replacement = LearningController(store: store, snapshot: next)
+        #expect(!(await replacement.send(command(next, .resume))).saveFailed)
+    }
     @Test func failedAutomaticContinuationKeepsConfirmationAndRetryPaused() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
