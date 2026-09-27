@@ -120,7 +120,7 @@ import LearningDomain
         last = MediaPosition(seconds: seconds, duration: timeline.duration)
         if member == items.count - 1 {
             playing = false; ready = false; player.pause(); removeObservers(); emit(.ended(last))
-        } else { emit(.position(last)) }
+        } else { emit(.memberBoundary(last)) }
     }
     private func failed(_ expected: UUID) {
         guard expected == generation, playing else { return }

@@ -19,7 +19,7 @@ public struct MediaPosition: Equatable, Sendable {
 
 public struct MediaTransportEvent: Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
-        case position(MediaPosition), ended(MediaPosition), interrupted(MediaPosition), failed(MediaFailure)
+        case position(MediaPosition), memberBoundary(MediaPosition), ended(MediaPosition), interrupted(MediaPosition), failed(MediaFailure)
     }
     public let token: TransportToken
     public let kind: Kind

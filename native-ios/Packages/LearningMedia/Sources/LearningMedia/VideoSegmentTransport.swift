@@ -149,7 +149,7 @@ import LearningDomain
         transitioning = true; memberRevision = UUID()
         let next = member + 1, revision = memberRevision
         item.forwardPlaybackEndTime = time(segments[next].end)
-        emit(.position(last))
+        emit(.memberBoundary(last))
         transition = Task { @MainActor [weak self] in
             guard let self, self.generation == generation, self.memberRevision == revision, self.playing else { return }
             let sought = await self.transitionSeek(self.player, self.time(self.segments[next].start))
