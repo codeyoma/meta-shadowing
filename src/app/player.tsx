@@ -291,8 +291,8 @@ function PlayerScreen({ pack, stage }: { pack: NonNullable<ReturnType<typeof sel
             <Icon name="speedometer" /><Label size={14} weight="700">{playerSpeed(state).label}</Label>
           </Pressable>
           <Pressable feedback={false} accessibilityRole="button" accessibilityLabel="문장 분석 열기" onPress={() => openInfo('analysis')}
-            style={{ flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="text.magnifyingglass" />
+            style={{ flex: 1, minHeight: 44, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="text.magnifyingglass" /><Label size={14} weight="700">분석</Label>
           </Pressable>
         </View>}
       </PlayerHeaderProgress> }), [state, unitLabel, accessReady, unavailable, accessDenied, openOptions, openInfo]);

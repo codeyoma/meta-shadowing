@@ -41,14 +41,15 @@ test('installed DUO analysis supports every token selection without escaping its
     let scale = 1;
     const load = nativeModules({ react: runtime.hooks, 'react-native-reanimated': nativeMotion,
       'react-native': { ScrollView: 'ScrollView', View: 'View', Text: 'Text', Pressable: 'Pressable',
-        AppState: { currentState: 'active' }, useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale: scale }) },
+        AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) }, useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale: scale }) },
       'expo-image': { Image: 'Image' }, 'expo-haptics': {}, 'expo-font': { isLoaded: () => false },
+      'expo-clipboard': { setStringAsync: async () => true },
       expo: { requireOptionalNativeModule: () => null, requireNativeModule: () => ({}) },
       'expo-router': { usePathname: () => '/player-info' },
     });
     const { SentenceRelationGraph } = load('components/sentence-relation-graph.tsx');
     runtime.render(React.createElement(SentenceRelationGraph, { sentence: longest }));
-    const controls = () => runtime.flush().filter(n => n.props.accessibilityRole === 'button');
+    const controls = () => runtime.flush().filter(n => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel?.startsWith('단어 '));
     const arrows = () => runtime.flush().filter(n => n.type === 'Image' && n.props.source?.uri?.startsWith('data:image/svg+xml'));
     const attachmentPoints = () => arrows().flatMap(n => {
       const path = decodeURIComponent(n.props.source.uri).match(/<path d="M ([\d.e+-]+) ([\d.e+-]+) Q ([\d.e+-]+) ([\d.e+-]+) ([\d.e+-]+) ([\d.e+-]+)"/);

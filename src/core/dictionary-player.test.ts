@@ -89,6 +89,7 @@ test(`stage ${stage} ${entry === 'analysis' ? 'analysis opens before source reve
   runtime.flush();
   appState = 'active'; appListeners.forEach(fn => fn(appState)); runtime.flush();
   if (entry === 'analysis') {
+    assert.ok(runtime.flush().some(n => n.props.children === '분석'), 'Analysis entry has a visible Korean label');
     runtime.find('이어하기').onPress({ nativeEvent: { pageX: 0, pageY: 0 } });
     await new Promise(resolve => setImmediate(resolve)); runtime.flush();
     assert.equal(runtime.find('음성 재생 중').disabled, true);
