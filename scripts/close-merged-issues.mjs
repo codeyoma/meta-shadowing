@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
+// Each compared commit needs an API lookup; keep automatic closure to small pushes.
+const MAX_COMPARED_COMMITS = 200;
+
 // Deliberately narrower than GitHub's prose parser. One explicit closure per line.
 export function closingIssues(body, repository) {
   if (typeof body !== 'string' || body.length > 65_536) return [];
@@ -63,7 +66,10 @@ export async function closeMergedIssues({ event, repository, request }) {
     if (!['ahead', 'identical'].includes(result.status) || !Number.isSafeInteger(result.total_commits) ||
         result.total_commits < 0 || !Array.isArray(result.commits)) throw new Error('Unverified dev push comparison.');
     total ??= result.total_commits;
-    if (total !== result.total_commits || total > 10_000) throw new Error('Unexpected dev push size.');
+    if (total !== result.total_commits) throw new Error('Unexpected dev push size.');
+    if (total > MAX_COMPARED_COMMITS) {
+      throw new Error(`Dev push exceeds the ${MAX_COMPARED_COMMITS}-commit automatic closure limit; verify and close issues manually.`);
+    }
     for (const commit of result.commits) {
       if (!/^[0-9a-f]{40}$/.test(commit.sha)) throw new Error('Invalid compared commit.');
       commits.add(commit.sha);

@@ -102,6 +102,30 @@ test('all compared commits and associated PR pages are inspected once', async ()
   assert.equal(f.reads.filter(p => p.endsWith('/pulls/101')).length, 1);
   assert(f.reads.includes(`repos/${repository}/commits/${merge}/pulls?per_page=100&page=2`));
 });
+test('a 200-commit push still validates its complete range and closes verified issues', async () => {
+  const commits = Array.from({ length: 199 }, (_, i) => ({ sha: (i + 1).toString(16).padStart(40, '0') }));
+  commits.push({ sha: merge });
+  const f = fixture({
+    [`repos/${repository}/compare/${before}...${after}?per_page=100&page=1`]: { status: 'ahead', total_commits: 200, commits: commits.slice(0, 100) },
+    [`repos/${repository}/compare/${before}...${after}?per_page=100&page=2`]: { status: 'ahead', total_commits: 200, commits: commits.slice(100) },
+  });
+  assert.deepEqual(await closeMergedIssues({ event, repository, request: f.request }), [94]);
+  assert.equal(f.reads.filter(path => path.includes('/commits/')).length, 200);
+  assert.equal(f.writes.length, 1);
+});
+test('a 201-commit push fails before pagination, commit lookups or issue writes', async () => {
+  const commits = Array.from({ length: 200 }, (_, i) => ({ sha: (i + 1).toString(16).padStart(40, '0') }));
+  commits.push({ sha: merge });
+  const firstPage = `repos/${repository}/compare/${before}...${after}?per_page=100&page=1`;
+  const f = fixture({
+    [firstPage]: { status: 'ahead', total_commits: 201, commits: commits.slice(0, 100) },
+    [`repos/${repository}/compare/${before}...${after}?per_page=100&page=2`]: { status: 'ahead', total_commits: 201, commits: commits.slice(100, 200) },
+    [`repos/${repository}/compare/${before}...${after}?per_page=100&page=3`]: { status: 'ahead', total_commits: 201, commits: commits.slice(200) },
+  });
+  await assert.rejects(closeMergedIssues({ event, repository, request: f.request }), /200-commit automatic closure limit/);
+  assert.deepEqual(f.reads, [firstPage]);
+  assert.deepEqual(f.writes, []);
+});
 test('truncated or divergent comparison fails closed', async () => {
   for (const comparison of [{ status: 'diverged', total_commits: 1, commits: [{ sha: merge }] },
     { status: 'ahead', total_commits: 2, commits: [{ sha: merge }] }]) {

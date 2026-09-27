@@ -87,6 +87,11 @@ internal repository identity, `codex/*` source and `dev` destination. Only expli
 same-repository closure lines qualify. Code/quoted examples, foreign issues and
 issue numbers that actually identify PRs are ignored. Already closed issues make
 reruns idempotent. Incomplete comparisons fail without closing issues.
+Automatic closure accepts at most 200 compared commits per push. A larger range
+fails after the first comparison response, before further pagination, per-commit
+PR lookups or issue writes; verify those merges and close completed issues manually.
+This cap limits per-commit API fan-out, not the shared token's remaining quota;
+normal GitHub rate limits and the job timeout still apply.
 The parser deliberately supports only a conservative Markdown subset. A line
 combining backticks with HTML, comment or blockquote markers disables automatic
 closure for the entire PR body; close the issues manually after verifying such a
