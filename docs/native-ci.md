@@ -37,6 +37,11 @@ generates a disposable copy without that local file and verifies the resolved
 identity, compiler, deployment and signing settings for both configurations.
 
 UI tests run in Debug because the retry test uses a Debug-only failure injection.
+Before starting XCUITest, a separate five-minute preparation step waits for
+`simctl bootstatus -b` to report that the required iOS 27 Simulator has finished
+booting. A readiness failure fails the job; it does not skip or retry failed tests.
+The synthetic confirmation test waits for the button to become enabled and
+hittable after the asynchronous save, rather than treating unchanged XP as readiness.
 Both Debug and Release products are inspected for JavaScript resources, excluded
 runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
 These checks require XcodeGen, `jq` and `rg`; missing build tools are installed

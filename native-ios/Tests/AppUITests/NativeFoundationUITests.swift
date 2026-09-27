@@ -9,8 +9,15 @@ final class NativeFoundationUITests: XCTestCase {
         XCTAssertTrue(xp.waitForExistence(timeout: 15))
         XCTAssertEqual(xp.label, "XP: 0")
         app.buttons["probe-finish-reveal"].tap()
+        let confirm = app.buttons["probe-confirm"]
+        // XP stays zero while reveal completion is saving; it is not a readiness signal.
+        guard confirm.wait(for: \.isEnabled, toEqual: true, timeout: 15),
+              confirm.wait(for: \.isHittable, toEqual: true, timeout: 5) else {
+            XCTFail("Confirmation did not become ready after reveal completion")
+            return
+        }
         XCTAssertEqual(xp.label, "XP: 0")
-        app.buttons["probe-confirm"].tap()
+        confirm.tap()
         XCTAssertTrue(xp.wait(for: \.label, toEqual: "XP: 3", timeout: 5))
         XCTAssertEqual(app.staticTexts["probe-confirmed"].label, "Confirmed phrases: 1")
         app.terminate()
