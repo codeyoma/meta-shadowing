@@ -51,6 +51,8 @@ jobs:
         run: swift test --package-path native-ios/Packages/LearningDomain
       - name: Test app foundation
         run: swift test --package-path native-ios/Packages/AppFoundation
+      - name: Test transactional learning storage
+        run: swift test --package-path native-ios/Packages/LearningPersistence
 
   ci-native-tests:
     name: ci-native-tests
@@ -69,13 +71,23 @@ jobs:
           xcodebuild -version
           xcodegen --version
           xcodegen generate --spec native-ios/project-ci.yml
-      - name: Test native UI on iOS 27
+      - name: Wait for iOS 27 Simulator readiness
+        id: simulator
+        timeout-minutes: 5
         run: |
           ci_simulator=$(xcrun simctl list devices available --json | jq -r --arg runtime "$IOS_TEST_RUNTIME" '[.devices[$runtime][]? | select(.isAvailable and (.name | startswith("iPhone")))][0].udid // empty')
           test -n "$ci_simulator" || { echo 'Required iOS 27.0 iPhone Simulator is unavailable.' >&2; exit 1; }
+          echo "::add-mask::$ci_simulator"
+          xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
+          echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
+          echo 'Required iOS 27.0 Simulator finished booting.'
+      - name: Test native UI on iOS 27
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
           xcodebuild test -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme MetaShadowingNative -configuration Debug \
-            -destination "platform=iOS Simulator,id=$ci_simulator,arch=arm64" \
+            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
             -parallel-testing-enabled NO \
             -resultBundlePath "$RUNNER_TEMP/native-ui.xcresult" \

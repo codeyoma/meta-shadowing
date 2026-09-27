@@ -20,9 +20,27 @@ struct MetaShadowingApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if let root = Self.probeRoot {
+                SyntheticLearningProbeView(root: root)
+            } else {
+                RootView(bootstrap: bootstrap)
+            }
+            #else
             RootView(bootstrap: bootstrap)
+            #endif
         }
     }
+
+    #if DEBUG
+    private static var probeRoot: URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--ui-test-learning-storage") else { return nil }
+        let index = arguments.firstIndex(of: "--ui-test-probe-id")
+        let identifier = index.flatMap { $0 + 1 < arguments.count ? UUID(uuidString: arguments[$0 + 1]) : nil }
+        return URL.applicationSupportDirectory.appending(path: "ProbeProfiles/\(identifier?.uuidString ?? "manual")")
+    }
+    #endif
 }
 
 #if DEBUG

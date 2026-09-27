@@ -10,8 +10,8 @@ Expo reference CI lane; the reference source remains available for migration.
 | Required check | Evidence |
 | --- | --- |
 | `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
-| `ci-quality` | Swift Testing suites in `LearningDomain` and `AppFoundation` |
-| `ci-native-tests` | Debug XCUITest: navigation, foreground/relaunch, accessibility text size and failure/retry |
+| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence` and `AppFoundation` |
+| `ci-native-tests` | Debug XCUITest: navigation, foreground/relaunch, accessibility text size, failure/retry and SQLite confirmation/relaunch |
 | `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
 
 The generic branch-policy script still uses Node 24 without npm installation.
@@ -37,12 +37,17 @@ generates a disposable copy without that local file and verifies the resolved
 identity, compiler, deployment and signing settings for both configurations.
 
 UI tests run in Debug because the retry test uses a Debug-only failure injection.
+Before starting XCUITest, a separate five-minute preparation step waits for
+`simctl bootstatus -b` to report that the required iOS 27 Simulator has finished
+booting. A readiness failure fails the job; it does not skip or retry failed tests.
+The synthetic confirmation test waits for the button to become enabled and
+hittable after the asynchronous save, rather than treating unchanged XP as readiness.
 Both Debug and Release products are inspected for JavaScript resources, excluded
 runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
 These checks require XcodeGen, `jq` and `rg`; missing build tools are installed
 with Homebrew. Toolchain versions are printed for reproducibility.
 
-Actions are SHA-pinned, repository tokens are read-only, and checkout credentials
+Actions are SHA-pinned, Swift CI tokens are read-only, and checkout credentials
 are not persisted. All jobs have timeouts and no path-based skipping. No signing
 credentials, Apple accounts, private lessons or hosted data are needed. UI result
 summaries expose test failures without exporting complete simulator logs or
@@ -58,12 +63,20 @@ TestFlight or submit an App Store release. Feature PRs target `dev`.
 
 ## Coverage limits
 
-The current Swift app is the #93 synthetic foundation, not the completed rewrite.
+The current Swift app includes the #93 synthetic foundation and #94 learning/storage
+domain, not the completed rewrite.
 Green Swift CI proves only the implemented package/app boundaries. It no longer
 provides regression evidence for the Expo reference or its StoreKit, CloudKit,
 delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
-not deleted. #94–#99 must add the corresponding Swift tests as features migrate.
+not deleted. #95–#99 must add the corresponding Swift tests as features migrate.
 
 Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains
 future work. Performance benchmarks are not an acceptance requirement.
+
+## Issue references
+
+Feature PRs link related tickets with `Refs #<number>`. Close completed issues
+manually after verifying acceptance and merge. There is no custom dev-push
+issue-closing workflow, commit scan or issue-write permission in Swift CI.
+PR creation alone does not complete an issue.

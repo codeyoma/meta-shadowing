@@ -1,0 +1,580 @@
+{
+  "referenceRevision": "7440058a3b6cfbd472d11b875664de40e258f940",
+  "backups": [
+    {
+      "name": "empty-v4",
+      "payload": {
+        "version": 4,
+        "tables": {
+          "checkpoints": [],
+          "completions": [],
+          "daily_stages": [],
+          "stage_awards": [],
+          "study_days": [],
+          "preferences": [],
+          "cycle_credits": [],
+          "unit_credits": []
+        },
+        "sync": {
+          "clocks": {},
+          "runs": []
+        }
+      }
+    },
+    {
+      "name": "completed-v4",
+      "payload": {
+        "version": 4,
+        "tables": {
+          "checkpoints": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "state": "{\"audioSeconds\":0,\"confirmed\":3,\"mode\":\"manual\",\"phase\":\"complete\",\"phrase\":0,\"phraseCount\":1,\"planned\":3,\"rate\":1,\"remainingMs\":0,\"runId\":\"finished\",\"running\":false,\"stage\":1,\"unitProgress\":[{\"confirmed\":3,\"planned\":3}],\"version\":1}"
+            }
+          ],
+          "completions": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "completed_at": "2026-09-27 12:00:00"
+            }
+          ],
+          "daily_stages": [],
+          "stage_awards": [],
+          "study_days": [
+            {
+              "language": "english",
+              "day": "2026-09-27"
+            }
+          ],
+          "preferences": [],
+          "cycle_credits": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "language": "english",
+              "book": "sample",
+              "phrase_count": 1,
+              "phrase": 0,
+              "confirmed": 3,
+              "credited": 3,
+              "day": "2026-09-27"
+            }
+          ],
+          "unit_credits": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "state": "{\"counts\":[3],\"sourceCount\":1,\"groupSize\":1,\"baseline\":3,\"earned\":0}"
+            }
+          ]
+        },
+        "sync": {
+          "clocks": {
+            "[\"checkpoint\",\"sample-v1\",1]": "0001790510400000:0000000009:fixturewriter"
+          },
+          "runs": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "language": "english",
+              "book": "sample",
+              "sourceCount": 1,
+              "groupSize": 1,
+              "observed": [
+                3
+              ],
+              "candidates": [
+                {
+                  "credited": 0,
+                  "counts": [
+                    0
+                  ]
+                }
+              ],
+              "events": [
+                {
+                  "unit": 0,
+                  "ordinal": 1,
+                  "day": "2026-09-27"
+                },
+                {
+                  "unit": 0,
+                  "ordinal": 2,
+                  "day": "2026-09-27"
+                },
+                {
+                  "unit": 0,
+                  "ordinal": 3,
+                  "day": "2026-09-27"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "completed-v2",
+      "payload": {
+        "version": 2,
+        "tables": {
+          "checkpoints": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "state": "{\"audioSeconds\":0,\"confirmed\":3,\"mode\":\"manual\",\"phase\":\"complete\",\"phrase\":0,\"phraseCount\":1,\"planned\":3,\"rate\":1,\"remainingMs\":0,\"runId\":\"finished\",\"running\":false,\"stage\":1,\"version\":1}"
+            }
+          ],
+          "completions": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "completed_at": "2026-09-27 12:00:00"
+            }
+          ],
+          "daily_stages": [],
+          "stage_awards": [],
+          "study_days": [
+            {
+              "language": "english",
+              "day": "2026-09-27"
+            }
+          ],
+          "preferences": [],
+          "cycle_credits": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "language": "english",
+              "book": "sample",
+              "phrase_count": 1,
+              "phrase": 0,
+              "confirmed": 3,
+              "credited": 3,
+              "day": "2026-09-27"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "completed-v3",
+      "payload": {
+        "version": 3,
+        "tables": {
+          "checkpoints": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "state": "{\"audioSeconds\":0,\"confirmed\":3,\"mode\":\"manual\",\"phase\":\"complete\",\"phrase\":0,\"phraseCount\":1,\"planned\":3,\"rate\":1,\"remainingMs\":0,\"runId\":\"finished\",\"running\":false,\"stage\":1,\"unitProgress\":[{\"confirmed\":3,\"planned\":3}],\"version\":1}"
+            }
+          ],
+          "completions": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "completed_at": "2026-09-27 12:00:00"
+            }
+          ],
+          "daily_stages": [],
+          "stage_awards": [],
+          "study_days": [
+            {
+              "language": "english",
+              "day": "2026-09-27"
+            }
+          ],
+          "preferences": [],
+          "cycle_credits": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "language": "english",
+              "book": "sample",
+              "phrase_count": 1,
+              "phrase": 0,
+              "confirmed": 3,
+              "credited": 3,
+              "day": "2026-09-27"
+            }
+          ],
+          "unit_credits": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "state": "{\"counts\":[3],\"sourceCount\":1,\"groupSize\":1,\"baseline\":3,\"earned\":0}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "historical-v1",
+      "payload": {
+        "version": 1,
+        "tables": {
+          "checkpoints": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "state": "{\"audioSeconds\":0,\"confirmed\":3,\"mode\":\"manual\",\"phase\":\"complete\",\"phrase\":0,\"phraseCount\":1,\"planned\":3,\"rate\":1,\"remainingMs\":0,\"runId\":\"finished\",\"running\":false,\"stage\":1,\"version\":1}"
+            }
+          ],
+          "completions": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "completed_at": "2026-09-27 12:00:00"
+            }
+          ],
+          "daily_stages": [
+            {
+              "language": "english",
+              "book": "sample",
+              "day": "2026-09-27",
+              "stage": 1
+            }
+          ],
+          "stage_awards": [
+            {
+              "language": "english",
+              "book": "sample",
+              "run": "finished",
+              "day": "2026-09-27",
+              "stage": 1,
+              "xp": 10
+            }
+          ],
+          "study_days": [
+            {
+              "language": "english",
+              "day": "2026-09-27"
+            }
+          ],
+          "preferences": []
+        }
+      }
+    },
+    {
+      "name": "grouped-and-silent-v4",
+      "payload": {
+        "version": 4,
+        "tables": {
+          "checkpoints": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "state": "{\"audioSeconds\":0,\"confirmed\":3,\"mode\":\"manual\",\"phase\":\"complete\",\"phrase\":0,\"phraseCount\":1,\"planned\":3,\"rate\":1,\"remainingMs\":0,\"runId\":\"finished\",\"running\":false,\"stage\":1,\"unitProgress\":[{\"confirmed\":3,\"planned\":3}],\"version\":1}"
+            },
+            {
+              "package": "sample-v1",
+              "stage": 11,
+              "state": "{\"audioSeconds\":0,\"confirmed\":0,\"mode\":\"manual\",\"phase\":\"ready\",\"phrase\":1,\"phraseCount\":2,\"planned\":1,\"rate\":1,\"remainingMs\":0,\"reveal\":{\"speed\":1,\"wpm\":150},\"runId\":\"silent-11\",\"running\":false,\"stage\":11,\"unitProgress\":[{\"confirmed\":1,\"planned\":1},{\"confirmed\":0,\"planned\":1}],\"version\":1}"
+            },
+            {
+              "package": "sample-v1",
+              "stage": 15,
+              "state": "{\"audioSeconds\":0,\"confirmed\":0,\"mode\":\"manual\",\"phase\":\"ready\",\"phrase\":1,\"phraseCount\":2,\"planned\":1,\"rate\":1,\"remainingMs\":0,\"reveal\":{\"speed\":1,\"wpm\":150},\"runId\":\"silent-15\",\"running\":false,\"stage\":15,\"unitProgress\":[{\"confirmed\":1,\"planned\":1},{\"confirmed\":0,\"planned\":1}],\"version\":1}"
+            },
+            {
+              "package": "sample-v1",
+              "stage": 7,
+              "state": "{\"audioSeconds\":0,\"confirmed\":0,\"groupSize\":3,\"lineage\":\"grouped\",\"mode\":\"manual\",\"phase\":\"ready\",\"phrase\":0,\"phraseCount\":2,\"planned\":3,\"rate\":1,\"remainingMs\":0,\"runId\":\"regrouped\",\"running\":false,\"sourcePhraseCount\":5,\"sourceProgress\":[{\"confirmed\":1,\"planned\":3},{\"confirmed\":1,\"planned\":3},{\"confirmed\":0,\"planned\":3},{\"confirmed\":0,\"planned\":3},{\"confirmed\":0,\"planned\":3}],\"stage\":7,\"unitProgress\":[{\"planned\":3,\"confirmed\":0},{\"planned\":3,\"confirmed\":0}],\"version\":2}"
+            }
+          ],
+          "completions": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "completed_at": "2026-09-27 12:00:00"
+            }
+          ],
+          "daily_stages": [],
+          "stage_awards": [],
+          "study_days": [
+            {
+              "language": "english",
+              "day": "2026-09-27"
+            }
+          ],
+          "preferences": [],
+          "cycle_credits": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "language": "english",
+              "book": "sample",
+              "phrase_count": 1,
+              "phrase": 0,
+              "confirmed": 3,
+              "credited": 3,
+              "day": "2026-09-27"
+            },
+            {
+              "package": "sample-v1",
+              "stage": 11,
+              "run": "silent-11",
+              "language": "english",
+              "book": "sample",
+              "phrase_count": 2,
+              "phrase": 1,
+              "confirmed": 0,
+              "credited": 3,
+              "day": ""
+            },
+            {
+              "package": "sample-v1",
+              "stage": 15,
+              "run": "silent-15",
+              "language": "english",
+              "book": "sample",
+              "phrase_count": 2,
+              "phrase": 1,
+              "confirmed": 0,
+              "credited": 3,
+              "day": ""
+            },
+            {
+              "package": "sample-v1",
+              "stage": 7,
+              "run": "grouped",
+              "language": "english",
+              "book": "sample",
+              "phrase_count": 3,
+              "phrase": 0,
+              "confirmed": 1,
+              "credited": 2,
+              "day": ""
+            },
+            {
+              "package": "sample-v1",
+              "stage": 7,
+              "run": "regrouped",
+              "language": "english",
+              "book": "sample",
+              "phrase_count": 2,
+              "phrase": 0,
+              "confirmed": 0,
+              "credited": 0,
+              "day": ""
+            }
+          ],
+          "unit_credits": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "state": "{\"counts\":[3],\"sourceCount\":1,\"groupSize\":1,\"baseline\":3,\"earned\":0}"
+            },
+            {
+              "package": "sample-v1",
+              "stage": 11,
+              "run": "silent-11",
+              "state": "{\"counts\":[1,0],\"sourceCount\":2,\"groupSize\":1,\"baseline\":3,\"earned\":0}"
+            },
+            {
+              "package": "sample-v1",
+              "stage": 15,
+              "run": "silent-15",
+              "state": "{\"counts\":[1,0],\"sourceCount\":2,\"groupSize\":1,\"baseline\":3,\"earned\":0}"
+            },
+            {
+              "package": "sample-v1",
+              "stage": 7,
+              "run": "grouped",
+              "state": "{\"counts\":[1,0,0],\"sourceCount\":5,\"groupSize\":2,\"baseline\":2,\"earned\":0}"
+            },
+            {
+              "package": "sample-v1",
+              "stage": 7,
+              "run": "regrouped",
+              "state": "{\"counts\":[0,0],\"sourceCount\":5,\"groupSize\":3,\"baseline\":0,\"earned\":0}"
+            }
+          ]
+        },
+        "sync": {
+          "clocks": {
+            "[\"checkpoint\",\"sample-v1\",11]": "0001790510400000:0000000018:fixturewriter",
+            "[\"checkpoint\",\"sample-v1\",15]": "0001790510400000:0000000022:fixturewriter",
+            "[\"checkpoint\",\"sample-v1\",1]": "0001790510400000:0000000009:fixturewriter",
+            "[\"checkpoint\",\"sample-v1\",7]": "0001790510400000:0000000014:fixturewriter"
+          },
+          "runs": [
+            {
+              "package": "sample-v1",
+              "stage": 1,
+              "run": "finished",
+              "language": "english",
+              "book": "sample",
+              "sourceCount": 1,
+              "groupSize": 1,
+              "observed": [
+                3
+              ],
+              "candidates": [
+                {
+                  "credited": 0,
+                  "counts": [
+                    0
+                  ]
+                }
+              ],
+              "events": [
+                {
+                  "unit": 0,
+                  "ordinal": 1,
+                  "day": "2026-09-27"
+                },
+                {
+                  "unit": 0,
+                  "ordinal": 2,
+                  "day": "2026-09-27"
+                },
+                {
+                  "unit": 0,
+                  "ordinal": 3,
+                  "day": "2026-09-27"
+                }
+              ]
+            },
+            {
+              "package": "sample-v1",
+              "stage": 11,
+              "run": "silent-11",
+              "language": "english",
+              "book": "sample",
+              "sourceCount": 2,
+              "groupSize": 1,
+              "observed": [
+                1,
+                0
+              ],
+              "candidates": [
+                {
+                  "credited": 0,
+                  "counts": [
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "events": [
+                {
+                  "unit": 0,
+                  "ordinal": 1,
+                  "day": "2026-09-27",
+                  "multiplier": 3
+                }
+              ]
+            },
+            {
+              "package": "sample-v1",
+              "stage": 15,
+              "run": "silent-15",
+              "language": "english",
+              "book": "sample",
+              "sourceCount": 2,
+              "groupSize": 1,
+              "observed": [
+                1,
+                0
+              ],
+              "candidates": [
+                {
+                  "credited": 0,
+                  "counts": [
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "events": [
+                {
+                  "unit": 0,
+                  "ordinal": 1,
+                  "day": "2026-09-27",
+                  "multiplier": 3
+                }
+              ]
+            },
+            {
+              "package": "sample-v1",
+              "stage": 7,
+              "run": "grouped",
+              "language": "english",
+              "book": "sample",
+              "sourceCount": 5,
+              "groupSize": 2,
+              "observed": [
+                1,
+                0,
+                0
+              ],
+              "candidates": [
+                {
+                  "credited": 0,
+                  "counts": "3*0"
+                }
+              ],
+              "events": [
+                {
+                  "unit": 0,
+                  "ordinal": 1,
+                  "day": "2026-09-27",
+                  "sources": [
+                    {
+                      "source": 0,
+                      "ordinal": 1
+                    },
+                    {
+                      "source": 1,
+                      "ordinal": 1
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "package": "sample-v1",
+              "stage": 7,
+              "run": "regrouped",
+              "language": "english",
+              "book": "sample",
+              "lineage": "grouped",
+              "sourceCount": 5,
+              "groupSize": 3,
+              "observed": [
+                0,
+                0
+              ],
+              "candidates": [
+                {
+                  "credited": 0,
+                  "counts": [
+                    0,
+                    0
+                  ]
+                }
+              ],
+              "events": []
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -5,10 +5,10 @@ let package = Package(
     name: "AppFoundation",
     platforms: [.iOS(.v26), .macOS(.v15)],
     products: [.library(name: "AppFoundation", targets: ["AppFoundation"])],
-    dependencies: [.package(path: "../LearningDomain")],
+    dependencies: [.package(path: "../LearningDomain"), .package(path: "../LearningPersistence")],
     targets: [
-        .target(name: "AppFoundation", dependencies: ["LearningDomain"]),
-        .testTarget(name: "AppFoundationTests", dependencies: ["AppFoundation", "LearningDomain"])
+        .target(name: "AppFoundation", dependencies: ["LearningDomain", "LearningPersistence"]),
+        .testTarget(name: "AppFoundationTests", dependencies: ["AppFoundation", "LearningDomain", "LearningPersistence"])
     ],
     swiftLanguageModes: [.v6]
 )

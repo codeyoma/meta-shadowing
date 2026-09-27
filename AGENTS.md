@@ -33,6 +33,9 @@
 - Keep all Git history. Feature branches use codex/ and target dev; main releases
   need explicit approval. Do not merge, commit, push, deploy, delete historical
   records, or alter remote rulesets without the corresponding user request.
+- Link related tickets with `Refs #<number>` in feature PRs. Issue closure is
+  manual after acceptance and merge are verified; there is no custom dev-merge
+  issue-closing workflow. Opening a PR alone does not complete an issue.
 - Preserve privacy: no credentials, account identifiers, local user paths, signed
   URLs, private content, or audio payloads in logs, issues, or public documents.
 - In the Expo reference, use native modules for device files, SQLite, and audio;

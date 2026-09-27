@@ -1,6 +1,33 @@
 import XCTest
 
 final class NativeFoundationUITests: XCTestCase {
+    @MainActor func testSyntheticLearningSurvivesRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-learning-storage", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let xp = app.staticTexts["probe-xp"]
+        XCTAssertTrue(xp.waitForExistence(timeout: 15))
+        XCTAssertEqual(xp.label, "XP: 0")
+        app.buttons["probe-finish-reveal"].tap()
+        let confirm = app.buttons["probe-confirm"]
+        // XP stays zero while reveal completion is saving; it is not a readiness signal.
+        guard confirm.wait(for: \.isEnabled, toEqual: true, timeout: 15),
+              confirm.wait(for: \.isHittable, toEqual: true, timeout: 5) else {
+            XCTFail("Confirmation did not become ready after reveal completion")
+            return
+        }
+        XCTAssertEqual(xp.label, "XP: 0")
+        confirm.tap()
+        XCTAssertTrue(xp.wait(for: \.label, toEqual: "XP: 3", timeout: 5))
+        XCTAssertEqual(app.staticTexts["probe-confirmed"].label, "Confirmed phrases: 1")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(xp.waitForExistence(timeout: 15))
+        XCTAssertEqual(xp.label, "XP: 3")
+        XCTAssertEqual(app.staticTexts["probe-confirmed"].label, "Confirmed phrases: 1")
+        XCTAssertEqual(app.staticTexts["probe-paused"].label, "Paused")
+    }
+
     @MainActor func testLibraryDetailForegroundAndRelaunch() {
         let app = XCUIApplication()
         app.launch()
