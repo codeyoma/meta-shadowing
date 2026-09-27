@@ -37,10 +37,10 @@ export default function Lesson() {
     <View style={{ backgroundColor: c.featuredCard, padding: 18, borderRadius: 26, gap: 14, borderCurve: 'continuous' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Image source={require('../../../assets/illustrations/morning-notes.png')} accessible={false}
-          style={{ width: 52, height: 62, borderRadius: 12 }} contentFit="cover" />
-        <View style={{ flex: 1, gap: 3 }}>
-          <BookTags sentences={selectedBook.sentences} />
-          <Label size={11} weight="700" color={c.featuredSecondary}>{selectedBook.sentences}문장 · 챕터 {selectedBook.chapters ?? '—'}</Label>
+          style={{ width: 52, height: 62, borderRadius: 12, alignSelf: 'flex-start' }} contentFit="cover" />
+        <View style={{ flex: 1, gap: 3, alignSelf: 'flex-start' }}>
+          <BookTags sentences={selectedBook.sentences} size={11} />
+          <Label size={11} weight="700" color={c.featuredSecondary}>{selectedBook.sentences}문장</Label>
           <Label size={22} display color="#ffffff">{selectedBook.title}</Label>
         </View>
         <Label size={17} display color={c.accent}>{overview ? `${overview.percent}%` : '—'}</Label>

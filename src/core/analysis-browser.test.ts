@@ -43,6 +43,8 @@ test('sentence menu opens the selected POS detail and Back returns without selec
       const card = runtime.flush().find(n => n.props.testID === id)!;
       assert.equal(card.props.style.backgroundColor, scheme === 'light' ? '#ffffff' : palettes.dark.card);
       assert.equal(card.props.style.borderRadius, 16);
+      if (id === 'analysis.sentence-card') assert.equal(card.props.style.alignItems, 'center',
+        'Sentence text stays vertically centered beside the taller copy target');
       if (id === 'analysis.graph-card') assert.equal(card.props.style.marginBottom, 16,
         'The graph adds 16 points to the existing 16-point section gap');
     }
@@ -77,6 +79,9 @@ test('sentence menu opens the selected POS detail and Back returns without selec
   }
   const curves = () => runtime.flush().filter(n => n.type === 'Image' && n.props.source?.uri?.startsWith('data:image/svg+xml'));
   assert.equal(curves().length, 2, 'All non-root arrows are visible before selection');
+  const graphLabels = runtime.flush();
+  assert.ok(graphLabels.some(n => n.type === 'Text' && n.props.children === 'nsubj'), 'Graph shows lowercase dependency abbreviations');
+  assert.ok(graphLabels.some(n => n.type === 'Text' && n.props.children === 'p'));
   assert.ok(curves().every(n => n.props.style.opacity === 1));
   const endpoints = () => curves().map(n => {
     const path = decodeURIComponent(n.props.source.uri).match(/<path d="M ([\d.e+-]+) ([\d.e+-]+) Q ([\d.e+-]+) ([\d.e+-]+) ([\d.e+-]+) ([\d.e+-]+)"/)!;
@@ -90,9 +95,9 @@ test('sentence menu opens the selected POS detail and Back returns without selec
   assert.ok(ends.every(x => x > 90 && x < 168), 'Attachments remain inside the measured word control');
   runtime.find('단어 1: Fish, 명사').onPress();
   assert.equal(runtime.find('단어 1: Fish, 명사').accessibilityState.selected, true);
-  assert.ok(runtime.find('Fish → swim: 주어 (nsubj)'));
-  assert.equal(runtime.flush().find(n => n.props.testID === 'analysis.dictionary-spacing')!.props.style.paddingTop, 20,
-    'The dictionary adds 20 points to the existing 12-point relation gap');
+  assert.ok(runtime.find('Fish → swim: 주어 (nominal subject)'));
+  assert.equal(runtime.flush().find(n => n.props.testID === 'analysis.dictionary-spacing')!.props.style.paddingBottom, 20,
+    'The dictionary keeps 32 points before the relationship explanations');
   assert.equal(runtime.flush().find(n => n.type === 'Text' && n.props.children === 'Fish')!.props.style.color, palettes.dark.accent);
   assert.equal(runtime.flush().find(n => n.type === 'Text' && n.props.children === 'swim')!.props.style.color, palettes.dark.link);
   assert.equal(runtime.flush().some(n => String(n.props.children).includes(' · 연결 관계')), false);
@@ -110,8 +115,8 @@ test('sentence menu opens the selected POS detail and Back returns without selec
   assert.equal(runtime.flush().some(n => String(n.props.children).includes('자기 자신을 향한')), false);
   runtime.find('단어 2: swim, 동사').onPress();
   for (fontScale of [1, 1.5, 3]) {
-    assert.ok(curves().every(n => n.props.style.top >= 24 * fontScale),
-      `Curves reserve upper label clearance at font scale ${fontScale}`);
+    assert.ok(curves().every(n => n.props.style.top >= 40 * fontScale),
+      `Curves reserve two-line label clearance at font scale ${fontScale}`);
   }
   fontScale = 1;
   assert.equal(closes, 0);

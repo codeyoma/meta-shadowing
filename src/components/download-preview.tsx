@@ -5,6 +5,7 @@ import type { DeliveryStatus } from '../../modules/package-delivery';
 import { hostedDownloadPresentation } from '@/core/library-presentation';
 import { OwnedLibraryBookCard } from './owned-library-book-card';
 import { ActionButton, Label } from './ui';
+import { LibraryGrid, LibraryGridItem } from './library-grid';
 
 /** Isolated animation playground: never invokes delivery, storage or learning APIs. */
 export function DownloadPreview() {
@@ -46,7 +47,7 @@ export function DownloadPreview() {
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24, gap: 20 }}>
     <Stack.Screen options={{ title: '다운로드 미리보기 · 10초' }} />
     <Label size={14} muted>개발용 미리보기예요. 실제 다운로드나 학습 기록은 바뀌지 않아요.</Label>
-    <OwnedLibraryBookCard title="Morning Notes · Apple-hosted" sentences={12} chapters={null} completed={0}
+    <LibraryGrid><LibraryGridItem><OwnedLibraryBookCard title="Morning Notes · Apple-hosted" sentences={12} chapters={null} completed={0}
       installed={status.phase === 'ready'} editing={editing} busy={!!download} download={download}
       storage={{ bytes: status.phase === 'ready' ? 1024 : 0, installed: status.phase === 'ready', busy: !!download }}
       storageFailed={failed} onRetryStorage={() => setFailed(false)} onStudy={() => {}}
@@ -54,7 +55,7 @@ export function DownloadPreview() {
       onCancel={() => {
         stop(); setStatus({ phase: 'cancelling', progress: status.progress });
         finish.current = setTimeout(() => setStatus({ phase: 'cancelled', progress: 0 }), 600);
-      }} />
+      }} /></LibraryGridItem></LibraryGrid>
     <View style={{ gap: 10 }}>
       <ActionButton title="처음 상태로" secondary onPress={reset} />
       <ActionButton title={editing ? '편집 완료' : '편집 상태 보기'} secondary onPress={() => setEditing(!editing)} />

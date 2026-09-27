@@ -2,10 +2,18 @@ import CoreHaptics
 import UIKit
 
 /// A single short pattern at a time; never changes the lesson's audio session.
-@MainActor final class CycleHapticPlayer {
+@MainActor final class CycleHapticPlayer: NSObject {
   private var engine: CHHapticEngine?
   private var player: (any CHHapticPatternPlayer)?
   private var generation = UUID()
+
+  override init() {
+    super.init()
+    // Stop on native inactivity even when the JavaScript thread is busy.
+    // Selector observers are automatically removed when their target deallocates.
+    NotificationCenter.default.addObserver(self, selector: #selector(stop),
+      name: UIApplication.willResignActiveNotification, object: nil)
+  }
 
   func prepare() {
     guard UIApplication.shared.applicationState == .active,
@@ -37,24 +45,36 @@ import UIKit
         && pulse.intensity.isFinite && (0...1).contains(pulse.intensity)
         && pulse.sharpness.isFinite && (0...1).contains(pulse.sharpness)
     }), UIApplication.shared.applicationState == .active else { return }
-    prepare()
-    guard let engine else { return }
     do {
-      try? player?.stop(atTime: CHHapticTimeImmediate)
       let events = pulses.map { pulse in
         CHHapticEvent(eventType: .hapticTransient, parameters: [
           CHHapticEventParameter(parameterID: .hapticIntensity, value: pulse.intensity),
           CHHapticEventParameter(parameterID: .hapticSharpness, value: pulse.sharpness),
         ], relativeTime: pulse.time)
       }
-      let pattern = try CHHapticPattern(events: events, parameters: [])
+      schedule(try CHHapticPattern(events: events, parameters: []))
+    } catch { stop() }
+  }
+
+  // A separate fixed pattern keeps the short learning-pattern input limits intact.
+  func playLaunch() {
+    guard UIApplication.shared.applicationState == .active else { return }
+    do { schedule(try LaunchHapticPattern.make()) }
+    catch { stop() }
+  }
+
+  private func schedule(_ pattern: CHHapticPattern) {
+    prepare()
+    guard let engine else { return }
+    do {
+      try? player?.stop(atTime: CHHapticTimeImmediate)
       let next = try engine.makePlayer(with: pattern)
       player = next
       try next.start(atTime: CHHapticTimeImmediate)
     } catch { stop() }
   }
 
-  func stop() {
+  @objc func stop() {
     generation = UUID()
     try? player?.stop(atTime: CHHapticTimeImmediate)
     player = nil

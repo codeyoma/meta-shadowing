@@ -7,6 +7,9 @@ declare class LearningHapticsModule extends NativeModule {
   prepare(): Promise<void>;
   play(pulses: HapticPulse[]): Promise<void>;
   stop(): Promise<void>;
+  prepareLaunch(): Promise<void>;
+  playLaunch(): Promise<void>;
+  stopLaunch(): Promise<void>;
 }
 
 export default requireNativeModule<LearningHapticsModule>('LearningHaptics');

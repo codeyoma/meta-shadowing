@@ -29,15 +29,15 @@ export function DependencyArcs({ edges, boxes, selected, scale }: {
   const arcs = attached.sort((a, b) => Math.abs(a.edge.head - a.edge.dependent) - Math.abs(b.edge.head - b.edge.dependent))
     .map(({ edge, head, dependent }) => {
       const left = Math.min(head, dependent), right = Math.max(head, dependent);
-      const labelWidth = (edge.name.length * 13 + 12) * scale;
+      const labelWidth = (Math.max(edge.name.length * 13, edge.label.length * 8) + 12) * scale;
       const labelLeft = Math.max(0, (left + right - labelWidth) / 2);
       const occupied = { left: Math.min(left, labelLeft) - 8, right: Math.max(right, labelLeft + labelWidth) + 8 };
       let lane = lanes.findIndex(spans => spans.every(s => occupied.right < s.left || occupied.left > s.right));
       if (lane < 0) { lane = lanes.length; lanes.push([]); }
       lanes[lane]!.push(occupied);
-      return { edge, head, dependent, left, right, labelWidth, labelLeft, rise: (32 + lane * 38) * scale };
+      return { edge, head, dependent, left, right, labelWidth, labelLeft, rise: (32 + lane * 54) * scale };
     });
-  const height = (lanes.length ? 32 + (lanes.length - 1) * 38 : 0) * scale + 32 * scale + 16;
+  const height = (lanes.length ? 32 + (lanes.length - 1) * 54 : 0) * scale + 44 * scale + 16;
   return <View style={{ height }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
     {arcs.map(({ edge, head, dependent, left, right, labelWidth, labelLeft, rise }) => {
       const focused = selected === null || edge.head === selected || edge.dependent === selected;
@@ -52,9 +52,10 @@ export function DependencyArcs({ edges, boxes, selected, scale }: {
         <Image accessible={false} source={{ uri: `data:image/svg+xml,${encodeURIComponent(svg)}` }}
           contentFit="fill" cachePolicy="none" transition={0}
           style={{ position: 'absolute', left: left - 8, top, width, height: arcHeight, opacity }} />
-        <View style={{ position: 'absolute', left: labelLeft, top: top - 20 * scale,
+        <View style={{ position: 'absolute', left: labelLeft, top: top - 40 * scale,
           width: labelWidth, alignItems: 'center', opacity }}>
           <Label size={12} color={color}>{edge.name}</Label>
+          <Label size={12} color={color}>{edge.label.toLowerCase()}</Label>
         </View>
       </View>;
     })}

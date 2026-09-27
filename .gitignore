@@ -13,6 +13,7 @@ android/
 !modules/learning-dictionary/ios/
 tests/learning-dictionary/*.xcodeproj/
 tests/learning-fonts/*.xcodeproj/
+tests/learning-haptics/*.xcodeproj/
 tests/learning-audio/*.xcodeproj/
 tests/storekit/*.xcodeproj/
 tests/cloudkit/*.xcodeproj/

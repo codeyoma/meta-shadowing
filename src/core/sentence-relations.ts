@@ -38,6 +38,31 @@ const descriptions: Record<string, readonly [string, string]> = {
   P: ['문장 부호', '문장의 구조나 경계를 표시하는 부호입니다.'],
 };
 
+// English dependency names use the same source tag set as the Korean descriptions.
+const englishNames: Record<string, string> = {
+  ABBREV: 'abbreviation', ACOMP: 'adjectival complement', ADVCL: 'adverbial clause modifier',
+  ADVMOD: 'adverbial modifier', AMOD: 'adjectival modifier', APPOS: 'appositional modifier',
+  ATTR: 'attribute', AUX: 'auxiliary', AUXPASS: 'passive auxiliary',
+  CC: 'coordinating conjunction', CCOMP: 'clausal complement', CONJ: 'conjunct',
+  CSUBJ: 'clausal subject', CSUBJPASS: 'clausal passive subject', DEP: 'dependency',
+  DET: 'determiner', DISCOURSE: 'discourse element', DOBJ: 'direct object',
+  EXPL: 'expletive', GOESWITH: 'goes with', IOBJ: 'indirect object', MARK: 'marker',
+  MWE: 'multiword expression', MWV: 'multiword verbal expression', NEG: 'negation modifier',
+  NN: 'noun compound modifier', NPADVMOD: 'noun phrase adverbial modifier',
+  NSUBJ: 'nominal subject', NSUBJPASS: 'passive nominal subject', NUM: 'numeric modifier',
+  NUMBER: 'number phrase component', P: 'punctuation', PARATAXIS: 'parataxis',
+  PARTMOD: 'participial modifier', PCOMP: 'prepositional complement', POBJ: 'object of a preposition',
+  POSS: 'possession modifier', PRECONJ: 'preconjunct', PREDET: 'predeterminer',
+  PREP: 'prepositional modifier', PRT: 'particle', QUANTMOD: 'quantifier phrase modifier',
+  RCMOD: 'relative clause modifier', ROOT: 'root', TMOD: 'temporal modifier',
+  VMOD: 'verbal modifier', VOCATIVE: 'vocative', XCOMP: 'open clausal complement',
+};
+
+/** Unknown source labels stay identifiable rather than receiving an invented expansion. */
+export function englishRelationName(label: string): string {
+  return Object.hasOwn(englishNames, label) ? englishNames[label]! : label.toLowerCase();
+}
+
 /** Preserve source head/dependent identities; presentation draws dependent-to-head arrows. */
 export function relationsForToken(sentence: AnalysisSentence, selected: number | null) {
   const edges: WordRelation[] = [];

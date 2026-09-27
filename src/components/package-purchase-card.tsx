@@ -6,22 +6,25 @@ import { paidLibraryEntry } from '@/core/library-presentation';
 import { ActionButton, Card, Icon, Label, usePalette } from './ui';
 import { PaidLibraryBook } from './paid-library-book';
 import { paidDuoPackage, paidAccess } from '@/native/paid-package';
+import { LibraryGridItem } from './library-grid';
+import type { ReactNode } from 'react';
 
-export function PackagePurchaseCard({ section, editing = false }: { section: 'owned' | 'store'; editing?:boolean }) {
+export function PackagePurchaseCard({ section, editing = false, inGrid = false }: { section: 'owned' | 'store'; editing?:boolean; inGrid?:boolean }) {
   const c = usePalette();
   const snapshot = useSyncExternalStore(packagePurchases.subscribe, packagePurchases.getSnapshot);
   const bridgeError = useSyncExternalStore(packagePurchases.subscribe, packagePurchases.hasBridgeError);
   const view = purchasePresentation(snapshot);
   const access = useSyncExternalStore(paidAccess.subscribe, paidAccess.getSnapshot);
   const entry = paidLibraryEntry(snapshot,{configured:!!paidDuoPackage,authorized:access.allowed,installed:false});
-  if (section === 'owned' && editing && paidDuoPackage) return <PaidLibraryBook editing title={entry.title} />;
+  const wrap = (content: ReactNode) => inGrid && section === 'owned' ? <LibraryGridItem>{content}</LibraryGridItem> : content;
+  if (section === 'owned' && editing && paidDuoPackage) return wrap(<PaidLibraryBook editing title={entry.title} />);
   if (entry.section !== section) return null;
   if (section === 'store' && !view.showInStore) return null;
-  if (section === 'owned' && paidDuoPackage) return <PaidLibraryBook editing={editing} title={entry.title} />;
+  if (section === 'owned' && paidDuoPackage) return wrap(<PaidLibraryBook editing={editing} title={entry.title} />);
   const issue = snapshot.entitlementIssue !== 'none' || snapshot.outcome === 'unverified';
   const failed = snapshot.catalogIssue === 'failed' || snapshot.outcome === 'failed' || bridgeError;
   const unavailable = !packagePurchases.available || snapshot.catalogIssue === 'unavailable';
-  return <View style={{ gap: 14 }}>
+  return wrap(<View style={{ gap: 14 }}>
     {section === 'store' && <Label size={23} weight="800" color={c.heading}>상점</Label>}
     <Card>
     <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
@@ -53,5 +56,5 @@ export function PackagePurchaseCard({ section, editing = false }: { section: 'ow
     {(failed || unavailable || issue || snapshot.ownership === 'unknown') && packagePurchases.available &&
       <ActionButton title="다시 확인" secondary disabled={snapshot.busy} onPress={() => { void packagePurchases.refresh(); }} />}
     </Card>
-  </View>;
+  </View>);
 }

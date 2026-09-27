@@ -15,10 +15,31 @@ derivative extends the yellow-orange background to the square edges, with no
 white margin or alpha. iOS supplies its own corner mask; Expo generates the
 1024-point icon rendition during prebuild. App Store submission remains separate.
 
-The native launch screen uses the original `logo.png`, centered and contained at
-320 points wide on white, including in dark appearance. It remains visible until
-fonts finish loading (or fail, allowing the system-font fallback). No artificial
-loading delay is added.
+`talking-pup-512.webp` is the owner's 512 × 512 transparent animated artwork,
+supplied on 2026-09-27 and preserved byte-for-byte. The native launch screen uses
+its first frame, centered at 160 points on white in both appearances (two thirds
+of the original 240-point display size). The animated launch uses the same size.
+`talking-pup-still.png` is a lossless PNG conversion of that frame for Expo's
+static iOS splash generator, which does not decode WebP in this project.
+
+After the artwork renders, the in-app launch screen plays its 17-frame, 2.4-second
+animation once using the native WebP decoder. The app opens once the animation
+finishes and fonts load (or fail, allowing the system-font fallback). Slow font
+loading keeps the stopped artwork visible without replaying it. Reduce Motion
+uses the still image without the animation delay. A failed image load or missing
+image callback cannot block entry to the ready app. Returning from the background
+does not replay the animation. The installed icon and navigation mascot are unchanged.
+
+`launch-wordmark.png` is the owner's transparent 1536 × 1024 wordmark attachment
+supplied on 2026-09-27, copied unchanged. Both the static native launch screen and
+the animated launch screen display it uncropped at 220 points wide, horizontally
+centered, with its image box 58 points above the screen bottom, clear of the home
+indicator. Both use the screen edge because Expo's retained native splash view
+can temporarily have zero safe-area insets. The puppy remains centered; its
+2.4-second playback and haptic timing are unchanged by the size reduction. The native splash stays
+visible until both in-app images render; an image failure or missing callback
+cannot block entry to the app. `plugins/with-launch-wordmark.js` recreates the
+native footer during prebuild and must precede `expo-splash-screen` in app config.
 
 ## Icon editing prompt
 

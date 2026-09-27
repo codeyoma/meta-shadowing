@@ -5,6 +5,55 @@ const { tmpdir } = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+test('prebuild adds the wordmark at the same screen-relative bottom offset as the animated launch', async t => {
+  const { getPrebuildConfigAsync } = require('@expo/prebuild-config');
+  const { compileModsAsync } = require('@expo/config-plugins');
+  const root = mkdtempSync(path.join(tmpdir(), 'ios-launch-wordmark-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const { exp } = await getPrebuildConfigAsync(process.cwd(), { platforms: ['ios'] });
+  const compiled = await compileModsAsync(exp, { projectRoot: root, platforms: ['ios'], introspect: true });
+  const storyboard = compiled._internal.modResults.ios.splashScreenStoryboard;
+  const view = storyboard.document.scenes[0].scene[0].objects[0].viewController[0].view[0];
+  const images = view.subviews[0].imageView;
+  assert.equal(images.filter(image => image.$.image === 'LaunchWordmark').length, 1);
+  const puppy = images.find(image => image.$.image === 'SplashScreenLogo');
+  assert.ok(puppy);
+  assert.equal(Number(puppy.rect[0].$.width), 160, 'The native still and animated puppy must share the smaller display size');
+  assert.equal(Number(puppy.rect[0].$.height), 160);
+  const puppyResource = storyboard.document.resources[0].image.find(image => image.$.name === 'SplashScreenLogo');
+  assert.equal(Number(puppyResource.$.width), 160, 'The native image intrinsic size must not jump at handoff');
+  assert.equal(Number(puppyResource.$.height), 160);
+  const constraints = view.constraints[0].constraint.map(constraint => constraint.$);
+  for (const attribute of ['centerX', 'centerY']) {
+    assert.ok(constraints.some(c => c.firstItem === puppy.$.id && c.firstAttribute === attribute && c.secondItem === view.$.id));
+  }
+  const footer = images.find(image => image.$.image === 'LaunchWordmark');
+  const footerConstraints = constraints.filter(c => c.firstItem === footer.$.id);
+  assert.equal(footer.$.contentMode, 'scaleAspectFit');
+  assert.ok(footerConstraints.some(c => c.firstAttribute === 'width' && Number(c.constant) === 220));
+  assert.ok(footerConstraints.some(c => c.firstAttribute === 'height' && Number(c.constant) === 220 * 2 / 3));
+  assert.ok(footerConstraints.some(c => c.firstAttribute === 'centerX' && c.secondItem === view.$.id));
+  assert.ok(footerConstraints.some(c => c.firstAttribute === 'bottom' && c.secondItem === view.$.id && Number(c.constant) === -58),
+    'Expo temporarily hosts the storyboard without a view controller safe area; use the same screen-relative coordinate as React Native');
+  const before = JSON.stringify(storyboard);
+  const plugin = require('../plugins/with-launch-wordmark')({});
+  const reapplied = await plugin.mods.ios.splashScreenStoryboard({ modResults: storyboard, modRequest: {} });
+  assert.equal(JSON.stringify(reapplied.modResults), before, 'Repeated prebuilds must not duplicate the footer or its constraints');
+});
+
+test('launch wordmark asset generation preserves the supplied PNG bytes and is repeatable', async t => {
+  const root = mkdtempSync(path.join(tmpdir(), 'ios-launch-wordmark-asset-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const plugin = require('../plugins/with-launch-wordmark')({});
+  for (let i = 0; i < 2; i++) {
+    await plugin.mods.ios.dangerous({ modRequest: { projectRoot: process.cwd(), platformProjectRoot: root, projectName: 'app' } });
+  }
+  const directory = path.join(root, 'app/Images.xcassets/LaunchWordmark.imageset');
+  const contents = JSON.parse(readFileSync(path.join(directory, 'Contents.json'), 'utf8'));
+  assert.equal(contents.images.length, 1);
+  assert.deepEqual(readFileSync(path.join(directory, contents.images[0].filename)), readFileSync('assets/brand/launch-wordmark.png'));
+});
+
 test('prebuild permits user-enabled voice monitoring to continue with the screen locked', async t => {
   const { getPrebuildConfigAsync } = require('@expo/prebuild-config');
   const { compileModsAsync } = require('@expo/config-plugins');

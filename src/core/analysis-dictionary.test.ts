@@ -47,7 +47,13 @@ test('analysis opens a separate dictionary on demand and preserves selection on 
   runtime.find('단어 1: Birds, 명사').onPress();
   assert.ok(runtime.find('사전 보기: Birds'));
   assert.equal(requests.length, 0, 'Selecting a word does not automatically open a drawer');
-  assert.ok(runtime.find('Birds → fly: 주어 (nsubj)'));
+  assert.ok(runtime.find('Birds → fly: 주어 (nominal subject)'));
+  const selectedContent = runtime.flush();
+  const graphIndex = selectedContent.findIndex(n => n.props.accessibilityLabel === '문장 관계 그래프');
+  const dictionaryIndex = selectedContent.findIndex(n => n.props.accessibilityLabel === '사전 보기: Birds');
+  const explanationIndex = selectedContent.findIndex(n => n.props.accessibilityLabel === 'Birds → fly: 주어 (nominal subject)');
+  assert.ok(graphIndex < dictionaryIndex && dictionaryIndex < explanationIndex,
+    'Dictionary lookup follows the graph before relationship explanations, including accessibility reading order');
   await runtime.find('문장 복사').onPress();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(copied, 'Birds fly.', 'Copy includes the full target sentence, not the selected token');
@@ -69,7 +75,7 @@ test('analysis opens a separate dictionary on demand and preserves selection on 
   assert.equal(first.term, 'Birds');
   first.resolve(); await opening; await new Promise(resolve => setImmediate(resolve));
   assert.equal(runtime.find('단어 1: Birds, 명사').accessibilityState.selected, true);
-  assert.ok(runtime.find('Birds → fly: 주어 (nsubj)'));
+  assert.ok(runtime.find('Birds → fly: 주어 (nominal subject)'));
   const stale = runtime.find('사전 보기: Birds').onPress();
   runtime.find('단어 2: fly, 동사').onPress();
   runtime.flush();
@@ -82,7 +88,7 @@ test('analysis opens a separate dictionary on demand and preserves selection on 
   requests[2]!.resolve(); await secondOpen; await new Promise(resolve => setImmediate(resolve));
   assert.equal(runtime.find('단어 2: fly, 동사').accessibilityState.selected, true,
     'Closing only the dictionary preserves the selected word');
-  assert.ok(runtime.find('Birds → fly: 주어 (nsubj)'));
+  assert.ok(runtime.find('Birds → fly: 주어 (nominal subject)'));
   assert.equal(errors.length, 1, 'Stale dictionary failures never alert');
   const failed = runtime.find('사전 보기: fly').onPress();
   requests[3]!.reject(Error('unavailable')); await failed; await new Promise(resolve => setImmediate(resolve));

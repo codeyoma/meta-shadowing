@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ScrollView } from 'react-native';
+import { ActivityIndicator, ScrollView } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { playableStage, isPlayableStage } from '@/core/catalog';
 import { canOpenStage } from '@/core/stage-overview';
@@ -13,7 +13,7 @@ import { testStageAccess } from '@/native/stage-access';
 import { mayUsePackage } from '@/native/paid-package';
 import { readInstalledSyntax } from '@/native/sentence-analysis';
 import { useProgressProfile } from './progress-profile';
-import { usePackageLearningAccess } from './use-package-learning-access';
+import { useVerifiedPackageLearningAccess } from './use-package-learning-access';
 import { AnalysisBrowser } from './analysis-browser';
 import { Label } from './ui';
 import { useSettingsColors } from './settings-row';
@@ -22,11 +22,12 @@ export function PlayerAnalysis() {
   const c = useSettingsColors();
   const params = useLocalSearchParams<{ stage: string; package: string; phrase: string; run: string; profile: string; authority: string }>();
   const stage = playableStage(params.stage), pack = selectedPackage(params.package), profile = useProgressProfile();
-  const access = usePackageLearningAccess(pack);
+  const access = useVerifiedPackageLearningAccess(pack);
   const identity = JSON.stringify([params, profile.id, profile.authority]);
   const [result, setResult] = useState<{ key: string; sentences: AnalysisSentence[] | null } | null>(null);
-  const valid = !!stage && !!pack && access && profile.available && params.profile === profile.id
+  const validEntry = !!stage && !!pack && profile.available && params.profile === profile.id
     && Number(params.authority) === profile.authority;
+  const valid = validEntry && access.allowed;
   useEffect(() => {
     let active = true;
     setResult(null);
@@ -58,10 +59,14 @@ export function PlayerAnalysis() {
     return () => { active = false; unsubscribe(); };
   }, [valid, pack, stage, params.phrase, params.run, profile.id, profile.authority, identity]);
   const content = valid && result?.key === identity ? result : null;
+  const loading = validEntry && (access.checking || (access.allowed && !content));
   if (content?.sentences) return <AnalysisBrowser key={identity} sentences={content.sentences} onClose={() => router.back()} />;
   return <>
-    <ScrollView style={{ backgroundColor: c.sheet }} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24 }}>
-      <Label muted>{valid && !content ? '문장 분석을 읽는 중이에요.' : '문장 분석을 사용할 수 없어요. 패키지의 분석 파일과 학습 접근 상태를 확인해 주세요.'}</Label>
+    <ScrollView style={{ backgroundColor: c.sheet }} contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{ padding: 24, flexGrow: 1, justifyContent: 'center' }}>
+      {loading
+        ? <ActivityIndicator size="large" color={c.secondary} accessibilityLabel="문장 분석 로딩 중" accessibilityState={{ busy: true }} />
+        : <Label muted align="center">이 학습에서는 문장 분석을 지원하지 않아요.</Label>}
     </ScrollView>
     <Stack.Screen options={{ title: '문장 분석', sheetAllowedDetents: [1],
       headerStyle: { backgroundColor: c.sheet }, contentStyle: { backgroundColor: c.sheet } }} />

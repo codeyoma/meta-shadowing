@@ -36,11 +36,12 @@
         }
       ],
       "expo-font",
+      "./plugins/with-launch-wordmark.js",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/brand/logo.png",
-          "imageWidth": 320,
+          "image": "./assets/brand/talking-pup-still.png",
+          "imageWidth": 160,
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF"
         }

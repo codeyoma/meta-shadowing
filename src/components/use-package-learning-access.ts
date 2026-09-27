@@ -21,6 +21,11 @@ export function usePackageLearningStatus(pack: LearningPackage | null) {
 
 /** Direct information/options routes still verify before exposing source text. */
 export function usePackageLearningAccess(pack: LearningPackage | null) {
+  return useVerifiedPackageLearningAccess(pack).allowed;
+}
+
+/** Keep pending verification distinct from a completed access denial. */
+export function useVerifiedPackageLearningAccess(pack: LearningPackage | null) {
   const [result, setResult] = useState<{ pack: LearningPackage | null; ready: boolean | null; checking: boolean }>(
     { pack, ready: null, checking: true });
   useFocusEffect(useCallback(() => {
@@ -50,5 +55,5 @@ export function usePackageLearningAccess(pack: LearningPackage | null) {
   const current = result.pack === pack;
   const ready = current ? result.ready : null;
   const checking = !current || result.checking;
-  return !!pack && ready === true && !checking && mayUsePackage(pack);
+  return { checking, allowed: !!pack && ready === true && !checking && mayUsePackage(pack) };
 }
