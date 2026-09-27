@@ -9,7 +9,7 @@ export function PaidLibraryBook({editing,title}:{editing:boolean;title:string}) 
   const access=useSyncExternalStore(paidAccess.subscribe,paidAccess.getSnapshot);
   const book=books.find(isPaidDuo);
   if(!book) return null;
-  return <View style={{gap:12}}>
+  return <View style={{flex:1,gap:12}}>
     <HostedLibraryBook book={book} editing={editing} title={title} accessBlocked={!access.allowed} />
     {!access.allowed && <><Label muted>구매 확인이 필요해요. 자료와 학습 기록은 유지돼요.</Label>
       <ActionButton title="구매 다시 확인" secondary onPress={() => {void paidAccess.refresh();}} /></>}

@@ -519,7 +519,7 @@ test('a study button keeps its color but cannot be pressed during quiet revalida
     f.mount(() => Card(props));
     const action = f.nodes().find(n => n.props.title === '학습하기')!;
     const drawn = (action.type as Function)(action.props);
-    assert.equal(drawn.props.style.backgroundColor, palettes.light.accent);
+    assert.equal(nodes(drawn).find(n => n.props.style?.backgroundColor)!.props.style.backgroundColor, palettes.light.accent);
     assert.equal(nodes(drawn).find(n => n.type === 'Pressable')!.props.disabled, true);
   } finally { f.close(); }
 });

@@ -68,13 +68,13 @@ export function HeaderButton({ title, icon, onPress, feedback = true }: { title:
   </Pressable>;
 }
 
-export function Badge({ children, icon, tone = 'neutral' }: PropsWithChildren<{ icon?: SFSymbol; tone?: 'neutral' | 'green' | 'blue' }>) {
+export function Badge({ children, icon, tone = 'neutral', size = 13 }: PropsWithChildren<{ icon?: SFSymbol; tone?: 'neutral' | 'green' | 'blue'; size?: number }>) {
   const c = usePalette();
   return <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 2.5, borderRadius: 10,
     backgroundColor: tone === 'green' ? c.selection : tone === 'blue' ? c.blueSoft : c.soft }}>
     {icon && <Icon name={icon} size={14} />}
-    <Label size={13} color={c.heading} weight="700">{children}</Label>
+    <Label size={size} color={c.heading} weight="700">{children}</Label>
   </View>;
 }
 

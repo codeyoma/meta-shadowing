@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { relationsForToken } from './sentence-relations';
+import { relationsForToken, englishRelationName } from './sentence-relations';
 import type { AnalysisSentence } from './sentence-analysis';
 
 const sentence: AnalysisSentence = { id: '1:0', sourceIndex: 0, text: 'Birds watch birds.', tokens: [
@@ -9,6 +9,15 @@ const sentence: AnalysisSentence = { id: '1:0', sourceIndex: 0, text: 'Birds wat
   { text: 'birds', offset: 12, pos: 'NOUN', head: 1, relation: 'DOBJ' },
   { text: '.', offset: 17, pos: 'PUNCT', head: 1, relation: 'P' },
 ] };
+
+test('detail expands source abbreviations without inventing names for unknown relations', () => {
+  for (const [label, name] of [
+    ['AUX', 'auxiliary'], ['ACOMP', 'adjectival complement'], ['NEG', 'negation modifier'],
+    ['NSUBJ', 'nominal subject'], ['DOBJ', 'direct object'], ['PREP', 'prepositional modifier'],
+    ['POBJ', 'object of a preposition'], ['P', 'punctuation'], ['ROOT', 'root'],
+    ['FUTURE_LABEL', 'future_label'], ['constructor', 'constructor'],
+  ]) assert.equal(englishRelationName(label!), name);
+});
 
 test('selecting a repeated word retains token identity and only its direct head-to-dependent relation', () => {
   const result = relationsForToken(sentence, 2);

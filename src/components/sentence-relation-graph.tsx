@@ -3,7 +3,7 @@ import { AppState, ScrollView, Text, View, useWindowDimensions } from 'react-nat
 import { FeedbackPressable as Pressable } from './feedback-pressable';
 import { Label, usePalette } from './ui';
 import { partOfSpeechName, type AnalysisSentence } from '@/core/sentence-analysis';
-import { relationsForToken } from '@/core/sentence-relations';
+import { englishRelationName, relationsForToken } from '@/core/sentence-relations';
 import { DependencyArcs } from './dependency-arcs';
 import { AnalysisDictionaryButton } from './analysis-dictionary-button';
 import { useSettingsColors } from './settings-row';
@@ -25,7 +25,7 @@ export function SentenceRelationGraph({ sentence, active = true }: { sentence: A
   const relations = relationsForToken(sentence, selected);
   const allRelations = relationsForToken(sentence, null);
   return <View style={{ gap: 16 }}>
-    <View testID="analysis.sentence-card" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    <View testID="analysis.sentence-card" style={{ flexDirection: 'row', alignItems: 'center', gap: 8,
       padding: 16, borderRadius: 16, borderCurve: 'continuous', backgroundColor: settings.group }}>
       <View style={{ flex: 1 }}><Label size={24}>{sentence.text}</Label></View>
       <SentenceCopyButton text={sentence.text} active={active} />
@@ -63,18 +63,18 @@ export function SentenceRelationGraph({ sentence, active = true }: { sentence: A
     </GraphScroll>
     </View>
     {selected === null ? <Label muted>단어를 선택하면 연결 관계를 볼 수 있어요.</Label> : <View style={{ gap: 12 }}>
+      <View testID="analysis.dictionary-spacing" style={{ paddingBottom: 20 }}>
+        <AnalysisDictionaryButton key={selected} term={sentence.tokens[selected]!.text} />
+      </View>
       {relations.root && <Label>문장의 중심어 (root)입니다.</Label>}
       {!relations.root && relations.edges.length === 0 && <Label muted>표시할 직접 연결 관계가 없어요.</Label>}
       {relations.edges.map(edge => {
-        const title = `${sentence.tokens[edge.dependent]!.text} → ${sentence.tokens[edge.head]!.text}: ${edge.name} (${edge.label.toLowerCase()})`;
+        const title = `${sentence.tokens[edge.dependent]!.text} → ${sentence.tokens[edge.head]!.text}: ${edge.name} (${englishRelationName(edge.label)})`;
         return <View key={edge.dependent} accessible accessibilityLabel={title} accessibilityHint={edge.explanation}
           style={{ padding: 16, borderRadius: 16, borderCurve: 'continuous', backgroundColor: c.card, gap: 8 }}>
           <Label weight="700">{title}</Label><Label muted>{edge.explanation}</Label>
         </View>;
       })}
-      <View testID="analysis.dictionary-spacing" style={{ paddingTop: 20 }}>
-        <AnalysisDictionaryButton key={selected} term={sentence.tokens[selected]!.text} />
-      </View>
     </View>}
   </View>;
 }

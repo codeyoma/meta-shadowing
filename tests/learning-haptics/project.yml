@@ -1,0 +1,24 @@
+name: LearningHapticsTests
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  LearningHapticsTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: '15.0'
+    sources:
+      - Tests
+      - path: ../../modules/learning-haptics/ios
+        excludes: ['LearningHapticsModule.swift', 'CycleHapticPlayer.swift', '*.podspec']
+    dependencies:
+      - sdk: CoreHaptics.framework
+schemes:
+  LearningHapticsTests:
+    build:
+      targets:
+        LearningHapticsTests: [test]
+    test:
+      targets: [LearningHapticsTests]
