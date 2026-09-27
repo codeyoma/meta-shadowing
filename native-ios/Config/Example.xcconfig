@@ -1,0 +1,3 @@
+// Copy to Local.xcconfig and use the existing app identity from local config.
+// Do not register a new app or commit account/signing identifiers.
+NATIVE_APP_BUNDLE_IDENTIFIER =

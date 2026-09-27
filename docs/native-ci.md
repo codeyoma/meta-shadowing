@@ -1,5 +1,18 @@
 # Native pull-request checks
 
+## Standalone Swift migration lane
+
+`native-ios/` now provides the #93 standalone Swift foundation. Its local Swift
+package tests, XcodeGen builds, iOS 27 UI tests and product inspection are documented
+in [the native guide](../native-ios/README.md). The deployment minimum remains
+iOS 26.0. Use an isolated simulator; do not replace the reference installation.
+
+This lane does not replace any hosted check below. The Expo reference workflow,
+runtime pins and branch protections remain unchanged. Local Swift verification
+is not hosted CI evidence; integrating a required Swift CI check is later work.
+
+## Expo reference lane
+
 The iPhone-first branch replaces web deployment and Supabase CI with native
 validation. `.github/workflows/ci.yml` runs on PRs into `dev`/`main` and pushes
 to those branches. PR checkout uses GitHub's merge candidate, not only the head.

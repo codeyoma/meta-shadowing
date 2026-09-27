@@ -1,0 +1,57 @@
+name: MetaShadowingNative
+options:
+  deploymentTarget:
+    iOS: '26.0'
+configFiles:
+  Debug: Config/Local.xcconfig
+  Release: Config/Local.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: '26.0'
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+    TARGETED_DEVICE_FAMILY: '1'
+packages:
+  LearningDomain:
+    path: Packages/LearningDomain
+  AppFoundation:
+    path: Packages/AppFoundation
+targets:
+  MetaShadowingNative:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: LearningDomain
+      - package: AppFoundation
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER)
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        INFOPLIST_KEY_CFBundleDisplayName: 쉐도잉 Native
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+  NativeFoundationUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests/AppUITests]
+    dependencies:
+      - target: MetaShadowingNative
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).uitests
+schemes:
+  MetaShadowingNative:
+    build:
+      targets:
+        MetaShadowingNative: all
+        NativeFoundationUITests: [test]
+    test:
+      targets: [NativeFoundationUITests]
