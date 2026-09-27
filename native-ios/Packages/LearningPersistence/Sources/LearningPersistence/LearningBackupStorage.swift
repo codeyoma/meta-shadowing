@@ -68,7 +68,7 @@ extension SQLiteLearningStore {
     public func acknowledgeBackup(profileID: String, revision: Int64) throws {
         let db = try connection(profileID)
         try db.transaction {
-            guard revision >= 0, try revision <= self.revision(db) else { throw LearningStoreError.revisionExhausted }
+            guard revision >= 0, revision <= (try self.revision(db)) else { throw LearningStoreError.revisionExhausted }
             try db.execute("UPDATE metadata SET acknowledged=MAX(acknowledged,?) WHERE id=1", [.integer(revision)])
         }
     }

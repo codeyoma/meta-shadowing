@@ -4,9 +4,9 @@ Describe the implemented change and its remaining scope.
 
 ## Issue
 
-For fully verified issue completion, replace this paragraph with a standalone
-`Closes #<issue-number>` line for each issue. For partial work, use `Refs #<issue-number>`.
-Feature PRs target `dev`; completed issues close only after verified merge, not PR creation.
+Link related issues with `Refs #<issue-number>` and state any remaining scope.
+Feature PRs target `dev`. Close completed issues manually after verifying acceptance
+and merge; PR creation does not close them.
 
 ## Verification
 

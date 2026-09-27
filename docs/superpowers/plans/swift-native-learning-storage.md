@@ -10,7 +10,7 @@
 
 **Published scope:** `docs/native-rebuild.md`, current `docs/learning-contract.md`, and GitHub issue #94 under #91. The owner-reviewed local migration design and roadmap informed this child plan; they are not included in this change.
 
-Status: Owner-approved sequential implementation completed locally on 2026-09-28. Tasks 1–8 and the independent final review passed; sanitized verification evidence is in `docs/swift-native/learning-storage-contract.md`. #93's foundation and Swift-only CI landed in PR #100. The separately approved dev-merge issue-closure workflow is implemented and locally tested; it activates only after merge. The owner authorized commit, push and a feature PR into `dev` after acceptance. Merge and release remain separate actions.
+Status: Owner-approved sequential implementation completed locally on 2026-09-28 (Asia/Seoul, UTC+09:00). Tasks 1–8 and the independent final review passed; sanitized verification evidence is in `docs/swift-native/learning-storage-contract.md`. #93's foundation and Swift-only CI landed in PR #100. The owner subsequently requested removal of custom issue-closing automation; related issues are referenced and closed manually after acceptance and merge are verified. The owner authorized commit, push and a feature PR into `dev` after acceptance. Merge and release remain separate actions.
 
 ## Global Constraints
 
@@ -181,7 +181,7 @@ func revoke(profileID: String) async
 - [x] Generate with `xcodegen generate --spec native-ios/project-ci.yml`; run existing documented Debug UI tests and Debug/Release builds with `CODE_SIGNING_ALLOWED=NO` on iOS 27. Run `native-ios/scripts/verify-native-product.sh` on both products. Confirm SQLite links natively and no Expo/React Native/JavaScript runtime is embedded.
 - [x] Conduct independent whole-branch review using `superpowers:requesting-code-review`, focusing on the five failure modes above and public actor boundaries. Fix actionable findings and rerun affected tests. Do not delegate implementation; review is the previously approved exception.
 - [x] Update only sanitized evidence with actual commands, outcomes and remaining W4/W5/W7 boundaries. `git diff --check` must pass. Inspect the exact changes for private identities, user paths, account data, generated projects and unrelated dirty files. No performance or full-rewrite completion claim.
-- [ ] At a later authorized PR publication, target `dev`, include `Closes #94` only after the ticket's acceptance criteria pass, and attach the PR to the task. PR creation is not issue completion; the separately reviewed workflow will close it on verified merge into `dev`. Do not merge or close unrelated prerequisite issues automatically.
+- [x] Publish the authorized feature PR into `dev`, reference #94 and attach the PR to the task. PR #101 is open; PR creation is not issue completion. Issue closure is manual after acceptance and merge are verified. Do not merge or close unrelated prerequisite issues automatically.
 
 ## Self-review and owner handoff
 

@@ -131,7 +131,7 @@ phrase, observes 3 XP, relaunches and verifies unchanged progress while paused.
 The probe is not compiled into Release. Existing navigation, foreground, Dynamic
 Type and load-retry tests remain in the suite.
 
-### Local acceptance result — 2026-09-28
+### Local acceptance result — 2026-09-28 (Asia/Seoul, UTC+09:00)
 
 Verified on Xcode 27 / Swift 6.4, using a dedicated iOS 27 Simulator and the
 fictional CI identity. These are local results, not claims about hosted CI:
@@ -145,13 +145,13 @@ fictional CI identity. These are local results, not claims about hosted CI:
   Debug links system SQLite. Release contains no storage-probe identifiers and
   opens the normal sample shell even when given the Debug-only launch argument.
 - Workflow lint, fictional-identity clean-checkout configuration checks and all
-  13 branch-policy/issue-closure regression tests passed.
+  3 branch-policy regression tests passed. Custom issue-closing automation and
+  its tests were subsequently removed at the owner's request.
 
 Final review fixes include buffering playback-end during a position commit,
 post-commit cycle continuation without retry autoplay, durable selection clearing,
-aggregate backup expansion limits, validated scope/reward decoding, and conservative
-handling of code/HTML/quoted examples in the separate issue-closure workflow.
-An independent whole-change reviewer rechecked all seven corrections and reported
+aggregate backup expansion limits and validated scope/reward decoding.
+An independent whole-change reviewer rechecked the corrections and reported
 no remaining Critical, Important or actionable Minor findings in the W3 scope.
 
 Media execution, finished UI, haptics, Apple services, account boundaries, physical

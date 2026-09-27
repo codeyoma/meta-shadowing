@@ -74,32 +74,9 @@ Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains
 future work. Performance benchmarks are not an acceptance requirement.
 
-## Closing completed issues after dev merge
+## Issue references
 
-Feature PRs use one standalone `Closes #<number>` line per fully verified issue.
-Use `Refs #<number>` for partial work. PR creation does not close issues. GitHub's
-normal closing keywords target the default branch, while this repository integrates
-features into `dev`; a separate `close-merged-issues.yml` workflow handles that case.
-
-The workflow runs trusted code only on pushes to `dev`. It enumerates the complete
-pushed commit range and associated PR pages, then checks merged status, merge SHA,
-internal repository identity, `codex/*` source and `dev` destination. Only explicit
-same-repository closure lines qualify. Code/quoted examples, foreign issues and
-issue numbers that actually identify PRs are ignored. Already closed issues make
-reruns idempotent. Incomplete comparisons fail without closing issues.
-Automatic closure accepts at most 200 compared commits per push. A larger range
-fails after the first comparison response, before further pagination, per-commit
-PR lookups or issue writes; verify those merges and close completed issues manually.
-This cap limits per-commit API fan-out, not the shared token's remaining quota;
-normal GitHub rate limits and the job timeout still apply.
-The parser deliberately supports only a conservative Markdown subset. A line
-combining backticks with HTML, comment or blockquote markers disables automatic
-closure for the entire PR body; close the issues manually after verifying such a
-merge. Ambiguous examples must never be interpreted as completion instructions.
-
-Only this separate job receives `issues: write`; checkout credentials are not
-persisted, PR text is never executed, and no privileged `pull_request_target`
-workflow is used. Runs are not canceled by a later push. Node regression tests use
-mock GitHub responses and do not change remote issues. The workflow becomes active
-only after it is merged into `dev`; local tests are not evidence of remote closure.
-No ruleset, default branch, release approval or merge permission is changed.
+Feature PRs link related tickets with `Refs #<number>`. Close completed issues
+manually after verifying acceptance and merge. There is no custom dev-push
+issue-closing workflow, commit scan or issue-write permission in Swift CI.
+PR creation alone does not complete an issue.
