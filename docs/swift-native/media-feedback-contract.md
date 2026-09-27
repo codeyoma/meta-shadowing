@@ -89,12 +89,48 @@ own recovery UI. No image generation, conversion, download or WebView is involve
 
 ## Verification and remaining acceptance
 
-Focused local tests have exercised real grouped audio/video, pause/seek,
+Local verification on 2026-09-28 exercised real grouped audio/video, pause/seek,
 cancelled preparation, missing/corrupt media, final-frame retention, duplicate
 native end events, observer removal, SQLite/no-credit invariants, feedback retry,
 17-frame decoding and generated-media UI relaunch on iOS 27. Package-only tests
-are not evidence that iOS adapters ran. Final matrix and independent review
-results are recorded after all corrections.
+are not evidence that iOS adapters ran.
+
+Final automated results: LearningDomain 53, LearningPersistence 24,
+AppFoundation 26 and LearningMedia 39 tests passed (142 total). The iOS 27 scheme
+ran 26 tests: eight XCUITests and 18 actual native integration tests, with zero
+failures or skips. Debug and Release builds and product guards passed. The
+local TypeScript oracle matched; actionlint, three branch-policy tests and the
+clean-checkout configuration guard passed. PNG build processing is disabled so
+all three bundled launch assets remain byte-identical to their supplied sources.
+This is local evidence, not a hosted GitHub Actions result.
+
+### Standards review
+
+Four Important findings were corrected: pending microphone activation at menu
+entry, missing visible media recovery, opening/teardown races, and remote-resource
+release on completion. A deterministic deferred-fixture test reproduced the
+reappearance race before its fix. The final independent recheck found zero
+Critical, Important or actionable Minor findings.
+
+### Spec review
+
+Three Important findings were corrected: menu-entry microphone activation,
+visible media recovery, and lost exact position through explicit pause. The
+final independent recheck found no remaining actionable findings or scope creep.
+The overlap with Standards is intentional; the axes remain separate.
+
+### Issue acceptance mapping
+
+| #95 item | Evidence | State |
+| --- | --- | --- |
+| Audio queues and bounded/grouped video | Native queue/video fixture tests, exact boundaries, rates, seek and retained frame | Implemented and tested |
+| Reviewed Swift services without Expo wrappers | Adapted native services and Debug/Release dependency guards | Implemented and tested |
+| Lifecycle, routes, monitoring and headsets | Policy tests, native notifications, activation cancellation and teardown tests | Automated checks pass; hardware pending |
+| Launch/cycle feedback and animation | Commit/retry tests, literal pulse schedules, 17-frame native decoding and launch UI tests | Automated checks pass; tactile alignment pending |
+| Play/pause/reentry/group/failure/background | Native fixtures plus audio/video/silent XCUITests | Passed |
+| Retired callbacks and resource cleanup | Transport generations, deferred seeks, menu activation, opening/teardown and remote-completion regressions | Passed |
+| No credit from media events | Real SQLite coordinator and UI tests | Passed |
+| Native fixtures and separate hardware report | 26 native/UI tests; pending device checklist below | Fixtures passed; device observations not claimed |
 
 Physical acceptance remains **pending**: wired output and microphone routing,
 voice-only gain, permission dialogs, single/double headset dispatch, unplugging,

@@ -13,8 +13,10 @@ import LearningMedia
     var position = MediaPosition(seconds: 0, duration: 1)
     var gate: CheckedContinuation<Void, Never>?
     var suspendPreparation = false
+    var failPreparation = false
     func prepare(_ request: PreparedMediaRequest) async throws {
         guard !disposed else { throw MediaFailure.cancelled }
+        if failPreparation { throw MediaFailure.unavailable }
         self.request = request
         position = MediaPosition(seconds: request.positionSeconds, duration: 1)
         if suspendPreparation { await withCheckedContinuation { gate = $0 } }
@@ -42,7 +44,7 @@ import LearningMedia
     let driver: PlatformTransportFixture
     let coordinator: LearningMediaCoordinator
 
-    init(stage: Int = 1) async throws {
+    init(stage: Int = 1, clock: MediaClock = .live) async throws {
         root = URL.temporaryDirectory.appending(path: UUID().uuidString)
         let scope = try mediaScope(stage: stage)
         plan = try LearningPlan.make(scope: scope, runID: "media-run", sources: [
@@ -55,7 +57,7 @@ import LearningMedia
             sources: [.audio(file: root.appending(path: "one.wav")), .audio(file: root.appending(path: "two.wav"))])
         let driver = driver
         coordinator = LearningMediaCoordinator(controller: controller, initial: await controller.state, catalog: catalog,
-            authorize: { _ in true }, makeTransport: { _ in driver })
+            authorize: { _ in true }, makeTransport: { _ in driver }, clock: clock)
     }
 
     func close() async {
@@ -65,6 +67,29 @@ import LearningMedia
 }
 
 @MainActor struct LearningMediaCoordinatorTests {
+    @Test func explicitPauseFlushesUncheckpointedPosition() async throws {
+        let f = try await MediaCoordinatorFixture()
+        _ = await f.coordinator.perform(.resume)
+        try await eventually { f.driver.playing }
+        f.driver.position = .init(seconds: 0.42, duration: 1)
+        let paused = await f.coordinator.perform(.pause)
+        #expect(paused.controller.paused)
+        #expect(paused.controller.snapshot.session.positionSeconds == 0.42)
+        await f.close()
+    }
+    @Test func visibleMediaRetryDoesNotEnableHeadsetRecovery() async throws {
+        let f = try await MediaCoordinatorFixture()
+        f.driver.failPreparation = true
+        _ = await f.coordinator.perform(.resume)
+        try await eventually { f.coordinator.state.error != nil && !f.coordinator.state.busy }
+        #expect(f.coordinator.remoteState.mainAction == nil)
+        f.driver.failPreparation = false
+        _ = await f.coordinator.retryMedia()
+        try await eventually { f.driver.playing }
+        #expect(f.coordinator.state.error == nil)
+        #expect(f.coordinator.state.controller.snapshot.progress.xp == 0)
+        await f.close()
+    }
     @Test func memberBoundaryBypassesCheckpointThrottle() async throws {
         let f = try await MediaCoordinatorFixture()
         _ = await f.coordinator.perform(.resume)
@@ -173,18 +198,21 @@ import LearningMedia
     }
 
     @Test func oldSeekCannotPublishIntoNewPlan() async throws {
-        let f = try await MediaCoordinatorFixture()
+        let f = try await MediaCoordinatorFixture(stage: 7)
         f.driver.suspendPreparation = true
         _ = await f.coordinator.perform(.resume)
         try await eventually { f.driver.gate != nil }
         let oldCallback = f.driver.onEvent, token = try #require(f.driver.request?.token)
-        f.coordinator.suspend(.inactivity)
+        _ = await f.coordinator.perform(.pause)
+        let replacement = await f.coordinator.perform(.regroup(size: 3, newPlanID: "replacement-plan"))
         f.driver.gate?.resume()
+        f.driver.suspendPreparation = false
         try await eventually { f.coordinator.state.controller.paused }
         oldCallback?(.init(token: token, kind: .ended(.init(seconds: 1, duration: 1))))
         #expect(!f.driver.playing)
-        #expect(f.coordinator.state.controller.snapshot.session.phase == .listening)
+        #expect(f.coordinator.state.controller.snapshot == replacement.controller.snapshot)
         #expect(f.coordinator.state.controller.snapshot.progress.xp == 0)
+        #expect(f.coordinator.state.controller.snapshot.session.plan.runID == "replacement-plan")
         await f.close()
     }
 

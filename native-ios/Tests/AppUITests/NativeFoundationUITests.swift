@@ -33,6 +33,7 @@ final class NativeFoundationUITests: XCTestCase {
         app.launch()
         let sample = app.buttons["lesson-native-sample"]
         XCTAssertTrue(sample.waitForExistence(timeout: 15))
+        XCTAssertTrue(sample.wait(for: \.isHittable, toEqual: true, timeout: 10))
         sample.tap()
         XCTAssertTrue(app.staticTexts["sentence-hello"].waitForExistence(timeout: 5))
         XCUIDevice.shared.press(.home)
@@ -51,7 +52,7 @@ final class NativeFoundationUITests: XCTestCase {
         app.launch()
         let sample = app.buttons["lesson-native-sample"]
         XCTAssertTrue(sample.waitForExistence(timeout: 15))
-        XCTAssertTrue(sample.isHittable)
+        XCTAssertTrue(sample.wait(for: \.isHittable, toEqual: true, timeout: 10))
         sample.tap()
         let first = app.staticTexts["sentence-hello"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
@@ -67,6 +68,7 @@ final class NativeFoundationUITests: XCTestCase {
         app.launch()
         let retry = app.buttons["bootstrap-retry"]
         XCTAssertTrue(retry.waitForExistence(timeout: 15))
+        XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10))
         retry.tap()
         XCTAssertTrue(app.buttons["lesson-native-sample"].waitForExistence(timeout: 15))
     }

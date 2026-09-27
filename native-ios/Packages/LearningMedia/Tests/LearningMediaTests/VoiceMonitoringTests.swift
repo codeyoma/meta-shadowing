@@ -15,16 +15,35 @@ import LearningMedia
     var capturedGain: Float = 0
     var permissionResponse: CheckedContinuation<Bool, Never>?
     var deferPermission = false
+    var deferActivation = false
+    var activation: CheckedContinuation<Void, Never>?
+    private var generation = 0
     func requestPermission() async -> Bool {
         if deferPermission { return await withCheckedContinuation { permissionResponse = $0 } }
         return permission == .granted
     }
-    func start(gain: Float) throws { running = true; capturedGain = gain }
-    func stop() { running = false }
+    func start(gain: Float) async throws {
+        let current = generation
+        if deferActivation { await withCheckedContinuation { activation = $0 } }
+        guard current == generation else { throw MediaFailure.cancelled }
+        running = true; capturedGain = gain
+    }
+    func stop() { generation += 1; running = false }
     func setGain(_ gain: Float) { capturedGain = gain }
 }
 
 @MainActor struct VoiceMonitoringTests {
+    @Test func menuOpeningCancelsPendingHardwareActivation() async throws {
+        let hardware = MonitorHardwareFixture(); hardware.deferActivation = true
+        let monitor = VoiceMonitoring(hardware: hardware)
+        let operation = Task { await monitor.setEnabled(true) }
+        try await eventually { hardware.activation != nil }
+        monitor.update(.init(menuOpen: true))
+        hardware.activation?.resume()
+        await operation.value
+        #expect(!hardware.running && monitor.state == .off)
+        monitor.close()
+    }
     @Test(arguments: [MonitorOutput.speaker, .bluetooth, .airplay, .usb, .receiver, .other])
     func unsupportedRouteNeverStartsCapture(_ output: MonitorOutput) async {
         let hardware = MonitorHardwareFixture(); hardware.outputs = [output]

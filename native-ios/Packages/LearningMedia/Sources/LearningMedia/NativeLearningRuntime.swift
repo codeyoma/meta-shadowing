@@ -8,6 +8,7 @@ import UIKit
 @MainActor @Observable public final class NativeLearningRuntime {
     public private(set) var state: LearningMediaState
     public private(set) var monitorState: VoiceMonitoring.State = .off
+    public private(set) var monitorGain: Float = 0.25
     public private(set) var feedbackCount = 0
     public let coordinator: LearningMediaCoordinator
     public let monitoring: VoiceMonitoring
@@ -38,14 +39,17 @@ import UIKit
             case .repeatChoice: self.haptics.play(.repeatChoice)
             }
         }
-        monitoring.onChange = { [weak self] in guard let self else { return }; self.monitorState = self.monitoring.state }
+        monitoring.onChange = { [weak self] in
+            guard let self else { return }
+            self.monitorState = self.monitoring.state; self.monitorGain = self.monitoring.gain
+        }
         graph.onInvalidation = { [weak self] in self?.monitoring.interrupted() }
         remote.onPress = { [weak self] event in Task { @MainActor in
             guard let self, !self.closed else { return }; _ = await self.coordinator.receiveRemote(event)
         } }
         lifecycle = LessonLifecycleObserver { [weak self] in self?.handle($0) }
         Task { @MainActor [weak self] in
-            guard let self, !self.closed else { return }
+            guard let self, !self.closed, !self.context.complete else { return }
             try? await self.remote.begin(self.coordinator.remoteState.owner)
             if !self.closed { self.refreshRemote() }
         }
@@ -69,6 +73,7 @@ import UIKit
     private func applyContext() {
         guard !closed else { return }
         coordinator.setContext(context); monitoring.update(context); refreshRemote()
+        if context.complete { remote.close() }
         if !context.actionable { haptics.stop() }
     }
     private func refreshRemote() {

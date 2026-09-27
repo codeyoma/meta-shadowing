@@ -4,6 +4,19 @@ import LearningDomain
 import LearningMedia
 
 @MainActor struct SilentRevealClockTests {
+    @Test func explicitPauseAndSpeedChangePreserveHalfWord() async throws {
+        var now = 0.0
+        let clock = MediaClock(now: { now }, sleep: { try await Task.sleep(for: .seconds($0)) })
+        let f = try await MediaCoordinatorFixture(stage: 11, clock: clock)
+        _ = await f.coordinator.perform(.resume)
+        now = 0.2
+        let paused = await f.coordinator.perform(.pause)
+        #expect(abs(paused.controller.snapshot.session.positionSeconds - 0.2) < 0.0001)
+        let changed = await f.coordinator.perform(.changeRevealSpeed(level: 2, presets: [150, 300, 450, 600]))
+        #expect(abs(changed.controller.snapshot.session.positionSeconds - 0.1) < 0.0001)
+        #expect(f.driver.request == nil)
+        await f.close()
+    }
     @Test func partialWordTimingSurvivesPause() throws {
         var now = 10.0
         let clock = SilentRevealClock(clock: MediaClock(now: { now }, sleep: { try await Task.sleep(for: .seconds($0)) }))

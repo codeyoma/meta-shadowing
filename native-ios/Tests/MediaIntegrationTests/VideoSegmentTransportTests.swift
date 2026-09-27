@@ -34,6 +34,15 @@ struct VideoSegmentTransportTests {
         #expect(abs(try #require(layer.player).currentTime().seconds - 7.5) < 0.04)
         #expect(layer.player?.currentItem != nil)
         #expect(output.copyPixelBuffer(forItemTime: CMTime(seconds: 7.49, preferredTimescale: 60_000), itemTimeForDisplay: nil) != nil)
+        let final = PreparedMediaRequest(token: MediaFixtureFactory.token(), sources: sources, positionSeconds: 3.5, rate: 1)
+        try await video.prepare(final); try video.play(token: final.token)
+        #expect(ends.count == 2 && layer.player?.rate == 0)
+        let replay = PreparedMediaRequest(token: MediaFixtureFactory.token(), sources: sources, positionSeconds: 0.2, rate: 0.5)
+        try await video.prepare(replay)
+        #expect(layer.player?.rate == 0)
+        try video.play(token: replay.token)
+        #expect(layer.player?.rate == 0.5)
+        #expect((video.pause()?.seconds ?? 0) >= 0.19)
     }
 
     @Test func pauseDuringMemberSeekCannotRestart() async throws {
@@ -112,6 +121,10 @@ struct VideoSegmentTransportTests {
         let request = PreparedMediaRequest(token: MediaFixtureFactory.token(), sources: [.video(file: file, start: 0, end: 1)], positionSeconds: 0, rate: 1)
         await #expect(throws: MediaFailure.invalidAsset) { try await video.prepare(request) }
         #expect(throws: MediaFailure.cancelled) { try video.play(token: request.token) }
+        let audioOnly = try MediaFixtureFactory.tone(in: root)
+        await #expect(throws: MediaFailure.invalidAsset) {
+            try await video.prepare(.init(token: MediaFixtureFactory.token(), sources: [.video(file: audioOnly, start: 0, end: 0.2)], positionSeconds: 0, rate: 1))
+        }
         let corrupt = root.appending(path: "corrupt.mp4")
         try Data([1, 2, 3]).write(to: corrupt)
         await #expect(throws: MediaFailure.unavailable) {

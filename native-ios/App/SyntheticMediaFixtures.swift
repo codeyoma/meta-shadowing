@@ -50,7 +50,11 @@ enum SyntheticMediaFixtures {
             }
         }
         guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else { throw MediaFailure.unavailable }
-        try await export.export(to: destination, as: .mov)
+        let candidate = root.appending(path: "media-probe-export-\(UUID()).mov")
+        defer { try? FileManager.default.removeItem(at: candidate) }
+        try await export.export(to: candidate, as: .mov)
+        try Task.checkCancellation()
+        try FileManager.default.moveItem(at: candidate, to: destination)
         return [.video(file: destination, start: 0, end: 0.75), .video(file: destination, start: 2, end: 2.75)]
     }
     nonisolated private static func tone(_ url: URL, duration: Double, compressed: Bool) throws -> URL {

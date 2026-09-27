@@ -46,6 +46,7 @@ public enum MicrophonePermission: Sendable { case undetermined, denied, granted 
             if state != .monitoring {
                 // The initial permission sheet is the only retryable inactivity cancellation.
                 if state == .requesting && hardware.permission == .undetermined && !context.menuOpen { permissionRetry = true }
+                hardware.stop()
                 version += 1; state = .off
             }
             return

@@ -63,6 +63,13 @@ public struct LearningMediaState: Sendable {
         return await perform(action)
     }
     public func perform(_ event: LearningEvent) async -> LearningMediaState {
+        if event == .pause, !closed, !closing {
+            suspend(.userPause)
+            if busy { await withCheckedContinuation { idleWaiters.append($0) } }
+            scheduleDrain()
+            if let drainTask { await drainTask.value }
+            return state
+        }
         guard !closed, !closing, !busy, drainTask == nil, pendingPause == nil, context.actionable, !committed.saveFailed else { return state }
         busy = true; error = nil
         switch event {
@@ -84,6 +91,11 @@ public struct LearningMediaState: Sendable {
         becameIdle(); scheduleDrain(); publish()
         if let drainTask { await drainTask.value }
         return state
+    }
+    /// Only an explicit visible recovery action may retry a media error.
+    public func retryMedia() async -> LearningMediaState {
+        guard error != nil, !committed.saveFailed else { return state }
+        return await perform(.resume)
     }
     public func setContext(_ context: LessonInteractionContext) {
         self.context = context
