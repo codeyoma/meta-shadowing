@@ -10,12 +10,13 @@ import { nativeOptionsStack } from '../test-support/native-options-stack';
 
 test('sentence menu opens the selected POS detail and Back returns without selecting another learning unit', t => {
   const runtime = nativeHooks(); t.after(runtime.dispose);
-  let closes = 0, haptics = 0, fontScale = 1, reduced = false;
+  let closes = 0, haptics = 0, fontScale = 1, reduced = false, scheme = 'dark';
   const load = nativeModules({ react: runtime.hooks, 'react-native-reanimated': { ...nativeMotion, useReducedMotion: () => reduced },
     'expo-router/native-stack': nativeOptionsStack(runtime.hooks),
-    'expo-router/react-navigation': { useIsFocused: () => true },
-    'react-native': { ScrollView: 'ScrollView', View: 'View', Text: 'Text', Pressable: 'Pressable',
-      AppState: { currentState: 'active' }, useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale }) },
+    'expo-router/react-navigation': { useIsFocused: () => true, useHeaderHeight: () => 56 },
+    'react-native': { ScrollView: 'ScrollView', View: 'View', Text: 'Text', Pressable: 'Pressable', PlatformColor: (name: string) => name,
+      AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) }, useColorScheme: () => scheme, useWindowDimensions: () => ({ fontScale }) },
+    'expo-clipboard': { setStringAsync: async () => true },
     'expo-image': { Image: 'Image' }, 'expo-haptics': { ImpactFeedbackStyle: { Light: 'light' },
       impactAsync: async () => { haptics++; } }, 'expo-font': { isLoaded: () => false },
     expo: { requireOptionalNativeModule: () => null, requireNativeModule: () => ({ isEnabled: () => true }) },
@@ -25,13 +26,27 @@ test('sentence menu opens the selected POS detail and Back returns without selec
   const { AnalysisBrowser } = load('components/analysis-browser.tsx');
   const sentences = readSentenceAnalysis(JSON.stringify(syntaxFixture()), syntaxPhrases, 'en', [0]);
   runtime.render(React.createElement(AnalysisBrowser, { sentences, onClose: () => closes++ }));
+  assert.equal(runtime.flush().find(n => n.type === 'Screen')!.props.options.title, '문장 분석');
   assert.equal(runtime.flush().some(n => n.props.children === '분석할 문장을 선택하세요.'), false);
   const stack = () => runtime.flush().find(n => n.type === 'NativeOptionsStack')!.props;
+  scheme = 'light';
+  assert.equal(stack().screenOptions.contentStyle.backgroundColor, '#f2f3f5');
+  scheme = 'dark';
+  assert.equal(stack().screenOptions.contentStyle.backgroundColor, palettes.dark.background);
   assert.equal(stack().screenOptions.animation, 'default');
   assert.equal(stack().screenOptions.headerShown, false, 'Only the outer sheet header is displayed');
   runtime.find('문장 2 분석: Fish swim.').onPress();
   assert.equal(haptics, 1, 'Sentence selection follows normal enabled-button feedback');
   assert.equal(stack().navigation.getState().index, 1, 'Selecting a sentence pushes a native detail screen');
+  for (scheme of ['light', 'dark']) {
+    for (const id of ['analysis.sentence-card', 'analysis.graph-card']) {
+      const card = runtime.flush().find(n => n.props.testID === id)!;
+      assert.equal(card.props.style.backgroundColor, scheme === 'light' ? '#ffffff' : palettes.dark.card);
+      assert.equal(card.props.style.borderRadius, 16);
+      if (id === 'analysis.graph-card') assert.equal(card.props.style.marginBottom, 16,
+        'The graph adds 16 points to the existing 16-point section gap');
+    }
+  }
   const nodes = runtime.flush();
   assert.ok(nodes.some(n => n.props.children === 'Fish swim.'));
   assert.ok(nodes.some(n => n.props.children === '명사'));
@@ -76,6 +91,8 @@ test('sentence menu opens the selected POS detail and Back returns without selec
   runtime.find('단어 1: Fish, 명사').onPress();
   assert.equal(runtime.find('단어 1: Fish, 명사').accessibilityState.selected, true);
   assert.ok(runtime.find('Fish → swim: 주어 (nsubj)'));
+  assert.equal(runtime.flush().find(n => n.props.testID === 'analysis.dictionary-spacing')!.props.style.paddingTop, 20,
+    'The dictionary adds 20 points to the existing 12-point relation gap');
   assert.equal(runtime.flush().find(n => n.type === 'Text' && n.props.children === 'Fish')!.props.style.color, palettes.dark.accent);
   assert.equal(runtime.flush().find(n => n.type === 'Text' && n.props.children === 'swim')!.props.style.color, palettes.dark.link);
   assert.equal(runtime.flush().some(n => String(n.props.children).includes(' · 연결 관계')), false);

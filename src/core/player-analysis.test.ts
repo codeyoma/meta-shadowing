@@ -20,7 +20,7 @@ test('analysis route fails closed on invalid entry, missing data, stale sessions
       return db.prepare(sql).get(...args) as T;
     }, all: <T>(sql: string, ...args: (string | number)[]) => db.prepare(sql).all(...args) as T[],
   }), () => 'profile');
-  const sync = new ProgressSync(profiles, { stop: async () => {} } as ProgressCloud);
+  const sync = new ProgressSync(profiles, { stop: async () => {}, account: async () => ({ status: 'no-account' }) } as ProgressCloud);
   t.after(() => { storageFailed = false; runtime.dispose(); sync.dispose(); db.close(); });
   const pack = { language: 'english', packageKey: 'syntax-test-v1', manifest: {
     id: 'syntax-test', version: 1, title: 'Test', phrases: syntaxPhrases.map(p => ({ ...p,
@@ -31,10 +31,18 @@ test('analysis route fails closed on invalid entry, missing data, stale sessions
   let params = { kind: 'analysis', stage: '11', package: pack.packageKey, phrase: '0', run: checkpoint.runId,
     profile: sync.getSnapshot().profile, authority: String(sync.getSnapshot().authority) };
   let payload: string | null = JSON.stringify(syntaxFixture()), permitted = true, closes = 0;
+  const requests: { id: string; term: string; resolve(): void }[] = [];
+  const dismissed: string[] = [];
   const load = nativeModules({ react: runtime.hooks, 'react-native-reanimated': nativeMotion,
+    '@/../modules/learning-dictionary': { dictionary: {
+      words: (term: string) => [{ start: 0, end: term.length }],
+      present: (id: string, term: string) => new Promise<void>(resolve => requests.push({ id, term, resolve })),
+      dismiss: async (id: string) => { dismissed.push(id); },
+    } },
     'expo-router/native-stack': nativeOptionsStack(runtime.hooks),
-    'expo-router/react-navigation': { useIsFocused: () => true },
-    'react-native': { ScrollView: 'ScrollView', View: 'View', Text: 'Text', Pressable: 'Pressable',
+    'expo-router/react-navigation': { useIsFocused: () => true, useHeaderHeight: () => 56 },
+    'expo-clipboard': { setStringAsync: async () => true },
+    'react-native': { ScrollView: 'ScrollView', View: 'View', Text: 'Text', Pressable: 'Pressable', PlatformColor: (name: string) => name,
       AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
       useColorScheme: () => 'dark', useWindowDimensions: () => ({ fontScale: 1 }) },
     'expo-image': { Image: 'Image' }, 'expo-haptics': {}, 'expo-font': { isLoaded: () => false },
@@ -60,13 +68,18 @@ test('analysis route fails closed on invalid entry, missing data, stale sessions
     assert.ok(runtime.flush().some(n => typeof n.props.children === 'string'
       && n.props.children.startsWith('문장 분석을 사용할 수 없어요.')));
     assert.ok(!runtime.flush().some(n => n.props.accessibilityLabel?.startsWith('문장 1 분석:')));
+    assert.ok(!runtime.flush().some(n => n.props.accessibilityLabel?.startsWith('사전 보기:')));
     runtime.find('분석 닫기').onPress();
   };
   await open();
   runtime.find('문장 2 분석: Fish swim.').onPress();
   runtime.find('단어 1: Fish, 명사').onPress();
+  runtime.find('사전 보기: Fish').onPress();
+  assert.equal(requests.at(-1)!.term, 'Fish');
   assert.ok(runtime.find('Fish → swim: 주어 (nsubj)'));
   runtime.find('문장 목록으로 돌아가기').onPress();
+  assert.ok(!runtime.flush().some(n => n.props.accessibilityLabel?.startsWith('사전 보기:')));
+  assert.ok(dismissed.includes(requests.at(-1)!.id));
   runtime.find('문장 1 분석: Birds fly.').onPress();
   runtime.find('단어 2: fly, 동사').onPress();
   assert.deepEqual(journal.load(pack.packageKey, 11, 1), checkpoint);
@@ -76,10 +89,27 @@ test('analysis route fails closed on invalid entry, missing data, stale sessions
   payload = '{'; await open(); unavailable();
   payload = JSON.stringify(syntaxFixture()); permitted = false; await open(); unavailable();
   permitted = true; await open(); runtime.find('문장 1 분석: Birds fly.');
+  runtime.find('문장 1 분석: Birds fly.').onPress();
+  runtime.find('단어 1: Birds, 명사').onPress();
+  runtime.find('사전 보기: Birds').onPress();
+  assert.equal(requests.at(-1)!.term, 'Birds');
   journal.save(pack.packageKey, { ...checkpoint, runId: 'replacement' }, { language: 'english', book: pack.manifest.id });
   sync.changed(); unavailable();
+  assert.ok(dismissed.includes(requests.at(-1)!.id));
   params = { ...params, run: 'replacement' }; await open(); runtime.find('문장 1 분석: Birds fly.');
   storageFailed = true;
   assert.doesNotThrow(() => sync.changed()); unavailable();
   assert.equal(closes, 6);
+  storageFailed = false; await open();
+  runtime.find('문장 1 분석: Birds fly.').onPress();
+  runtime.find('단어 1: Birds, 명사').onPress();
+  runtime.find('사전 보기: Birds').onPress();
+  const staleClose = requests.at(-1)!.resolve;
+  await sync.accountChanged();
+  unavailable();
+  assert.ok(dismissed.includes(requests.at(-1)!.id));
+  staleClose();
+  assert.ok(!runtime.flush().some(n => n.props.accessibilityLabel?.startsWith('사전 보기:')));
+  assert.equal(journal.progress.summary('english').xp, 0);
+  assert.deepEqual(journal.load(pack.packageKey, 11, 1), { ...checkpoint, runId: 'replacement' });
 });

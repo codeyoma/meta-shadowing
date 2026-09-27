@@ -16,8 +16,10 @@ import { useProgressProfile } from './progress-profile';
 import { usePackageLearningAccess } from './use-package-learning-access';
 import { AnalysisBrowser } from './analysis-browser';
 import { Label } from './ui';
+import { useSettingsColors } from './settings-row';
 
 export function PlayerAnalysis() {
+  const c = useSettingsColors();
   const params = useLocalSearchParams<{ stage: string; package: string; phrase: string; run: string; profile: string; authority: string }>();
   const stage = playableStage(params.stage), pack = selectedPackage(params.package), profile = useProgressProfile();
   const access = usePackageLearningAccess(pack);
@@ -58,10 +60,11 @@ export function PlayerAnalysis() {
   const content = valid && result?.key === identity ? result : null;
   if (content?.sentences) return <AnalysisBrowser key={identity} sentences={content.sentences} onClose={() => router.back()} />;
   return <>
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24 }}>
+    <ScrollView style={{ backgroundColor: c.sheet }} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 24 }}>
       <Label muted>{valid && !content ? '문장 분석을 읽는 중이에요.' : '문장 분석을 사용할 수 없어요. 패키지의 분석 파일과 학습 접근 상태를 확인해 주세요.'}</Label>
     </ScrollView>
-    <Stack.Screen options={{ title: '문장 분석', sheetAllowedDetents: [1] }} />
+    <Stack.Screen options={{ title: '문장 분석', sheetAllowedDetents: [1],
+      headerStyle: { backgroundColor: c.sheet }, contentStyle: { backgroundColor: c.sheet } }} />
     <Stack.Toolbar placement="right"><Stack.Toolbar.Button icon="xmark" accessibilityLabel="분석 닫기" onPress={() => router.back()} /></Stack.Toolbar>
   </>;
 }

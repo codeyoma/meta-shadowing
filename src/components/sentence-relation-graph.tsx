@@ -1,20 +1,37 @@
-import { useState, type ReactNode } from 'react';
-import { ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { AppState, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { FeedbackPressable as Pressable } from './feedback-pressable';
 import { Label, usePalette } from './ui';
 import { partOfSpeechName, type AnalysisSentence } from '@/core/sentence-analysis';
 import { relationsForToken } from '@/core/sentence-relations';
 import { DependencyArcs } from './dependency-arcs';
+import { AnalysisDictionaryButton } from './analysis-dictionary-button';
+import { useSettingsColors } from './settings-row';
+import { SentenceCopyButton } from './sentence-copy-button';
 
 /** Only reference UI state lives here; no player, checkpoint or reward capabilities. */
-export function SentenceRelationGraph({ sentence }: { sentence: AnalysisSentence }) {
-  const c = usePalette(), { fontScale } = useWindowDimensions();
-  const [selected, setSelected] = useState<number | null>(null);
+export function SentenceRelationGraph({ sentence, active = true }: { sentence: AnalysisSentence; active?: boolean }) {
+  const c = usePalette(), settings = useSettingsColors(), { fontScale } = useWindowDimensions();
+  const [selection, setSelection] = useState<number | null>(null);
+  const selected = active ? selection : null;
+  useEffect(() => { if (!active) setSelection(null); }, [active]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') setSelection(null);
+    });
+    return () => subscription.remove();
+  }, []);
   const [boxes, setBoxes] = useState<Record<number, { x: number; width: number }>>({});
   const relations = relationsForToken(sentence, selected);
   const allRelations = relationsForToken(sentence, null);
   return <View style={{ gap: 16 }}>
-    <Label size={24}>{sentence.text}</Label>
+    <View testID="analysis.sentence-card" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+      padding: 16, borderRadius: 16, borderCurve: 'continuous', backgroundColor: settings.group }}>
+      <View style={{ flex: 1 }}><Label size={24}>{sentence.text}</Label></View>
+      <SentenceCopyButton text={sentence.text} active={active} />
+    </View>
+    <View testID="analysis.graph-card" style={{ padding: 16, borderRadius: 16, borderCurve: 'continuous',
+      backgroundColor: settings.group, gap: 8, marginBottom: 16 }}>
     <Label size={14} muted>화살표는 역할을 하는 단어에서 연결된 중심어를 향해요.</Label>
     <GraphScroll fontScale={fontScale}>
       <View style={{ direction: 'ltr' }}>
@@ -25,7 +42,7 @@ export function SentenceRelationGraph({ sentence }: { sentence: AnalysisSentence
             return <Pressable key={index} accessibilityRole="button"
               accessibilityLabel={`단어 ${index + 1}: ${token.text}, ${partOfSpeechName(token.pos)}`}
               accessibilityHint={connected && !active ? '선택한 단어와 직접 연결됨. 이 단어의 관계 보기' : '이 단어의 관계 보기'}
-              accessibilityState={{ selected: active }} onPress={() => setSelected(active ? null : index)}
+              accessibilityState={{ selected: active }} onPress={() => setSelection(active ? null : index)}
               onLayout={({ nativeEvent: { layout: { x, width } } }) => setBoxes(previous => {
                 return previous[index]?.x === x && previous[index]?.width === width ? previous
                   : { ...previous, [index]: { x, width } };
@@ -44,6 +61,7 @@ export function SentenceRelationGraph({ sentence }: { sentence: AnalysisSentence
         </View>
       </View>
     </GraphScroll>
+    </View>
     {selected === null ? <Label muted>단어를 선택하면 연결 관계를 볼 수 있어요.</Label> : <View style={{ gap: 12 }}>
       {relations.root && <Label>문장의 중심어 (root)입니다.</Label>}
       {!relations.root && relations.edges.length === 0 && <Label muted>표시할 직접 연결 관계가 없어요.</Label>}
@@ -54,6 +72,9 @@ export function SentenceRelationGraph({ sentence }: { sentence: AnalysisSentence
           <Label weight="700">{title}</Label><Label muted>{edge.explanation}</Label>
         </View>;
       })}
+      <View testID="analysis.dictionary-spacing" style={{ paddingTop: 20 }}>
+        <AnalysisDictionaryButton key={selected} term={sentence.tokens[selected]!.text} />
+      </View>
     </View>}
   </View>;
 }
@@ -75,7 +96,7 @@ function GraphScroll({ children, fontScale }: { children: ReactNode; fontScale: 
       {children}
     </ScrollView>
     {overflow && <View pointerEvents="none" accessible={false} accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants" style={{ height: 4, borderRadius: 2, backgroundColor: c.card }}>
+      importantForAccessibility="no-hide-descendants" style={{ height: 4, borderRadius: 2, backgroundColor: c.line }}>
       <View testID="sentence-graph-scroll-thumb" style={{ width: thumbWidth, height: 4, borderRadius: 2,
         backgroundColor: c.secondary, transform: [{ translateX: position }] }} />
     </View>}
