@@ -6,6 +6,34 @@ import Testing
 @testable import LearningPersistence
 
 @Suite struct SQLiteConnectionTests {
+    @Test func closedConnectionRejectsDatabaseOperations() throws {
+        let db = try SQLiteConnection(path: ":memory:")
+        try db.close()
+
+        #expect(throws: LearningStoreError.sqlite(SQLITE_MISUSE)) { try db.script("SELECT 1") }
+        #expect(throws: LearningStoreError.sqlite(SQLITE_MISUSE)) { try db.query("SELECT 1") }
+        #expect(throws: LearningStoreError.sqlite(SQLITE_MISUSE)) { try db.execute("SELECT 1") }
+        var enteredTransaction = false
+        #expect(throws: LearningStoreError.sqlite(SQLITE_MISUSE)) {
+            try db.transaction { enteredTransaction = true }
+        }
+        #expect(!enteredTransaction)
+    }
+
+    @Test func repeatedClosePreservesCommittedData() throws {
+        let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let path = root.appending(path: "close.sqlite").path
+        let db = try SQLiteConnection(path: path)
+        try db.script("CREATE TABLE fixture(value INTEGER); INSERT INTO fixture VALUES(42)")
+        try db.close()
+        try db.close()
+
+        let reopened = try SQLiteConnection(path: path)
+        #expect(try reopened.query("SELECT value FROM fixture").first?["value"]?.integer == 42)
+        #expect(try reopened.query("PRAGMA busy_timeout").first?["timeout"]?.integer == 250)
+        try reopened.close()
+    }
+
     @Test func memoryConnectionRollsBackAndChecksParameters() throws {
         let db = try SQLiteConnection(path: ":memory:")
         try LearningSchema.prepare(db, profileID: "guest")

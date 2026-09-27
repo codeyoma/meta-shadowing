@@ -121,8 +121,9 @@ legacy/modern backups. Fixture generation uses fixed public data and dates.
 
 Real SQLite tests exercise reopen, profile isolation, lost replies, stale writers,
 read-only/busy/corrupt/future stores, every write boundary, import rollback and
-acknowledgement. Controller tests cover committed publication, retry without
-autoplay, deactivation and old/live transport callbacks.
+acknowledgement. Connection lifecycle tests cover rejection after close, repeated
+close and committed data after reopening. Controller tests cover committed
+publication, retry without autoplay, deactivation and old/live transport callbacks.
 
 On the dedicated iOS 27 Simulator, Debug `--ui-test-learning-storage` opens the
 probe. `--ui-test-probe-id <UUID>` selects an isolated test namespace, not an
@@ -136,7 +137,7 @@ Type and load-retry tests remain in the suite.
 Verified on Xcode 27 / Swift 6.4, using a dedicated iOS 27 Simulator and the
 fictional CI identity. These are local results, not claims about hosted CI:
 
-- LearningDomain: 53 tests passed; LearningPersistence: 18 passed;
+- LearningDomain: 53 tests passed; LearningPersistence: 20 passed;
   AppFoundation: 20 passed. No failures or skips.
 - Independent TypeScript oracle: fixture `--check` passed.
 - XCUITest: all 4 tests passed, including confirmation/relaunch persistence.

@@ -20,7 +20,11 @@ final class SQLiteConnection {
             throw LearningStoreError.sqlite(result)
         }
         sqlite3_extended_result_codes(handle, 1)
-        guard sqlite3_busy_timeout(handle, 250) == SQLITE_OK else { throw LearningStoreError.sqlite(SQLITE_ERROR) }
+        let timeoutResult = sqlite3_busy_timeout(handle, 250)
+        guard timeoutResult == SQLITE_OK else {
+            if let handle { sqlite3_close_v2(handle) }; handle = nil
+            throw LearningStoreError.sqlite(timeoutResult)
+        }
     }
     deinit { if let handle { sqlite3_close_v2(handle) } }
     func close() throws {
@@ -31,10 +35,12 @@ final class SQLiteConnection {
     }
     func execute(_ sql: String, _ bindings: [SQLValue] = []) throws { _ = try query(sql, bindings) }
     func script(_ sql: String) throws {
+        guard let handle else { throw LearningStoreError.sqlite(SQLITE_MISUSE) }
         let result = sqlite3_exec(handle, sql, nil, nil, nil)
         guard result == SQLITE_OK else { throw LearningStoreError.sqlite(result) }
     }
     func query(_ sql: String, _ bindings: [SQLValue] = []) throws -> [[String: SQLValue]] {
+        guard let handle else { throw LearningStoreError.sqlite(SQLITE_MISUSE) }
         var statement: OpaquePointer?
         let prepared = sqlite3_prepare_v2(handle, sql, -1, &statement, nil)
         guard prepared == SQLITE_OK, let statement else { throw LearningStoreError.sqlite(prepared) }
