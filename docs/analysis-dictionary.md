@@ -8,6 +8,8 @@ dismissed the analysis screen. The inline prototype is not shipped.
 
 - Selecting a token highlights its relations and shows a `사전 보기` button below
   the explanations. Selection alone does not open the dictionary.
+  Punctuation remains selectable in the graph but has no dictionary action;
+  lookup eligibility uses the same native word tokenizer as the existing drawer.
 - The button presents the existing Apple dictionary drawer above analysis.
   Apple's close control and the existing footer dismiss only that drawer;
   the analysis screen and selected token remain available. Neither action

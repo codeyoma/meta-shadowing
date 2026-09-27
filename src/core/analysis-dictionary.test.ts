@@ -22,6 +22,7 @@ test('analysis opens a separate dictionary on demand and preserves selection on 
         listeners.add(fn); return { remove: () => listeners.delete(fn) };
       } } },
     '@/../modules/learning-dictionary': { dictionary: {
+      words: (term: string) => term === '.' ? [] : [{ start: 0, end: term.length }],
       present: (id: string, term: string) => new Promise<void>((resolve, reject) => requests.push({ id, term, resolve, reject })),
       dismiss: async (id: string) => { dismissed.push(id); },
     } },
@@ -101,4 +102,7 @@ test('analysis opens a separate dictionary on demand and preserves selection on 
   assert.ok(dismissed.includes(requests.at(-1)!.id));
   render();
   assert.equal(dictionary(), undefined, 'Reopening starts with no word selected');
+  runtime.find('단어 3: ., 문장 부호').onPress();
+  assert.equal(dictionary(), undefined, 'Punctuation retains graph selection without an invalid lookup action');
+  assert.equal(runtime.find('단어 3: ., 문장 부호').accessibilityState.selected, true);
 });

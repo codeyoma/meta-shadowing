@@ -35,6 +35,7 @@ test('analysis route fails closed on invalid entry, missing data, stale sessions
   const dismissed: string[] = [];
   const load = nativeModules({ react: runtime.hooks, 'react-native-reanimated': nativeMotion,
     '@/../modules/learning-dictionary': { dictionary: {
+      words: (term: string) => [{ start: 0, end: term.length }],
       present: (id: string, term: string) => new Promise<void>(resolve => requests.push({ id, term, resolve })),
       dismiss: async (id: string) => { dismissed.push(id); },
     } },
