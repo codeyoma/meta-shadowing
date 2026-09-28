@@ -1,5 +1,6 @@
 import Foundation
 import LearningDomain
+import LearningReference
 
 public struct StageStudySummary: Equatable, Sendable {
     public let unit: Int
@@ -44,6 +45,8 @@ public actor ProductWorkspace {
     private let now: @Sendable () -> Date
     private let calendar: Calendar
     private var writing = false
+    private struct LessonReference { weak var controller: LearningController? }
+    private var lessons: [UUID: LessonReference] = [:]
     public init(store: any LearningStore, catalog: any ProductCatalog, profileID: String,
                 now: @escaping @Sendable () -> Date = Date.init, calendar: Calendar = .current) {
         self.store = store; self.catalog = catalog; self.profileID = profileID
@@ -119,11 +122,42 @@ public actor ProductWorkspace {
             throw CancellationError()
         }
         let controller = LearningController(store: store, snapshot: snapshot)
+        lessons = lessons.filter { $0.value.controller != nil }
+        lessons[snapshot.handle.writerID] = LessonReference(controller: controller)
         return OpenedLesson(controller: controller, initial: await controller.state, materials: material)
     }
     public func permitsPractice(_ scope: LearningScope) async -> Bool {
         guard scope.profileID == profileID else { return false }
         return await catalog.permitsPractice(packageKey: scope.packageKey)
+    }
+    public func referenceChanges() async -> AsyncStream<Void> { await catalog.referenceChanges() }
+    public func readAnalysis(_ request: AnalysisRequest) async throws -> [AnalysisSentence] {
+        guard await permitsPractice(request.scope) else { throw AnalysisError.denied }
+        let material = try await catalog.materials(packageKey: request.scope.packageKey)
+        guard material.book.id == request.scope.packageKey, material.book.book == request.scope.book,
+              material.book.language == request.scope.language, material.sources == request.plan.sources,
+              await currentAnalysis(request) else { throw AnalysisError.denied }
+        guard let file = try await catalog.syntax(packageKey: request.scope.packageKey) else { throw AnalysisError.unavailable }
+        guard await permitsPractice(request.scope) else { throw AnalysisError.denied }
+        let data = try await InstalledSyntaxReader().read(file)
+        try Task.checkCancellation()
+        let result = try SentenceAnalysisReader.read(data, sources: material.sources,
+            language: request.scope.language == "english" ? "en" : request.scope.language,
+            sourceIndices: request.sourceIndices)
+        guard await permitsPractice(request.scope), await currentAnalysis(request) else { throw AnalysisError.denied }
+        try Task.checkCancellation()
+        return result
+    }
+    private func currentAnalysis(_ request: AnalysisRequest) async -> Bool {
+        guard let controller = lessons[request.writerID]?.controller,
+              request.matches(await controller.state) else { return false }
+        // Fresh paused lessons need not have a persisted checkpoint yet.
+        do {
+            if let saved = try await store.readCheckpoint(plan: request.plan) {
+                return saved.plan == request.plan && saved.unit == request.unit
+            }
+            return true
+        } catch { return false }
     }
     private func scope(_ book: CatalogBook, stage: Int) throws -> LearningScope {
         try LearningScope(profileID: profileID, packageKey: book.id, language: book.language, book: book.book, stage: stage)

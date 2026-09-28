@@ -23,6 +23,8 @@ packages:
     path: Packages/LearningMedia
   LearningPersistence:
     path: Packages/LearningPersistence
+  LearningReference:
+    path: Packages/LearningReference
 targets:
   MetaShadowingNative:
     type: application
@@ -45,6 +47,7 @@ targets:
       - package: AppFoundation
       - package: LearningMedia
       - package: LearningPersistence
+      - package: LearningReference
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER)
@@ -73,6 +76,7 @@ targets:
       - package: LearningDomain
       - package: AppFoundation
       - package: LearningPersistence
+      - package: LearningReference
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).mediatests
