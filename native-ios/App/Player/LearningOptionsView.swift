@@ -44,16 +44,18 @@ struct LearningOptionsView: View {
                         Button("닫기") { flow.dismissOptions() }.accessibilityIdentifier("options-close")
                     }
                 }
-                .safeAreaInset(edge: .bottom) {
-                    VStack {
-                        if let runtime = flow.runtime, runtime.controls.saveFailed {
-                            Text("저장하지 못했어요.").foregroundStyle(.red)
-                            Button("저장 다시 시도") { Task { _ = await runtime.coordinator.retrySave() } }
-                        }
-                        Button("학습 이어하기") { flow.dismissOptions() }.buttonStyle(.borderedProminent)
-                    }.padding().frame(maxWidth: .infinity).background(.bar)
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack {
+                if let runtime = flow.runtime, runtime.controls.saveFailed {
+                    Text("저장하지 못했어요.").foregroundStyle(.red)
+                    Button("저장 다시 시도") { Task { _ = await runtime.coordinator.retrySave() } }
+                        .accessibilityIdentifier("options-save-retry")
                 }
-        }.presentationDragIndicator(.visible)
+                Button("학습 이어하기") { flow.dismissOptions() }.buttonStyle(.borderedProminent)
+            }.padding().frame(maxWidth: .infinity).background(.bar)
+        }
+        .presentationDragIndicator(.visible)
     }
     @ViewBuilder private func destination(_ route: LearningOptionRoute) -> some View {
         if let runtime = flow.runtime {
@@ -79,7 +81,7 @@ struct LearningOptionsView: View {
                     }
                 }.navigationTitle("단어 공개 속도")
             default:
-                PreferenceEditorView(option: route, initial: activePreferences(runtime)) { value in
+                PreferenceEditorView(option: route, preferences: activePreferences(runtime)) { value in
                     switch route {
                     case .rate:
                         let result = await runtime.coordinator.editWhilePaused(.changeRate(value.rate))

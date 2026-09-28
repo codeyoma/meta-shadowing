@@ -1,6 +1,68 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    @MainActor func testFailedGroupingEditRetryUpdatesOpenEditor() {
+        let app = fixture(stage: 7, mode: "audio", extra: ["--ui-test-product-fail-save"])
+        XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))
+        app.buttons["player-options"].tap()
+        app.buttons["다구간 학습 사이즈"].tap()
+        let selected = app.segmentedControls.buttons["3구간"]
+        XCTAssertTrue(selected.waitForExistence(timeout: 5))
+        selected.tap()
+        let failure = app.staticTexts["저장하지 못했어요. 다시 변경해 주세요."]
+        XCTAssertTrue(failure.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.segmentedControls.buttons["2구간"].isSelected)
+        let retry = app.buttons["options-save-retry"]
+        guard retry.wait(for: \.isHittable, toEqual: true, timeout: 5) else {
+            XCTFail("Retry must remain available in the editor"); return
+        }
+        retry.tap()
+        XCTAssertTrue(selected.wait(for: \.isSelected, toEqual: true, timeout: 5))
+        XCTAssertTrue(failure.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(selected.isEnabled)
+        app.navigationBars["다구간 학습 사이즈"].buttons["BackButton"].tap()
+        app.buttons["options-close"].tap()
+        XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["학습 설정"].tap()
+        app.buttons["다구간 학습 사이즈"].tap()
+        XCTAssertTrue(app.segmentedControls.buttons["2구간"].wait(for: \.isSelected, toEqual: true, timeout: 5))
+    }
+
+    @MainActor func testFailedRateEditRetryUpdatesOpenEditor() {
+        let app = fixture(stage: 1, mode: "audio", extra: ["--ui-test-product-fail-save"])
+        let speed = app.buttons["학습 속도"]
+        XCTAssertTrue(speed.waitForExistence(timeout: 10))
+        speed.tap()
+        let slider = app.sliders["재생 속도"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        slider.adjust(toNormalizedSliderPosition: 1)
+        let failure = app.staticTexts["저장하지 못했어요. 다시 변경해 주세요."]
+        XCTAssertTrue(failure.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1×"].exists)
+        XCTAssertFalse(slider.isEnabled)
+        let retry = app.buttons["options-save-retry"]
+        guard retry.wait(for: \.isHittable, toEqual: true, timeout: 5) else {
+            XCTFail("Retry must remain available in the editor"); return
+        }
+        retry.tap()
+        XCTAssertTrue(app.staticTexts["3×"].waitForExistence(timeout: 5))
+        XCTAssertTrue(failure.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(slider.isEnabled)
+        app.navigationBars["배속"].buttons["BackButton"].tap()
+        app.buttons["options-close"].tap()
+        XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.buttons["stage-1"].tap()
+        XCTAssertTrue(speed.waitForExistence(timeout: 10))
+        speed.tap()
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["3×"].exists)
+    }
+
     @MainActor func testRepeatAndBackgroundReentryPreserveConfirmedWork() {
         let app = fixture(stage: 1, mode: "audio")
         let main = app.buttons["player-main"]

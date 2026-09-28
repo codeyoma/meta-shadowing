@@ -43,11 +43,15 @@ actor ProductTestCatalog: ProductCatalog {
 /// Fault injection remains at the persistence boundary; transactions still use real SQLite.
 actor ProductTestStore: LearningStore {
     let underlying: SQLiteLearningStore
-    private var failConfirmation = true
+    private var failNextSave = true
     init(root: URL) { underlying = SQLiteLearningStore(root: root) }
     func apply(_ command: LearningCommand) async throws -> CommitReceipt {
-        if failConfirmation, command.event == .confirm || command.event == .next {
-            failConfirmation = false; throw LearningStoreError.injectedFailure
+        if failNextSave {
+            switch command.event {
+            case .confirm, .next, .changeRate, .regroup:
+                failNextSave = false; throw LearningStoreError.injectedFailure
+            default: break
+            }
         }
         return try await underlying.apply(command)
     }

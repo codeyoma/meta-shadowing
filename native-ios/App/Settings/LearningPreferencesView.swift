@@ -17,7 +17,7 @@ struct LearningPreferencesView: View {
     var body: some View {
         List(LearningOptionRoute.preferences) { option in
             NavigationLink(option.title) {
-                PreferenceEditorView(option: option, initial: model.snapshot?.preferences.learning ?? .fresh) { value in
+                PreferenceEditorView(option: option, preferences: model.snapshot?.preferences.learning ?? .fresh) { value in
                     await model.saveLearningPreferences(value)
                 }
             }
@@ -26,14 +26,15 @@ struct LearningPreferencesView: View {
 }
 struct PreferenceEditorView: View {
     let option: LearningOptionRoute
+    let preferences: LearningPreferences
     let save: (LearningPreferences) async -> Bool
     @State private var value: LearningPreferences
     @State private var committed: LearningPreferences
     @State private var saving = false
     @State private var failed = false
-    init(option: LearningOptionRoute, initial: LearningPreferences, save: @escaping (LearningPreferences) async -> Bool) {
-        self.option = option; self.save = save
-        value = initial; committed = initial
+    init(option: LearningOptionRoute, preferences: LearningPreferences, save: @escaping (LearningPreferences) async -> Bool) {
+        self.option = option; self.preferences = preferences; self.save = save
+        value = preferences; committed = preferences
     }
     var body: some View {
         Form {
@@ -63,6 +64,10 @@ struct PreferenceEditorView: View {
             default: EmptyView()
             }
         }.navigationTitle(option.title).disabled(saving)
+            .onChange(of: preferences) { _, updated in
+                // A coordinator retry can commit outside this editor's save task.
+                value = updated; committed = updated; failed = false
+            }
     }
     private func commit(_ next: LearningPreferences) {
         guard !saving else { return }
