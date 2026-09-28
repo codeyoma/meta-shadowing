@@ -19,7 +19,6 @@ struct LearningPreferencesView: View {
             NavigationLink(option.title) {
                 PreferenceEditorView(option: option, initial: model.snapshot?.preferences.learning ?? .fresh) { value in
                     await model.saveLearningPreferences(value)
-                    return !model.failed
                 }
             }
         }.navigationTitle("학습 설정")

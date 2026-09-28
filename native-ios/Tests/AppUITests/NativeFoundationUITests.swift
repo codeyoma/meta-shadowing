@@ -48,10 +48,12 @@ final class NativeFoundationUITests: XCTestCase {
 
     @MainActor func testLargeTextCanReachEverySentence() {
         let app = XCUIApplication()
-        app.launchArguments = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString,
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
         let sample = app.buttons["book-morning-notes-v1"]
         XCTAssertTrue(sample.waitForExistence(timeout: 15))
+        for _ in 0..<5 where !sample.isHittable { app.scrollViews.firstMatch.swipeUp() }
         XCTAssertTrue(sample.wait(for: \.isHittable, toEqual: true, timeout: 10))
         sample.tap()
         let first = app.buttons["stage-1"]

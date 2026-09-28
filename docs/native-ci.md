@@ -45,7 +45,8 @@ hittable after the asynchronous save, rather than treating unchanged XP as readi
 Both Debug and Release products are inspected for JavaScript resources, excluded
 runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
 The guard also checks unchanged launch artwork, microphone/background-audio
-declarations, and absence of Debug storage/media probe symbols in Release.
+declarations, unchanged bundled sample manifest/audio, and absence of Debug
+storage/media/product fixture symbols in Release.
 These checks require XcodeGen, `jq` and `rg`; missing build tools are installed
 with Homebrew. Toolchain versions are printed for reproducibility.
 
@@ -65,13 +66,14 @@ TestFlight or submit an App Store release. Feature PRs target `dev`.
 
 ## Coverage limits
 
-The current Swift app includes #93–#95 foundation, learning/storage and media/feedback,
-not the completed rewrite.
+The current Swift app includes #93–#96 foundation, learning/storage, media/feedback
+and principal native product screens, not the completed rewrite.
 Green Swift CI proves only the implemented package/app boundaries. It no longer
 provides regression evidence for the Expo reference or its StoreKit, CloudKit,
 delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
 not deleted. Native W4 tests now cover the migrated media/feedback boundaries;
-#96–#99 must add the remaining feature tests as those features migrate.
+W5 tests cover normal browsing, settings and the audio/video/silent player;
+#97–#99 must add the remaining feature tests as those features migrate.
 
 Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains

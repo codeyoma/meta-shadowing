@@ -1,9 +1,10 @@
 # Swift learning and storage boundary (W3 / #94)
 
 This implements the deterministic learning domain and local transactional store.
-It is not the production player, media engine, CloudKit adapter or completed app.
-The normal app remains the synthetic W2 library. A Debug-only storage probe adds
-an end-to-end local confirmation/relaunch check without real content or accounts.
+The store does not own the player, media engine or CloudKit adapter. W4 now consumes
+its transport interface and W5 renders the normal product UI; their verification
+is recorded separately. A Debug-only storage probe retains an end-to-end local
+confirmation/relaunch check without real content or accounts.
 
 ## Ownership
 
@@ -14,7 +15,7 @@ an end-to-end local confirmation/relaunch check without real content or accounts
   profile has a hashed directory under the injected root; there is no scan of
   reference installations. SQLite connections and transactions never cross the actor.
 - `AppFoundation.LearningController` coordinates commands and committed UI state.
-  W4 will execute its transport requests; W5 will render the production screens.
+  W4 executes its transport requests; W5 renders the product screens.
 
 The SQLite/controller actors are intentional despite the app's main-actor-first
 view policy. Filesystem work does not run in a SwiftUI initializer.
@@ -26,6 +27,14 @@ view policy. Filesystem work does not run in a SwiftUI initializer.
 An unfinished compatible checkpoint is restored; a completed checkpoint is history.
 A new run requires a new run ID. Package/source identity mismatches fail rather than
 silently selecting different lesson content.
+
+W5 browsing uses `readLanguageProgress(profileID:language:today:)` for language
+XP/level/streak without manufacturing a book scope, and `readCheckpoint(plan:)`
+for a validated paused summary, including completed history. These queries do
+not create writers, change latest-learning selection or increment backup revision.
+Imported checkpoints bind to the supplied validated content plan; source-count
+or identity incompatibility is rejected. Public source text is not part of the
+private backup payload.
 
 Create `LearningCommand(handle:id:expectedVersion:event:)` for each user action.
 Reuse its UUID only when retrying the same operation. The store reduces against

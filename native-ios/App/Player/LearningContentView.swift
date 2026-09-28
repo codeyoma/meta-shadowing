@@ -43,13 +43,26 @@ struct LearningTextBlock: View {
     let preferences: LearningPreferences
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(presentation.lines) { line in
+            if preferences.speechView == "bubble" {
+                ForEach(presentation.bubbles) { bubble in
+                    lines(bubble.lines).padding(20)
+                        .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 24))
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("learning-bubble-\(bubble.id)")
+                }
+            } else {
+                lines(presentation.lines).padding(20)
+                    .background(Color(uiColor: .tertiarySystemFill), in: .rect(cornerRadius: 8))
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private func lines(_ values: [LearningTextLine]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(values) { line in
                 LearningLineView(line: line, preferences: preferences)
                     .padding(.bottom, line.kind == .translation ? 12 : 0)
             }
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
-            .background(Color(uiColor: preferences.speechView == "bubble" ? .secondarySystemGroupedBackground : .tertiarySystemFill),
-                        in: .rect(cornerRadius: preferences.speechView == "bubble" ? 24 : 8))
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 private struct LearningLineView: View {

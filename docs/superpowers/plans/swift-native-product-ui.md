@@ -12,6 +12,14 @@
 
 Status: Owner requested execution again after the plan/seam/baseline handoff on 2026-09-28. Implementation proceeds sequentially. Actual verification is recorded separately in the product UI contract.
 
+Execution record, 2026-09-28: the product implementation and two-axis review are
+complete. All 166 package tests and 39 iOS 27 tests pass, as do Debug/Release
+product and CI configuration checks. Some planned test names were consolidated
+into public-boundary and end-to-end journeys; the original step inventory below
+is retained rather than retroactively claiming every proposed test was written.
+Manual VoiceOver focus/spoken-output and system Reduce Motion observations remain
+unverified. See [the verification record](../../swift-native/product-ui-contract.md).
+
 ## Global constraints
 
 - Preserve current capabilities through the migration, using native iOS conventions rather than pixel-identical React Native controls.

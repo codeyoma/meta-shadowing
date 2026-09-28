@@ -254,6 +254,7 @@ public struct LearningMediaState: Sendable {
     }
     private func prepare(_ token: TransportToken, unit: Int, seconds: Double, rate: Double, delay: Int, frameOnly: Bool) {
         stopOutput(); self.token = token; phase = .preparing
+        position = nil
         let current = generation, plan = committed.snapshot.session.plan
         preparation = Task { @MainActor [weak self] in
             guard let self else { return }

@@ -5,6 +5,25 @@ import Testing
 @testable import AppFoundation
 
 @MainActor @Suite struct ProductModelTests {
+    @Test func busyPreferenceSaveDoesNotReportAnUncommittedValueAsSaved() async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = DelayedProductCatalog()
+        let model = ProductModel(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root),
+            catalog: catalog, profileID: "model"))
+        let loading = Task { await model.activate() }
+        while !(await catalog.entered) { await Task.yield() }
+        var preferences = LearningPreferences.fresh; preferences.rate = 2
+        let saved = await model.saveLearningPreferences(preferences)
+        #expect(saved == false)
+        await catalog.release()
+        await loading.value
+        #expect(model.snapshot?.preferences.learning.rate == 1)
+        let retried = await model.saveLearningPreferences(preferences)
+        #expect(retried == true)
+        #expect(model.snapshot?.preferences.learning.rate == 2)
+    }
+
     @Test func failedPreferenceSaveRetainsCommittedValueAndRetryPersists() async throws {
         let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

@@ -21,16 +21,18 @@ public enum ProductLoadState: Equatable, Sendable {
     public var failed: Bool { if case .failed = state { true } else { false } }
     public var launchReady: Bool { if case .idle = state { false } else if case .loading = state { snapshot != nil } else { true } }
 
-    public func activate() async { await perform(.load) }
-    public func select(language: String, packageKey: String?) async { await perform(.select(language, packageKey)) }
-    public func saveLearningPreferences(_ value: LearningPreferences) async { await perform(.preferences(value)) }
-    public func retry() async { await perform(retryOperation) }
+    public func activate() async { _ = await perform(.load) }
+    public func select(language: String, packageKey: String?) async { _ = await perform(.select(language, packageKey)) }
+    @discardableResult public func saveLearningPreferences(_ value: LearningPreferences) async -> Bool {
+        await perform(.preferences(value))
+    }
+    public func retry() async { _ = await perform(retryOperation) }
     public func deactivate() {
         generation += 1; pending?.cancel(); pending = nil; busy = false
         if case .loading = state { state = snapshot.map(ProductLoadState.ready) ?? .idle }
     }
-    private func perform(_ operation: Operation) async {
-        guard !busy, !Task.isCancelled else { return }
+    private func perform(_ operation: Operation) async -> Bool {
+        guard !busy, !Task.isCancelled else { return false }
         generation += 1
         let request = generation
         busy = true; retryOperation = operation
@@ -43,14 +45,16 @@ public enum ProductLoadState: Equatable, Sendable {
             }
         }
         pending = task
+        defer { if generation == request { busy = false; pending = nil } }
         do {
             let value = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
-            guard generation == request, !Task.isCancelled else { return }
+            guard generation == request, !Task.isCancelled else { return false }
             snapshot = value; state = .ready(value)
+            return true
         } catch {
-            guard generation == request else { return }
+            guard generation == request else { return false }
             state = error is CancellationError ? (snapshot.map(ProductLoadState.ready) ?? .idle) : .failed(lastCommitted: snapshot)
+            return false
         }
-        if generation == request { busy = false; pending = nil }
     }
 }

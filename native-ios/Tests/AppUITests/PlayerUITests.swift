@@ -1,6 +1,46 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    @MainActor func testRepeatAndBackgroundReentryPreserveConfirmedWork() {
+        let app = fixture(stage: 1, mode: "audio")
+        let main = app.buttons["player-main"]
+        let timeline = app.descendants(matching: .any)["cycle-timeline"]
+        guard main.waitForExistence(timeout: 10) else { XCTFail("Player unavailable"); return }
+        for count in 1...2 {
+            XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 15))
+            main.tap()
+            XCTAssertTrue(timeline.wait(for: \.label, toEqual: "확인한 반복 \(count)/3", timeout: 5))
+        }
+        let repeatButton = app.buttons["player-repeat"]
+        XCTAssertTrue(repeatButton.wait(for: \.isEnabled, toEqual: true, timeout: 15))
+        repeatButton.tap()
+        XCTAssertTrue(timeline.wait(for: \.label, toEqual: "확인한 반복 3/5", timeout: 5))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 10))
+        XCTAssertEqual(timeline.label, "확인한 반복 3/5")
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
+        app.buttons["stage-1"].tap()
+        XCTAssertTrue(timeline.waitForExistence(timeout: 10))
+        XCTAssertEqual(timeline.label, "확인한 반복 3/5")
+        app.buttons["player-options"].tap()
+        XCTAssertTrue(app.buttons["options-close"].waitForExistence(timeout: 5))
+        app.buttons["options-close"].tap()
+        XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+    }
+
+    @MainActor func testHeaderActionsHaveIndependentMinimumTouchTargets() {
+        let app = fixture(stage: 1, mode: "audio")
+        guard app.buttons["player-main"].waitForExistence(timeout: 10) else { XCTFail("Player unavailable"); return }
+        for label in ["Lv 1", "학습 속도", "문장 분석"] {
+            let button = app.buttons[label]
+            XCTAssertTrue(button.isHittable, label)
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44, label)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44, label)
+        }
+    }
+
     @MainActor private func fixture(stage: Int, mode: String, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString,
@@ -22,7 +62,10 @@ final class PlayerUITests: XCTestCase {
         let main = video.buttons["player-main"]
         guard main.waitForExistence(timeout: 10) else { XCTFail("Player unavailable"); return }
         XCTAssertTrue(video.otherElements["lesson-video"].exists)
+        XCTAssertTrue(video.otherElements["learning-bubble-0-0"].exists)
+        XCTAssertTrue(video.otherElements["learning-bubble-1-0"].exists)
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 15))
+        XCTAssertEqual(video.descendants(matching: .any)["cycle-timeline"].value as? String, "재생 완료, 확인 대기")
         main.tap()
         XCTAssertTrue(video.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 1/3", timeout: 5))
         video.buttons["player-exit"].tap()

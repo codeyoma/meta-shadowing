@@ -14,6 +14,10 @@ import Testing
         let session = try LearningSession.start(plan: plan, preferences: .fresh)
         let presentation = try LearningUnitPresentation.make(session: session, revealOriginal: true, elapsedSeconds: 0)
         #expect(presentation.lines.map(\.accessibleText) == ["One.", "하나.", "Two!", "둘!", "\"Three.\" \"Four.\"", "셋과 넷."])
+        #expect(presentation.bubbles.map { $0.lines.map(\.accessibleText) } == [
+            ["One.", "하나."], ["Two!", "둘!"], ["\"Three.\" \"Four.\"", "셋과 넷."]
+        ])
+        #expect(presentation.bubbles.map(\.id) == ["0-0", "0-1", "1-0"])
     }
 
     @Test func partialRevealPreservesLanguageOrderAndCompletion() throws {

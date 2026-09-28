@@ -15,8 +15,13 @@ public struct LearningTextLine: Identifiable, Equatable, Sendable {
         hint ?? spans.filter(\.visible).map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
-public struct LearningUnitPresentation: Equatable, Sendable {
+public struct LearningTextBubble: Identifiable, Equatable, Sendable {
+    public let id: String
     public let lines: [LearningTextLine]
+}
+public struct LearningUnitPresentation: Equatable, Sendable {
+    public let bubbles: [LearningTextBubble]
+    public var lines: [LearningTextLine] { bubbles.flatMap(\.lines) }
     public static func make(session: LearningSession, revealOriginal: Bool, elapsedSeconds: Double) throws -> Self {
         let policy = try StagePolicy.forStage(session.plan.scope.stage)
         if session.isSilent {
@@ -24,24 +29,25 @@ public struct LearningUnitPresentation: Equatable, Sendable {
             let lines = try RevealTimeline.lines(source: source, stage: session.plan.scope.stage)
             let visibility = try RevealTimeline.visible(lines: lines, seconds: elapsedSeconds,
                 WPM: session.reveal?.WPM ?? 150, completed: session.phase == .speaking || session.phase == .decision || session.phase == .complete)
-            return Self(lines: visibility.map { line in
+            return Self(bubbles: [LearningTextBubble(id: "\(source.index)-0", lines: visibility.map { line in
                 LearningTextLine(id: "\(source.index)-\(line.kind.rawValue)", sourceIndex: source.index, kind: line.kind,
                     spans: line.spans.map { LearningTextSpan(text: $0.text, visible: $0.visible) }, hint: nil)
-            })
+            })])
         }
-        return Self(lines: session.currentSources.flatMap { index in
+        return Self(bubbles: session.currentSources.flatMap { index in
             let source = session.plan.sources[index]
             let originals = quoted(source.text), translations = quoted(source.translation)
             let pairs: [(String, String)]
             if let originals, let translations, originals.count == translations.count { pairs = Array(zip(originals, translations)) }
             else { pairs = [(source.text, source.translation)] }
-            return pairs.enumerated().flatMap { ordinal, pair in [
+            return pairs.enumerated().map { ordinal, pair in
+                LearningTextBubble(id: "\(index)-\(ordinal)", lines: [
                 LearningTextLine(id: "\(index)-\(ordinal)-target", sourceIndex: index, kind: .target,
                     spans: [.init(text: pair.0, visible: revealOriginal)],
                     hint: !revealOriginal && policy.firstWordHints ? LearningText.firstWordHint(pair.0) : nil),
                 LearningTextLine(id: "\(index)-\(ordinal)-translation", sourceIndex: index, kind: .translation,
                     spans: [.init(text: pair.1, visible: true)], hint: nil)
-            ] }
+            ]) }
         })
     }
     private static func quoted(_ text: String) -> [String]? {

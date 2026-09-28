@@ -92,8 +92,7 @@ struct LearningOptionsView: View {
                         global.speechView = value.speechView
                         global.originalTextFont = value.originalTextFont; global.translationTextFont = value.translationTextFont
                         global.originalTextSize = value.originalTextSize; global.translationTextSize = value.translationTextSize
-                        await model.saveLearningPreferences(global)
-                        return !model.failed
+                        return await model.saveLearningPreferences(global)
                     }
                 }.disabled(runtime.controls.saveFailed)
             }

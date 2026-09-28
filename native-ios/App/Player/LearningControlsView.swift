@@ -46,20 +46,46 @@ private struct CycleTimelineView: View {
     let session: LearningSession
     let motion: LearningMotionState
     var body: some View {
-        HStack {
-            ForEach(0..<session.current.planned, id: \.self) { ordinal in
-                Image(systemName: ordinal < session.current.confirmed ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(ordinal < session.current.confirmed ? BrandStyle.green : .secondary)
-                if ordinal + 1 < session.current.planned { Rectangle().frame(height: 2).foregroundStyle(.quaternary) }
+        GeometryReader { geometry in
+            ScrollViewReader { scroll in
+                ScrollView(.horizontal) {
+                    // Legacy checkpoints may contain more cycles than fit on screen.
+                    LazyHStack(spacing: 0) {
+                        ForEach(0..<session.current.planned, id: \.self) { ordinal in
+                            HStack(spacing: 4) {
+                                node(.make(session: session, ordinal: ordinal, position: motion.position))
+                                    .frame(width: 24, height: 24)
+                                if ordinal + 1 < session.current.planned {
+                                    Rectangle().fill(ordinal < session.current.confirmed ? BrandStyle.green : Color.secondary.opacity(0.2))
+                                        .frame(height: 2).padding(.trailing, 4)
+                                }
+                            }
+                            .frame(width: ordinal + 1 == session.current.planned ? 24
+                                : max(44, (geometry.size.width - 24) / CGFloat(min(session.current.planned, 5) - 1)))
+                            .id(ordinal)
+                        }
+                    }
+                }.scrollIndicators(.hidden)
+                    .onChange(of: session.current.confirmed, initial: true) { _, confirmed in
+                        scroll.scrollTo(min(confirmed, session.current.planned - 1), anchor: .center)
+                    }
             }
-        }.accessibilityElement(children: .ignore)
+        }.frame(height: 24)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("확인한 반복 \(session.current.confirmed)/\(session.current.planned)")
+            .accessibilityValue(session.phase == .speaking ? "재생 완료, 확인 대기" : "")
             .accessibilityIdentifier("cycle-timeline")
-            .overlay(alignment: .bottom) {
-                if let position = motion.position, session.phase == .listening {
-                    ProgressView(value: min(position.seconds, position.duration), total: max(0.001, position.duration))
-                        .tint(BrandStyle.green).offset(y: 7).accessibilityHidden(true)
+    }
+    @ViewBuilder private func node(_ state: LearningCyclePresentation) -> some View {
+        switch state {
+        case .confirmed: Image(systemName: "checkmark.circle.fill").resizable().foregroundStyle(BrandStyle.green)
+        case .pending: Circle().stroke(.secondary.opacity(0.3), lineWidth: 2)
+        case let .active(progress):
+            Circle().stroke(.secondary.opacity(0.3), lineWidth: 2)
+                .overlay {
+                    Circle().trim(from: 0, to: progress).stroke(BrandStyle.green, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
                 }
-            }
+        }
     }
 }

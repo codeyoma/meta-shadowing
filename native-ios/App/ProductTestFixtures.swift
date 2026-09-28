@@ -12,7 +12,9 @@ actor ProductTestCatalog: ProductCatalog {
     private var materialsTask: Task<BookMaterials, any Error>?
     init(root: URL, mode: String) { self.root = root; self.mode = mode }
     func books() -> [CatalogBook] {
-        [CatalogBook(id: "ui-fixture-v1", book: "ui-fixture", language: "english", title: "Native UI fixture", sentenceCount: 2)]
+        [CatalogBook(id: "ui-fixture-v1", book: "ui-fixture", language: "english",
+                     title: mode == "long" ? "A long book title that wraps naturally · 긴 제목도 끝까지 읽을 수 있어요" : "Native UI fixture",
+                     sentenceCount: 2)]
     }
     func permitsPractice(packageKey: String) -> Bool { packageKey == "ui-fixture-v1" }
     func materials(packageKey: String) async throws -> BookMaterials {

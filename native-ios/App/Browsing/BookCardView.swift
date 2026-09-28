@@ -4,6 +4,7 @@ import SwiftUI
 struct BookCardView: View {
     let summary: BookStudySummary
     let select: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Image("morning-notes").resizable().scaledToFit()
@@ -13,7 +14,9 @@ struct BookCardView: View {
                         .background(.regularMaterial, in: .capsule).padding(8)
                 }.accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 8) {
-                Text(summary.book.title).font(.system(.headline, design: .rounded)).lineLimit(2, reservesSpace: true)
+                let title = Text(summary.book.title).font(.system(.headline, design: .rounded))
+                if dynamicTypeSize.isAccessibilitySize { title.fixedSize(horizontal: false, vertical: true) }
+                else { title.lineLimit(2, reservesSpace: true) }
                 Text("총 \(summary.book.sentenceCount)문장").font(.caption).foregroundStyle(.secondary)
                 HStack {
                     ProgressView(value: Double(summary.completedStages), total: 16).tint(BrandStyle.green)

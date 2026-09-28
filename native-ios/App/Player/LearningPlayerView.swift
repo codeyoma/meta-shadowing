@@ -92,15 +92,22 @@ private struct PlayerHeaderView: View {
                 Text("\(session.unit + 1)/\(session.unitCount)").monospacedDigit().font(.caption.bold())
             }
             HStack {
-                Button("Lv \((session.plan.scope.stage + 1) / 2)") { Task { await flow.presentOptions(.guide) } }
+                Button { Task { await flow.presentOptions(.guide) } } label: {
+                    Text("Lv \((session.plan.scope.stage + 1) / 2)").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                }
                 Spacer()
-                Button(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×") {
+                Button {
                     Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate) }
+                } label: {
+                    Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
+                        .frame(minWidth: 44, minHeight: 44).contentShape(.rect)
                 }.accessibilityLabel("학습 속도")
                 Spacer()
-                Button { Task { await flow.presentOptions(.analysis) } } label: { Image(systemName: "text.magnifyingglass") }
+                Button { Task { await flow.presentOptions(.analysis) } } label: {
+                    Image(systemName: "text.magnifyingglass").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+                }
                     .accessibilityLabel("문장 분석")
-            }.buttonStyle(.borderless).frame(minHeight: 44)
+            }.buttonStyle(.borderless)
         }.padding(.horizontal).padding(.top, 8).background(.bar)
     }
 }
