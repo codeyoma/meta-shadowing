@@ -4,6 +4,10 @@ import LearningPersistence
 
 /// Injects only storage latency/failure; all durable behavior uses real SQLite.
 actor GatedLearningStore: LearningStore {
+    func readLanguageProgress(profileID: String, language: String, today: StudyDay) async throws -> LanguageStudyProgress {
+        try await underlying.readLanguageProgress(profileID: profileID, language: language, today: today)
+    }
+    func readCheckpoint(plan: LearningPlan) async throws -> LearningSession? { try await underlying.readCheckpoint(plan: plan) }
     let underlying: SQLiteLearningStore
     var entered = false
     private var suspend = false, fail = false
