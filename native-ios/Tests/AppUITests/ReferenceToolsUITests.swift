@@ -29,6 +29,19 @@ final class ReferenceToolsUITests: XCTestCase {
         for _ in 0..<25 where !last.isHittable { graph.swipeLeft() }
         XCTAssertTrue(last.isHittable); last.tap()
         XCTAssertTrue(last.isSelected)
+        let relation = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "finish → Words")).firstMatch
+        for _ in 0..<12 where !relation.isHittable {
+            scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.7))
+                .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25)))
+        }
+        XCTAssertTrue(relation.isHittable)
+        let copy = app.buttons["analysis-copy"]
+        for _ in 0..<16 where !copy.isHittable {
+            scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25))
+                .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.75)))
+        }
+        XCTAssertTrue(copy.isHittable); copy.tap()
+        XCTAssertTrue(copy.wait(for: \.label, toEqual: "복사됨", timeout: 5))
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "Reference graph at largest Dynamic Type"
         evidence.lifetime = .keepAlways

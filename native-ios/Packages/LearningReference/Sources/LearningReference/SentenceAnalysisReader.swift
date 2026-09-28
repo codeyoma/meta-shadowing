@@ -17,7 +17,7 @@ public enum SentenceAnalysisReader {
             try Task.checkCancellation()
             guard entry.phraseNumber == index + 1, entry.status == "complete", entry.noError,
                   entry.analysis.language == language, !entry.text.isEmpty,
-                  normalized(entry.text) == normalized(sources[index].text),
+                  normalized(entry.text).utf16.elementsEqual(normalized(sources[index].text).utf16),
                   (1...1000).contains(entry.analysis.sentences.count),
                   (1...10_000).contains(entry.analysis.tokens.count) else { throw AnalysisError.invalid }
             let text = entry.text as NSString
@@ -66,7 +66,7 @@ public enum SentenceAnalysisReader {
             let length = (span.content as NSString).length
             guard length > 0, span.beginOffset >= end, span.beginOffset <= text.length,
                   length <= text.length - span.beginOffset,
-                  text.substring(with: NSRange(location: span.beginOffset, length: length)) == span.content,
+                  text.substring(with: NSRange(location: span.beginOffset, length: length)).utf16.elementsEqual(span.content.utf16),
                   text.substring(with: NSRange(location: end, length: span.beginOffset - end))
                     .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AnalysisError.invalid }
             end = span.beginOffset + length

@@ -2,9 +2,35 @@ import Foundation
 import Testing
 import AppFoundation
 import LearningDomain
+import UIKit
 @testable import MetaShadowingNative
 
 @MainActor struct DictionaryOwnershipTests {
+    @Test func realPresenterCancellationDuringPresentationSettlesOnce() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive })
+        let window = UIWindow(windowScene: scene)
+        let host = UIViewController()
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true }
+        let presenter = DictionaryPresenter()
+        presenter.host = host
+        let id = UUID()
+        var completions = 0
+        var succeeded = false
+        presenter.present(id: id, term: "hello") { result in
+            completions += 1
+            if case .success = result { succeeded = true }
+        }
+        #expect(host.presentedViewController != nil)
+        presenter.dismiss(id: id)
+        try await waitForMedia { completions == 1 && host.presentedViewController == nil }
+        #expect(succeeded)
+        presenter.dismiss(id: id)
+        #expect(completions == 1)
+        #expect(window.rootViewController === host)
+    }
     @Test func playerEligibilityKeepsHiddenTextAndIncompleteRevealUnavailable() throws {
         let source = LearningSource(index: 0, text: "Hello secret", translation: "안녕 친구")
         for stage in [5, 11, 15] {

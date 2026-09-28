@@ -7,6 +7,27 @@ import LearningReference
 @testable import MetaShadowingNative
 
 @MainActor @Suite(.serialized) struct ReferenceLifecycleTests {
+    @Test func cancelledDictionaryPreparationCannotReopenOptionsGate() async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = DeferredReferenceAccessCatalog(root: root)
+        let flow = LearningFlow(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root.appending(path: "store")),
+            catalog: catalog, profileID: "reference-test"))
+        await flow.open(packageKey: "ui-fixture-v1", stage: 1)
+        await flow.presentOptions(.menu); flow.dismissOptions()
+        let runtime = try #require(flow.runtime)
+        await catalog.deferNextAccess()
+        let lookup = Task { await flow.lookupPlayer(term: "Secret", permitsWord: { true }) }
+        await catalog.waitForRead()
+        await flow.presentOptions(.menu)
+        #expect(flow.options == .menu)
+        #expect(!runtime.coordinator.remoteState.actionable)
+        await catalog.release()
+        await lookup.value
+        #expect(!runtime.coordinator.remoteState.actionable)
+        #expect(runtime.state.controller.paused)
+        await flow.close()
+    }
     @Test func accessChangeClearsDisplayedAnalysisWithoutLearningCredit() async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -44,6 +65,28 @@ import LearningReference
         #expect(flow.runtime?.controls.xp == 0)
         await flow.close()
     }
+}
+private actor DeferredReferenceAccessCatalog: ProductCatalog {
+    let base: ProductTestCatalog
+    var shouldDefer = false
+    var pending: CheckedContinuation<Bool, Never>?
+    var entered: CheckedContinuation<Void, Never>?
+    init(root: URL) { base = ProductTestCatalog(root: root.appending(path: "assets"), mode: "analysis") }
+    func books() async -> [CatalogBook] { await base.books() }
+    func materials(packageKey: String) async throws -> BookMaterials { try await base.materials(packageKey: packageKey) }
+    func permitsPractice(packageKey: String) async -> Bool {
+        if shouldDefer {
+            shouldDefer = false
+            return await withCheckedContinuation { pending = $0; entered?.resume(); entered = nil }
+        }
+        return true
+    }
+    func deferNextAccess() { shouldDefer = true }
+    func waitForRead() async {
+        if pending != nil { return }
+        await withCheckedContinuation { entered = $0 }
+    }
+    func release() { pending?.resume(returning: true); pending = nil }
 }
 private actor RevocableReferenceCatalog: ProductCatalog {
     let base: ProductTestCatalog

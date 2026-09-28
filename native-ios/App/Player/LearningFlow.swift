@@ -184,7 +184,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
             return await workspace.permitsPractice(identity.scope)
         })
         // The menu gate stays closed to remote actions until the owned dictionary is gone.
-        if !playerDictionary.busy { runtime.setMenuOpen(false) }
+        if self.runtime === runtime { dictionarySettled() }
     }
     func dictionarySettled() { if !playerDictionary.busy, options == nil { runtime?.setMenuOpen(false) } }
 }
