@@ -99,7 +99,9 @@ No playback-ended test button substitutes for native media completion.
 The product UI tests use `--ui-test-product --ui-test-probe-id <UUID>` for isolated
 SQLite profiles. Optional Debug-only `--ui-test-product-fixture audio|video|long|video-long`
 selects generated public fixtures; `--ui-test-product-fail-save` injects one failed
-confirmation without replacing the real store. These flags and helpers are absent
+confirmation without replacing the real store. `--ui-test-product-delay-reveal-save`
+delays one changed WPM-preset save to verify that active speed selection waits for
+committed values. These flags and helpers are absent
 from Release. The large-text UI test uses the largest accessibility text category.
 
 The product check inspects resources, all embedded Mach-O dependencies/symbols,

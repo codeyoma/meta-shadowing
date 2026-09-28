@@ -16,7 +16,11 @@ struct MetaShadowingApp: App {
         if UUID(uuidString: root.lastPathComponent) != nil,
            let index = arguments.firstIndex(of: "--ui-test-product-fixture"), index + 1 < arguments.count {
             catalog = ProductTestCatalog(root: root.appending(path: "Assets"), mode: arguments[index + 1])
-            if arguments.contains("--ui-test-product-fail-save") { store = ProductTestStore(root: root) }
+            let failSave = arguments.contains("--ui-test-product-fail-save")
+            let delayRevealSave = arguments.contains("--ui-test-product-delay-reveal-save")
+            if failSave || delayRevealSave {
+                store = ProductTestStore(root: root, failNextSave: failSave, delayRevealSave: delayRevealSave)
+            }
         }
         if ProcessInfo.processInfo.arguments.contains("--ui-test-fail-first-load") {
             catalog = FailFirstProductCatalog(base: catalog)

@@ -106,7 +106,11 @@ struct LearningOptionsView: View {
                     ForEach(1...4, id: \.self) { level in
                         let selected = reveal.level == level && reveal.WPM == presets[level - 1]
                         Button {
-                            Task { _ = await runtime.coordinator.editWhilePaused(.changeRevealSpeed(level: level, presets: presets)) }
+                            Task {
+                                guard !model.busy else { return }
+                                let committed = LearningRevealSpeedDraft.normalized(model.snapshot?.preferences.learning.revealWPM ?? [150, 200, 250, 300])
+                                _ = await runtime.coordinator.editWhilePaused(.changeRevealSpeed(level: level, presets: committed))
+                            }
                         } label: {
                             HStack {
                                 Text("S\(level)")
@@ -120,7 +124,7 @@ struct LearningOptionsView: View {
                 }.buttonStyle(.bordered)
                 Text("기본 WPM을 바꾼 뒤 S1–S4를 선택하면 현재 학습에 적용돼요.").font(.footnote)
             }
-        }.padding().background(.bar).disabled(runtime.controls.saveFailed)
+        }.padding().background(.bar).disabled(runtime.controls.saveFailed || model.busy)
     }
     private func activePreferences(_ runtime: NativeLearningRuntime) -> LearningPreferences {
         var value = model.snapshot?.preferences.learning ?? .fresh

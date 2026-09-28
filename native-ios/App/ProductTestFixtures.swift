@@ -43,8 +43,12 @@ actor ProductTestCatalog: ProductCatalog {
 /// Fault injection remains at the persistence boundary; transactions still use real SQLite.
 actor ProductTestStore: LearningStore {
     let underlying: SQLiteLearningStore
-    private var failNextSave = true
-    init(root: URL) { underlying = SQLiteLearningStore(root: root) }
+    private var failNextSave: Bool
+    private var delayRevealSave: Bool
+    init(root: URL, failNextSave: Bool, delayRevealSave: Bool) {
+        underlying = SQLiteLearningStore(root: root)
+        self.failNextSave = failNextSave; self.delayRevealSave = delayRevealSave
+    }
     func apply(_ command: LearningCommand) async throws -> CommitReceipt {
         if failNextSave {
             switch command.event {
@@ -64,7 +68,13 @@ actor ProductTestStore: LearningStore {
     }
     func readCheckpoint(plan: LearningPlan) async throws -> LearningSession? { try await underlying.readCheckpoint(plan: plan) }
     func preferences(profileID: String) async throws -> ProfilePreferences { try await underlying.preferences(profileID: profileID) }
-    func savePreferences(_ value: ProfilePreferences, profileID: String) async throws -> Int64 { try await underlying.savePreferences(value, profileID: profileID) }
+    func savePreferences(_ value: ProfilePreferences, profileID: String) async throws -> Int64 {
+        if delayRevealSave, value.learning.revealWPM != (try await underlying.preferences(profileID: profileID)).learning.revealWPM {
+            delayRevealSave = false
+            try await Task.sleep(for: .seconds(8))
+        }
+        return try await underlying.savePreferences(value, profileID: profileID)
+    }
     func revoke(profileID: String) async { await underlying.revoke(profileID: profileID) }
     func revoke(writerID: UUID) async { await underlying.revoke(writerID: writerID) }
     func exportBackup(profileID: String) async throws -> BackupSnapshot { try await underlying.exportBackup(profileID: profileID) }

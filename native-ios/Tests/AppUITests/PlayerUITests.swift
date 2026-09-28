@@ -1,6 +1,32 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    @MainActor func testRevealLevelWaitsForPendingPresetSave() {
+        continueAfterFailure = false
+        let app = fixture(stage: 15, mode: "audio", extra: ["--ui-test-product-delay-reveal-save"])
+        XCTAssertTrue(app.buttons["학습 속도"].waitForExistence(timeout: 10))
+        app.buttons["학습 속도"].tap()
+        let first = app.textFields["reveal-wpm-1"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        first.replaceNumericText(with: "175")
+        app.buttons["완료"].tap()
+        for level in 1...4 {
+            XCTAssertFalse(app.buttons["active-reveal-level-\(level)"].isEnabled,
+                           "Do not apply a stale preset while its save is pending")
+        }
+        let active = app.staticTexts["active-reveal-speed"]
+        XCTAssertEqual(active.label, "현재 S1 · 150 WPM")
+        let level = app.buttons["active-reveal-level-1"]
+        XCTAssertTrue(level.wait(for: \.isEnabled, toEqual: true, timeout: 15))
+        XCTAssertEqual(first.value as? String, "175")
+        XCTAssertEqual(active.label, "현재 S1 · 150 WPM", "Saving a preset must not change the active run")
+        level.tap()
+        XCTAssertTrue(active.wait(for: \.label, toEqual: "현재 S1 · 175 WPM", timeout: 5))
+        app.buttons["학습 이어하기"].tap()
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+    }
+
     @MainActor func testGuideExplainsActiveStageWithoutGrantingCredit() {
         continueAfterFailure = false
         let app = fixture(stage: 9, mode: "audio")
