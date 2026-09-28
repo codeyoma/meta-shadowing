@@ -55,6 +55,8 @@ jobs:
         run: swift test --package-path native-ios/Packages/LearningPersistence
       - name: Test native media policies and feedback
         run: swift test --package-path native-ios/Packages/LearningMedia
+      - name: Reference tools tests
+        run: swift test --package-path native-ios/Packages/LearningReference
 
   ci-native-tests:
     name: ci-native-tests
