@@ -1,21 +1,33 @@
 import AppFoundation
 import LearningDomain
+import LearningPersistence
 import SwiftUI
 
 @main
 struct MetaShadowingApp: App {
-    @State private var bootstrap: AppBootstrap
+    @State private var model: ProductModel
 
     init() {
-        let workspace = PreviewWorkspace(root: URL.applicationSupportDirectory)
+        let root = Self.productRoot
+        var catalog: any ProductCatalog = BundledProductCatalog(root: Bundle.main.bundleURL.appending(path: "sample"))
+        var store: any LearningStore = SQLiteLearningStore(root: root)
         #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if UUID(uuidString: root.lastPathComponent) != nil,
+           let index = arguments.firstIndex(of: "--ui-test-product-fixture"), index + 1 < arguments.count {
+            catalog = ProductTestCatalog(root: root.appending(path: "Assets"), mode: arguments[index + 1])
+            let failSave = arguments.contains("--ui-test-product-fail-save")
+            let delayRevealSave = arguments.contains("--ui-test-product-delay-reveal-save")
+            if failSave || delayRevealSave {
+                store = ProductTestStore(root: root, failNextSave: failSave, delayRevealSave: delayRevealSave)
+            }
+        }
         if ProcessInfo.processInfo.arguments.contains("--ui-test-fail-first-load") {
-            let loader = FailFirstPreviewLoad(workspace: workspace)
-            bootstrap = AppBootstrap { try await loader.load() }
-            return
+            catalog = FailFirstProductCatalog(base: catalog)
         }
         #endif
-        bootstrap = AppBootstrap { try await workspace.loadLibrary() }
+        model = ProductModel(workspace: ProductWorkspace(store: store,
+            catalog: catalog, profileID: "local"))
     }
 
     var body: some Scene {
@@ -26,12 +38,23 @@ struct MetaShadowingApp: App {
                     SyntheticMediaProbeView(root: root, mode: Self.mediaMode)
                 } else { SyntheticLearningProbeView(root: root) }
             } else {
-                LaunchGateView(bootstrap: bootstrap)
+                LaunchGateView(model: model)
             }
             #else
-            LaunchGateView(bootstrap: bootstrap)
+            LaunchGateView(model: model)
             #endif
         }
+    }
+
+    private static var productRoot: URL {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ui-test-product"), let index = arguments.firstIndex(of: "--ui-test-probe-id"),
+           index + 1 < arguments.count, let id = UUID(uuidString: arguments[index + 1]) {
+            return URL.applicationSupportDirectory.appending(path: "ProductTestProfiles/\(id.uuidString)")
+        }
+        #endif
+        return URL.applicationSupportDirectory.appending(path: "SwiftNativeProduct/v1")
     }
 
     #if DEBUG
@@ -52,18 +75,20 @@ struct MetaShadowingApp: App {
 
 #if DEBUG
 /// Deterministic UI-test failure; never compiled into the Release product.
-private actor FailFirstPreviewLoad {
-    let workspace: PreviewWorkspace
+private actor FailFirstProductCatalog: ProductCatalog {
+    let base: any ProductCatalog
     private var failed = false
 
-    init(workspace: PreviewWorkspace) { self.workspace = workspace }
+    init(base: any ProductCatalog) { self.base = base }
 
-    func load() async throws -> PreviewLibrary {
+    func books() async throws -> [CatalogBook] {
         if !failed {
             failed = true
             throw CocoaError(.fileReadUnknown)
         }
-        return try await workspace.loadLibrary()
+        return try await base.books()
     }
+    func materials(packageKey: String) async throws -> BookMaterials { try await base.materials(packageKey: packageKey) }
+    func permitsPractice(packageKey: String) async -> Bool { await base.permitsPractice(packageKey: packageKey) }
 }
 #endif

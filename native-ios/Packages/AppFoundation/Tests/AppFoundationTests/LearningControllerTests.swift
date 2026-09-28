@@ -5,6 +5,10 @@ import Testing
 @testable import AppFoundation
 
 actor FailingStore: LearningStore {
+    func readLanguageProgress(profileID: String, language: String, today: StudyDay) async throws -> LanguageStudyProgress {
+        try await underlying.readLanguageProgress(profileID: profileID, language: language, today: today)
+    }
+    func readCheckpoint(plan: LearningPlan) async throws -> LearningSession? { try await underlying.readCheckpoint(plan: plan) }
     let underlying: SQLiteLearningStore
     var failure = false
     var lostReply = false
@@ -14,6 +18,8 @@ actor FailingStore: LearningStore {
     var failResume = false
     var loseResumeReply = false
     var failPause = false
+    var failPreferences = false
+    func failNextPreferences() { failPreferences = true }
     init(root: URL) { underlying = SQLiteLearningStore(root: root) }
     func failNext(afterCommit: Bool = false) { failure = !afterCommit; lostReply = afterCommit }
     func suspendNext() { suspend = true }
@@ -33,7 +39,10 @@ actor FailingStore: LearningStore {
     }
     func readProgress(scope: LearningScope, today: StudyDay) async throws -> LearningProgress { try await underlying.readProgress(scope: scope, today: today) }
     func preferences(profileID: String) async throws -> ProfilePreferences { try await underlying.preferences(profileID: profileID) }
-    func savePreferences(_ value: ProfilePreferences, profileID: String) async throws -> Int64 { try await underlying.savePreferences(value, profileID: profileID) }
+    func savePreferences(_ value: ProfilePreferences, profileID: String) async throws -> Int64 {
+        if failPreferences { failPreferences = false; throw LearningStoreError.injectedFailure }
+        return try await underlying.savePreferences(value, profileID: profileID)
+    }
     func revoke(profileID: String) async { await underlying.revoke(profileID: profileID) }
     func revoke(writerID: UUID) async { await underlying.revoke(writerID: writerID) }
     func exportBackup(profileID: String) async throws -> BackupSnapshot { try await underlying.exportBackup(profileID: profileID) }

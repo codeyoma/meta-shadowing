@@ -3,38 +3,29 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @State private var retryAttempt = 0
-    let bootstrap: AppBootstrap
+    let model: ProductModel
 
     var body: some View {
         Group {
-            switch bootstrap.state {
-            case .idle, .loading:
-                ProgressView("샘플을 준비하고 있어요")
-            case .ready(let library):
-                PreviewLibraryView(library: library)
-            case .failed:
+            if model.snapshot != nil { ProductTabsView(model: model) }
+            else if model.failed {
                 ContentUnavailableView {
-                    Label("샘플을 열 수 없어요", systemImage: "exclamationmark.triangle")
+                    Label("도서를 열 수 없어요", systemImage: "exclamationmark.triangle")
                 } description: {
                     Text("저장소를 확인한 뒤 다시 시도해 주세요. 기존 데이터는 초기화하지 않았어요.")
                 } actions: {
-                    Button("다시 시도") { retryAttempt += 1 }
+                    Button("다시 시도") { Task { await model.retry() } }
                         .accessibilityIdentifier("bootstrap-retry")
                 }
-            }
+            } else { ProgressView("도서를 준비하고 있어요") }
         }
-        .task(id: Request(isActive: scenePhase == .active, retryAttempt: retryAttempt)) {
-            if scenePhase == .active { await bootstrap.activate() }
+        .task(id: scenePhase) {
+            if scenePhase == .active { await model.activate() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { bootstrap.deactivate() }
+            if phase != .active { model.deactivate() }
         }
-        .onDisappear { bootstrap.deactivate() }
+        .onDisappear { model.deactivate() }
     }
 
-    private struct Request: Equatable {
-        let isActive: Bool
-        let retryAttempt: Int
-    }
 }

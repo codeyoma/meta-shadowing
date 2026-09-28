@@ -40,12 +40,32 @@ UI tests run in Debug because the retry test uses a Debug-only failure injection
 Before starting XCUITest, a separate five-minute preparation step waits for
 `simctl bootstatus -b` to report that the required iOS 27 Simulator has finished
 booting. A readiness failure fails the job; it does not skip or retry failed tests.
+The job then builds test products and performs a single app install/launch preflight
+in a separate UUID-scoped product profile before `test-without-building`. This checks
+the app-launch service as well as simulator boot, and fails if launch cannot succeed.
+Each XCTest still starts a clean app process: [XCUIApplication.launch](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/launch())
+terminates any running preflight instance. No test results are manufactured by the preflight.
 The synthetic confirmation test waits for the button to become enabled and
 hittable after the asynchronous save, rather than treating unchanged XP as readiness.
+The load-retry test uses an isolated product profile and verifies that foregrounding
+does not consume its explicit retry action. Test assertions include failure messages
+so the result summary distinguishes loading, launch-gate and retry failures.
+The retry checks explicitly wait for the real launch overlay to disappear, cover
+the largest Dynamic Type setting, and include button/window geometry on a hit-test failure.
+Verbose simulator diagnostic collection is disabled because it can stall for ten
+minutes after a failure. XCTest assertions, result bundles, failure summaries and
+nonzero test exit codes remain enabled; no failed test is skipped or retried by CI.
+The native job has a 40-minute budget, including cold simulator setup and test-product
+compilation; the test step itself remains bounded at 30 minutes. A previous 30-minute
+job limit cancelled the expanded suite before Xcode could finalize its result bundle.
+Only test-case lifecycle lines and the final test verdict are streamed from Xcode's
+verbose output; shell `pipefail` preserves test failures through that filter. The result
+summary reports an interrupted run explicitly when no finalized bundle is available.
 Both Debug and Release products are inspected for JavaScript resources, excluded
 runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
 The guard also checks unchanged launch artwork, microphone/background-audio
-declarations, and absence of Debug storage/media probe symbols in Release.
+declarations, unchanged bundled sample manifest/audio, and absence of Debug
+storage/media/product fixture symbols in Release.
 These checks require XcodeGen, `jq` and `rg`; missing build tools are installed
 with Homebrew. Toolchain versions are printed for reproducibility.
 
@@ -65,13 +85,14 @@ TestFlight or submit an App Store release. Feature PRs target `dev`.
 
 ## Coverage limits
 
-The current Swift app includes #93–#95 foundation, learning/storage and media/feedback,
-not the completed rewrite.
+The current Swift app includes #93–#96 foundation, learning/storage, media/feedback
+and principal native product screens, not the completed rewrite.
 Green Swift CI proves only the implemented package/app boundaries. It no longer
 provides regression evidence for the Expo reference or its StoreKit, CloudKit,
 delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
 not deleted. Native W4 tests now cover the migrated media/feedback boundaries;
-#96–#99 must add the remaining feature tests as those features migrate.
+W5 tests cover normal browsing, settings and the audio/video/silent player;
+#97–#99 must add the remaining feature tests as those features migrate.
 
 Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains

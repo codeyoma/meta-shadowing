@@ -49,6 +49,21 @@ it; the next explicit playback or monitoring request configures and activates it
 again. A late pre-interruption activation cannot restore the invalidated cache.
 See [Apple's audio-session activation API](https://developer.apple.com/documentation/avfaudio/avaudiosession/activate(options:completionhandler:)).
 
+## W5 presentation and paused edits
+
+The normal player observes `NativeLearningRuntime.controls` for semantic state
+and `motion` only inside timeline/reveal views. Control equality excludes position
+and writer-version churn; the compatibility aggregate `state` is retained for
+existing probes. `LearningCyclePresentation` shows current media fraction or an
+ended unchecked outline; it never grants credit. A new preparation clears the
+previous transport sample so the next cycle cannot display stale progress.
+
+`LearningMediaCoordinator.editWhilePaused(_:)` accepts only rate, group, reveal
+speed and source-selection commands. The writer must be active, foreground and
+authorized, with a successful settled pause. It does not reopen the menu's remote
+action gate and cannot accept resume or confirmation. The normal flow waits for
+that durable pause before publishing an options sheet.
+
 ## Wired monitoring and headset actions
 
 Monitoring supports exactly one `.headphones` output, preferring headset mic and

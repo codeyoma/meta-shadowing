@@ -59,7 +59,7 @@ jobs:
   ci-native-tests:
     name: ci-native-tests
     runs-on: xcode-27
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-27-0
@@ -83,23 +83,50 @@ jobs:
           xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
           echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
           echo 'Required iOS 27.0 Simulator finished booting.'
-      - name: Test native UI and actual media adapters on iOS 27
+      - name: Build native test products
         env:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
-          xcodebuild test -project native-ios/MetaShadowingNative.xcodeproj \
+          xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme MetaShadowingNative -configuration Debug \
+            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
+            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
+            CODE_SIGNING_ALLOWED=NO -quiet
+      - name: Verify isolated app launch before XCTest
+        timeout-minutes: 3
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
+          ci_app="$RUNNER_TEMP/native-ui-build/Build/Products/Debug-iphonesimulator/MetaShadowingNative.app"
+          ci_profile=$(uuidgen)
+          xcrun simctl install "$CI_SIMULATOR" "$ci_app" > "$RUNNER_TEMP/native-ui-install.log" 2>&1
+          xcrun simctl launch --terminate-running-process "$CI_SIMULATOR" com.example.metashadowing.ci \
+            --ui-test-product --ui-test-probe-id "$ci_profile" > "$RUNNER_TEMP/native-ui-preflight.log" 2>&1
+          echo 'Isolated CI app launched before XCTest.'
+      - name: Test native UI and actual media adapters on iOS 27
+        timeout-minutes: 30
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme MetaShadowingNative -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
             -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
             -resultBundlePath "$RUNNER_TEMP/native-ui.xcresult" \
-            CODE_SIGNING_ALLOWED=NO -quiet
+            CODE_SIGNING_ALLOWED=NO 2>&1 |
+            awk '/^Test Case / && / (started|passed|failed)[ .]/ { print; fflush() } /^\*\* TEST/ { print; fflush() }'
       - name: Report UI test results without account or device metadata
         if: always()
         run: |
-          if [ -d "$RUNNER_TEMP/native-ui.xcresult" ]; then
+          set -o pipefail
+          if [ -f "$RUNNER_TEMP/native-ui.xcresult/Info.plist" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/native-ui.xcresult" |
-              jq '{result, totalTestCount, passedTests, failedTests, testFailures}'
+              jq '{result, totalTestCount, passedTests, failedTests, skippedTests, testFailures}'
+          else
+            echo 'No finalized XCTest result bundle; the test command did not finish.'
           fi
 
   ci-ios-build:

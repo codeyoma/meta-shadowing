@@ -67,6 +67,62 @@ import LearningMedia
 }
 
 @MainActor struct LearningMediaCoordinatorTests {
+    @Test func cycleOutlineFollowsPlaybackButCheckRequiresConfirmation() async throws {
+        let f = try await MediaCoordinatorFixture()
+        _ = await f.coordinator.perform(.resume)
+        try await eventually { f.driver.playing }
+        f.driver.send(.position(.init(seconds: 0.5, duration: 1)))
+        func node(_ ordinal: Int) -> LearningCyclePresentation {
+            let state = f.coordinator.state
+            return .make(session: state.controller.snapshot.session, ordinal: ordinal, position: state.position)
+        }
+        #expect(node(0) == .active(0.5))
+        #expect(node(1) == .pending)
+        f.driver.send(.ended(.init(seconds: 1, duration: 1)))
+        try await eventually { f.coordinator.state.controller.snapshot.session.phase == .speaking && !f.coordinator.state.busy }
+        #expect(node(0) == .active(1))
+        #expect(f.coordinator.state.controller.snapshot.progress.xp == 0)
+        _ = await f.coordinator.perform(.confirm)
+        #expect(node(0) == .confirmed)
+        #expect(node(1) == .active(0))
+        await f.close()
+    }
+
+    @Test(arguments: [LearningEvent.changeRate(1.25), .regroup(size: 3, newPlanID: "new-group"), .selectSource(1)])
+    func menuEditsRemainPausedAndRemoteBlocked(_ event: LearningEvent) async throws {
+        let stage: Int = if case .regroup = event { 7 } else { 1 }
+        let f = try await MediaCoordinatorFixture(stage: stage)
+        let remote = f.coordinator.remoteState
+        var remoteState = LessonRemoteState()
+        remoteState.begin(remote.owner)
+        remoteState.update(owner: remote.owner, revision: remote.revision, actionable: remote.actionable,
+                           repeatable: remote.repeatable, since: 0)
+        let pendingRemote = remoteState.take(action: .main, at: 1, foreground: true, wired: true)
+        let queued = try #require(pendingRemote)
+        _ = await f.coordinator.perform(.resume)
+        try await eventually { f.driver.playing }
+        f.coordinator.setContext(.init(menuOpen: true))
+        _ = await f.coordinator.perform(.pause)
+        let edited = await f.coordinator.editWhilePaused(event)
+        switch event {
+        case .changeRate: #expect(edited.controller.snapshot.session.rate == 1.25)
+        case .regroup: #expect(edited.controller.snapshot.session.plan.groupSize == 3)
+        case .selectSource: #expect(edited.controller.snapshot.session.unit == 1)
+        default: Issue.record("Unexpected fixture")
+        }
+        #expect(edited.controller.paused)
+        #expect(edited.controller.snapshot.progress.xp == 0)
+        #expect(!f.driver.playing)
+        #expect(!f.coordinator.remoteState.actionable)
+        _ = await f.coordinator.receiveRemote(queued)
+        #expect(!f.driver.playing)
+        let version = f.coordinator.state.controller.snapshot.writerVersion
+        _ = await f.coordinator.editWhilePaused(.resume)
+        _ = await f.coordinator.editWhilePaused(.confirm)
+        #expect(f.coordinator.state.controller.snapshot.writerVersion == version)
+        await f.close()
+    }
+
     @Test(arguments: [LessonInteractionContext(menuOpen: true),
                       LessonInteractionContext(foreground: false),
                       LessonInteractionContext(access: false)])

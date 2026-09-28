@@ -3,7 +3,7 @@ import LearningMedia
 import SwiftUI
 
 struct LaunchGateView: View {
-    let bootstrap: AppBootstrap
+    let model: ProductModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var playback = LaunchPlayback()
@@ -14,11 +14,11 @@ struct LaunchGateView: View {
 
     private var isShowing: Bool {
         if playback.phase != .finished { return true }
-        switch bootstrap.state { case .idle, .loading: return true; case .ready, .failed: return false }
+        return !model.launchReady
     }
     var body: some View {
         ZStack {
-            RootView(bootstrap: bootstrap).allowsHitTesting(!isShowing).accessibilityHidden(isShowing)
+            RootView(model: model).allowsHitTesting(!isShowing).accessibilityHidden(isShowing)
             if isShowing {
                 LaunchArtworkView(artwork: artwork, wordmark: wordmark, still: still, playback: playback)
                     .ignoresSafeArea()

@@ -70,6 +70,8 @@ public struct ProfilePreferences: Codable, Equatable, Sendable {
     }
 }
 public protocol LearningStore: Actor {
+    func readLanguageProgress(profileID: String, language: String, today: StudyDay) async throws -> LanguageStudyProgress
+    func readCheckpoint(plan: LearningPlan) async throws -> LearningSession?
     func open(plan: LearningPlan, preferences: LearningPreferences, writerID: UUID) async throws -> LearningSnapshot
     func apply(_ command: LearningCommand) async throws -> CommitReceipt
     func readProgress(scope: LearningScope, today: StudyDay) async throws -> LearningProgress

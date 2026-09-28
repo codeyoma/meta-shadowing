@@ -29,6 +29,11 @@ targets:
     platform: iOS
     sources:
       - path: App
+      - path: ../assets/sample
+        type: folder
+        buildPhase: resources
+      - path: ../assets/illustrations/morning-notes.png
+        buildPhase: resources
       - path: ../assets/brand/talking-pup-512.webp
         buildPhase: resources
       - path: ../assets/brand/talking-pup-still.png
