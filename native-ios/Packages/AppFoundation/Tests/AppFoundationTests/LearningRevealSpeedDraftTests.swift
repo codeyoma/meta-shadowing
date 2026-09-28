@@ -2,6 +2,16 @@ import Testing
 import AppFoundation
 
 @Suite struct LearningRevealSpeedDraftTests {
+    @Test(arguments: ["", "-", "0", "1000", "150.5", "1e2", "１２３", "+150", " 150", "150 "])
+    func invalidWPMCannotReplaceSavedValue(_ draft: String) {
+        #expect(LearningRevealSpeedDraft.validWPM(draft) == nil)
+    }
+
+    @Test(arguments: [("1", 1), ("150", 150), ("999", 999)])
+    func validWPMIsAnInteger(_ input: (String, Int)) {
+        #expect(LearningRevealSpeedDraft.validWPM(input.0) == input.1)
+    }
+
     @Test(arguments: [
         ([150, 200, 250, 300], [150, 200, 250, 300]),
         ([160, 210, 260, 310], [150, 200, 250, 300]),

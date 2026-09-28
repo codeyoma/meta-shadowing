@@ -65,13 +65,17 @@ final class NativeFoundationUITests: XCTestCase {
     }
 
     @MainActor func testRetryAfterSyntheticLoadFailure() {
+        continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-fail-first-load"]
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString, "--ui-test-fail-first-load"]
         app.launch()
         let retry = app.buttons["bootstrap-retry"]
-        XCTAssertTrue(retry.waitForExistence(timeout: 15))
-        XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        XCTAssertTrue(retry.waitForExistence(timeout: 15), "Initial load failure must expose retry")
+        XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10), "Launch gate must release the retry action")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10), "Foregrounding must preserve the explicit retry action")
         retry.tap()
-        XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 15), "Explicit retry must load the sample book")
     }
 }

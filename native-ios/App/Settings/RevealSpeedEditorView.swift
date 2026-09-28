@@ -41,7 +41,7 @@ private struct RevealPresetRow: View {
         .toolbar { if focused { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("완료") { focused = false } } } }
     }
     private func commit() {
-        if let speed = LearningTypographyDraft.validWPM(draft), speed != value { draft = String(change(speed)) }
+        if let speed = LearningRevealSpeedDraft.validWPM(draft), speed != value { draft = String(change(speed)) }
         else { draft = String(value) }
     }
 }

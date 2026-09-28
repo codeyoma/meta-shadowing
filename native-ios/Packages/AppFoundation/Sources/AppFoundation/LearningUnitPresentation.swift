@@ -43,7 +43,7 @@ public struct LearningUnitPresentation: Equatable, Sendable {
             return pairs.enumerated().map { ordinal, pair in
                 LearningTextBubble(id: "\(index)-\(ordinal)", lines: [
                 LearningTextLine(id: "\(index)-\(ordinal)-target", sourceIndex: index, kind: .target,
-                    spans: [.init(text: pair.0, visible: revealOriginal)],
+                    spans: [.init(text: pair.0, visible: revealOriginal || !policy.firstWordHints)],
                     hint: !revealOriginal && policy.firstWordHints ? LearningText.firstWordHint(pair.0) : nil),
                 LearningTextLine(id: "\(index)-\(ordinal)-translation", sourceIndex: index, kind: .translation,
                     spans: [.init(text: pair.1, visible: true)], hint: nil)

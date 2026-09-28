@@ -29,6 +29,8 @@ see [the W3 consumer contract](../docs/swift-native/learning-storage-contract.md
 The product model owns one cancellable load task. Inactivity cancels pending work,
 while generation checks reject late results from non-cooperative loaders. A ready
 library remains visible while foreground refresh reads current progress.
+Failed operations retain their recovery action across foreground changes; only an
+explicit retry or a new user operation replaces the failed request.
 Views receive narrow values; filesystem work stays off the main actor.
 
 ## Local prerequisites and identity

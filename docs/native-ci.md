@@ -42,6 +42,12 @@ Before starting XCUITest, a separate five-minute preparation step waits for
 booting. A readiness failure fails the job; it does not skip or retry failed tests.
 The synthetic confirmation test waits for the button to become enabled and
 hittable after the asynchronous save, rather than treating unchanged XP as readiness.
+The load-retry test uses an isolated product profile and verifies that foregrounding
+does not consume its explicit retry action. Test assertions include failure messages
+so the result summary distinguishes loading, launch-gate and retry failures.
+Verbose simulator diagnostic collection is disabled because it can stall for ten
+minutes after a failure. XCTest assertions, result bundles, failure summaries and
+nonzero test exit codes remain enabled; no failed test is skipped or retried by CI.
 Both Debug and Release products are inspected for JavaScript resources, excluded
 runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
 The guard also checks unchanged launch artwork, microphone/background-audio

@@ -1,6 +1,30 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    @MainActor func testSubtitleToggleAppearsOnlyForHintStages() {
+        continueAfterFailure = false
+        for stage in [1, 5, 7, 9] {
+            let app = fixture(stage: stage, mode: "audio")
+            XCTAssertTrue(app.buttons["player-main"].waitForExistence(timeout: 10))
+            let toggle = app.switches["subtitle-toggle"]
+            if stage == 5 || stage == 9 {
+                XCTAssertTrue(toggle.exists, "Hint stage \(stage) must offer subtitle reveal")
+                XCTAssertFalse(app.staticTexts["Secret one"].exists)
+                toggle.tap()
+                XCTAssertTrue(app.staticTexts["Secret one"].waitForExistence(timeout: 5))
+                toggle.tap()
+                XCTAssertTrue(app.staticTexts["Secret one"].waitForNonExistence(timeout: 5))
+            } else {
+                XCTAssertFalse(toggle.exists, "Subtitled stage \(stage) must not offer hiding")
+                XCTAssertTrue(app.staticTexts["Secret one"].exists)
+            }
+            XCTAssertTrue(app.staticTexts["하나"].exists)
+            app.buttons["player-exit"].tap()
+            XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+            app.terminate()
+        }
+    }
+
     @MainActor func testUngroupedPlayerCanEditGlobalGroupAndRevealPresets() {
         let app = fixture(stage: 1, mode: "audio")
         XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))

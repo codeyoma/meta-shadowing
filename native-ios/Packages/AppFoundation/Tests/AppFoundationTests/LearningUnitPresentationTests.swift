@@ -4,6 +4,18 @@ import Testing
 @testable import AppFoundation
 
 @Suite struct LearningUnitPresentationTests {
+    @Test(arguments: [1, 2, 3, 4, 7, 8])
+    func nonHintStagesAlwaysShowTargetText(_ stage: Int) throws {
+        let scope = try LearningScope(profileID: "text", packageKey: "sample-v1", language: "english", book: "sample", stage: stage)
+        let plan = try LearningPlan.make(scope: scope, runID: "subtitled", sources: [
+            .init(index: 0, text: "Hello world.", translation: "안녕 세상.")
+        ], groupSize: 2)
+        let session = try LearningSession.start(plan: plan, preferences: .fresh)
+        let presentation = try LearningUnitPresentation.make(session: session, revealOriginal: false, elapsedSeconds: 0)
+        #expect(presentation.lines.map(\.accessibleText) == ["Hello world.", "안녕 세상."])
+        #expect(presentation.lines.allSatisfy { $0.spans.allSatisfy(\.visible) })
+    }
+
     @Test func matchingDialoguePairsStayTogetherAndMismatchStaysIntact() throws {
         let scope = try LearningScope(profileID: "text", packageKey: "sample-v1", language: "english", book: "sample", stage: 7)
         let sources = [
@@ -32,7 +44,7 @@ import Testing
         let completed = try LearningUnitPresentation.make(session: ended, revealOriginal: false, elapsedSeconds: 0)
         #expect(completed.lines.map(\.accessibleText) == ["안녕 세상", "Hello world"])
     }
-    @Test(arguments: [5, 9, 11, 13, 15])
+    @Test(arguments: [5, 6, 9, 10, 11, 13, 15])
     func hiddenTextHasNoAccessibleFullTarget(_ stage: Int) throws {
         let scope = try LearningScope(profileID: "text", packageKey: "sample-v1", language: "english", book: "sample", stage: stage)
         let plan = try LearningPlan.make(scope: scope, runID: "text", sources: [

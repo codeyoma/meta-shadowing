@@ -5,6 +5,24 @@ import Testing
 @testable import AppFoundation
 
 @MainActor @Suite struct ProductModelTests {
+    @Test func startupFailureWaitsForExplicitRetryAcrossActivation() async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = ProductModel(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root),
+            catalog: FirstLoadFailureCatalog(), profileID: "model"))
+        await model.activate()
+        #expect(model.failed)
+        #expect(model.launchReady)
+        model.deactivate()
+        await model.activate()
+        #expect(model.failed)
+        #expect(model.snapshot == nil)
+        await model.retry()
+        #expect(!model.failed)
+        #expect(model.snapshot?.books.count == 1)
+        #expect(model.snapshot?.progress.xp == 0)
+    }
+
     @Test func busyPreferenceSaveDoesNotReportAnUncommittedValueAsSaved() async throws {
         let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -36,6 +54,10 @@ import Testing
         await model.saveLearningPreferences(preferences)
         #expect(model.failed)
         #expect(model.snapshot?.preferences.learning.rate == 1)
+        model.deactivate()
+        await model.activate()
+        #expect(model.failed)
+        #expect(model.snapshot?.preferences.learning.rate == 1)
         await model.retry()
         #expect(!model.failed)
         #expect(model.snapshot?.preferences.learning.rate == 2)
@@ -59,6 +81,17 @@ import Testing
         await model.select(language: "japanese", packageKey: nil)
         #expect(model.snapshot?.preferences.libraryLanguage == "japanese")
     }
+}
+
+private actor FirstLoadFailureCatalog: ProductCatalog {
+    private let base = BundledProductCatalog(root: ProductCatalogTests.sampleRoot)
+    private var shouldFail = true
+    func books() async throws -> [CatalogBook] {
+        if shouldFail { shouldFail = false; throw ProductError.unavailable }
+        return try await base.books()
+    }
+    func materials(packageKey: String) async throws -> BookMaterials { try await base.materials(packageKey: packageKey) }
+    func permitsPractice(packageKey: String) async -> Bool { await base.permitsPractice(packageKey: packageKey) }
 }
 
 actor DelayedProductCatalog: ProductCatalog {

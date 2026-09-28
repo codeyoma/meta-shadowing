@@ -17,8 +17,10 @@ struct LearningContentView: View {
             SilentLearningContent(session: session, motion: motion, preferences: preferences)
         } else {
             VStack(alignment: .trailing, spacing: 8) {
-                Toggle("자막 보기", isOn: $originalVisible).frame(minHeight: 44).toggleStyle(.switch)
-                    .accessibilityIdentifier("subtitle-toggle")
+                if (try? StagePolicy.forStage(session.plan.scope.stage).firstWordHints) == true {
+                    Toggle("자막 보기", isOn: $originalVisible).frame(minHeight: 44).toggleStyle(.switch)
+                        .accessibilityIdentifier("subtitle-toggle")
+                }
                 if let presentation = try? LearningUnitPresentation.make(session: session,
                     revealOriginal: originalVisible, elapsedSeconds: 0) {
                     LearningTextBlock(presentation: presentation, preferences: preferences)

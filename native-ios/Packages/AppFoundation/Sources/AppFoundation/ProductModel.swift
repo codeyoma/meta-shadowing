@@ -21,7 +21,11 @@ public enum ProductLoadState: Equatable, Sendable {
     public var failed: Bool { if case .failed = state { true } else { false } }
     public var launchReady: Bool { if case .idle = state { false } else if case .loading = state { snapshot != nil } else { true } }
 
-    public func activate() async { _ = await perform(.load) }
+    public func activate() async {
+        // Foreground refresh must not dismiss an error or replace its pending retry operation.
+        guard !failed else { return }
+        _ = await perform(.load)
+    }
     public func select(language: String, packageKey: String?) async { _ = await perform(.select(language, packageKey)) }
     @discardableResult public func saveLearningPreferences(_ value: LearningPreferences) async -> Bool {
         await perform(.preferences(value))

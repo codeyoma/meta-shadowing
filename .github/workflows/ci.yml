@@ -92,6 +92,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
             -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
             -resultBundlePath "$RUNNER_TEMP/native-ui.xcresult" \
             CODE_SIGNING_ALLOWED=NO -quiet
       - name: Report UI test results without account or device metadata

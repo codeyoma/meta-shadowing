@@ -1,5 +1,11 @@
 /// Editor rules for validated four-level preferences. Reading legacy values never saves them.
 public enum LearningRevealSpeedDraft {
+    public static func validWPM(_ text: String) -> Int? {
+        guard !text.isEmpty, text.allSatisfy({ $0.isASCII && $0.isNumber }),
+              let value = Int(text), (1...999).contains(value) else { return nil }
+        return value
+    }
+
     public static func normalized(_ saved: [Int]) -> [Int] {
         precondition(saved.count == 4 && saved.allSatisfy { (1...999).contains($0) })
         var result = saved
