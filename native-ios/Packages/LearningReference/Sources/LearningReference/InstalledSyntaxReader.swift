@@ -14,6 +14,11 @@ public struct InstalledSyntaxFile: Sendable {
 public actor InstalledSyntaxReader {
     public init() {}
     public func read(_ file: InstalledSyntaxFile) throws -> Data {
+        do { return try readVerified(file) }
+        catch is CancellationError { throw CancellationError() }
+        catch { throw AnalysisError.invalid }
+    }
+    private func readVerified(_ file: InstalledSyntaxFile) throws -> Data {
         try Task.checkCancellation()
         guard file.root.isFileURL, (1...20_000_000).contains(file.byteCount),
               file.sha256.count == 64, file.sha256.allSatisfy({ $0.isASCII && $0.isHexDigit }),

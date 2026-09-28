@@ -16,8 +16,8 @@ struct AnalysisDetailView: View {
                             SentenceCopyButton(text: sentence.text)
                         }.padding().background(.background, in: .rect(cornerRadius: 16))
                         SentenceRelationGraphView(sentence: sentence, selected: model.selectedToken, select: model.selectToken)
-                        AnalysisRelationsView(sentence: sentence, selected: model.selectedToken)
                         AnalysisDictionaryButton(model: model, flow: flow)
+                        AnalysisRelationsView(sentence: sentence, selected: model.selectedToken)
                     }.padding()
                 }.background(Color(uiColor: .systemGroupedBackground)).accessibilityIdentifier("analysis-detail-scroll")
             } else { ContentUnavailableView("문장 분석을 사용할 수 없어요", systemImage: "text.magnifyingglass") }

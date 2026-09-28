@@ -18,6 +18,10 @@ Syntax descriptors come from the authorized catalog, not views. Reads require a
 regular, confined local file, declared byte count and SHA-256 hash. Bounds are
 20,000,000 bytes, 100,000 entries, 1,000 sentences and 10,000 tokens per entry.
 Missing, malformed or incompatible content fails closed.
+File-system failures become `AnalysisError.invalid` without exposing paths;
+task cancellation remains `CancellationError`. Whitespace identity and gap checks
+use ECMAScript's explicit whitespace set, matching the behavioral reference:
+U+FEFF is whitespace, while U+0085 is not.
 
 `AnalysisModel` owns one load generation. Closing, backgrounding, lesson changes
 or authority revisions clear reference state. Late results cannot publish into a
@@ -29,6 +33,10 @@ The options entry commits a pause before opening analysis. Native navigation
 presents the current unit's sentences, POS labels, dependent-to-head graph and
 textual relationship explanations. Position-based token identities distinguish
 repeated words. Unknown source tags remain identifiable without invented meanings.
+Selected tokens use the brand accent; direct neighbors use the theme's link color
+and expose their connected status to accessibility. Overflowing graphs retain a
+proportional position indicator while idle, and fitting graphs omit it. Scroll
+state stays in the scroll wrapper, and Canvas captures precomputed edges.
 
 Explicit copy writes only the full source sentence. Its 1.5-second success
 indication preserves selection. No dictionary definition is copied, logged,
@@ -40,6 +48,8 @@ Punctuation remains selectable but has no lookup action. System close and the
 app footer dismiss only the owned dictionary. Ordinary dismissal preserves
 analysis selection; background or authority invalidation clears it. Duplicate
 taps cannot stack drawers.
+The explicit lookup action sits immediately after the graph, before relationship
+explanations, preserving the later reference UI refinement.
 
 The player supports eligible visible source and translation words. Incomplete
 silent reveal has no lookup actions. Hidden source words never become link
@@ -62,14 +72,14 @@ the old learning flow before replacing its workspace.
 
 ## Verification
 
-The five Swift package suites pass 200 tests: LearningDomain 53,
+The five Swift package suites pass 204 tests: LearningDomain 53,
 LearningPersistence 27, AppFoundation 57, LearningMedia 49 and LearningReference
-14. They cover mapping, malformed input, file integrity, profile denial, writer
+18. They cover mapping, malformed input, file integrity, profile denial, writer
 closure, authorization loss and late publication. Unicode identity uses exact
 UTF-16 code units after whitespace normalization, not Swift canonical equality.
 Nonzero emoji/combining-mark offsets and sentence-local head rebasing are tested.
 
-On iOS 27, all 33 native integration tests and all four reference UI journeys
+On iOS 27, all 33 native integration tests and all six reference UI journeys
 pass without skips. These verify real dictionary cancellation during presentation,
 system/footer dismissal preserving analysis selection, ordinary player lookup
 returning paused, unchanged XP, and final-token/relationship/copy/close reachability
@@ -80,9 +90,9 @@ Independent standards and specification reviews were completed. Their actionable
 findings are covered by regressions, including six independently changed request
 identity fields and an old failure arriving after a newer successful load.
 Debug and Release build/product guards, clean CI generation, workflow lint and
-branch-policy tests pass. The full iOS 27 scheme passes all 37 UI tests and 33
+branch-policy tests pass. The full iOS 27 scheme passes all 39 UI tests and 33
 native integration tests with no skips.
-The analysis/select/copy/close journey also passes in dark appearance; the
+The connected-token and dictionary-order journey also passes in dark appearance; the
 isolated simulator's original light appearance was restored afterward.
 
 Manual VoiceOver testing is excluded by owner decision, not reported as passed.

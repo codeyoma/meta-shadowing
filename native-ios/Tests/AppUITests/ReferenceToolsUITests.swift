@@ -1,6 +1,48 @@
 import XCTest
 
 final class ReferenceToolsUITests: XCTestCase {
+    @MainActor func testConnectedTokensAndDictionaryReadingOrder() {
+        continueAfterFailure = false
+        let app = openFixture()
+        app.buttons["문장 분석"].tap()
+        XCTAssertTrue(app.buttons["analysis-sentence-1:0"].waitForExistence(timeout: 8))
+        app.buttons["analysis-sentence-1:0"].tap()
+        let selected = app.buttons["analysis-token-0"], connected = app.buttons["analysis-token-1"]
+        XCTAssertTrue(selected.waitForExistence(timeout: 5)); selected.tap()
+        XCTAssertEqual(connected.value as? String, "선택한 단어와 직접 연결됨")
+        XCTAssertFalse(connected.isSelected)
+        XCTAssertTrue(selected.isSelected)
+        let lookup = app.buttons["analysis-dictionary"]
+        let relation = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "one → Secret")).firstMatch
+        XCTAssertTrue(lookup.exists); XCTAssertTrue(relation.exists)
+        XCTAssertLessThan(lookup.frame.maxY, relation.frame.minY)
+        XCTAssertFalse(app.otherElements["analysis-scroll-position"].exists)
+        let appearance = XCTAttachment(screenshot: app.screenshot())
+        appearance.name = "Selected and connected graph tokens"
+        appearance.lifetime = .keepAlways
+        add(appearance)
+        selected.tap()
+        XCTAssertEqual(connected.value as? String ?? "", "")
+    }
+    @MainActor func testOverflowIndicatorPersistsAfterScrolling() {
+        continueAfterFailure = false
+        let app = openFixture(mode: "analysis-long")
+        app.buttons["문장 분석"].tap()
+        XCTAssertTrue(app.buttons["analysis-sentence-1:0"].waitForExistence(timeout: 8))
+        app.buttons["analysis-sentence-1:0"].tap()
+        let indicator = app.otherElements["analysis-scroll-position"]
+        XCTAssertTrue(indicator.waitForExistence(timeout: 5))
+        let before = indicator.value as? String
+        app.scrollViews["analysis-graph"].swipeLeft()
+        XCTAssertNotEqual(indicator.value as? String, before)
+        // A persistent cue must survive the native indicator's idle fade.
+        let idleDeadline = Date().addingTimeInterval(2)
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            Date() >= idleDeadline && indicator.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 3), .completed)
+        XCTAssertTrue(indicator.exists)
+    }
     @MainActor func testVisiblePlayerWordPausesForDictionaryWithoutCredit() {
         continueAfterFailure = false
         let app = openFixture()

@@ -58,7 +58,16 @@ public enum SentenceAnalysisReader {
         return sourceIndices.flatMap { selected[$0] ?? [] }
     }
     private static func normalized(_ text: String) -> String {
-        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        text.unicodeScalars.split(whereSeparator: isReferenceWhitespace)
+            .map { String(String.UnicodeScalarView($0)) }.joined(separator: " ")
+    }
+    // ECMAScript WhiteSpace + LineTerminator, matching the reference's /\s+/ and trim().
+    private static func isReferenceWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0009...0x000D, 0x0020, 0x00A0, 0x1680, 0x2000...0x200A,
+             0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF: true
+        default: false
+        }
     }
     private static func validateSpans(_ spans: [Span], in text: NSString) throws {
         var end = 0
@@ -67,11 +76,11 @@ public enum SentenceAnalysisReader {
             guard length > 0, span.beginOffset >= end, span.beginOffset <= text.length,
                   length <= text.length - span.beginOffset,
                   text.substring(with: NSRange(location: span.beginOffset, length: length)).utf16.elementsEqual(span.content.utf16),
-                  text.substring(with: NSRange(location: end, length: span.beginOffset - end))
-                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AnalysisError.invalid }
+                  normalized(text.substring(with: NSRange(location: end, length: span.beginOffset - end))).isEmpty
+            else { throw AnalysisError.invalid }
             end = span.beginOffset + length
         }
-        guard text.substring(from: end).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AnalysisError.invalid }
+        guard normalized(text.substring(from: end)).isEmpty else { throw AnalysisError.invalid }
     }
     private struct Document: Decodable {
         let schemaVersion: Int, complete: Bool, encodingType: String, language: String, entryCount: Int

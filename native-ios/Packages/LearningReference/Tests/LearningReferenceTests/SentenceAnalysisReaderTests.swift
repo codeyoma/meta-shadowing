@@ -24,6 +24,24 @@ func sources(_ texts: [String] = ["I read."]) -> [LearningSource] {
 }
 
 struct SentenceAnalysisReaderTests {
+    @Test func sourceIdentityUsesECMAScriptWhitespace() throws {
+        let result = try SentenceAnalysisReader.read(syntaxFixture(["I\u{FEFF}read."]),
+            sources: sources(), language: "en", sourceIndices: [0])
+        #expect(result.count == 1)
+        #expect(throws: AnalysisError.invalid) {
+            try SentenceAnalysisReader.read(syntaxFixture(["I\u{0085}read."]),
+                sources: sources(), language: "en", sourceIndices: [0])
+        }
+    }
+    @Test func spanGapsUseECMAScriptWhitespace() throws {
+        let raw = String(decoding: try syntaxFixture(), as: UTF8.self)
+        let bom = raw.replacingOccurrences(of: "I read.", with: "I\u{FEFF}read.")
+        #expect(try SentenceAnalysisReader.read(Data(bom.utf8), sources: sources(), language: "en", sourceIndices: [0]).count == 1)
+        let nel = raw.replacingOccurrences(of: "I read.", with: "I\u{0085}read.")
+        #expect(throws: AnalysisError.invalid) {
+            try SentenceAnalysisReader.read(Data(nel.utf8), sources: sources(["I\u{0085}read."]), language: "en", sourceIndices: [0])
+        }
+    }
     @Test func nonzeroOffsetsCountUTF16NotCharacters() throws {
         let text = "😀 read e\u{301}."
         var doc = try #require(JSONSerialization.jsonObject(with: syntaxFixture([text])) as? [String: Any])

@@ -4,6 +4,19 @@ import Testing
 import LearningReference
 
 struct InstalledSyntaxReaderTests {
+    @Test func missingFileUsesPublicErrorWithoutFilesystemDetails() async {
+        let file = InstalledSyntaxFile(root: .temporaryDirectory.appending(path: UUID().uuidString),
+            relativePath: "missing.json", byteCount: 1, sha256: String(repeating: "0", count: 64))
+        await #expect(throws: AnalysisError.invalid) { try await InstalledSyntaxReader().read(file) }
+    }
+    @Test func cancelledReadRemainsCancellation() async {
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await InstalledSyntaxReader().read(.init(root: .temporaryDirectory,
+                relativePath: "missing.json", byteCount: 1, sha256: String(repeating: "0", count: 64)))
+        }
+        await #expect(throws: CancellationError.self) { try await task.value }
+    }
     @Test(arguments: ["count", "hash", "directory"])
     func rejectsIncorrectDescriptorAndNonRegularFile(_ kind: String) async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
