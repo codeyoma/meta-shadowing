@@ -6,6 +6,30 @@ import UIKit
 @testable import MetaShadowingNative
 
 @MainActor struct DictionaryOwnershipTests {
+    @Test func cancellationBeforeUIKitStartsPresentationIsRetained() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive })
+        let window = UIWindow(windowScene: scene)
+        let host = DeferredDictionaryHost()
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true }
+        let presenter = DictionaryPresenter()
+        presenter.host = host
+        let id = UUID()
+        var completions = 0
+        presenter.present(id: id, term: "hello") { result in
+            #expect(host.presentedViewController == nil)
+            if case .failure = result { Issue.record("Expected an owned cancellation to succeed") }
+            completions += 1
+        }
+        presenter.dismiss(id: id)
+        #expect(completions == 0, "Cancellation must wait for the pending presentation")
+        host.startPresentation()
+        try await waitForMedia { completions == 1 && host.presentedViewController == nil }
+        #expect(host.presentedViewController == nil)
+        #expect(completions == 1)
+    }
     @Test func realPresenterCancellationDuringPresentationSettlesOnce() async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .first { $0.activationState == .foregroundActive })
@@ -20,6 +44,8 @@ import UIKit
         var completions = 0
         var succeeded = false
         presenter.present(id: id, term: "hello") { result in
+            #expect(host.presentedViewController == nil,
+                "A completed request must no longer own a presented drawer")
             completions += 1
             if case .success = result { succeeded = true }
         }
@@ -87,6 +113,23 @@ import UIKit
     @Test(arguments: ["123", "café", "안녕", "well-known", "don't"])
     func recognizesWholeWords(_ text: String) {
         #expect(DictionaryWords.ranges(text) == [NSRange(location: 0, length: text.utf16.count)])
+    }
+}
+// Hold only UIKit's entry point; presentation and dismissal still use real controllers.
+@MainActor private final class DeferredDictionaryHost: UIViewController {
+    private var pendingPresentation: (() -> Void)?
+    override func present(_ controller: UIViewController, animated: Bool, completion: (() -> Void)? = nil) {
+        pendingPresentation = { [weak self] in
+            self?.performPresentation(controller, animated: animated, completion: completion)
+        }
+    }
+    private func performPresentation(_ controller: UIViewController, animated: Bool, completion: (() -> Void)?) {
+        super.present(controller, animated: animated, completion: completion)
+    }
+    func startPresentation() {
+        let pending = pendingPresentation
+        pendingPresentation = nil
+        pending?()
     }
 }
 @MainActor private final class DictionaryProbe: DictionaryPresenting {

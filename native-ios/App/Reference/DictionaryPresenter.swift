@@ -8,6 +8,7 @@ final class DictionaryPresenter: DictionaryPresenting {
   private var sheet: DictionarySheet?
   private var completion: (@MainActor (Result<Void, Error>) -> Void)?
   private var pendingDismissalAnimated: Bool?
+  private var presentationPending = false
   private var closed = false
 
   func present(id: UUID, term: String, completion: @escaping @MainActor (Result<Void, Error>) -> Void) {
@@ -19,10 +20,12 @@ final class DictionaryPresenter: DictionaryPresenting {
     else { completion(.failure(Failure.unavailable)); return }
     let sheet = DictionarySheet(term: term)
     self.id = id; self.sheet = sheet; self.completion = completion; pendingDismissalAnimated = nil
+    presentationPending = true
     sheet.finished = { [weak self] in self?.finish(id: id) }
     sheet.continueLearning = { [weak self] in self?.dismiss(id: id, animated: true) }
     root.present(sheet, animated: true) { [weak self] in
       guard let self, self.id == id else { return }
+      self.presentationPending = false
       if let animated = self.pendingDismissalAnimated { self.dismiss(id: id, animated: animated) }
     }
   }
@@ -32,7 +35,9 @@ final class DictionaryPresenter: DictionaryPresenting {
     guard self.id == id, let sheet else { return }
     // Background/shutdown cancellation stays immediate, even after a user close.
     pendingDismissalAnimated = (pendingDismissalAnimated ?? true) && animated
-    if sheet.isBeingPresented { return } // Presentation completion performs this cancellation.
+    // UIKit's isBeingPresented does not cover the entire pending presentation.
+    // Keep ownership until the presentation completion can perform cancellation.
+    if presentationPending { return }
     if sheet.isBeingDismissed { return }
     sheet.dismiss(animated: pendingDismissalAnimated == true) { [weak self] in self?.finish(id: id) }
   }
@@ -41,7 +46,7 @@ final class DictionaryPresenter: DictionaryPresenting {
   func shutdown() { closed = true; dismissCurrent() }
 
   private func finish(id: UUID) {
-    guard self.id == id else { return }
+    guard self.id == id, !presentationPending else { return }
     let done = completion
     self.id = nil; sheet = nil; completion = nil; pendingDismissalAnimated = nil
     done?(.success(()))
