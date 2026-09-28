@@ -42,6 +42,11 @@ Session intent is main-actor-owned; OS configuration/activation is serialized
 off the UI executor. iOS 27 uses Apple's asynchronous activation APIs, while
 iOS 26 uses the synchronous API off the main actor. A released activation lease
 cannot start playback. Playback cleanup cannot deactivate live monitoring.
+Interruption and media-services loss/reset invalidate cached OS state and pending
+activation generations. The session drains to inactive without dropping logical
+remote ownership. Release, foreground and interruption-end events do not reactivate
+it; the next explicit playback or monitoring request configures and activates it
+again. A late pre-interruption activation cannot restore the invalidated cache.
 See [Apple's audio-session activation API](https://developer.apple.com/documentation/avfaudio/avaudiosession/activate(options:completionhandler:)).
 
 ## Wired monitoring and headset actions
@@ -96,13 +101,20 @@ native end events, observer removal, SQLite/no-credit invariants, feedback retry
 are not evidence that iOS adapters ran.
 
 Final automated results: LearningDomain 53, LearningPersistence 24,
-AppFoundation 26 and LearningMedia 39 tests passed (142 total). The iOS 27 scheme
-ran 26 tests: eight XCUITests and 18 actual native integration tests, with zero
+AppFoundation 26 and LearningMedia 42 tests passed (145 total). The iOS 27 scheme
+ran 27 tests: eight XCUITests and 19 actual native integration tests, with zero
 failures or skips. Debug and Release builds and product guards passed. The
 local TypeScript oracle matched; actionlint, three branch-policy tests and the
 clean-checkout configuration guard passed. PNG build processing is disabled so
 all three bundled launch assets remain byte-identical to their supplied sources.
 This is local evidence, not a hosted GitHub Actions result.
+
+The PR #102 interruption regression failed before the fix for interruption,
+media-services loss and reset, then passed after session invalidation was wired
+into the runtime. It changes actual simulator audio-session configuration to
+exercise recovery on explicit Resume, not only notification delivery. Package
+tests also cover dormant remote ownership, interrupted activation and monitoring
+recovery without automatic output. This does not simulate a real phone call.
 
 ### Standards review
 
@@ -130,7 +142,7 @@ The overlap with Standards is intentional; the axes remain separate.
 | Play/pause/reentry/group/failure/background | Native fixtures plus audio/video/silent XCUITests | Passed |
 | Retired callbacks and resource cleanup | Transport generations, deferred seeks, menu activation, opening/teardown and remote-completion regressions | Passed |
 | No credit from media events | Real SQLite coordinator and UI tests | Passed |
-| Native fixtures and separate hardware report | 26 native/UI tests; pending device checklist below | Fixtures passed; device observations not claimed |
+| Native fixtures and separate hardware report | 27 native/UI tests; pending device checklist below | Fixtures passed; device observations not claimed |
 
 Physical acceptance remains **pending**: wired output and microphone routing,
 voice-only gain, permission dialogs, single/double headset dispatch, unplugging,

@@ -9,6 +9,37 @@ import AppFoundation
 @testable import MetaShadowingNative
 
 @Suite(.serialized) @MainActor struct NativeLifecycleTests {
+    @Test(arguments: [AVAudioSession.interruptionNotification,
+                      AVAudioSession.mediaServicesWereLostNotification,
+                      AVAudioSession.mediaServicesWereResetNotification])
+    func explicitResumeReconfiguresInvalidatedAudioSession(_ notification: Notification.Name) async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = SyntheticMediaProbeModel(root: root, mode: "audio")
+        await model.open()
+        let runtime = try #require(model.runtime)
+        try await waitForMedia { MPNowPlayingInfoCenter.default().nowPlayingInfo != nil }
+        _ = await runtime.coordinator.perform(.resume)
+        try await waitForMedia { runtime.state.phase == .playing }
+
+        NotificationCenter.default.post(name: notification, object: nil,
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
+        try await waitForMedia { runtime.state.controller.paused && !runtime.state.busy }
+        let audio = AVAudioSession.sharedInstance()
+        // Simulate OS-owned state loss, not just the notification that reports it.
+        try await simulateLostAudioSessionState()
+        NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: nil,
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
+        #expect(runtime.state.controller.paused)
+        #expect(audio.category == .ambient)
+
+        _ = await runtime.coordinator.perform(.resume)
+        try await waitForMedia { runtime.state.phase == .playing }
+        #expect(audio.category == .playback)
+        #expect(runtime.feedbackCount == 0)
+        model.close(); await runtime.close()
+    }
+
     @Test func reappearanceDuringFixturePreparationPublishesOnlyLatestRuntime() async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -104,6 +135,13 @@ import AppFoundation
         center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
         #expect(events.count == 2)
     }
+}
+
+@concurrent private func simulateLostAudioSessionState() async throws {
+    let audio = AVAudioSession.sharedInstance()
+    if #available(iOS 27, *) { #expect(try await audio.deactivate()) }
+    else { try audio.setActive(false) }
+    try audio.setCategory(.ambient)
 }
 
 private actor FixturePreparationGate {

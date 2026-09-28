@@ -12,6 +12,7 @@ import UIKit
     public private(set) var feedbackCount = 0
     public let coordinator: LearningMediaCoordinator
     public let monitoring: VoiceMonitoring
+    @ObservationIgnored private let session: LessonAudioSession
     @ObservationIgnored private let graph: VoiceMonitorEngine
     @ObservationIgnored private let remote: LessonRemoteControl
     @ObservationIgnored private let haptics = NativeHapticPlayer()
@@ -22,7 +23,7 @@ import UIKit
     public init(controller: LearningController, initial: LearningControllerState, catalog: MediaAssetCatalog,
                 authorize: @escaping @Sendable (LearningScope) async -> Bool,
                 makeTransport: @escaping @MainActor ([MediaSource]) -> any MediaTransport) {
-        let session = LessonAudioSession()
+        session = LessonAudioSession()
         graph = VoiceMonitorEngine(session: session)
         monitoring = VoiceMonitoring(hardware: graph, defaults: .standard)
         remote = LessonRemoteControl(session: session)
@@ -87,7 +88,9 @@ import UIKit
         case .active: context.foreground = true; applyContext()
         case .inactive: context.foreground = false; applyContext()
         case .routeChanged: coordinator.suspend(.routeChange); monitoring.routeChanged(); haptics.stop()
-        case .interrupted, .reset: coordinator.suspend(.interruption); monitoring.interrupted(); haptics.stop()
+        case .interrupted, .reset:
+            session.invalidate()
+            coordinator.suspend(.interruption); monitoring.interrupted(); haptics.stop()
         }
     }
 }
