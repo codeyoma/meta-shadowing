@@ -84,12 +84,17 @@ runtime observation.
 The largest Dynamic Type hidden-text/control journey and the
 sufficient-description/trait accessibility audit passed.
 
-The final full iOS 27 scheme passed 39 tests: 17 XCUITests and 22 native integration
-tests, with zero failures or skips. It ran in system dark appearance; focused
-journeys also passed in light appearance. The simulator was restored to light
-after verification. Fresh unsigned Debug and Release builds, both product guards
+The final full iOS 27 scheme passed 40 tests: 18 XCUITests and 22 native integration
+tests, with zero failures or skips, in light appearance. The preceding 39-test
+candidate passed in system dark appearance, and the added cover regression also
+passed separately in dark appearance. The simulator was restored to light after
+verification. Fresh unsigned Debug and Release builds, both product guards
 and the clean-checkout CI configuration test passed. These are local results,
 not hosted GitHub Actions or physical-device acceptance.
+The final visual smoke check also found a blank loose-PNG cover in SwiftUI's
+name-only image initializer despite successful UIKit decoding. The library now
+uses UIKit's named-image cache as the SwiftUI image source. A screenshot-color
+regression failed on the blank card and passed with the supplied blue artwork.
 Accessibility-tree tests are not a claim about VoiceOver's spoken output or
 physical tactile/routing behavior. Unobserved manual checks stay explicit.
 

@@ -7,7 +7,8 @@ struct BookCardView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image("morning-notes").resizable().scaledToFit()
+            // The name-only SwiftUI initializer rendered this loose PNG blank on iOS 27.
+            Image(uiImage: UIImage(named: "morning-notes") ?? UIImage()).resizable().scaledToFit()
                 .overlay(alignment: .topTrailing) {
                     Label("샘플", systemImage: "book").font(.caption.bold())
                         .padding(.horizontal, 8).padding(.vertical, 3)

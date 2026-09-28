@@ -1,6 +1,30 @@
 import XCTest
+import UIKit
 
 final class ProductUITests: XCTestCase {
+    @MainActor func testBundledCoverRendersBlueArtwork() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let action = app.buttons["book-morning-notes-v1"]
+        XCTAssertTrue(action.wait(for: \.isHittable, toEqual: true, timeout: 20))
+        let title = app.staticTexts["Morning Notes"]
+        let screenshot = try XCTUnwrap(app.screenshot().image.cgImage)
+        let scale = CGFloat(screenshot.width) / app.frame.width
+        let region = CGRect(x: action.frame.midX - 20, y: title.frame.minY - 50, width: 40, height: 20)
+        let crop = try XCTUnwrap(screenshot.cropping(to: CGRect(x: region.minX * scale, y: region.minY * scale,
+                                                               width: region.width * scale, height: region.height * scale)))
+        var pixels = [UInt8](repeating: 0, count: 8 * 4 * 4)
+        let bluePixels = try pixels.withUnsafeMutableBytes { bytes in
+            let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: 8, height: 4,
+                bitsPerComponent: 8, bytesPerRow: 32, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: 8, height: 4))
+            return stride(from: 0, to: bytes.count, by: 4).filter { Int(bytes[$0 + 2]) > Int(bytes[$0]) + 20 }.count
+        }
+        XCTAssertGreaterThan(bluePixels, 4, "The supplied blue illustration must render, not an empty card.")
+    }
+
     @MainActor func testFontSettingsPersistAcrossRelaunch() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
