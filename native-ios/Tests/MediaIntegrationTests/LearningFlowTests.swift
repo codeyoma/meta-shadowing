@@ -6,6 +6,22 @@ import LearningPersistence
 @testable import MetaShadowingNative
 
 @MainActor @Suite(.serialized) struct LearningFlowTests {
+    @Test func closingDoesNotWaitForAnUncooperativeCatalog() async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = DeferredLessonCatalog(root: root)
+        let flow = LearningFlow(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root), catalog: catalog, profileID: "flow"))
+        let opening = Task { await flow.open(packageKey: "fixture-v1", stage: 1) }
+        while !(await catalog.entered) { await Task.yield() }
+        var closed = false
+        let closing = Task { await flow.close(); closed = true }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(closed)
+        await catalog.release()
+        await opening.value; await closing.value
+        #expect(flow.runtime == nil)
+    }
+
     @Test func closeDuringOpenDiscardsRuntime() async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }

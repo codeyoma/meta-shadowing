@@ -6,12 +6,14 @@ set -euo pipefail
 native_root=$(cd "$(dirname "$0")/.." && pwd)
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/native-ci-config.XXXXXX")
 trap 'rm -rf -- "$fixture"' EXIT
-mkdir -p "$fixture/native-ios" "$fixture/assets/brand"
+mkdir -p "$fixture/native-ios" "$fixture/assets/brand" "$fixture/assets/illustrations"
 rsync -a --exclude Local.xcconfig --exclude '*.xcodeproj' --exclude DerivedData \
     --exclude .build --exclude .swiftpm "$native_root/" "$fixture/native-ios/"
-for resource in talking-pup-512.webp talking-pup-still.png launch-wordmark.png; do
+for resource in talking-pup-512.webp talking-pup-still.png launch-wordmark.png mascot.png; do
     cp "$native_root/../assets/brand/$resource" "$fixture/assets/brand/$resource"
 done
+cp "$native_root/../assets/illustrations/morning-notes.png" "$fixture/assets/illustrations/morning-notes.png"
+cp -R "$native_root/../assets/sample" "$fixture/assets/sample"
 test ! -e "$fixture/native-ios/Config/Local.xcconfig"
 
 if ! xcodegen generate --spec "$fixture/native-ios/project-ci.yml" --quiet; then

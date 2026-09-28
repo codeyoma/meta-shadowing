@@ -41,6 +41,7 @@ struct ProductTabsView: View {
                     }
                 }.sensoryFeedback(.impact(weight: .light), trigger: tab)
             }.tint(.primary)
+                .accessibilityHidden(learningRoute != nil)
                 .fullScreenCover(item: $learningRoute) { route in LearningPlayerView(route: route, model: model) }
         }
     }

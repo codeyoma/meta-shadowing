@@ -10,7 +10,7 @@ struct LearningContentView: View {
     @State private var originalVisible: Bool
     init(session: LearningSession, motion: LearningMotionState, preferences: LearningPreferences) {
         self.session = session; self.motion = motion; self.preferences = preferences
-        originalVisible = ![5, 6, 9, 10].contains(session.plan.scope.stage)
+        originalVisible = !((try? StagePolicy.forStage(session.plan.scope.stage).firstWordHints) ?? false)
     }
     var body: some View {
         if session.isSilent {
@@ -62,12 +62,12 @@ private struct LearningLineView: View {
                           : preferences.translationTextSize ?? (preferences.speechView == "bubble" ? 18 : 16)
         let font = target ? preferences.originalTextFont : preferences.translationTextFont
         ZStack(alignment: .topLeading) {
-            Text(attributed).frame(maxWidth: .infinity, alignment: .leading)
-            if let hint = line.hint { Text(hint) }
+            Text(attributed).frame(maxWidth: .infinity, alignment: .leading).accessibilityHidden(true)
+            if let hint = line.hint { Text(hint).accessibilityHidden(true) }
         }
         .font(LearningFont.make(font, size: CGFloat(base) * scale))
         .textSelection(.disabled)
-        .accessibilityElement(children: .ignore).accessibilityLabel(line.accessibleText)
+        .accessibilityRepresentation { Text(line.accessibleText) }
         .accessibilityHidden(line.accessibleText.isEmpty)
         .accessibilityIdentifier("learning-line-\(line.id)")
     }

@@ -1,11 +1,13 @@
 # Standalone Swift iOS foundation
 
-This includes the #93 development shell, #94 learning/storage foundation and #95
-native media/feedback services, not
-a feature-complete replacement app. The normal UI displays one synthetic lesson
-and three sentence pairs. A Debug probe exercises real SQLite confirmation and
-relaunch. A separate Debug media probe plays generated audio/video and silent reveal.
-Neither probe purchases content or contacts cloud services.
+This includes the #93 development shell, #94 learning/storage foundation, #95
+native media/feedback services and #96 native product UI. The normal app now has
+Books, Stages and Settings, with the twelve original Morning Notes audio phrases
+bundled for offline learning. The player supports all sixteen domain stages,
+paused options, sentence navigation and shared typography/speed/grouping editors.
+Analysis/dictionary and Apple purchase/delivery/sync integrations remain #97/#98;
+their destinations explicitly report unavailability rather than faking success.
+Debug storage/media probes remain isolated verification tools.
 The Expo app remains the behavioral reference until the later migration tickets land.
 
 ## Ownership and isolation
@@ -17,15 +19,16 @@ The Expo app remains the behavioral reference until the later migration tickets 
 - `App`: the composition root, native navigation and scene lifecycle integration.
 - `Tests/AppUITests`: launch, navigation, foreground, relaunch, Dynamic Type and retry.
 
-Only the app root constructs the workspace, under Application Support's
-`SwiftNativeFoundation/v1/library.json`. No reference directories are scanned.
-Missing content seeds a public-safe fixture; corrupt or inaccessible content fails
-without resetting it. The learning store uses a separate injected namespace;
+Only the app root constructs the product workspace, under Application Support's
+`SwiftNativeProduct/v1`, with a local profile and sync disabled. No reference
+directories are scanned, migrated or erased. The bundled manifest, byte counts,
+hashes and confined local paths are validated before practice. Corrupt or
+inaccessible content fails without resetting progress. The learning store uses an injected namespace;
 see [the W3 consumer contract](../docs/swift-native/learning-storage-contract.md).
 
-The bootstrap owns one cancellable load task. Inactivity cancels pending work,
+The product model owns one cancellable load task. Inactivity cancels pending work,
 while generation checks reject late results from non-cooperative loaders. A ready
-library remains available across foreground transitions without loading again.
+library remains visible while foreground refresh reads current progress.
 Views receive narrow values; filesystem work stays off the main actor.
 
 ## Local prerequisites and identity
@@ -91,7 +94,11 @@ failure for retry testing. It does not edit storage and is absent from Release.
 opens the W4 probe; supported modes are `audio`, `video` and `silent`. These use
 disposable `ProbeProfiles` namespaces, real SQLite and generated fixtures.
 No playback-ended test button substitutes for native media completion.
-The large-text UI test uses the largest accessibility text category.
+The product UI tests use `--ui-test-product --ui-test-probe-id <UUID>` for isolated
+SQLite profiles. Optional Debug-only `--ui-test-product-fixture audio|video|long`
+selects generated public fixtures; `--ui-test-product-fail-save` injects one failed
+confirmation without replacing the real store. These flags and helpers are absent
+from Release. The large-text UI test uses the largest accessibility text category.
 
 The product check inspects resources, all embedded Mach-O dependencies/symbols,
 the deployment minimum and signed entitlements. This is a local W2 guard, not an
@@ -128,8 +135,9 @@ is not run by hosted CI. Required check names and branch protections are unchang
 their app-check implementations now validate Swift. Local success does not claim
 a hosted CI result.
 
-W5–W8 still own finished product screens, Apple services, delivery and
-replacement/release acceptance. W4 hardware acceptance remains separate from
+W6–W8 still own reference tools, Apple services, delivery and
+replacement/release acceptance. See [the product UI contract](../docs/swift-native/product-ui-contract.md)
+for #96's implemented boundaries and verification. W4 hardware acceptance remains separate from
 automated tests; see [the media contract](../docs/swift-native/media-feedback-contract.md). No performance
 benchmarks or improvement targets are required. Physical-device replacement,
 account access and public distribution require separate authorization.

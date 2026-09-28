@@ -5,7 +5,6 @@ shopt -s nocasematch
 for tool in rg jq file otool nm codesign plutil strings cmp; do
     command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
-
 app=${1:?Usage: bash native-ios/scripts/verify-native-product.sh PATH_TO_APP}
 configuration=${2:-}
 if [[ -z "$configuration" && "$app" == */Release-iphonesimulator/* ]]; then configuration=Release; fi
@@ -19,6 +18,14 @@ test "$minimum" = '26.0' || { echo 'Unexpected deployment minimum' >&2; exit 1; 
 for resource in talking-pup-512.webp talking-pup-still.png launch-wordmark.png; do
     cmp -s "$app/$resource" "$native_root/../assets/brand/$resource" || {
         echo 'Missing or changed bundled launch artwork' >&2; exit 1;
+    }
+done
+cmp -s "$app/sample/manifest.json" "$native_root/../assets/sample/manifest.json" || {
+    echo 'Missing or changed bundled sample manifest' >&2; exit 1;
+}
+for resource in "$native_root"/../assets/sample/audio/*.m4a; do
+    cmp -s "$app/sample/audio/${resource##*/}" "$resource" || {
+        echo 'Missing or changed bundled sample audio' >&2; exit 1;
     }
 done
 /usr/libexec/PlistBuddy -c 'Print NSMicrophoneUsageDescription' "$plist" >/dev/null
@@ -36,7 +43,7 @@ while IFS= read -r -d '' artifact; do
         native_binaries=$((native_binaries + 1))
         dependencies=$(otool -L "$artifact")
         symbols=$(nm -u "$artifact")
-        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-learning-media|media-probe-video|ui-test-learning-storage|SyntheticLearningProbe' >/dev/null; then
+        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-learning-media|media-probe-video|ui-test-learning-storage|SyntheticLearningProbe|ProductTestCatalog|ProductTestStore|ui-test-product' >/dev/null; then
             echo 'Debug probe code leaked into Release' >&2; exit 1
         fi
         if printf '%s\n%s\n' "$dependencies" "$symbols" |

@@ -99,7 +99,9 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         pending = nil; runtime = nil; video = nil
         let task = Task {
             await previous?.value
-            if let opened = try? await opening?.value { await opened.controller.deactivate() }
+            // The workspace revokes a writer if its open is cancelled. A catalog may
+            // ignore cancellation; it must not hold the user's Close action hostage.
+            // The open generation also deactivates any late successful result.
             await active?.close()
         }
         teardown = task
