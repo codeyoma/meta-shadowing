@@ -2,6 +2,31 @@ import XCTest
 import UIKit
 
 final class ProductUITests: XCTestCase {
+    @MainActor func testStagePathAndGuideUseCanonicalMethodNames() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let book = app.buttons["book-morning-notes-v1"]
+        guard book.wait(for: \.isHittable, toEqual: true, timeout: 20) else {
+            XCTFail("Book unavailable"); return
+        }
+        book.tap()
+        XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
+        let names = ["자막 쉐도잉", "자막 쉐도잉", "무자막 쉐도잉", "다구간 쉐도잉",
+                     "다구간 무자막", "속사포 영한", "속사포 한영", "속사포 한글"]
+        for stage in 1...16 {
+            XCTAssertEqual(app.buttons["stage-\(stage)"].label,
+                           "Stage \(stage), \(names[(stage - 1) / 2]), 완료 0/3")
+        }
+        let stage = app.buttons["stage-3"]
+        for _ in 0..<5 where !stage.isHittable { app.swipeUp() }
+        stage.tap()
+        let guide = app.buttons["Lv 2"]
+        XCTAssertTrue(guide.waitForExistence(timeout: 10))
+        guide.tap()
+        XCTAssertTrue(app.staticTexts["자막 쉐도잉"].waitForExistence(timeout: 5))
+    }
+
     @MainActor func testBundledCoverRendersBlueArtwork() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
@@ -48,6 +73,35 @@ final class ProductUITests: XCTestCase {
         app.buttons["폰트 설정"].tap()
         XCTAssertTrue(app.textFields["original-size"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["original-size"].value as? String, "21")
+    }
+
+    @MainActor func testRateEditorShowsOnlyLiveValueAndPersistsPreference() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        XCTAssertTrue(app.buttons["book-morning-notes-v1"].wait(for: \.isHittable, toEqual: true, timeout: 20))
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["학습 설정"].tap()
+        app.buttons["배속"].tap()
+        let slider = app.sliders["재생 속도"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1×"].exists)
+        for label in ["0.25×", "2×", "3×"] { XCTAssertFalse(app.staticTexts[label].exists, label) }
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Playback rate markers"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        slider.adjust(toNormalizedSliderPosition: 0)
+        XCTAssertTrue(app.staticTexts["0.25×"].waitForExistence(timeout: 5))
+        XCTAssertTrue(slider.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.buttons["book-morning-notes-v1"].wait(for: \.isHittable, toEqual: true, timeout: 20))
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["학습 설정"].tap()
+        app.buttons["배속"].tap()
+        XCTAssertTrue(app.sliders["재생 속도"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["0.25×"].exists)
+        XCTAssertFalse(app.staticTexts["1×"].exists)
     }
 
     @MainActor func testBooksStagesSettingsAndEmptyLanguage() {

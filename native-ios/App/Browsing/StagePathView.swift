@@ -65,7 +65,7 @@ struct StageRow: View {
 }
 enum StageMethod {
     static func title(_ stage: Int) -> String {
-        let names = ["자막 쉐도잉", "짧은 암기", "첫 단어 힌트", "묶음 암기", "묶음 힌트", "원문 먼저", "번역 먼저", "빠른 회상"]
+        let names = ["자막 쉐도잉", "자막 쉐도잉", "무자막 쉐도잉", "다구간 쉐도잉", "다구간 무자막", "속사포 영한", "속사포 한영", "속사포 한글"]
         return (1...16).contains(stage) ? names[(stage - 1) / 2] : "학습"
     }
 }

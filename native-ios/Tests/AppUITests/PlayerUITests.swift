@@ -41,6 +41,36 @@ final class PlayerUITests: XCTestCase {
         }
     }
 
+    @MainActor func testPausedRateEditorKeepsGlobalPreferenceSeparate() {
+        let app = fixture(stage: 1, mode: "audio")
+        let speed = app.buttons["학습 속도"]
+        XCTAssertTrue(speed.waitForExistence(timeout: 10))
+        speed.tap()
+        let slider = app.sliders["재생 속도"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        for label in ["0.25×", "2×", "3×"] { XCTAssertFalse(app.staticTexts[label].exists, label) }
+        slider.adjust(toNormalizedSliderPosition: 1)
+        XCTAssertTrue(app.staticTexts["3×"].waitForExistence(timeout: 5))
+        XCTAssertTrue(slider.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        app.navigationBars["배속"].buttons["BackButton"].tap()
+        app.buttons["options-close"].tap()
+        XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+        speed.tap()
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["3×"].exists)
+        XCTAssertFalse(app.staticTexts["1×"].exists)
+        app.navigationBars["배속"].buttons["BackButton"].tap()
+        app.buttons["options-close"].tap()
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["학습 설정"].tap()
+        app.buttons["배속"].tap()
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1×"].exists)
+        XCTAssertFalse(app.staticTexts["3×"].exists)
+    }
+
     @MainActor private func fixture(stage: Int, mode: String, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString,
