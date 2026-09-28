@@ -7,6 +7,8 @@ import UIKit
 /// One mounted lesson owns all OS resources. Call close before replacing its writer.
 @MainActor @Observable public final class NativeLearningRuntime {
     public private(set) var state: LearningMediaState
+    public private(set) var controls: LearningControlPresentation
+    public let motion = LearningMotionState()
     public private(set) var monitorState: VoiceMonitoring.State = .off
     public private(set) var monitorGain: Float = 0.25
     public private(set) var feedbackCount = 0
@@ -30,6 +32,8 @@ import UIKit
         coordinator = LearningMediaCoordinator(controller: controller, initial: initial, catalog: catalog,
             authorize: authorize, makeTransport: makeTransport, audioSession: session)
         state = coordinator.state
+        controls = LearningControlPresentation(state: coordinator.state, gate: coordinator.remoteState)
+        motion.update(coordinator.state)
         context = .init(foreground: UIApplication.shared.applicationState == .active, complete: initial.snapshot.session.phase == .complete)
         coordinator.onChange = { [weak self] in self?.updated($0) }
         coordinator.onFeedback = { [weak self] event in
@@ -67,6 +71,8 @@ import UIKit
     }
     private func updated(_ state: LearningMediaState) {
         self.state = state
+        controls = LearningControlPresentation(state: state, gate: coordinator.remoteState)
+        motion.update(state)
         let complete = state.controller.snapshot.session.phase == .complete
         if complete != context.complete { context.complete = complete; applyContext() }
         refreshRemote()

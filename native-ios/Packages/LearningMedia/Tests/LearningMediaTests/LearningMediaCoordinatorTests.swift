@@ -67,6 +67,41 @@ import LearningMedia
 }
 
 @MainActor struct LearningMediaCoordinatorTests {
+    @Test(arguments: [LearningEvent.changeRate(1.25), .regroup(size: 3, newPlanID: "new-group"), .selectSource(1)])
+    func menuEditsRemainPausedAndRemoteBlocked(_ event: LearningEvent) async throws {
+        let stage: Int = if case .regroup = event { 7 } else { 1 }
+        let f = try await MediaCoordinatorFixture(stage: stage)
+        let remote = f.coordinator.remoteState
+        var remoteState = LessonRemoteState()
+        remoteState.begin(remote.owner)
+        remoteState.update(owner: remote.owner, revision: remote.revision, actionable: remote.actionable,
+                           repeatable: remote.repeatable, since: 0)
+        let pendingRemote = remoteState.take(action: .main, at: 1, foreground: true, wired: true)
+        let queued = try #require(pendingRemote)
+        _ = await f.coordinator.perform(.resume)
+        try await eventually { f.driver.playing }
+        f.coordinator.setContext(.init(menuOpen: true))
+        _ = await f.coordinator.perform(.pause)
+        let edited = await f.coordinator.editWhilePaused(event)
+        switch event {
+        case .changeRate: #expect(edited.controller.snapshot.session.rate == 1.25)
+        case .regroup: #expect(edited.controller.snapshot.session.plan.groupSize == 3)
+        case .selectSource: #expect(edited.controller.snapshot.session.unit == 1)
+        default: Issue.record("Unexpected fixture")
+        }
+        #expect(edited.controller.paused)
+        #expect(edited.controller.snapshot.progress.xp == 0)
+        #expect(!f.driver.playing)
+        #expect(!f.coordinator.remoteState.actionable)
+        _ = await f.coordinator.receiveRemote(queued)
+        #expect(!f.driver.playing)
+        let version = f.coordinator.state.controller.snapshot.writerVersion
+        _ = await f.coordinator.editWhilePaused(.resume)
+        _ = await f.coordinator.editWhilePaused(.confirm)
+        #expect(f.coordinator.state.controller.snapshot.writerVersion == version)
+        await f.close()
+    }
+
     @Test(arguments: [LessonInteractionContext(menuOpen: true),
                       LessonInteractionContext(foreground: false),
                       LessonInteractionContext(access: false)])

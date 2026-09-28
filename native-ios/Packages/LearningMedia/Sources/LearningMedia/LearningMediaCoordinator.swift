@@ -101,6 +101,24 @@ public struct LearningMediaState: Sendable {
         if let drainTask { await drainTask.value }
         return state
     }
+    /// Explicit menu edits keep playback and remote commands gated throughout the save.
+    public func editWhilePaused(_ event: LearningEvent) async -> LearningMediaState {
+        switch event {
+        case .changeRate, .changeRevealSpeed, .regroup, .selectSource: break
+        default: return state
+        }
+        guard !closed, !closing, !busy, drainTask == nil, pendingPause == nil,
+              context.foreground, context.access, !context.complete,
+              committed.active, committed.paused, !committed.saveFailed else { return state }
+        busy = true
+        let current = generation
+        publish()
+        let result = await controller.send(command(event))
+        accept(result, expected: current)
+        becameIdle(); scheduleDrain(); publish()
+        if let drainTask { await drainTask.value }
+        return state
+    }
     /// Only an explicit visible recovery action may retry a media error.
     public func retryMedia() async -> LearningMediaState {
         guard error != nil, !committed.saveFailed else { return state }
