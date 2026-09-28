@@ -10,7 +10,16 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-27-swift-native-migration-design.md`, especially sections 3–7; GitHub #97; `docs/analysis-dictionary.md`; current TypeScript reference behavior.
 
-**Status:** Draft for owner review, 2026-09-28. No implementation or test pass is claimed. #96 is closed and its implementation is available. The detailed child plan was not previously published or approved.
+**Status:** Approved and implemented. All six tasks are complete, including independent review and regression fixes. The implementation base is `f146918b0df7d272094d19fcfc07674f6ac19e1d` on `codex/swift-reference-tools`. The [reference-tools contract](../../swift-native/reference-tools-contract.md) records actual verification and remaining integration boundaries. The detailed checklist below is the original execution proposal, retained as plan history rather than a claim that every possible input combination was tested.
+
+## Completed milestones
+
+- [x] Validated syntax and relation values.
+- [x] Authorized, confined installed-file boundary.
+- [x] Owned analysis state and lifecycle invalidation.
+- [x] Native browser, graphs and explicit source copy.
+- [x] Owned Apple dictionary and both entry points.
+- [x] Package, iOS 27, build, configuration and review verification.
 
 ## Global constraints
 
@@ -31,10 +40,10 @@
 - `LearningOptionsView` has a #97 unavailable destination; `ProductCatalog` currently supplies only bundled sample media and practice authorization.
 - The bundled Morning Notes sample has no syntax file. Keep its analysis unavailable; do not invent analysis or copy private installed content into the repository.
 - #97 implements and verifies the local syntax-reader boundary with public synthetic fixtures. #98 will supply validated hosted-package descriptors and service authorization. Existing files alone never establish entitlement.
-- Dictionary lookup from the ordinary player must also be preserved: only currently visible, eligible target-language words are actionable. Reference selection can expose an authorized complete sentence without changing the player's masked state.
+- Dictionary lookup from the ordinary player must also be preserved: only currently visible, eligible source or translation words are actionable. Incomplete silent reveal does not allow lookup. Reference selection can expose an authorized complete sentence without changing the player's masked state.
 - Preserve the source tag vocabulary, Korean/English POS names, relation descriptions and dependent-to-head edge direction. Native layout may differ from the reference; do not remove graph or textual relationship information.
 
-## Agreed-test seams proposed for approval
+## Approved test seams
 
 1. `SentenceAnalysisReader.read` and `SentenceRelations.project`: validated public values, source identity, UTF-16 offsets and edge identities.
 2. `InstalledSyntaxReader.read` and `ProductWorkspace.readAnalysis`: confined file integrity, authorization and scoped requests.
@@ -111,7 +120,7 @@ Tests proceed one behavior at a time: red, minimal implementation, green. Do not
 - [ ] Write ownership tests for duplicate taps, selection change, background, closing analysis, profile/session invalidation, failure recovery, cancellation during presentation and obsolete completion arriving after a new request. Confirm red before implementing the owner.
 - [ ] Adapt `modules/learning-dictionary/ios/DictionaryPresenter.swift` without its Expo wrapper. Present `UIReferenceLibraryViewController` using public UIKit only. Both system close and the app footer close only the dictionary; interactive dismissal also settles exactly once. No result scraping or installed-dictionary dependency in fixture assertions.
 - [ ] Add explicit lookup to analysis selection. Tapping a graph token alone never opens the dictionary; successful dictionary close preserves analysis selection. Background or authorization invalidation clears it.
-- [ ] Restore ordinary player lookup only for visible target-language words permitted by the current learning presentation. Pause and checkpoint before presenting; save failure blocks lookup. Hidden words, unrevealed suffixes and translation-only stages cannot leak target words through hit targets or accessibility.
+- [ ] Restore ordinary player lookup only for visible source or translation words permitted by the current learning presentation. Pause and checkpoint before presenting; save failure blocks lookup. Hidden words, incomplete silent reveal and translation-only stages cannot leak target words through hit targets or accessibility.
 - [ ] Verify actual system presentation and both dismissal paths on iOS 27 with a public word. Missing definitions remain Apple's UI, not an application failure. Assert unchanged XP/checkpoint and no automatic playback after dismissal.
 
 ## Task 6: Final verification, contracts and review

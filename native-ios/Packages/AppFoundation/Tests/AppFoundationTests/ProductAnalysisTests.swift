@@ -7,6 +7,21 @@ import CryptoKit
 @testable import AppFoundation
 
 struct ProductAnalysisTests {
+    @Test(arguments: ["source", "package"])
+    func changedCatalogIdentityCannotReplacePinnedSources(_ field: String) async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = ReferenceCatalog(root: root)
+        let workspace = ProductWorkspace(store: SQLiteLearningStore(root: root.appending(path: "store")),
+            catalog: catalog, profileID: "reference")
+        let opened = try await workspace.openLesson(packageKey: "fixture-v1", stage: 1, verifiedTestAccess: false)
+        await catalog.replace(field)
+        await #expect(throws: AnalysisError.denied) {
+            try await workspace.readAnalysis(AnalysisRequest(state: opened.initial))
+        }
+        #expect(await opened.controller.state == opened.initial)
+        await opened.controller.deactivate()
+    }
     @Test func validatesCurrentWriterAndRevocationDuringRead() async throws {
         let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -52,14 +67,17 @@ private actor ReferenceCatalog: ProductCatalog {
     let root: URL
     var allowed = true
     var revokes = false
+    var replacement = ""
     init(root: URL) { self.root = root }
     func revokeOnRead() { revokes = true }
     func allow() { allowed = true; revokes = false }
+    func replace(_ field: String) { replacement = field }
     func books() -> [CatalogBook] {
-        [.init(id: "fixture-v1", book: "fixture", language: "english", title: "Fixture", sentenceCount: 1)]
+        [.init(id: replacement == "package" ? "fixture-v2" : "fixture-v1", book: "fixture", language: "english", title: "Fixture", sentenceCount: 1)]
     }
     func materials(packageKey: String) -> BookMaterials {
-        .init(book: books()[0], root: root, sources: [.init(index: 0, text: "Hello", translation: "안녕")], media: [])
+        .init(book: books()[0], root: root,
+            sources: [.init(index: 0, text: replacement == "source" ? "Changed" : "Hello", translation: "안녕")], media: [])
     }
     func permitsPractice(packageKey: String) -> Bool { allowed && packageKey == "fixture-v1" }
     func syntax(packageKey: String) throws -> InstalledSyntaxFile? {

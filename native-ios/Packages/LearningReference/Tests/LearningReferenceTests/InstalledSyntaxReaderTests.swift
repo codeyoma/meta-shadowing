@@ -4,6 +4,21 @@ import Testing
 import LearningReference
 
 struct InstalledSyntaxReaderTests {
+    @Test(arguments: ["count", "hash", "directory"])
+    func rejectsIncorrectDescriptorAndNonRegularFile(_ kind: String) async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let data = Data("fixture".utf8)
+        let file = root.appending(path: "syntax.json")
+        if kind == "directory" { try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true) }
+        else { try data.write(to: file) }
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let descriptor = InstalledSyntaxFile(root: root, relativePath: "syntax.json",
+            byteCount: kind == "count" ? data.count + 1 : data.count,
+            sha256: kind == "hash" ? String(repeating: "0", count: 64) : hash)
+        await #expect(throws: (any Error).self) { try await InstalledSyntaxReader().read(descriptor) }
+    }
     @Test func readsVerifiedFileAndRejectsDamage() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

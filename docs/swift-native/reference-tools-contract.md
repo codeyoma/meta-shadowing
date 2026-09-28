@@ -62,9 +62,31 @@ the old learning flow before replacing its workspace.
 
 ## Verification
 
-Final verification is in progress. Package tests cover mapping, malformed input,
-file integrity, profile denial, writer closure, authorization loss and late
-publication. Native integration and UI tests cover ownership, lifecycle, graphs
-and actual dictionary presentation with public fixtures on iOS 27.
+The five Swift package suites pass 200 tests: LearningDomain 53,
+LearningPersistence 27, AppFoundation 57, LearningMedia 49 and LearningReference
+14. They cover mapping, malformed input, file integrity, profile denial, writer
+closure, authorization loss and late publication. Unicode identity uses exact
+UTF-16 code units after whitespace normalization, not Swift canonical equality.
+Nonzero emoji/combining-mark offsets and sentence-local head rebasing are tested.
+
+On iOS 27, all 33 native integration tests and all four reference UI journeys
+pass without skips. These verify real dictionary cancellation during presentation,
+system/footer dismissal preserving analysis selection, ordinary player lookup
+returning paused, unchanged XP, and final-token/relationship/copy/close reachability
+at the largest Dynamic Type setting. The menu gate stays closed when an obsolete
+dictionary preparation finishes behind newer options.
+
+Independent standards and specification reviews were completed. Their actionable
+findings are covered by regressions, including six independently changed request
+identity fields and an old failure arriving after a newer successful load.
+Debug and Release build/product guards, clean CI generation, workflow lint and
+branch-policy tests pass. The full iOS 27 scheme passes all 37 UI tests and 33
+native integration tests with no skips.
+The analysis/select/copy/close journey also passes in dark appearance; the
+isolated simulator's original light appearance was restored afterward.
+
 Manual VoiceOver testing is excluded by owner decision, not reported as passed.
-Hosted-package and Apple-service acceptance remain #98.
+The reference graph has no custom animation requiring a Reduce Motion branch;
+UIKit owns system transitions. Hardware preference behavior is not claimed as
+tested. Hosted-package and StoreKit/CloudKit acceptance remain #98. No physical app,
+account, cloud data, remote branch or issue state was changed for this work.
