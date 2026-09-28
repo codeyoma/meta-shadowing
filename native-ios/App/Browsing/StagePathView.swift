@@ -24,7 +24,7 @@ struct StagePathView: View {
                         Label("자료를 확인할 수 없어요. 도서 목록에서 다시 시도해 주세요.", systemImage: "exclamationmark.triangle")
                     }
                 }.padding().background(.regularMaterial, in: .rect(cornerRadius: 20))
-                LazyVStack(spacing: 12) {
+                VStack(spacing: 12) {
                     ForEach(1...16, id: \.self) { stage in
                         StageRow(stage: stage, completions: summary.completedRuns[stage, default: 0],
                             checkpoint: summary.checkpoints[stage],

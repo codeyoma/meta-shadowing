@@ -4,7 +4,7 @@ import SwiftUI
 struct ProductTabsView: View {
     let model: ProductModel
     @State private var tab = 0
-    @State private var selectedStage: Int?
+    @State private var learningRoute: LearningRoute?
     var body: some View {
         if let snapshot = model.snapshot {
             VStack(spacing: 0) {
@@ -32,7 +32,7 @@ struct ProductTabsView: View {
                     Tab("스테이지", systemImage: "map", value: 1) {
                         NavigationStack {
                             if let book = snapshot.selectedBook {
-                                StagePathView(summary: book) { selectedStage = $0 }
+                                StagePathView(summary: book) { learningRoute = LearningRoute(packageKey: book.id, stage: $0) }
                             } else { ContentUnavailableView("도서를 선택해 주세요", systemImage: "book") }
                         }
                     }
@@ -41,6 +41,7 @@ struct ProductTabsView: View {
                     }
                 }.sensoryFeedback(.impact(weight: .light), trigger: tab)
             }.tint(.primary)
+                .fullScreenCover(item: $learningRoute) { route in LearningPlayerView(route: route, model: model) }
         }
     }
 }

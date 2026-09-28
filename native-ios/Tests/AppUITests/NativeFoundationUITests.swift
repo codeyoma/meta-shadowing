@@ -31,15 +31,15 @@ final class NativeFoundationUITests: XCTestCase {
     @MainActor func testLibraryDetailForegroundAndRelaunch() {
         let app = XCUIApplication()
         app.launch()
-        let sample = app.buttons["lesson-native-sample"]
+        let sample = app.buttons["book-morning-notes-v1"]
         XCTAssertTrue(sample.waitForExistence(timeout: 15))
         XCTAssertTrue(sample.wait(for: \.isHittable, toEqual: true, timeout: 10))
         sample.tap()
-        XCTAssertTrue(app.staticTexts["sentence-hello"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
         XCUIDevice.shared.press(.home)
         app.activate()
-        XCTAssertTrue(app.staticTexts["sentence-hello"].waitForExistence(timeout: 5))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["도서 목록"].tap()
         XCTAssertTrue(sample.waitForExistence(timeout: 5))
         app.terminate()
         app.launch()
@@ -50,15 +50,15 @@ final class NativeFoundationUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
-        let sample = app.buttons["lesson-native-sample"]
+        let sample = app.buttons["book-morning-notes-v1"]
         XCTAssertTrue(sample.waitForExistence(timeout: 15))
         XCTAssertTrue(sample.wait(for: \.isHittable, toEqual: true, timeout: 10))
         sample.tap()
-        let first = app.staticTexts["sentence-hello"]
+        let first = app.buttons["stage-1"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         XCTAssertTrue(first.isHittable)
-        let last = app.staticTexts["sentence-step"]
-        if !last.isHittable { app.swipeUp() }
+        let last = app.buttons["stage-16"]
+        for _ in 0..<20 where !last.isHittable { app.swipeUp() }
         XCTAssertTrue(last.isHittable)
     }
 
@@ -70,6 +70,6 @@ final class NativeFoundationUITests: XCTestCase {
         XCTAssertTrue(retry.waitForExistence(timeout: 15))
         XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10))
         retry.tap()
-        XCTAssertTrue(app.buttons["lesson-native-sample"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 15))
     }
 }

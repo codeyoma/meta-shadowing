@@ -1,0 +1,41 @@
+import AppFoundation
+import SwiftUI
+
+struct RevealSpeedEditorView: View {
+    let values: [Int]
+    let change: ([Int]) -> Void
+    var body: some View {
+        Section("단어 공개 속도 (WPM)") {
+            ForEach(0..<4, id: \.self) { index in
+                RevealPresetRow(level: index + 1, value: values[index]) { value in
+                    var updated = values; updated[index] = value; change(updated)
+                }
+            }
+        }
+        Text("기본값을 바꾸어도 진행 중인 학습 속도는 변하지 않아요.").font(.footnote)
+    }
+}
+private struct RevealPresetRow: View {
+    let level: Int
+    let value: Int
+    let change: (Int) -> Void
+    @State private var draft: String
+    @FocusState private var focused: Bool
+    init(level: Int, value: Int, change: @escaping (Int) -> Void) {
+        self.level = level; self.value = value; self.change = change; draft = String(value)
+    }
+    var body: some View {
+        HStack {
+            Text("S\(level)")
+            TextField("WPM", text: $draft).keyboardType(.numberPad).focused($focused)
+                .multilineTextAlignment(.trailing).onSubmit(commit)
+        }
+        .onChange(of: value) { _, new in draft = String(new) }
+        .onChange(of: focused) { _, active in if !active { commit() } }
+        .toolbar { if focused { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("완료") { focused = false } } } }
+    }
+    private func commit() {
+        if let speed = LearningTypographyDraft.validWPM(draft), speed != value { change(speed) }
+        else { draft = String(value) }
+    }
+}

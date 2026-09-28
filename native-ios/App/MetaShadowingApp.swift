@@ -10,12 +10,19 @@ struct MetaShadowingApp: App {
     init() {
         let root = Self.productRoot
         var catalog: any ProductCatalog = BundledProductCatalog(root: Bundle.main.bundleURL.appending(path: "sample"))
+        var store: any LearningStore = SQLiteLearningStore(root: root)
         #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if UUID(uuidString: root.lastPathComponent) != nil,
+           let index = arguments.firstIndex(of: "--ui-test-product-fixture"), index + 1 < arguments.count {
+            catalog = ProductTestCatalog(root: root.appending(path: "Assets"), mode: arguments[index + 1])
+            if arguments.contains("--ui-test-product-fail-save") { store = ProductTestStore(root: root) }
+        }
         if ProcessInfo.processInfo.arguments.contains("--ui-test-fail-first-load") {
             catalog = FailFirstProductCatalog(base: catalog)
         }
         #endif
-        model = ProductModel(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root),
+        model = ProductModel(workspace: ProductWorkspace(store: store,
             catalog: catalog, profileID: "local"))
     }
 
