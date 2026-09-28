@@ -97,7 +97,7 @@ opens the W4 probe; supported modes are `audio`, `video` and `silent`. These use
 disposable `ProbeProfiles` namespaces, real SQLite and generated fixtures.
 No playback-ended test button substitutes for native media completion.
 The product UI tests use `--ui-test-product --ui-test-probe-id <UUID>` for isolated
-SQLite profiles. Optional Debug-only `--ui-test-product-fixture audio|video|long`
+SQLite profiles. Optional Debug-only `--ui-test-product-fixture audio|video|long|video-long`
 selects generated public fixtures; `--ui-test-product-fail-save` injects one failed
 confirmation without replacing the real store. These flags and helpers are absent
 from Release. The large-text UI test uses the largest accessibility text category.

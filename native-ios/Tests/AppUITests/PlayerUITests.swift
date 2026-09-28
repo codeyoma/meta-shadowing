@@ -1,6 +1,58 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    @MainActor func testGuideExplainsActiveStageWithoutGrantingCredit() {
+        continueAfterFailure = false
+        let app = fixture(stage: 9, mode: "audio")
+        XCTAssertTrue(app.buttons["Lv 5"].waitForExistence(timeout: 10))
+        app.buttons["Lv 5"].tap()
+        let practice = app.staticTexts["guide-practice"]
+        XCTAssertTrue(practice.waitForExistence(timeout: 5), "The guide must explain the active stage, not only its name")
+        XCTAssertTrue(practice.label.contains("첫 단어"))
+        let group = app.staticTexts["guide-grouping"]
+        for _ in 0..<5 where !group.isHittable { app.swipeUp() }
+        XCTAssertTrue(group.isHittable)
+        XCTAssertTrue(group.label.contains("2–4개"))
+        let confirmation = app.staticTexts["guide-confirmation"]
+        for _ in 0..<5 where !confirmation.isHittable { app.swipeUp() }
+        XCTAssertTrue(confirmation.isHittable)
+        XCTAssertTrue(confirmation.label.contains("세 번"))
+        let rewards = app.staticTexts["guide-rewards"]
+        for _ in 0..<5 where !rewards.isHittable { app.swipeUp() }
+        XCTAssertTrue(rewards.isHittable)
+        XCTAssertTrue(rewards.label.contains("원본 구간 수"))
+        app.buttons["학습 이어하기"].tap()
+        XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+    }
+
+    @MainActor func testVideoStaysFixedWhileLargeLessonTextScrolls() {
+        continueAfterFailure = false
+        let app = fixture(stage: 1, mode: "video-long", extra: [
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        let video = app.otherElements["lesson-video"]
+        XCTAssertTrue(video.waitForExistence(timeout: 10))
+        let header = app.descendants(matching: .any)["player-progress"]
+        let footer = app.buttons["player-main"]
+        let text = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Secret bilingual practice.")).firstMatch
+        XCTAssertTrue(text.exists)
+        let videoFrame = video.frame, headerY = header.frame.minY, footerY = footer.frame.minY
+        let textY = text.frame.minY
+        let scroll = app.scrollViews.firstMatch
+        scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+            .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)))
+        XCTAssertLessThan(text.frame.minY, textY, "The lesson text must actually scroll")
+        XCTAssertEqual(video.frame.minY, videoFrame.minY, accuracy: 1, "Video must remain outside the scrolling text")
+        XCTAssertEqual(video.frame.height, videoFrame.height, accuracy: 1)
+        XCTAssertEqual(header.frame.minY, headerY, accuracy: 1)
+        XCTAssertEqual(footer.frame.minY, footerY, accuracy: 1)
+        XCTAssertTrue(footer.isHittable)
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+    }
+
     @MainActor func testStageExitStaysFixedAcrossOptionsAndLargeText() {
         continueAfterFailure = false
         for largeText in [false, true] {

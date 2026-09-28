@@ -32,18 +32,23 @@ struct LearningPlayerView: View {
                         ScrollView {
                             VStack(spacing: 20) {
                                 VoiceMonitorControls(runtime: runtime)
-                                if let video = flow.video {
-                                    LessonVideoSurface(transport: video).aspectRatio(16 / 9, contentMode: .fit)
-                                        .clipShape(.rect(cornerRadius: 16)).accessibilityLabel("학습 영상")
-                                        .accessibilityIdentifier("lesson-video")
-                                }
                                 LearningContentView(session: runtime.controls.session, motion: runtime.motion,
                                     preferences: model.snapshot?.preferences.learning ?? .fresh)
                                     .id("\(runtime.controls.session.plan.runID)-\(runtime.controls.session.unit)")
                             }.padding()
                         }
                         .background(Color(uiColor: .systemGroupedBackground))
-                        .safeAreaInset(edge: .top) { PlayerHeaderView(runtime: runtime, flow: flow) }
+                        .safeAreaInset(edge: .top) {
+                            VStack(spacing: 0) {
+                                PlayerHeaderView(runtime: runtime, flow: flow)
+                                if let video = flow.video {
+                                    LessonVideoSurface(transport: video).aspectRatio(16 / 9, contentMode: .fit)
+                                        .clipShape(.rect(cornerRadius: 16)).accessibilityLabel("학습 영상")
+                                        .accessibilityIdentifier("lesson-video")
+                                        .padding([.horizontal, .top])
+                                }
+                            }.background(Color(uiColor: .systemGroupedBackground))
+                        }
                         .safeAreaInset(edge: .bottom) { LearningControlsView(runtime: runtime) }
                     }
                 } else if flow.failed {

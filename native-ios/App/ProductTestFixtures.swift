@@ -22,13 +22,13 @@ actor ProductTestCatalog: ProductCatalog {
         if let materialsTask { return try await materialsTask.value }
         let book = books()[0], root = root, mode = mode
         let task = Task {
-            let media = try await SyntheticMediaFixtures.create(in: root, video: mode == "video").map {
+            let media = try await SyntheticMediaFixtures.create(in: root, video: mode == "video" || mode == "video-long").map {
                 switch $0 {
                 case let .audio(file): BookMediaAsset.audio(file: file)
                 case let .video(file, start, end): BookMediaAsset.video(file: file, start: start, end: end)
                 }
             }
-            let long = mode == "long"
+            let long = mode == "long" || mode == "video-long"
             return BookMaterials(book: book, root: root, sources: [
                 .init(index: 0, text: long ? String(repeating: "Secret bilingual practice. ", count: 40) : "Secret one",
                       translation: long ? String(repeating: "긴 문장을 천천히 연습해요. ", count: 40) : "하나"),
