@@ -35,7 +35,6 @@ struct LearningOptionsView: View {
                         } else { Text("유선 헤드폰을 연결하면 학습 화면에서 내 목소리를 들을 수 있어요.").font(.footnote) }
                     }
                 }
-                Section { Button("스테이지로 돌아가기") { Task { await exit() } } }
             }.navigationTitle("학습 옵션")
                 .navigationDestination(for: LearningOptionRoute.self) { route in destination(route) }
                 .toolbar {
@@ -51,7 +50,12 @@ struct LearningOptionsView: View {
                     Button("저장 다시 시도") { Task { _ = await runtime.coordinator.retrySave() } }
                         .accessibilityIdentifier("options-save-retry")
                 }
-                Button("학습 이어하기") { flow.dismissOptions() }.buttonStyle(.borderedProminent)
+                Button { Task { await exit() } } label: {
+                    Text("스테이지로 돌아가기").frame(maxWidth: .infinity, minHeight: 44)
+                }.buttonStyle(.bordered)
+                Button { flow.dismissOptions() } label: {
+                    Text("학습 이어하기").frame(maxWidth: .infinity, minHeight: 44)
+                }.buttonStyle(.borderedProminent)
             }.padding().frame(maxWidth: .infinity).background(.bar)
         }
         .presentationDragIndicator(.visible)

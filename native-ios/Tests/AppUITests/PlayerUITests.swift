@@ -1,6 +1,34 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    @MainActor func testStageExitStaysFixedAcrossOptionsAndLargeText() {
+        continueAfterFailure = false
+        for largeText in [false, true] {
+            let extra = largeText ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] : []
+            let app = fixture(stage: 1, mode: "audio", extra: extra)
+            XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))
+            app.buttons["player-options"].tap()
+            let leave = app.buttons["스테이지로 돌아가기"]
+            XCTAssertTrue(leave.wait(for: \.isHittable, toEqual: true, timeout: 5), "Stage exit must be visible without scrolling")
+            let footerY = leave.frame.midY
+            app.swipeUp()
+            XCTAssertTrue(leave.isHittable)
+            XCTAssertEqual(leave.frame.midY, footerY, accuracy: 1)
+            app.swipeDown()
+            let rate = app.buttons["배속"]
+            XCTAssertTrue(rate.wait(for: \.isHittable, toEqual: true, timeout: 5))
+            rate.tap()
+            XCTAssertTrue(app.sliders["재생 속도"].waitForExistence(timeout: 5))
+            XCTAssertTrue(leave.isHittable, "Nested options must keep the fixed stage-exit action")
+            XCTAssertEqual(leave.frame.midY, footerY, accuracy: 1)
+            XCTAssertTrue(app.buttons["학습 이어하기"].isHittable)
+            leave.tap()
+            XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+            app.terminate()
+        }
+    }
+
     @MainActor func testSubtitleToggleAppearsOnlyForHintStages() {
         continueAfterFailure = false
         for stage in [1, 5, 7, 9] {
@@ -253,6 +281,7 @@ final class PlayerUITests: XCTestCase {
         let book = app.buttons["book-ui-fixture-v1"]
         XCTAssertTrue(book.waitForExistence(timeout: 15))
         if !book.exists { return app }
+        for _ in 0..<5 where !book.isHittable { app.scrollViews.firstMatch.swipeUp() }
         XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10))
         book.tap()
         let row = app.buttons["stage-\(stage)"]
