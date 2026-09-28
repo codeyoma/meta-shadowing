@@ -6,17 +6,21 @@ set -euo pipefail
 native_root=$(cd "$(dirname "$0")/.." && pwd)
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/native-ci-config.XXXXXX")
 trap 'rm -rf -- "$fixture"' EXIT
+mkdir -p "$fixture/native-ios" "$fixture/assets/brand"
 rsync -a --exclude Local.xcconfig --exclude '*.xcodeproj' --exclude DerivedData \
-    --exclude .build --exclude .swiftpm "$native_root/" "$fixture/"
-test ! -e "$fixture/Config/Local.xcconfig"
+    --exclude .build --exclude .swiftpm "$native_root/" "$fixture/native-ios/"
+for resource in talking-pup-512.webp talking-pup-still.png launch-wordmark.png; do
+    cp "$native_root/../assets/brand/$resource" "$fixture/assets/brand/$resource"
+done
+test ! -e "$fixture/native-ios/Config/Local.xcconfig"
 
-if ! xcodegen generate --spec "$fixture/project-ci.yml" --quiet; then
+if ! xcodegen generate --spec "$fixture/native-ios/project-ci.yml" --quiet; then
     echo 'FAIL: CI project must generate without a local identity or signing config.' >&2
     exit 1
 fi
 
 for configuration in Debug Release; do
-    xcodebuild -project "$fixture/MetaShadowingNative.xcodeproj" \
+    xcodebuild -project "$fixture/native-ios/MetaShadowingNative.xcodeproj" \
         -scheme MetaShadowingNative -configuration "$configuration" \
         -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
         -showBuildSettings -json \

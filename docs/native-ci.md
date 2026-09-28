@@ -10,8 +10,8 @@ Expo reference CI lane; the reference source remains available for migration.
 | Required check | Evidence |
 | --- | --- |
 | `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
-| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence` and `AppFoundation` |
-| `ci-native-tests` | Debug XCUITest: navigation, foreground/relaunch, accessibility text size, failure/retry and SQLite confirmation/relaunch |
+| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation` and `LearningMedia` |
+| `ci-native-tests` | Debug XCUITest plus actual iOS audio/video, lifecycle, artwork decoding and Core Haptics construction tests |
 | `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
 
 The generic branch-policy script still uses Node 24 without npm installation.
@@ -44,6 +44,8 @@ The synthetic confirmation test waits for the button to become enabled and
 hittable after the asynchronous save, rather than treating unchanged XP as readiness.
 Both Debug and Release products are inspected for JavaScript resources, excluded
 runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
+The guard also checks unchanged launch artwork, microphone/background-audio
+declarations, and absence of Debug storage/media probe symbols in Release.
 These checks require XcodeGen, `jq` and `rg`; missing build tools are installed
 with Homebrew. Toolchain versions are printed for reproducibility.
 
@@ -63,12 +65,13 @@ TestFlight or submit an App Store release. Feature PRs target `dev`.
 
 ## Coverage limits
 
-The current Swift app includes the #93 synthetic foundation and #94 learning/storage
-domain, not the completed rewrite.
+The current Swift app includes #93–#95 foundation, learning/storage and media/feedback,
+not the completed rewrite.
 Green Swift CI proves only the implemented package/app boundaries. It no longer
 provides regression evidence for the Expo reference or its StoreKit, CloudKit,
 delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
-not deleted. #95–#99 must add the corresponding Swift tests as features migrate.
+not deleted. Native W4 tests now cover the migrated media/feedback boundaries;
+#96–#99 must add the remaining feature tests as those features migrate.
 
 Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains

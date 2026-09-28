@@ -53,6 +53,8 @@ jobs:
         run: swift test --package-path native-ios/Packages/AppFoundation
       - name: Test transactional learning storage
         run: swift test --package-path native-ios/Packages/LearningPersistence
+      - name: Test native media policies and feedback
+        run: swift test --package-path native-ios/Packages/LearningMedia
 
   ci-native-tests:
     name: ci-native-tests
@@ -81,7 +83,7 @@ jobs:
           xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
           echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
           echo 'Required iOS 27.0 Simulator finished booting.'
-      - name: Test native UI on iOS 27
+      - name: Test native UI and actual media adapters on iOS 27
         env:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
@@ -128,7 +130,7 @@ jobs:
               -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
               -derivedDataPath "$RUNNER_TEMP/native-build" CODE_SIGNING_ALLOWED=NO -quiet
             bash native-ios/scripts/verify-native-product.sh \
-              "$RUNNER_TEMP/native-build/Build/Products/$configuration-iphonesimulator/MetaShadowingNative.app"
+              "$RUNNER_TEMP/native-build/Build/Products/$configuration-iphonesimulator/MetaShadowingNative.app" "$configuration"
           done
 
   release-approval:

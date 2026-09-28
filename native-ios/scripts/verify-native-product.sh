@@ -2,17 +2,27 @@
 set -euo pipefail
 shopt -s nocasematch
 
-for tool in rg jq file otool nm codesign plutil; do
+for tool in rg jq file otool nm codesign plutil strings cmp; do
     command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
 
 app=${1:?Usage: bash native-ios/scripts/verify-native-product.sh PATH_TO_APP}
+configuration=${2:-}
+if [[ -z "$configuration" && "$app" == */Release-iphonesimulator/* ]]; then configuration=Release; fi
+native_root=$(cd "$(dirname "$0")/.." && pwd)
 plist="$app/Info.plist"
 test -f "$plist" || { echo 'Missing app Info.plist' >&2; exit 1; }
 executable=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$plist")
 test -f "$app/$executable" || { echo 'Missing app executable' >&2; exit 1; }
 minimum=$(/usr/libexec/PlistBuddy -c 'Print MinimumOSVersion' "$plist")
 test "$minimum" = '26.0' || { echo 'Unexpected deployment minimum' >&2; exit 1; }
+for resource in talking-pup-512.webp talking-pup-still.png launch-wordmark.png; do
+    cmp -s "$app/$resource" "$native_root/../assets/brand/$resource" || {
+        echo 'Missing or changed bundled launch artwork' >&2; exit 1;
+    }
+done
+/usr/libexec/PlistBuddy -c 'Print NSMicrophoneUsageDescription' "$plist" >/dev/null
+test "$(/usr/libexec/PlistBuddy -c 'Print UIBackgroundModes:0' "$plist")" = audio
 
 # Inspect embedded resources and every Mach-O, including Debug's code dylib.
 native_binaries=0
@@ -26,6 +36,9 @@ while IFS= read -r -d '' artifact; do
         native_binaries=$((native_binaries + 1))
         dependencies=$(otool -L "$artifact")
         symbols=$(nm -u "$artifact")
+        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-learning-media|media-probe-video|ui-test-learning-storage|SyntheticLearningProbe' >/dev/null; then
+            echo 'Debug probe code leaked into Release' >&2; exit 1
+        fi
         if printf '%s\n%s\n' "$dependencies" "$symbols" |
             grep -Eiq '/(lib)?(Expo|React|hermes|JavaScriptCore|jsc)|_RCT|_EXModule|_JSGlobalContextCreate|_JSContextGroupCreate'; then
             echo 'Forbidden native runtime dependency or symbol' >&2
@@ -36,7 +49,7 @@ done < <(rg --files --hidden --no-ignore --null "$app")
 test "$native_binaries" -gt 0 || { echo 'No native executable found' >&2; exit 1; }
 
 # A simulator build may be unsigned. Signed builds must have readable,
-# minimal entitlements; service capabilities are outside the W2 shell.
+# minimal entitlements; account services remain outside the native media slice.
 if codesign -d "$app" >/dev/null 2>&1; then
     entitlements=$(codesign -d --entitlements :- "$app" 2>/dev/null)
     if test -n "$entitlements"; then
@@ -49,4 +62,4 @@ if codesign -d "$app" >/dev/null 2>&1; then
         done <<< "$keys"
     fi
 fi
-echo 'PASS: iOS 26.0 minimum; no excluded runtimes, JS resources or service entitlements.'
+echo 'PASS: iOS 26.0 minimum; unchanged launch artwork; no excluded runtimes or service entitlements.'

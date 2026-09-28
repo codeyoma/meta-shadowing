@@ -22,12 +22,14 @@ struct MetaShadowingApp: App {
         WindowGroup {
             #if DEBUG
             if let root = Self.probeRoot {
-                SyntheticLearningProbeView(root: root)
+                if ProcessInfo.processInfo.arguments.contains("--ui-test-learning-media") {
+                    SyntheticMediaProbeView(root: root, mode: Self.mediaMode)
+                } else { SyntheticLearningProbeView(root: root) }
             } else {
-                RootView(bootstrap: bootstrap)
+                LaunchGateView(bootstrap: bootstrap)
             }
             #else
-            RootView(bootstrap: bootstrap)
+            LaunchGateView(bootstrap: bootstrap)
             #endif
         }
     }
@@ -35,10 +37,15 @@ struct MetaShadowingApp: App {
     #if DEBUG
     private static var probeRoot: URL? {
         let arguments = ProcessInfo.processInfo.arguments
-        guard arguments.contains("--ui-test-learning-storage") else { return nil }
+        guard arguments.contains("--ui-test-learning-storage") || arguments.contains("--ui-test-learning-media") else { return nil }
         let index = arguments.firstIndex(of: "--ui-test-probe-id")
         let identifier = index.flatMap { $0 + 1 < arguments.count ? UUID(uuidString: arguments[$0 + 1]) : nil }
         return URL.applicationSupportDirectory.appending(path: "ProbeProfiles/\(identifier?.uuidString ?? "manual")")
+    }
+    private static var mediaMode: String {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "--media-probe-mode"), index + 1 < arguments.count else { return "audio" }
+        return arguments[index + 1]
     }
     #endif
 }

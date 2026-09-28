@@ -4,7 +4,7 @@ import LearningPersistence
 import Testing
 @testable import AppFoundation
 
-private actor FailingStore: LearningStore {
+actor FailingStore: LearningStore {
     let underlying: SQLiteLearningStore
     var failure = false
     var lostReply = false
@@ -12,17 +12,22 @@ private actor FailingStore: LearningStore {
     var suspend = false
     var entered = false
     var failResume = false
+    var loseResumeReply = false
+    var failPause = false
     init(root: URL) { underlying = SQLiteLearningStore(root: root) }
     func failNext(afterCommit: Bool = false) { failure = !afterCommit; lostReply = afterCommit }
     func suspendNext() { suspend = true }
-    func failNextResume() { failResume = true }
+    func failNextResume(afterCommit: Bool = false) { failResume = !afterCommit; loseResumeReply = afterCommit }
+    func failNextPause() { failPause = true }
     func release() { gate?.resume(); gate = nil }
     func open(plan: LearningPlan, preferences: LearningPreferences, writerID: UUID) async throws -> LearningSnapshot { try await underlying.open(plan: plan, preferences: preferences, writerID: writerID) }
     func apply(_ command: LearningCommand) async throws -> CommitReceipt {
         if suspend { suspend = false; entered = true; await withCheckedContinuation { gate = $0 } }
         if failure { failure = false; throw LearningStoreError.injectedFailure }
         if failResume && command.event == .resume { failResume = false; throw LearningStoreError.injectedFailure }
+        if failPause && command.event == .pause { failPause = false; throw LearningStoreError.injectedFailure }
         let result = try await underlying.apply(command)
+        if loseResumeReply && command.event == .resume { loseResumeReply = false; throw LearningStoreError.injectedFailure }
         if lostReply { lostReply = false; throw LearningStoreError.injectedFailure }
         return result
     }
@@ -30,19 +35,31 @@ private actor FailingStore: LearningStore {
     func preferences(profileID: String) async throws -> ProfilePreferences { try await underlying.preferences(profileID: profileID) }
     func savePreferences(_ value: ProfilePreferences, profileID: String) async throws -> Int64 { try await underlying.savePreferences(value, profileID: profileID) }
     func revoke(profileID: String) async { await underlying.revoke(profileID: profileID) }
+    func revoke(writerID: UUID) async { await underlying.revoke(writerID: writerID) }
     func exportBackup(profileID: String) async throws -> BackupSnapshot { try await underlying.exportBackup(profileID: profileID) }
     func mergeBackup(_ data: Data, profileID: String) async throws -> BackupSnapshot { try await underlying.mergeBackup(data, profileID: profileID) }
     func restoreIntoEmptyProfile(_ data: Data, profileID: String) async throws -> BackupSnapshot { try await underlying.restoreIntoEmptyProfile(data, profileID: profileID) }
     func acknowledgeBackup(profileID: String, revision: Int64) async throws { try await underlying.acknowledgeBackup(profileID: profileID, revision: revision) }
 }
-private func syntheticPlan(run: String = "synthetic-run") throws -> LearningPlan {
+func syntheticPlan(run: String = "synthetic-run") throws -> LearningPlan {
     try .make(scope: LearningScope(profileID: "probe", packageKey: "sample-v1", language: "english", book: "sample", stage: 11),
               runID: run, sources: [LearningSource(index: 0, text: "Hello.", translation: "안녕.")], groupSize: 2)
 }
-private func command(_ snapshot: LearningSnapshot, _ event: LearningEvent) -> LearningCommand {
+func command(_ snapshot: LearningSnapshot, _ event: LearningEvent) -> LearningCommand {
     LearningCommand(handle: snapshot.handle, id: UUID(), expectedVersion: snapshot.writerVersion, event: event)
 }
 @Suite struct LearningControllerTests {
+    @Test func deactivationRevokesOnlyItsOwnedWriter() async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SQLiteLearningStore(root: root), plan = try syntheticPlan()
+        let first = try await store.open(plan: plan, preferences: .fresh, writerID: UUID())
+        let old = LearningController(store: store, snapshot: first)
+        let next = try await store.open(plan: plan, preferences: .fresh, writerID: UUID())
+        await old.deactivate()
+        let replacement = LearningController(store: store, snapshot: next)
+        #expect(!(await replacement.send(command(next, .resume))).saveFailed)
+    }
     @Test func failedAutomaticContinuationKeepsConfirmationAndRetryPaused() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

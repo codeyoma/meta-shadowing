@@ -37,6 +37,7 @@ expo-env.d.ts
 # Standalone Swift app: generated products and machine-local identity.
 native-ios/*.xcodeproj/
 native-ios/DerivedData/
+native-ios/Generated/Info.plist
 native-ios/Config/Local.xcconfig
 native-ios/Packages/*/.build/
 native-ios/Packages/*/.swiftpm/

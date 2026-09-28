@@ -19,25 +19,58 @@ packages:
     path: Packages/LearningDomain
   AppFoundation:
     path: Packages/AppFoundation
+  LearningMedia:
+    path: Packages/LearningMedia
+  LearningPersistence:
+    path: Packages/LearningPersistence
 targets:
   MetaShadowingNative:
     type: application
     platform: iOS
-    sources: [App]
+    sources:
+      - path: App
+      - path: ../assets/brand/talking-pup-512.webp
+        buildPhase: resources
+      - path: ../assets/brand/talking-pup-still.png
+        buildPhase: resources
+      - path: ../assets/brand/launch-wordmark.png
+        buildPhase: resources
     dependencies:
       - package: LearningDomain
       - package: AppFoundation
+      - package: LearningMedia
+      - package: LearningPersistence
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER)
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
+        COMPRESS_PNG_FILES: NO
+        STRIP_PNG_TEXT: NO
         INFOPLIST_KEY_CFBundleDisplayName: 쉐도잉 Native
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: 유선 헤드폰으로 내 목소리를 실시간 모니터링합니다. 녹음하거나 전송하지 않습니다.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    info:
+      path: Generated/Info.plist
+      properties:
+        UIBackgroundModes: [audio]
+  NativeMediaIntegrationTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests/MediaIntegrationTests]
+    dependencies:
+      - target: MetaShadowingNative
+      - package: LearningMedia
+      - package: LearningDomain
+      - package: AppFoundation
+      - package: LearningPersistence
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).mediatests
   NativeFoundationUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -53,5 +86,6 @@ schemes:
       targets:
         MetaShadowingNative: all
         NativeFoundationUITests: [test]
+        NativeMediaIntegrationTests: [test]
     test:
-      targets: [NativeFoundationUITests]
+      targets: [NativeFoundationUITests, NativeMediaIntegrationTests]

@@ -1,9 +1,11 @@
 # Standalone Swift iOS foundation
 
-This includes the #93 development shell and #94 learning/storage foundation, not
+This includes the #93 development shell, #94 learning/storage foundation and #95
+native media/feedback services, not
 a feature-complete replacement app. The normal UI displays one synthetic lesson
 and three sentence pairs. A Debug probe exercises real SQLite confirmation and
-relaunch. It does not play media, purchase content or contact cloud services.
+relaunch. A separate Debug media probe plays generated audio/video and silent reveal.
+Neither probe purchases content or contacts cloud services.
 The Expo app remains the behavioral reference until the later migration tickets land.
 
 ## Ownership and isolation
@@ -11,6 +13,7 @@ The Expo app remains the behavioral reference until the later migration tickets 
 - `LearningDomain`: Sendable values, sixteen-stage rules, reward receipts and backup validation.
 - `LearningPersistence`: profile-isolated, actor-owned transactional system SQLite.
 - `AppFoundation`: local workspaces, committed-state controller and observable bootstrap.
+- `LearningMedia`: native transport, wired monitoring, lifecycle, remote commands, launch and haptics.
 - `App`: the composition root, native navigation and scene lifecycle integration.
 - `Tests/AppUITests`: launch, navigation, foreground, relaunch, Dynamic Type and retry.
 
@@ -54,6 +57,7 @@ xcodegen generate --spec native-ios/project.yml
 swift test --package-path native-ios/Packages/LearningDomain
 swift test --package-path native-ios/Packages/LearningPersistence
 swift test --package-path native-ios/Packages/AppFoundation
+swift test --package-path native-ios/Packages/LearningMedia
 
 NATIVE_SIM_ID="$(xcrun simctl create 'MetaShadowing Native W2 iOS 27' \
   com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
@@ -83,6 +87,10 @@ XcodeBuildMCP can run the same scheme with the dedicated simulator selected.
 The Debug-only `--ui-test-fail-first-load` argument injects one synthetic load
 failure for retry testing. It does not edit storage and is absent from Release.
 `--ui-test-learning-storage` opens the synthetic W3 storage probe in Debug only.
+`--ui-test-learning-media --ui-test-probe-id <UUID> --media-probe-mode audio`
+opens the W4 probe; supported modes are `audio`, `video` and `silent`. These use
+disposable `ProbeProfiles` namespaces, real SQLite and generated fixtures.
+No playback-ended test button substitutes for native media completion.
 The large-text UI test uses the largest accessibility text category.
 
 The product check inspects resources, all embedded Mach-O dependencies/symbols,
@@ -120,7 +128,8 @@ is not run by hosted CI. Required check names and branch protections are unchang
 their app-check implementations now validate Swift. Local success does not claim
 a hosted CI result.
 
-W4–W8 still own media, finished UI/launch animation and haptics,
-Apple services, delivery, and replacement/release acceptance. No performance
+W5–W8 still own finished product screens, Apple services, delivery and
+replacement/release acceptance. W4 hardware acceptance remains separate from
+automated tests; see [the media contract](../docs/swift-native/media-feedback-contract.md). No performance
 benchmarks or improvement targets are required. Physical-device replacement,
 account access and public distribution require separate authorization.
