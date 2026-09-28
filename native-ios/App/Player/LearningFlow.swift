@@ -5,7 +5,7 @@ import Observation
 import Foundation
 
 enum LearningOptionRoute: String, Identifiable, Hashable {
-    case menu, rate, group, revealSpeed, display, typography, sentences, guide, analysis
+    case menu, rate, group, revealSpeed, revealPresets, display, typography, sentences, guide, analysis
     var id: String { rawValue }
 }
 

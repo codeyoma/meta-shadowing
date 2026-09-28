@@ -9,7 +9,7 @@ trap 'rm -rf -- "$fixture"' EXIT
 mkdir -p "$fixture/native-ios" "$fixture/assets/brand" "$fixture/assets/illustrations"
 rsync -a --exclude Local.xcconfig --exclude '*.xcodeproj' --exclude DerivedData \
     --exclude .build --exclude .swiftpm "$native_root/" "$fixture/native-ios/"
-for resource in talking-pup-512.webp talking-pup-still.png launch-wordmark.png mascot.png; do
+for resource in talking-pup-512.webp talking-pup-still.png launch-wordmark.png; do
     cp "$native_root/../assets/brand/$resource" "$fixture/assets/brand/$resource"
 done
 cp "$native_root/../assets/illustrations/morning-notes.png" "$fixture/assets/illustrations/morning-notes.png"

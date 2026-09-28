@@ -1,6 +1,94 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    @MainActor func testUngroupedPlayerCanEditGlobalGroupAndRevealPresets() {
+        let app = fixture(stage: 1, mode: "audio")
+        XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))
+        app.buttons["player-options"].tap()
+        let group = app.buttons["다구간 학습 사이즈"], presets = app.buttons["크레이지 스피킹"]
+        XCTAssertTrue(group.waitForExistence(timeout: 5))
+        XCTAssertTrue(presets.exists)
+        guard group.exists, presets.exists else { return }
+        group.tap()
+        app.segmentedControls.buttons["4구간"].tap()
+        app.navigationBars["다구간 학습 사이즈"].buttons["BackButton"].tap()
+        presets.tap()
+        let first = app.textFields["reveal-wpm-1"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        first.doubleTap(); first.typeText("175")
+        app.buttons["완료"].tap()
+        XCTAssertEqual(first.value as? String, "175")
+        app.navigationBars["크레이지 스피킹"].buttons["BackButton"].tap()
+        app.buttons["options-close"].tap()
+        XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+        XCTAssertTrue(app.staticTexts["1/2"].exists)
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["학습 설정"].tap()
+        group.tap()
+        XCTAssertTrue(app.segmentedControls.buttons["4구간"].wait(for: \.isSelected, toEqual: true, timeout: 5))
+        app.navigationBars["다구간 학습 사이즈"].buttons["BackButton"].tap()
+        presets.tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertEqual(first.value as? String, "175")
+    }
+
+    @MainActor func testSilentSpeedPresetsRequireExplicitRunSelection() {
+        let app = fixture(stage: 15, mode: "audio")
+        XCTAssertTrue(app.buttons["학습 속도"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 10))
+        XCTAssertEqual(app.buttons["player-main"].label, "다음 학습")
+        app.buttons["학습 속도"].tap()
+        let first = app.textFields["reveal-wpm-1"]
+        guard first.waitForExistence(timeout: 5) else { XCTFail("Silent speed must include global presets"); return }
+        let active = app.staticTexts["active-reveal-speed"]
+        XCTAssertEqual(active.label, "현재 S1 · 150 WPM")
+        XCTAssertTrue(app.buttons["active-reveal-level-1"].isSelected)
+        first.doubleTap(); first.typeText("175")
+        app.buttons["완료"].tap()
+        XCTAssertEqual(first.value as? String, "175")
+        XCTAssertEqual(active.label, "현재 S1 · 150 WPM")
+        XCTAssertFalse(app.buttons["active-reveal-level-1"].isSelected)
+        app.buttons["active-reveal-level-1"].tap()
+        XCTAssertTrue(active.wait(for: \.label, toEqual: "현재 S1 · 175 WPM", timeout: 5))
+        app.navigationBars["단어 공개 속도"].buttons["BackButton"].tap()
+        app.buttons["options-close"].tap()
+        XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "다음 학습", timeout: 5))
+        XCTAssertTrue(app.staticTexts["1/2"].exists)
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+    }
+
+    @MainActor func testProgressTrackWidthSurvivesCounterDigitBoundary() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let book = app.buttons["book-morning-notes-v1"]
+        XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 20))
+        book.tap()
+        app.buttons["stage-1"].tap()
+        XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))
+        func selectSource(_ index: Int) {
+            app.buttons["player-options"].tap()
+            app.buttons["전체 문장"].tap()
+            let row = app.buttons["source-\(index)"]
+            for _ in 0..<8 where !row.isHittable { app.swipeUp() }
+            XCTAssertTrue(row.isHittable)
+            row.tap()
+        }
+        selectSource(8)
+        XCTAssertTrue(app.staticTexts["9/12"].waitForExistence(timeout: 5))
+        let track = app.descendants(matching: .any)["player-progress"]
+        let before = track.frame
+        XCTAssertGreaterThan(before.width, 0)
+        selectSource(9)
+        XCTAssertTrue(app.staticTexts["10/12"].waitForExistence(timeout: 5))
+        XCTAssertEqual(track.frame.width, before.width, accuracy: 0.5)
+        XCTAssertEqual(track.frame.minX, before.minX, accuracy: 0.5)
+        XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+    }
+
     @MainActor func testFailedGroupingEditRetryUpdatesOpenEditor() {
         let app = fixture(stage: 7, mode: "audio", extra: ["--ui-test-product-fail-save"])
         XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))

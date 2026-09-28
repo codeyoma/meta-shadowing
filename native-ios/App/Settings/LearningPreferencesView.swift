@@ -6,11 +6,12 @@ extension LearningOptionRoute {
     var title: String {
         switch self {
         case .menu: "학습 옵션"; case .rate: "배속"; case .group: "다구간 학습 사이즈"
-        case .revealSpeed: "크레이지 스피킹"; case .display: "학습 화면"; case .typography: "폰트 설정"
+        case .revealSpeed: "단어 공개 속도"; case .revealPresets: "크레이지 스피킹"
+        case .display: "학습 화면"; case .typography: "폰트 설정"
         case .sentences: "전체 문장"; case .guide: "학습 안내"; case .analysis: "문장 분석"
         }
     }
-    static let preferences: [Self] = [.display, .typography, .rate, .group, .revealSpeed]
+    static let preferences: [Self] = [.display, .typography, .rate, .group, .revealPresets]
 }
 struct LearningPreferencesView: View {
     let model: ProductModel
@@ -49,7 +50,7 @@ struct PreferenceEditorView: View {
                     var next = value; next.groupSize = size; commit(next)
                 })) { ForEach(2...4, id: \.self) { Text("\($0)구간").tag($0) } }.pickerStyle(.segmented)
                 Text("진행 중인 학습은 학습 옵션에서 별도로 바꿀 수 있어요.").font(.footnote)
-            case .revealSpeed:
+            case .revealSpeed, .revealPresets:
                 RevealSpeedEditorView(values: value.revealWPM) { speeds in
                     var next = value; next.revealWPM = speeds; commit(next)
                 }

@@ -89,7 +89,11 @@ private struct PlayerHeaderView: View {
         VStack(spacing: 8) {
             HStack {
                 ProgressView(value: Double(session.units.filter { $0.confirmed == $0.planned }.count), total: Double(session.unitCount))
-                Text("\(session.unit + 1)/\(session.unitCount)").monospacedDigit().font(.caption.bold())
+                    .accessibilityIdentifier("player-progress")
+                ZStack(alignment: .trailing) {
+                    Text("\(session.unitCount)/\(session.unitCount)").hidden().accessibilityHidden(true)
+                    Text("\(session.unit + 1)/\(session.unitCount)")
+                }.monospacedDigit().font(.caption.bold()).fixedSize()
             }
             HStack {
                 Button { Task { await flow.presentOptions(.guide) } } label: {

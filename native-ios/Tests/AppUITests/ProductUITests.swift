@@ -2,6 +2,33 @@ import XCTest
 import UIKit
 
 final class ProductUITests: XCTestCase {
+    @MainActor func testRevealPresetsSnapAndCascadeAcrossRelaunch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        func openEditor() {
+            XCTAssertTrue(app.buttons["book-morning-notes-v1"].wait(for: \.isHittable, toEqual: true, timeout: 20))
+            app.tabBars.buttons["설정"].tap()
+            app.buttons["학습 설정"].tap()
+            app.buttons["크레이지 스피킹"].tap()
+            XCTAssertTrue(app.textFields["reveal-wpm-1"].waitForExistence(timeout: 5))
+        }
+        openEditor()
+        let first = app.textFields["reveal-wpm-1"]
+        first.doubleTap()
+        first.typeText("999")
+        XCTAssertEqual(first.value as? String, "999")
+        app.buttons["완료"].tap()
+        for (index, expected) in ["200", "250", "300", "350"].enumerated() {
+            XCTAssertEqual(app.textFields["reveal-wpm-\(index + 1)"].value as? String, expected)
+        }
+        app.terminate(); app.launch()
+        openEditor()
+        for (index, expected) in ["200", "250", "300", "350"].enumerated() {
+            XCTAssertEqual(app.textFields["reveal-wpm-\(index + 1)"].value as? String, expected)
+        }
+    }
+
     @MainActor func testStagePathAndGuideUseCanonicalMethodNames() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
