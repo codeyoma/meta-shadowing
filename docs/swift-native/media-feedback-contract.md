@@ -66,6 +66,11 @@ control; next-track means an actionable third-cycle Repeat. An owner/revision
 gate accepts one press per revision with 0.35-second debounce. Unavailable,
 stale, background and menu-open presses cannot confirm. No double-click timer,
 silent keep-alive audio or hidden sample player is used.
+Each gate transition receives a monotonically increasing, coordinator-owned
+revision, including disabling and re-enabling interaction without a database
+write. Publication records transitions even without a remote observer; unchanged
+reads/publications retain their revision. A rejected queued press cannot consume
+a reopened gate, and a pre-transition press cannot become valid again afterward.
 
 ## Feedback and launch
 
@@ -101,7 +106,7 @@ native end events, observer removal, SQLite/no-credit invariants, feedback retry
 are not evidence that iOS adapters ran.
 
 Final automated results: LearningDomain 53, LearningPersistence 24,
-AppFoundation 26 and LearningMedia 42 tests passed (145 total). The iOS 27 scheme
+AppFoundation 26 and LearningMedia 45 tests passed (148 total). The iOS 27 scheme
 ran 27 tests: eight XCUITests and 19 actual native integration tests, with zero
 failures or skips. Debug and Release builds and product guards passed. The
 local TypeScript oracle matched; actionlint, three branch-policy tests and the

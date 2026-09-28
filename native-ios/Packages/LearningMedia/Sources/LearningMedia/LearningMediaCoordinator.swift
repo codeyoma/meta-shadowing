@@ -38,6 +38,8 @@ public struct LearningMediaState: Sendable {
     private var lastPositionSave = -Double.infinity
     private var revealing = false, busy = false, closing = false, closed = false
     private var consumedRemoteRevision: String?
+    private var lastRemoteGate: LearningRemotePresentation?
+    private var remoteRevision: UInt64 = 0
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init(controller: LearningController, initial: LearningControllerState, catalog: MediaAssetCatalog,
@@ -53,6 +55,13 @@ public struct LearningMediaState: Sendable {
         .init(controller: committed, position: position, phase: phase, error: error, busy: busy || drainTask != nil || pendingPause != nil)
     }
     var permitsInteraction: Bool { context.actionable && !closed && !closing }
+    func revision(for gate: LearningRemotePresentation) -> String {
+        if lastRemoteGate != gate {
+            remoteRevision += 1
+            lastRemoteGate = gate
+        }
+        return String(remoteRevision)
+    }
     public func receiveRemote(_ event: LessonRemoteEvent) async -> LearningMediaState {
         let gate = remoteState
         guard event.owner == gate.owner, event.revision == gate.revision,
@@ -100,6 +109,7 @@ public struct LearningMediaState: Sendable {
     public func setContext(_ context: LessonInteractionContext) {
         self.context = context
         if !context.actionable { suspend(context.menuOpen ? .menu : .inactivity) }
+        else { publish() }
     }
     public func suspend(_ reason: SuspensionReason) {
         guard !closed else { return }
@@ -124,7 +134,11 @@ public struct LearningMediaState: Sendable {
     private func command(_ event: LearningEvent) -> LearningCommand {
         .init(handle: committed.snapshot.handle, id: UUID(), expectedVersion: committed.snapshot.writerVersion, event: event)
     }
-    private func publish() { onChange?(state) }
+    private func publish() {
+        // Retire each gate even when no remote consumer observes the disabled interval.
+        _ = remoteState
+        onChange?(state)
+    }
     private func becameIdle() {
         busy = false
         let waiters = idleWaiters; idleWaiters.removeAll()

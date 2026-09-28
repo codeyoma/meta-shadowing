@@ -1,6 +1,6 @@
 import LearningDomain
 
-public struct LearningRemotePresentation: Sendable {
+public struct LearningRemotePresentation: Equatable, Sendable {
     public let owner: String
     public let revision: String
     public let mainAction: LearningEvent?
@@ -19,9 +19,11 @@ extension LearningMediaCoordinator {
         else if !session.running { action = .resume }
         else if session.phase == .speaking { action = .confirm }
         else { action = nil }
-        return .init(owner: state.controller.snapshot.handle.writerID.uuidString,
+        let gate = LearningRemotePresentation(owner: state.controller.snapshot.handle.writerID.uuidString,
             revision: "\(state.controller.snapshot.writerVersion):\(enabled)", mainAction: action,
             repeatable: enabled && session.canRepeat && action == .next,
             playing: session.running && session.phase == .listening && state.phase == .playing)
+        return .init(owner: gate.owner, revision: revision(for: gate), mainAction: gate.mainAction,
+            repeatable: gate.repeatable, playing: gate.playing)
     }
 }

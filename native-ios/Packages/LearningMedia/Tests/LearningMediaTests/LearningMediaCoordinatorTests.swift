@@ -67,6 +67,85 @@ import LearningMedia
 }
 
 @MainActor struct LearningMediaCoordinatorTests {
+    @Test(arguments: [LessonInteractionContext(menuOpen: true),
+                      LessonInteractionContext(foreground: false),
+                      LessonInteractionContext(access: false)])
+    func rejectedHeadsetPressDoesNotConsumeReopenedGate(_ blocked: LessonInteractionContext) async throws {
+        let f = try await MediaCoordinatorFixture()
+        let initial = f.coordinator.remoteState
+        let version = f.coordinator.state.controller.snapshot.writerVersion
+        var native = LessonRemoteState(); native.begin(initial.owner)
+        native.update(owner: initial.owner, revision: initial.revision, actionable: initial.actionable,
+            repeatable: initial.repeatable, since: 0)
+        let received = native.take(action: .main, at: 1, foreground: true, wired: true)
+        let event = try #require(received)
+
+        f.coordinator.setContext(blocked)
+        _ = await f.coordinator.receiveRemote(event)
+        try await eventually { !f.coordinator.state.busy }
+        f.coordinator.setContext(.init())
+        #expect(f.coordinator.state.controller.snapshot.writerVersion == version)
+        #expect(f.coordinator.state.controller.paused)
+        let reopened = f.coordinator.remoteState
+        native.update(owner: reopened.owner, revision: reopened.revision, actionable: reopened.actionable,
+            repeatable: reopened.repeatable, since: 2)
+        let retry = native.take(action: .main, at: 2, foreground: true, wired: true)
+        #expect(retry != nil)
+        if let retry {
+            _ = await f.coordinator.receiveRemote(retry)
+            try await eventually { f.driver.playing }
+        }
+        #expect(f.coordinator.state.controller.snapshot.progress.xp == 0)
+        await f.close()
+    }
+
+    @Test(arguments: [LessonInteractionContext(menuOpen: true),
+                      LessonInteractionContext(foreground: false),
+                      LessonInteractionContext(access: false)])
+    func staleHeadsetPressCannotResumeAfterGateRoundTrip(_ blocked: LessonInteractionContext) async throws {
+        let f = try await MediaCoordinatorFixture()
+        let initial = f.coordinator.remoteState
+        let version = f.coordinator.state.controller.snapshot.writerVersion
+        var native = LessonRemoteState(); native.begin(initial.owner)
+        native.update(owner: initial.owner, revision: initial.revision, actionable: initial.actionable,
+            repeatable: initial.repeatable, since: 0)
+        let received = native.take(action: .main, at: 1, foreground: true, wired: true)
+        let event = try #require(received)
+        // No consumer reads remoteState while the gate is closed.
+        f.coordinator.setContext(blocked)
+        try await eventually { !f.coordinator.state.busy }
+        f.coordinator.setContext(.init())
+        _ = await f.coordinator.receiveRemote(event)
+        #expect(f.coordinator.state.controller.paused)
+        #expect(f.coordinator.state.controller.snapshot.writerVersion == version)
+        #expect(!f.driver.playing)
+        #expect(f.coordinator.state.controller.snapshot.progress.xp == 0)
+        await f.close()
+    }
+
+    @Test func unchangedRemotePresentationDoesNotRearmConsumedPress() async throws {
+        let f = try await MediaCoordinatorFixture()
+        let initial = f.coordinator.remoteState
+        var native = LessonRemoteState(); native.begin(initial.owner)
+        native.update(owner: initial.owner, revision: initial.revision, actionable: initial.actionable,
+            repeatable: initial.repeatable, since: 0)
+        let received = native.take(action: .main, at: 1, foreground: true, wired: true)
+        let event = try #require(received)
+        f.coordinator.setContext(.init())
+        let unchanged = f.coordinator.remoteState
+        #expect(unchanged.revision == initial.revision)
+        native.update(owner: unchanged.owner, revision: unchanged.revision, actionable: unchanged.actionable,
+            repeatable: unchanged.repeatable, since: 2)
+        #expect(native.take(action: .main, at: 2, foreground: true, wired: true) == nil)
+        _ = await f.coordinator.receiveRemote(event)
+        try await eventually { f.driver.playing }
+        let version = f.coordinator.state.controller.snapshot.writerVersion
+        _ = await f.coordinator.receiveRemote(event)
+        #expect(f.coordinator.state.controller.snapshot.writerVersion == version)
+        #expect(f.coordinator.state.controller.snapshot.progress.xp == 0)
+        await f.close()
+    }
+
     @Test func explicitPauseFlushesUncheckpointedPosition() async throws {
         let f = try await MediaCoordinatorFixture()
         _ = await f.coordinator.perform(.resume)
