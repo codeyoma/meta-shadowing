@@ -52,6 +52,8 @@ public struct LearningControlPresentation: Equatable, Sendable {
     init() {}
     func update(_ state: LearningMediaState) {
         position = state.position
-        elapsedSeconds = state.position?.seconds ?? state.controller.snapshot.session.positionSeconds
+        let session = state.controller.snapshot.session
+        // Paused edits can rescale or reset committed time without a new transport sample.
+        elapsedSeconds = session.running ? (state.position?.seconds ?? session.positionSeconds) : session.positionSeconds
     }
 }

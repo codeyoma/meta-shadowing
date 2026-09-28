@@ -3,8 +3,10 @@ import LearningDomain
 import CryptoKit
 
 /// Reads the app's bundled public sample. No hosted package or ownership authority.
+/// The root must remain immutable for this catalog's lifetime, as an installed app bundle does.
 public actor BundledProductCatalog: ProductCatalog {
     private let root: URL
+    private var validatedMaterials: BookMaterials?
     public init(root: URL) { self.root = root }
 
     public func books() throws -> [CatalogBook] { [try manifest().book] }
@@ -12,6 +14,11 @@ public actor BundledProductCatalog: ProductCatalog {
         (try? manifest().book.id) == packageKey
     }
     public func materials(packageKey: String) throws -> BookMaterials {
+        try Task.checkCancellation()
+        if let validatedMaterials {
+            guard validatedMaterials.book.id == packageKey else { throw ProductError.denied }
+            return validatedMaterials
+        }
         let manifest = try manifest()
         guard manifest.book.id == packageKey else { throw ProductError.denied }
         let base = root.standardizedFileURL.resolvingSymlinksInPath()
@@ -30,10 +37,13 @@ public actor BundledProductCatalog: ProductCatalog {
             guard data.count == phrase.bytes, digest == phrase.sha256 else { throw ProductError.invalidContent }
             media.append(.audio(file: file))
         }
-        return BookMaterials(book: manifest.book, root: base,
+        let materials = BookMaterials(book: manifest.book, root: base,
             sources: manifest.phrases.enumerated().map {
                 LearningSource(index: $0.offset, text: $0.element.text, translation: $0.element.translation)
             }, media: media)
+        try Task.checkCancellation()
+        validatedMaterials = materials
+        return materials
     }
     private func manifest() throws -> Manifest {
         try Task.checkCancellation()
