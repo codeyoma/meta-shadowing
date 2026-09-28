@@ -119,7 +119,7 @@ final class PlayerUITests: XCTestCase {
         presets.tap()
         let first = app.textFields["reveal-wpm-1"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
-        first.doubleTap(); first.typeText("175")
+        first.replaceNumericText(with: "175")
         app.buttons["완료"].tap()
         XCTAssertEqual(first.value as? String, "175")
         app.navigationBars["크레이지 스피킹"].buttons["BackButton"].tap()
@@ -149,7 +149,7 @@ final class PlayerUITests: XCTestCase {
         let active = app.staticTexts["active-reveal-speed"]
         XCTAssertEqual(active.label, "현재 S1 · 150 WPM")
         XCTAssertTrue(app.buttons["active-reveal-level-1"].isSelected)
-        first.doubleTap(); first.typeText("175")
+        first.replaceNumericText(with: "175")
         app.buttons["완료"].tap()
         XCTAssertEqual(first.value as? String, "175")
         XCTAssertEqual(active.label, "현재 S1 · 150 WPM")

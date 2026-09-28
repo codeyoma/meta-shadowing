@@ -3,6 +3,7 @@ import UIKit
 
 final class ProductUITests: XCTestCase {
     @MainActor func testRevealPresetsSnapAndCascadeAcrossRelaunch() {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
         app.launch()
@@ -15,8 +16,8 @@ final class ProductUITests: XCTestCase {
         }
         openEditor()
         let first = app.textFields["reveal-wpm-1"]
-        first.doubleTap()
-        first.typeText("999")
+        first.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
+        first.replaceNumericText(with: "999")
         XCTAssertEqual(first.value as? String, "999")
         app.buttons["완료"].tap()
         for (index, expected) in ["200", "250", "300", "350"].enumerated() {
