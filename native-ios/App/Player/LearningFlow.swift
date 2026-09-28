@@ -16,11 +16,24 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     private(set) var failed = false
     private(set) var title = ""
     private(set) var options: LearningOptionRoute?
+    private(set) var analysis: AnalysisModel?
+    let analysisPresenter: DictionaryPresenter
+    let playerPresenter: DictionaryPresenter
+    let analysisDictionary: DictionaryRequestOwner
+    let playerDictionary: DictionaryRequestOwner
+    @ObservationIgnored private var analysisRequest: AnalysisRequest?
+    @ObservationIgnored private var accessChanges: Task<Void, Never>?
     private let workspace: ProductWorkspace
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var pending: Task<OpenedLesson, any Error>?
     @ObservationIgnored private var teardown: Task<Void, Never>?
-    init(workspace: ProductWorkspace) { self.workspace = workspace }
+    init(workspace: ProductWorkspace) {
+        self.workspace = workspace
+        let analysis = DictionaryPresenter(), player = DictionaryPresenter()
+        analysisPresenter = analysis; playerPresenter = player
+        analysisDictionary = DictionaryRequestOwner(presenter: analysis)
+        playerDictionary = DictionaryRequestOwner(presenter: player)
+    }
 
     func open(packageKey: String, stage: Int) async {
         generation += 1
@@ -61,6 +74,15 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
                 authorize: { await workspace.permitsPractice($0) },
                 makeTransport: { _ in if let video { video } else { AudioQueueTransport() } })
             self.runtime = runtime
+            accessChanges = Task { [weak self, workspace] in
+                let changes = await workspace.referenceChanges()
+                for await _ in changes {
+                    guard !Task.isCancelled else { return }
+                    // Any authority revision invalidates old content, even if access is regranted.
+                    self?.invalidateAnalysis()
+                    self?.playerDictionary.cancel()
+                }
+            }
             title = opened.materials.book.title
             pending = nil; loading = false
             _ = await runtime.coordinator.perform(.stageEntry)
@@ -71,6 +93,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     }
     func presentOptions(_ route: LearningOptionRoute) async {
         guard let runtime, options == nil else { return }
+        playerDictionary.cancel()
         let request = generation
         runtime.setMenuOpen(true)
         let paused = await runtime.coordinator.perform(.pause)
@@ -82,10 +105,13 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         options = route
     }
     func dismissOptions() {
+        invalidateAnalysis()
         options = nil
         runtime?.setMenuOpen(false)
     }
     func suspend() {
+        playerDictionary.cancel()
+        invalidateAnalysis()
         runtime?.suspend()
         if loading { generation += 1; pending?.cancel(); loading = false; failed = true }
     }
@@ -94,6 +120,9 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         await releaseResources()
     }
     private func releaseResources() async {
+        playerDictionary.cancel()
+        accessChanges?.cancel(); accessChanges = nil
+        invalidateAnalysis()
         let previous = teardown, opening = pending, active = runtime
         opening?.cancel(); active?.suspend()
         pending = nil; runtime = nil; video = nil
@@ -107,4 +136,55 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         teardown = task
         await task.value
     }
+    func loadAnalysis() async {
+        guard let runtime, options != nil else { return }
+        let request = AnalysisRequest(state: runtime.state.controller)
+        guard request.matches(runtime.state.controller) else { return }
+        analysisRequest = request
+        let workspace = workspace
+        let model = AnalysisModel(load: { try await workspace.readAnalysis($0) }, isCurrent: { [weak self, weak runtime] request in
+            guard let self, let runtime, self.runtime === runtime, self.options != nil else { return false }
+            return self.analysisRequest == request && request.matches(runtime.state.controller)
+        })
+        analysis = model
+        await model.load(request)
+    }
+    func validateReference() {
+        guard let request = analysisRequest else { return }
+        if let runtime, request.matches(runtime.state.controller) { return }
+        invalidateAnalysis()
+    }
+    func invalidateAnalysis() {
+        analysisDictionary.cancel()
+        analysis?.invalidate(); analysisRequest = nil
+    }
+    func leaveAnalysis() { invalidateAnalysis(); analysis = nil }
+    func lookupAnalysis(term: String, sentenceID: String, token: Int) async {
+        guard let request = analysisRequest else { return }
+        await analysisDictionary.lookup(term: term, permits: { [weak self] in
+            guard let self, let runtime = self.runtime else { return false }
+            return self.analysisRequest == request && request.matches(runtime.state.controller)
+                && self.analysis?.selectedSentenceID == sentenceID && self.analysis?.selectedToken == token
+                && self.analysis?.selectedSentence?.tokens[token].text == term
+        }, prepare: { [workspace] in await workspace.permitsPractice(request.scope) })
+    }
+    func lookupPlayer(term: String, permitsWord: @escaping @MainActor () -> Bool) async {
+        guard let runtime, options == nil else { return }
+        let identity = AnalysisRequest(state: runtime.state.controller)
+        await playerDictionary.lookup(term: term, permits: { [weak self, weak runtime] in
+            guard let self, let runtime, self.runtime === runtime, self.options == nil else { return false }
+            let session = runtime.controls.session
+            return runtime.controls.active && !runtime.controls.saveFailed && permitsWord()
+                && session.plan == identity.plan && session.unit == identity.unit
+        }, prepare: { [weak runtime, workspace] in
+            guard let runtime else { return false }
+            runtime.setMenuOpen(true)
+            let paused = await runtime.coordinator.perform(.pause)
+            guard paused.controller.active, !paused.controller.saveFailed, paused.controller.paused else { return false }
+            return await workspace.permitsPractice(identity.scope)
+        })
+        // The menu gate stays closed to remote actions until the owned dictionary is gone.
+        if !playerDictionary.busy { runtime.setMenuOpen(false) }
+    }
+    func dictionarySettled() { if !playerDictionary.busy, options == nil { runtime?.setMenuOpen(false) } }
 }

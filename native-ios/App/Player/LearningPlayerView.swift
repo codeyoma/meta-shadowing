@@ -33,7 +33,7 @@ struct LearningPlayerView: View {
                             VStack(spacing: 20) {
                                 VoiceMonitorControls(runtime: runtime)
                                 LearningContentView(session: runtime.controls.session, motion: runtime.motion,
-                                    preferences: model.snapshot?.preferences.learning ?? .fresh)
+                                    preferences: model.snapshot?.preferences.learning ?? .fresh, flow: flow)
                                     .id("\(runtime.controls.session.plan.runID)-\(runtime.controls.session.unit)")
                             }.padding()
                         }
@@ -73,11 +73,14 @@ struct LearningPlayerView: View {
             }
         }
         .interactiveDismissDisabled()
+        .background { DictionaryHost(presenter: flow.playerPresenter).frame(width: 0, height: 0) }
+        .onChange(of: flow.playerDictionary.busy) { _, _ in flow.dictionarySettled() }
         .sheet(item: Binding(get: { flow.options }, set: { if $0 == nil { flow.dismissOptions() } })) { option in
             LearningOptionsView(flow: flow, model: model, initial: option, exit: exit)
         }
         .task { await flow.open(packageKey: route.packageKey, stage: route.stage) }
         .onChange(of: scenePhase) { _, phase in if phase != .active { flow.suspend() } }
+        .onChange(of: flow.runtime?.controls) { _, _ in flow.validateReference() }
         .onDisappear { Task { await flow.close() } }
     }
     private func exit() async {

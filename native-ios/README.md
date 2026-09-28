@@ -5,8 +5,9 @@ native media/feedback services and #96 native product UI. The normal app now has
 Books, Stages and Settings, with the twelve original Morning Notes audio phrases
 bundled for offline learning. The player supports all sixteen domain stages,
 paused options, sentence navigation and shared typography/speed/grouping editors.
-Analysis/dictionary and Apple purchase/delivery/sync integrations remain #97/#98;
-their destinations explicitly report unavailability rather than faking success.
+Native analysis, relation graphs and Apple dictionary are implemented under #97.
+The bundled sample has no syntax, so analysis remains unavailable for that book.
+Apple purchase/delivery/sync remains #98; those destinations report unavailability.
 Debug storage/media probes remain isolated verification tools.
 The Expo app remains the behavioral reference until the later migration tickets land.
 
@@ -16,6 +17,7 @@ The Expo app remains the behavioral reference until the later migration tickets 
 - `LearningPersistence`: profile-isolated, actor-owned transactional system SQLite.
 - `AppFoundation`: local workspaces, committed-state controller and observable bootstrap.
 - `LearningMedia`: native transport, wired monitoring, lifecycle, remote commands, launch and haptics.
+- `LearningReference`: offline syntax validation, confined reads and relation projections.
 - `App`: the composition root, native navigation and scene lifecycle integration.
 - `Tests/AppUITests`: launch, navigation, foreground, relaunch, Dynamic Type and retry.
 
@@ -63,6 +65,7 @@ swift test --package-path native-ios/Packages/LearningDomain
 swift test --package-path native-ios/Packages/LearningPersistence
 swift test --package-path native-ios/Packages/AppFoundation
 swift test --package-path native-ios/Packages/LearningMedia
+swift test --package-path native-ios/Packages/LearningReference
 
 NATIVE_SIM_ID="$(xcrun simctl create 'MetaShadowing Native W2 iOS 27' \
   com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
@@ -139,9 +142,15 @@ is not run by hosted CI. Required check names and branch protections are unchang
 their app-check implementations now validate Swift. Local success does not claim
 a hosted CI result.
 
-W6–W8 still own reference tools, Apple services, delivery and
+W7–W8 still own Apple services, delivery and
 replacement/release acceptance. See [the product UI contract](../docs/swift-native/product-ui-contract.md)
 for #96's implemented boundaries and verification. W4 hardware acceptance remains separate from
 automated tests; see [the media contract](../docs/swift-native/media-feedback-contract.md). No performance
 benchmarks or improvement targets are required. Physical-device replacement,
 account access and public distribution require separate authorization.
+
+See [the reference-tools contract](../docs/swift-native/reference-tools-contract.md)
+for #97's authorization and dictionary ownership boundaries. Debug fixture modes
+`analysis` and `analysis-long` use generated public syntax through the normal UI.
+No private content or installed Apple dictionary is needed for package tests;
+native UI checks presentation rather than definition text.

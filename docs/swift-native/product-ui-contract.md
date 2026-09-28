@@ -66,7 +66,8 @@ Failed confirmation stays uncredited until retry commits; recovery stays paused.
 Returning to stages and opening the lesson again obtains the current durable
 checkpoint if an obsolete writer cannot recover. No generic error path resets data.
 
-Installed syntax, relation graphs and Apple dictionary remain #97. StoreKit,
+Installed syntax, relation graphs and Apple dictionary are covered by the
+[W6 reference-tools contract](reference-tools-contract.md). StoreKit,
 hosted downloads, purchase restore, private CloudKit and scoped reset operations
 remain #98. Their navigation entries report this boundary. Bundled content is
 read-only; there is no destructive substitute for removing a hosted download.
