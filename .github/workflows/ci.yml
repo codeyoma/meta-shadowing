@@ -83,11 +83,31 @@ jobs:
           xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
           echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
           echo 'Required iOS 27.0 Simulator finished booting.'
+      - name: Build native test products
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
+          xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme MetaShadowingNative -configuration Debug \
+            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
+            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
+            CODE_SIGNING_ALLOWED=NO -quiet
+      - name: Verify isolated app launch before XCTest
+        timeout-minutes: 3
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
+          ci_app="$RUNNER_TEMP/native-ui-build/Build/Products/Debug-iphonesimulator/MetaShadowingNative.app"
+          ci_profile=$(uuidgen)
+          xcrun simctl install "$CI_SIMULATOR" "$ci_app" > "$RUNNER_TEMP/native-ui-install.log" 2>&1
+          xcrun simctl launch --terminate-running-process "$CI_SIMULATOR" com.example.metashadowing.ci \
+            --ui-test-product --ui-test-probe-id "$ci_profile" > "$RUNNER_TEMP/native-ui-preflight.log" 2>&1
+          echo 'Isolated CI app launched before XCTest.'
       - name: Test native UI and actual media adapters on iOS 27
         env:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
-          xcodebuild test -project native-ios/MetaShadowingNative.xcodeproj \
+          xcodebuild test-without-building -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme MetaShadowingNative -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \

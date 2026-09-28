@@ -65,13 +65,24 @@ final class NativeFoundationUITests: XCTestCase {
     }
 
     @MainActor func testRetryAfterSyntheticLoadFailure() {
+        assertLoadRetry()
+    }
+
+    @MainActor func testRetryRemainsReachableAtLargestText() {
+        assertLoadRetry(extra: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+    }
+
+    @MainActor private func assertLoadRetry(extra: [String] = []) {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString, "--ui-test-fail-first-load"]
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString, "--ui-test-fail-first-load"] + extra
         app.launch()
         let retry = app.buttons["bootstrap-retry"]
         XCTAssertTrue(retry.waitForExistence(timeout: 15), "Initial load failure must expose retry")
-        XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10), "Launch gate must release the retry action")
+        let launchScreen = app.descendants(matching: .any)["launch-screen"]
+        XCTAssertTrue(launchScreen.waitForNonExistence(timeout: 15), "Launch artwork must finish before retry is tappable")
+        XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10),
+                      "Retry is not tappable: enabled=\(retry.isEnabled), frame=\(retry.frame), window=\(app.windows.firstMatch.frame)")
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10), "Foregrounding must preserve the explicit retry action")

@@ -40,11 +40,18 @@ UI tests run in Debug because the retry test uses a Debug-only failure injection
 Before starting XCUITest, a separate five-minute preparation step waits for
 `simctl bootstatus -b` to report that the required iOS 27 Simulator has finished
 booting. A readiness failure fails the job; it does not skip or retry failed tests.
+The job then builds test products and performs a single app install/launch preflight
+in a separate UUID-scoped product profile before `test-without-building`. This checks
+the app-launch service as well as simulator boot, and fails if launch cannot succeed.
+Each XCTest still starts a clean app process: [XCUIApplication.launch](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/launch())
+terminates any running preflight instance. No test results are manufactured by the preflight.
 The synthetic confirmation test waits for the button to become enabled and
 hittable after the asynchronous save, rather than treating unchanged XP as readiness.
 The load-retry test uses an isolated product profile and verifies that foregrounding
 does not consume its explicit retry action. Test assertions include failure messages
 so the result summary distinguishes loading, launch-gate and retry failures.
+The retry checks explicitly wait for the real launch overlay to disappear, cover
+the largest Dynamic Type setting, and include button/window geometry on a hit-test failure.
 Verbose simulator diagnostic collection is disabled because it can stall for ten
 minutes after a failure. XCTest assertions, result bundles, failure summaries and
 nonzero test exit codes remain enabled; no failed test is skipped or retried by CI.
