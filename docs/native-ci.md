@@ -55,6 +55,12 @@ the largest Dynamic Type setting, and include button/window geometry on a hit-te
 Verbose simulator diagnostic collection is disabled because it can stall for ten
 minutes after a failure. XCTest assertions, result bundles, failure summaries and
 nonzero test exit codes remain enabled; no failed test is skipped or retried by CI.
+The native job has a 40-minute budget, including cold simulator setup and test-product
+compilation; the test step itself remains bounded at 30 minutes. A previous 30-minute
+job limit cancelled the expanded suite before Xcode could finalize its result bundle.
+Only test-case lifecycle lines and the final test verdict are streamed from Xcode's
+verbose output; shell `pipefail` preserves test failures through that filter. The result
+summary reports an interrupted run explicitly when no finalized bundle is available.
 Both Debug and Release products are inspected for JavaScript resources, excluded
 runtime dependencies/symbols, the iOS 26.0 minimum and unexpected entitlements.
 The guard also checks unchanged launch artwork, microphone/background-audio
