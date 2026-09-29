@@ -127,6 +127,13 @@ jobs:
           if [ -f "$RUNNER_TEMP/native-ui.xcresult/Info.plist" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/native-ui.xcresult" |
               jq '{result, totalTestCount, passedTests, failedTests, skippedTests, testFailures}'
+            # The summary includes only the first assertion per failed test.
+            # Export all assertion messages, never device metadata or source locations.
+            xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/native-ui.xcresult" |
+              jq '[.testNodes[] | .. | objects |
+                select(.nodeType? == "Test Case" and .result? == "Failed") |
+                {test: .nodeIdentifier, durationInSeconds,
+                 failures: [.. | objects | select(.nodeType? == "Failure Message") | .name]}]'
           else
             echo 'No finalized XCTest result bundle; the test command did not finish.'
           fi

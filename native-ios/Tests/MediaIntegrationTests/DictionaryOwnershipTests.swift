@@ -6,7 +6,8 @@ import UIKit
 @testable import MetaShadowingNative
 
 @MainActor struct DictionaryOwnershipTests {
-    @Test func cancellationBeforeUIKitStartsPresentationIsRetained() async throws {
+    @Test(arguments: [0, 6])
+    func cancellationBeforeUIKitStartsPresentationIsRetained(delaySeconds: Int) async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .first { $0.activationState == .foregroundActive })
         let window = UIWindow(windowScene: scene)
@@ -25,8 +26,14 @@ import UIKit
         }
         presenter.dismiss(id: id)
         #expect(completions == 0, "Cancellation must wait for the pending presentation")
-        host.startPresentation()
-        try await waitForMedia { completions == 1 && host.presentedViewController == nil }
+        // Exercise a cold/slow presentation without changing system animation settings.
+        let presentation = Task { @MainActor in
+            try await Task.sleep(for: .seconds(delaySeconds))
+            host.startPresentation()
+        }
+        defer { presentation.cancel() }
+        try await waitForDictionaryDismissal(host: host, completions: { completions })
+        try await presentation.value
         #expect(host.presentedViewController == nil)
         #expect(completions == 1)
     }
@@ -51,7 +58,7 @@ import UIKit
         }
         #expect(host.presentedViewController != nil)
         presenter.dismiss(id: id)
-        try await waitForMedia { completions == 1 && host.presentedViewController == nil }
+        try await waitForDictionaryDismissal(host: host, completions: { completions })
         #expect(succeeded)
         presenter.dismiss(id: id)
         #expect(completions == 1)
@@ -114,6 +121,19 @@ import UIKit
     func recognizesWholeWords(_ text: String) {
         #expect(DictionaryWords.ranges(text) == [NSRange(location: 0, length: text.utf16.count)])
     }
+}
+@MainActor
+private func waitForDictionaryDismissal(host: UIViewController, completions: () -> Int) async throws {
+    // Cold system-dictionary presentation is not a five-second media fixture.
+    // This is a cleanup/ownership assertion, not a presentation performance limit.
+    let deadline = ContinuousClock.now + .seconds(30)
+    while (completions() != 1 || host.presentedViewController != nil), ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+    let completionCount = completions()
+    let drawerAttached = host.presentedViewController != nil
+    try #require(completionCount == 1 && !drawerAttached,
+        "Dictionary dismissal exceeded its 30-second UIKit deadline")
 }
 // Hold only UIKit's entry point; presentation and dismissal still use real controllers.
 @MainActor private final class DeferredDictionaryHost: UIViewController {
