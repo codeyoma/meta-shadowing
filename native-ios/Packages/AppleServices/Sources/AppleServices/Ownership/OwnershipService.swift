@@ -56,7 +56,8 @@ public final class OwnershipService {
   }
 
   public func startObserving() {
-    guard observer == nil else { return }
+    // Unconfigured builds must not initialize a StoreKit environment at launch.
+    guard !productID.isEmpty, observer == nil else { return }
     let lifetime = lifetime
     observer = Task { [weak self] in
       for await result in Transaction.updates {
@@ -205,6 +206,11 @@ public final class OwnershipService {
   }
 
   private func refreshEntitlements(preserveOnAbsence: Bool = false) async {
+    guard !productID.isEmpty else {
+      snapshot.ownership = .notOwned
+      snapshot.entitlementIssue = .none
+      return
+    }
     entitlementRevision += 1
     let revision = entitlementRevision
     var ownership = PackageOwnership.notOwned

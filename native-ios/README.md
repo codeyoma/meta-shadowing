@@ -45,6 +45,9 @@ The local verification toolchain is Xcode 27, Swift 6 language mode and XcodeGen
 app's deployment minimum remains **iOS 26.0**. The product check also uses `rg` and
 `jq`. No npm install, Expo generation, CocoaPods or Metro is needed for this target.
 
+The following identity steps apply to privately configured builds using `project.yml`.
+The verification commands below use `project-ci.yml` and need no private configuration.
+
 1. Copy `native-ios/Config/Example.xcconfig` to `native-ios/Config/Local.xcconfig`.
 2. Set `NATIVE_APP_BUNDLE_IDENTIFIER` to the existing app identifier from your
    local configuration. In this checkout it can be read with
@@ -52,7 +55,7 @@ app's deployment minimum remains **iOS 26.0**. The product check also uses `rg` 
 3. Keep `Local.xcconfig` ignored. Do not add an Apple account, signing team or
    new production identifier for simulator verification.
 
-The shell deliberately uses the existing identity. Installing it on a reference
+A privately configured build uses the existing identity. Installing it on a reference
 device would replace that app. **Use a newly created dedicated simulator, never
 the reference simulator or the physical phone.** Do not infer install authority
 from the presence of a connected device.
@@ -63,7 +66,7 @@ Run from the worktree root. Create the simulator once and retain its returned ID
 locally; IDs must not be committed or posted in issues.
 
 ```sh
-xcodegen generate --spec native-ios/project.yml
+xcodegen generate --spec native-ios/project-ci.yml
 swift test --package-path native-ios/Packages/LearningDomain
 swift test --package-path native-ios/Packages/LearningPersistence
 swift test --package-path native-ios/Packages/AppFoundation
@@ -79,6 +82,13 @@ xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
   -scheme MetaShadowingNative -configuration Debug \
   -destination "platform=iOS Simulator,id=$NATIVE_SIM_ID" \
   -derivedDataPath native-ios/DerivedData CODE_SIGNING_ALLOWED=NO build
+
+# Install the local fixture in an earlier app process, including on a clean simulator.
+xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
+  -scheme StoreKitFixtureSetup -configuration Debug \
+  -destination "platform=iOS Simulator,id=$NATIVE_SIM_ID" \
+  -derivedDataPath native-ios/DerivedData -parallel-testing-enabled NO \
+  -collect-test-diagnostics never CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
 
 xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
   -scheme MetaShadowingNative -configuration Debug \
@@ -105,6 +115,13 @@ disposable `ProbeProfiles` namespaces, real SQLite and generated fixtures.
 No playback-ended test button substitutes for native media completion.
 StoreKit fixture execution requires an ad-hoc Debug signature with `get-task-allow`;
 it never requires an Apple account. Do not run purchase fixtures in an unsigned host.
+Use the fictional CI configuration for these checks. Run `StoreKitFixtureSetup`
+successfully on the same simulator before `MetaShadowingNative` tests. On a cold
+iOS 27 simulator, loading the fixture within the purchase-test process can leave
+purchases routed to Sandbox even though product queries use the local catalog.
+The separate setup scheme installs and validates the catalog without purchasing;
+the behavioral suite then launches a new host process and resets its own fixture
+transactions. This is not a test retry or a substitute for purchase assertions.
 The product UI tests use `--ui-test-product --ui-test-probe-id <UUID>` for isolated
 SQLite profiles. Optional Debug-only `--ui-test-product-fixture audio|video|long|video-long`
 selects generated public fixtures; `--ui-test-product-fail-save` injects one failed

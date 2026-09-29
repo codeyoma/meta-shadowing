@@ -64,6 +64,28 @@ Test-product build and execution override signing with `CODE_SIGNING_ALLOWED=YES
 CODE_SIGN_IDENTITY=-`. This is an ad-hoc simulator signature, not account-based signing.
 The Debug app includes `get-task-allow` so StoreKitTest can intercept purchases. Unsigned
 product inspection stays unchanged. Missing StoreKit fixture setup fails before purchase.
+The `remaining` shard first runs the separate `StoreKitFixtureSetup` scheme against
+the same app identity and simulator. Its single required check installs the local
+catalog with `SKTestSession`, validates the fixture product, and leaves no purchases.
+It must report exactly one passing test with zero skipped or failed tests. The normal
+suite then starts a new app process; all existing purchase/restore/refund assertions
+remain intact. This explicit preparation is not a retry of failed tests.
+Setup compilation has its own ten-minute budget and execution has five minutes.
+The complete main scheme is built after setup so its full app/test dependency graph
+owns the final products used by `test-without-building`.
+
+A clean iOS 27 reproduction showed fixture product and entitlement queries using
+Xcode's local store while `Product.purchase()` in the same initial process requested
+Sandbox authentication. A minimal host reproduced it without application services.
+Installing the fixture in an earlier process, followed by a new host launch, allowed
+the same real purchase to return a verified `.xcode` transaction without any login.
+The app also avoids opening StoreKit transaction streams or querying entitlements
+when no product is configured. Local verification must include a newly created
+simulator; a previously initialized simulator alone cannot detect this setup failure.
+Local verification on 2026-09-29 passed the setup check and all 79 `remaining` tests
+on the newly created simulator, plus all 17 player tests on the existing dedicated
+simulator. All 337 package tests passed. These are local results, not a claim that
+the subsequent hosted run has completed.
 The build job also validates the service configuration mapper and builds a fictional,
 unsigned ExtensionKit downloader without launching it or contacting Apple services.
 

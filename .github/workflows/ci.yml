@@ -97,10 +97,51 @@ jobs:
           xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
           echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
           echo 'Required iOS 27.0 Simulator finished booting.'
+      - name: Build StoreKit fixture setup products
+        if: matrix.shard == 'remaining'
+        timeout-minutes: 10
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
+          xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme StoreKitFixtureSetup -configuration Debug \
+            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
+            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -quiet
+      - name: Prepare local StoreKit fixture in a separate host process
+        if: matrix.shard == 'remaining'
+        timeout-minutes: 5
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
+          set -o pipefail
+          # Install the fixture before launching the process that exercises purchases.
+          # This is setup, not a retry of failing tests or a sandbox-account login.
+          ci_setup_status=0
+          xcodebuild test-without-building -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme StoreKitFixtureSetup -configuration Debug \
+            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
+            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
+            -parallel-testing-enabled NO -collect-test-diagnostics never \
+            -resultBundlePath "$RUNNER_TEMP/native-storekit-setup.xcresult" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 |
+            awk '/^Test Case / || /^\*\* TEST/ { print; fflush() }' || ci_setup_status=$?
+          if [ ! -f "$RUNNER_TEMP/native-storekit-setup.xcresult/Info.plist" ]; then
+            echo 'StoreKit fixture setup did not produce a finalized test result.' >&2
+            exit 1
+          fi
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/native-storekit-setup.xcresult" |
+            jq '{result, totalTestCount, passedTests, failedTests, skippedTests, testFailures}' > "$RUNNER_TEMP/native-storekit-setup-summary.json"
+          cat "$RUNNER_TEMP/native-storekit-setup-summary.json"
+          jq -e '.result == "Passed" and .totalTestCount == 1 and
+            .passedTests == 1 and .failedTests == 0 and .skippedTests == 0' \
+            "$RUNNER_TEMP/native-storekit-setup-summary.json" > /dev/null
+          exit "$ci_setup_status"
       - name: Build native test products
         env:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
+          # Build the complete test graph last; setup may relink the same app host.
           xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme MetaShadowingNative -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \

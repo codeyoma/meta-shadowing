@@ -28,6 +28,19 @@ packages:
   LearningReference:
     path: Packages/LearningReference
 targets:
+  NativeStoreKitFixtureSetup:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/StoreKitFixtureSetup
+      - path: Tests/AppleServiceIntegrationTests/Fixtures
+        buildPhase: resources
+    dependencies:
+      - target: MetaShadowingNative
+      - sdk: StoreKitTest.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).storekitsetup
   NativeAppleServiceTests:
     type: bundle.unit-test
     platform: iOS
@@ -115,6 +128,13 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).uitests
 schemes:
+  StoreKitFixtureSetup:
+    build:
+      targets:
+        MetaShadowingNative: all
+        NativeStoreKitFixtureSetup: [test]
+    test:
+      targets: [NativeStoreKitFixtureSetup]
   MetaShadowingNative:
     build:
       targets:

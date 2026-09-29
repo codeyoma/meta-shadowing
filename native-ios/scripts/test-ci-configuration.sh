@@ -34,6 +34,18 @@ if [ "$(/usr/bin/xmllint --xpath "$test_contract" "$scheme")" != true ]; then
     exit 1
 fi
 
+# StoreKit setup must use the same app host, in a separate process/scheme, without
+# filtering or replacing any of the three behavioral test targets above.
+setup_scheme="$fixture/native-ios/MetaShadowingNative.xcodeproj/xcshareddata/xcschemes/StoreKitFixtureSetup.xcscheme"
+setup_contract='count(/Scheme/TestAction/Testables/TestableReference) = 1
+    and count(//TestableReference[@skipped="NO" and @parallelizable="NO"][BuildableReference/@BlueprintName="NativeStoreKitFixtureSetup"]) = 1
+    and count(/Scheme/BuildAction/BuildActionEntries/BuildActionEntry/BuildableReference[@BlueprintName="MetaShadowingNative"]) = 1
+    and count(//SkippedTests | //SelectedTests) = 0'
+if [ "$(/usr/bin/xmllint --xpath "$setup_contract" "$setup_scheme")" != true ]; then
+    echo 'FAIL: StoreKit setup must run separately against the app host with no filtered tests.' >&2
+    exit 1
+fi
+
 for configuration in Debug Release; do
     xcodebuild -project "$fixture/native-ios/MetaShadowingNative.xcodeproj" \
         -scheme MetaShadowingNative -configuration "$configuration" \

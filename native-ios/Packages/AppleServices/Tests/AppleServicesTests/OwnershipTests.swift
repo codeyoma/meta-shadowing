@@ -3,6 +3,18 @@ import Testing
 @testable import AppleServices
 
 struct OwnershipTests {
+    @Test @MainActor func unconfiguredAccessNeverQueriesStoreKitEntitlements() async {
+        let service = OwnershipService(productID: "", currentEntitlements: {
+            Issue.record("An unconfigured product must not query StoreKit entitlements")
+            return []
+        })
+        defer { service.stopObserving() }
+        let access = PackageAccess(store: service)
+        #expect(!(await access.refresh()).allowed)
+        await service.refresh()
+        #expect(service.snapshot.product == nil)
+        #expect(service.snapshot.catalogIssue == .unavailable)
+    }
     @Test @MainActor func stoppedRestoreCannotPublishIntoRestartedService() async throws {
         var held: CheckedContinuation<Void, Never>?
         let service = OwnershipService(productID: "com.example.book", currentEntitlements: { [] }, synchronize: {
