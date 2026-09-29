@@ -115,11 +115,18 @@ jobs:
             -scheme MetaShadowingNative -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
-            -parallel-testing-enabled NO \
+            -parallel-testing-worker-count 2 \
             -collect-test-diagnostics never \
             -resultBundlePath "$RUNNER_TEMP/native-ui.xcresult" \
             CODE_SIGNING_ALLOWED=NO 2>&1 |
-            awk '/^Test Case / && / (started|passed|failed)[ .]/ { print; fflush() } /^\*\* TEST/ { print; fflush() }'
+            awk '
+              /^Test Case / && / (started|passed|failed)[ .]/ { print; fflush() }
+              /^Test case / && / (passed|failed) on / {
+                # Xcode may interleave diagnostics inside the destination suffix.
+                sub(/ on .*/, ""); print; fflush()
+              }
+              /^\*\* TEST/ { print; fflush() }
+            '
       - name: Report UI test results without account or device metadata
         if: always()
         run: |
@@ -130,10 +137,12 @@ jobs:
             # The summary includes only the first assertion per failed test.
             # Export all assertion messages, never device metadata or source locations.
             xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/native-ui.xcresult" |
-              jq '[.testNodes[] | .. | objects |
-                select(.nodeType? == "Test Case" and .result? == "Failed") |
-                {test: .nodeIdentifier, durationInSeconds,
-                 failures: [.. | objects | select(.nodeType? == "Failure Message") | .name]}]'
+              jq '[.testNodes[] | .. | objects | select(.nodeType? == "Test Case")] as $tests |
+                [$tests[] | select(.result == "Failed") |
+                  {test: .nodeIdentifier, durationInSeconds,
+                   failures: [.. | objects | select(.nodeType? == "Failure Message") | .name]}],
+                ($tests | map({test: .nodeIdentifier, result, durationInSeconds}) |
+                  sort_by(.durationInSeconds // 0) | reverse | .[:10])'
           else
             echo 'No finalized XCTest result bundle; the test command did not finish.'
           fi

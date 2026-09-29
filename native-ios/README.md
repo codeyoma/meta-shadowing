@@ -117,8 +117,8 @@ GitHub Actions now validates only the standalone Swift app. It uses the
 GitHub-hosted `xcode-27` public-preview runner, explicitly selects Xcode 27.0,
 and runs UI tests on iOS 27.0. The deployment minimum remains iOS 26.0.
 
-`project-ci.yml` includes the local app specification and replaces only its
-configuration files with `Config/CI.xcconfig`. This uses a fictional,
+`project-ci.yml` includes the local app specification, replaces its configuration
+files with `Config/CI.xcconfig`, and enables parallel UI testing. This uses a fictional,
 unsigned simulator identity and never reads or overwrites `Local.xcconfig`.
 No Apple account, provisioning profile, npm dependency or Expo generation is needed.
 
@@ -129,10 +129,15 @@ xcodegen generate --spec native-ios/project-ci.yml
 
 The configuration test generates a disposable copy without local configuration
 and checks the resolved Debug/Release identity, signing and compiler settings.
+It also requires both full test targets exactly once and parallelism only for UI tests.
 Generating the CI project replaces only the ignored generated Xcode project;
 run `xcodegen generate --spec native-ios/project.yml` to return to local settings.
-Package tests, Debug UI tests, Debug/Release builds and product checks use the
-same commands above. CI supplies disposable build/result paths. See
+Package tests, Debug/Release builds and product checks use the same commands above.
+For CI-style testing, generate `project-ci.yml` and replace
+`-parallel-testing-enabled NO` in the test command with
+`-parallel-testing-worker-count 2`. Xcode distributes UI classes across simulator
+clones while the media integration target retains its serial-runner setting.
+CI supplies disposable build/result paths. See
 [the CI guide](../docs/native-ci.md) for the required jobs and coverage limits.
 
 ## Reference checks and remaining work

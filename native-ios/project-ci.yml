@@ -1,7 +1,16 @@
 # Share the app, packages, tests and compiler settings with local development.
-# Only replace the private identity config for a clean, unsigned CI checkout.
+# Use an unsigned CI identity and distribute UI classes across simulator clones.
 include:
   - project.yml
 configFiles:
   Debug: Config/CI.xcconfig
   Release: Config/CI.xcconfig
+schemes:
+  MetaShadowingNative:
+    test:
+      # Includes merge arrays additively, so replace to avoid duplicate testables.
+      targets:REPLACE:
+        - name: NativeFoundationUITests
+          parallelizable: true
+        - name: NativeMediaIntegrationTests
+          parallelizable: false
