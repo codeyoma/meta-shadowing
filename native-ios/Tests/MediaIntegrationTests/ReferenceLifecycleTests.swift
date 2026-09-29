@@ -18,7 +18,7 @@ import LearningReference
         _ = await runtime.coordinator.perform(.resume)
         try await waitForMedia { runtime.coordinator.remoteState.actionable }
         await catalog.replaceAuthority()
-        for _ in 0..<100 where runtime.coordinator.remoteState.actionable { await Task.yield() }
+        try await waitForMedia { !runtime.coordinator.remoteState.actionable }
         #expect(!runtime.coordinator.remoteState.actionable)
         #expect(runtime.controls.xp == 0)
         await flow.close()

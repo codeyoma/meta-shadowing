@@ -287,7 +287,11 @@ public actor SyncCoordinator {
     public func networkAvailable() async {
         guard active else { return }
         retryCount = 0
-        await retry()
+        if snapshot.account == .unknown || snapshot.account == .unavailable {
+            await refreshAccount()
+        } else {
+            await retry()
+        }
     }
     func serviceError(_ error: any Error) -> ProgressCloudError {
         if let error = error as? ProgressCloudError { return error }

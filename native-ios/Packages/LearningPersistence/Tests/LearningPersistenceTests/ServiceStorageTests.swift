@@ -4,6 +4,19 @@ import Testing
 @testable import LearningPersistence
 
 struct ServiceStorageTests {
+    @Test(arguments: [ProfilePreferences(), ProfilePreferences(libraryLanguage: "french")])
+    func unchangedPreferencesDoNotEmitRevisionEvents(value: ProfilePreferences) async throws {
+        let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let target = store(root)
+        let revision = try await target.savePreferences(value, profileID: "local")
+        var changes = try await target.backupChanges(profileID: "local").makeAsyncIterator()
+        #expect(await changes.next() == revision)
+        let before = try await target.exportBackup(profileID: "local")
+        #expect(try await target.savePreferences(value, profileID: "local") == revision)
+        #expect(try await target.exportBackup(profileID: "local") == before)
+        await target.finishTestRevisionObservation()
+        #expect(await changes.next() == nil)
+    }
     @Test func revisionSignalOnlyFollowsCommittedChanges() async throws {
         let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
         let target = store(root)
@@ -38,5 +51,11 @@ struct ServiceStorageTests {
         #expect(merged.revision == before.revision + 1)
         #expect(try await target.readProgress(scope: plan().scope, today: StudyDay("2026-09-27")).xp == 3)
         #expect(try await target.mergeBackups([payload], profileID: "guest").revision == merged.revision)
+    }
+}
+
+private extension SQLiteLearningStore {
+    func finishTestRevisionObservation() {
+        for listener in revisionListeners["local"]?.values ?? [:].values { listener.finish() }
     }
 }

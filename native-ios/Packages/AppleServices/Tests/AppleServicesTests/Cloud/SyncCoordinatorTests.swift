@@ -5,6 +5,55 @@ import Testing
 @testable import AppleServices
 
 @CloudActor struct SyncCoordinatorTests {
+    @Test(arguments: [CloudAccount.unknown, .unavailable], [false, true])
+    func reconnectRechecksAccountAndHonorsSavedConsent(initialAccount: CloudAccount, enabled: Bool) async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try makeSyncFixture(root)
+        await fixture.coordinator.refreshAccount()
+        try await fixture.coordinator.enable(importGuest: false, generation: fixture.coordinator.snapshot.generation)
+        if !enabled { try await fixture.coordinator.disable(generation: fixture.coordinator.snapshot.generation) }
+        let profile = await fixture.coordinator.snapshot.profileID
+        await fixture.coordinator.stop()
+
+        var online = false
+        let owner = ProgressCloudOwner(cacheDirectory: { root.appendingPathComponent("reconnect-\($0)") }, activationAccess: {
+            .init(identity: { fixture.cloud.account }, makeTransport: {
+                try ProgressTransport(directory: root.appendingPathComponent("reconnect-\($0)"), scope: $0, cloud: fixture.cloud)
+            })
+        })
+        let store = SQLiteLearningStore(root: root.appendingPathComponent("learning"))
+        let coordinator = SyncCoordinator(store: store, transport: NativeCloudTransport(owner: owner,
+            account: { online ? .available(fixture.cloud.account) : initialAccount }))
+        await coordinator.refreshAccount()
+        #expect(await coordinator.snapshot.account == initialAccount)
+        #expect(await coordinator.snapshot.profileID == profile)
+        let revision = try await store.savePreferences(.init(libraryLanguage: "french"), profileID: profile)
+        let before = try await store.exportBackup(profileID: profile)
+        #expect(before.acknowledgedRevision < revision)
+
+        // A reconnect while backgrounded cannot reactivate services.
+        await coordinator.setActive(false)
+        online = true
+        await coordinator.networkAvailable()
+        #expect(await coordinator.snapshot.account == initialAccount)
+        #expect(try await store.exportBackup(profileID: profile) == before)
+        online = false
+        await coordinator.setActive(true)
+        await coordinator.networkAvailable()
+        #expect(await coordinator.snapshot.account == initialAccount)
+        #expect(try await store.exportBackup(profileID: profile) == before)
+
+        online = true
+        await coordinator.networkAvailable()
+        #expect(await coordinator.snapshot.account == .available(fixture.cloud.account))
+        #expect(await coordinator.snapshot.profileID == profile)
+        #expect(await coordinator.snapshot.enabled == enabled)
+        let after = try await store.exportBackup(profileID: profile)
+        #expect(after.acknowledgedRevision == (enabled ? revision : before.acknowledgedRevision))
+        #expect(try await store.preferences(profileID: profile).libraryLanguage == "french")
+        await coordinator.stop()
+    }
     @Test func explicitCloudDeleteWorksAfterDisablingAutomaticSync() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

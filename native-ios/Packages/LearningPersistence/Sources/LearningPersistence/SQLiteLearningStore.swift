@@ -77,17 +77,17 @@ public actor SQLiteLearningStore: LearningStore {
     public func savePreferences(_ value: ProfilePreferences, profileID: String) throws -> Int64 {
         let value = try value.validated()
         let data = try encode(value), db = try connection(profileID)
-        let committed = try db.transaction {
+        let (committed, changed) = try db.transaction {
             guard try readServiceState(db).resetIntent == nil else { throw LearningStoreError.staleWriter }
-            if try db.query("SELECT state FROM preferences WHERE id=1").first?["state"]?.data == data { return try revision(db) }
+            if try db.query("SELECT state FROM preferences WHERE id=1").first?["state"]?.data == data { return (try revision(db), false) }
             let oldRow = try db.query("SELECT state,clock,selection_clock FROM preferences WHERE id=1").first
             let old = try decode(ProfilePreferences.self, oldRow?["state"]), stamp = try nextStamp(db)
             let settingsStamp = old.learning == value.learning ? oldRow?["clock"]?.text ?? "" : stamp
             let selectionStamp = old.libraryLanguage == value.libraryLanguage && old.libraryBook == value.libraryBook && old.libraryPackageKey == value.libraryPackageKey ? oldRow?["selection_clock"]?.text ?? "" : stamp
             try db.execute("UPDATE preferences SET state=?,clock=?,selection_clock=? WHERE id=1", [.blob(data), .text(settingsStamp), .text(selectionStamp)])
-            return try incrementRevision(db)
+            return (try incrementRevision(db), true)
         }
-        publishRevision(committed, profileID: profileID)
+        if changed { publishRevision(committed, profileID: profileID) }
         return committed
     }
     public func revoke(profileID: String) {
