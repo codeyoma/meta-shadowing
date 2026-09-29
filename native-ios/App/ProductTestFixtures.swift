@@ -4,6 +4,8 @@ import AppFoundation
 import LearningDomain
 import LearningMedia
 import LearningPersistence
+import LearningReference
+import CryptoKit
 
 /// Only injected for a validated, isolated UI-test profile. Never compiled into Release.
 actor ProductTestCatalog: ProductCatalog {
@@ -17,6 +19,14 @@ actor ProductTestCatalog: ProductCatalog {
                      sentenceCount: 2)]
     }
     func permitsPractice(packageKey: String) -> Bool { packageKey == "ui-fixture-v1" }
+    func syntax(packageKey: String) async throws -> InstalledSyntaxFile? {
+        guard mode == "analysis" || mode == "analysis-long" else { return nil }
+        let materials = try await materials(packageKey: packageKey)
+        let data = try ReferenceTestSyntax.data(materials.sources)
+        try data.write(to: root.appending(path: "syntax.json"), options: .atomic)
+        return InstalledSyntaxFile(root: root, relativePath: "syntax.json", byteCount: data.count,
+            sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
+    }
     func materials(packageKey: String) async throws -> BookMaterials {
         guard packageKey == "ui-fixture-v1" else { throw ProductError.denied }
         if let materialsTask { return try await materialsTask.value }
@@ -30,7 +40,7 @@ actor ProductTestCatalog: ProductCatalog {
             }
             let long = mode == "long" || mode == "video-long"
             return BookMaterials(book: book, root: root, sources: [
-                .init(index: 0, text: long ? String(repeating: "Secret bilingual practice. ", count: 40) : "Secret one",
+                .init(index: 0, text: mode == "analysis-long" ? String(repeating: "Words ", count: 12) + "finish" : long ? String(repeating: "Secret bilingual practice. ", count: 40) : "Secret one",
                       translation: long ? String(repeating: "긴 문장을 천천히 연습해요. ", count: 40) : "하나"),
                 .init(index: 1, text: "Secret two", translation: "둘")
             ], media: media)

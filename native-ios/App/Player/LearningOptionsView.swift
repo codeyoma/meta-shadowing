@@ -14,6 +14,7 @@ struct LearningOptionsView: View {
         path = initial == .menu ? [] : [initial]
     }
     var body: some View {
+        VStack(spacing: 0) {
         NavigationStack(path: $path) {
             List {
                 if let runtime = flow.runtime {
@@ -43,7 +44,8 @@ struct LearningOptionsView: View {
                     }
                 }
         }
-        .safeAreaInset(edge: .bottom) {
+        // Keep the footer outside the stack so every pushed destination receives
+        // the reduced viewport, including UIKit-backed navigation transitions.
             VStack {
                 if let runtime = flow.runtime, runtime.controls.saveFailed {
                     Text("저장하지 못했어요.").foregroundStyle(.red)
@@ -59,13 +61,17 @@ struct LearningOptionsView: View {
             }.padding().frame(maxWidth: .infinity).background(.bar)
         }
         .presentationDragIndicator(.visible)
+        .onChange(of: path) { old, new in
+            if old.contains(.analysis), !new.contains(.analysis) { flow.leaveAnalysis() }
+        }
+        .onDisappear { flow.leaveAnalysis() }
     }
     @ViewBuilder private func destination(_ route: LearningOptionRoute) -> some View {
         if let runtime = flow.runtime {
             switch route {
             case .sentences: AllSentencesView(flow: flow, session: runtime.controls.session)
             case .guide: LearningGuideView(stage: runtime.controls.session.plan.scope.stage)
-            case .analysis: ServiceUnavailableView(title: "문장 분석", ticket: "#97")
+            case .analysis: AnalysisBrowserView(flow: flow)
             case .revealSpeed:
                 preferenceEditor(.revealSpeed, runtime: runtime)
                     .safeAreaInset(edge: .top) { revealSelection(runtime) }

@@ -1,5 +1,6 @@
 import Foundation
 import LearningDomain
+import LearningReference
 
 public enum ProductError: Error, Equatable, Sendable {
     case unavailable, invalidContent, denied, busy
@@ -32,4 +33,11 @@ public protocol ProductCatalog: Sendable {
     func books() async throws -> [CatalogBook]
     func materials(packageKey: String) async throws -> BookMaterials
     func permitsPractice(packageKey: String) async -> Bool
+    func syntax(packageKey: String) async throws -> InstalledSyntaxFile?
+    /// Mutable catalogs emit on entitlement, installation or account changes.
+    func referenceChanges() async -> AsyncStream<Void>
+}
+public extension ProductCatalog {
+    func syntax(packageKey: String) async throws -> InstalledSyntaxFile? { nil }
+    func referenceChanges() async -> AsyncStream<Void> { AsyncStream { $0.finish() } }
 }

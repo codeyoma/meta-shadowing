@@ -10,7 +10,7 @@ Expo reference CI lane; the reference source remains available for migration.
 | Required check | Evidence |
 | --- | --- |
 | `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
-| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation` and `LearningMedia` |
+| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation`, `LearningMedia` and `LearningReference` |
 | `ci-native-tests` | Debug XCUITest plus actual iOS audio/video, lifecycle, artwork decoding and Core Haptics construction tests |
 | `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
 
@@ -55,6 +55,16 @@ the largest Dynamic Type setting, and include button/window geometry on a hit-te
 Verbose simulator diagnostic collection is disabled because it can stall for ten
 minutes after a failure. XCTest assertions, result bundles, failure summaries and
 nonzero test exit codes remain enabled; no failed test is skipped or retried by CI.
+Dictionary ownership tests use a separate 30-second, condition-based UIKit deadline,
+not the five-second media-fixture deadline. On consecutive cold hosted runs, the first
+dictionary test exceeded the media deadline while the next dictionary test passed.
+The summary alone cannot distinguish slow presentation from a stuck drawer.
+The fixture also exercises a deliberately
+delayed presentation beyond five seconds. It still requires exactly one completion,
+no attached drawer, and no premature cancellation completion. Timeout failures name
+dictionary cleanup, include captured assertion values, and stop the test. Media deadlines are unchanged.
+CI reports every assertion message for failed test cases, not only the first message
+from Xcode's summary. Device metadata and source locations remain excluded.
 The native job has a 40-minute budget, including cold simulator setup and test-product
 compilation; the test step itself remains bounded at 30 minutes. A previous 30-minute
 job limit cancelled the expanded suite before Xcode could finalize its result bundle.
@@ -92,7 +102,8 @@ provides regression evidence for the Expo reference or its StoreKit, CloudKit,
 delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
 not deleted. Native W4 tests now cover the migrated media/feedback boundaries;
 W5 tests cover normal browsing, settings and the audio/video/silent player;
-#97–#99 must add the remaining feature tests as those features migrate.
+W6 tests cover syntax, scoped analysis, graphs and dictionary ownership;
+#98–#99 must add the remaining feature tests as those features migrate.
 
 Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains

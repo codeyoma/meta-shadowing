@@ -6,8 +6,9 @@ The owner replaced the original inline-dictionary design with an explicit
 dictionary button after native close behavior in the embedded prototype also
 dismissed the analysis screen. The inline prototype is not shipped.
 
-- Selecting a token highlights its relations and shows a `사전 보기` button below
-  the explanations. Selection alone does not open the dictionary.
+- Selecting a token highlights its relations and shows a `사전 보기` button
+  immediately after the graph, before the explanations. This reflects the later
+  reference UI refinement. Selection alone does not open the dictionary.
   Punctuation remains selectable in the graph but has no dictionary action;
   lookup eligibility uses the same native word tokenizer as the existing drawer.
 - The button presents the existing Apple dictionary drawer above analysis.
@@ -22,7 +23,7 @@ dismissed the analysis screen. The inline prototype is not shipped.
   is unchanged.
 - The sentence and graph use separate rounded cards. Light mode uses white cards
   on the existing menu gray background; dark mode uses the existing dark palette.
-  Graph-to-explanation and explanation-to-dictionary gaps are 32 points.
+  The native graph-to-dictionary and dictionary-to-explanation gaps are 32 points.
 - The source-sentence copy button stays vertically centered and shows a check
   for 1.5 seconds after a successful copy. Copying preserves token selection and
   never copies dictionary content.
