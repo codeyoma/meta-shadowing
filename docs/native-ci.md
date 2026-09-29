@@ -30,22 +30,35 @@ The narrow actionlint label extension recognizes this official preview label;
 it does not configure a self-hosted runner or suppress other workflow checks.
 
 XcodeGen generates `native-ios/project-ci.yml`, which includes the normal app
-specification and overrides its config-file references and UI test parallelism. The checked-in CI
+specification and overrides only its config-file references. The checked-in CI
 config contains a fictional simulator identity and disables signing. It does
 not include, create or overwrite private `Local.xcconfig`. A regression test
 generates a disposable copy without that local file and verifies the resolved
 identity, compiler, deployment and signing settings for both configurations.
 It also verifies that both complete test targets occur exactly once, with no
-selected or skipped tests, and that only the UI target enables parallelism.
+selected or skipped tests in the scheme and serial execution for both targets.
 
-The CI scheme distributes UI test classes across two Xcode workers on the same
-runner. Xcode gives each worker a separate simulator clone; each test still
-launches its own app process and isolated fixture profiles retain their UUIDs.
-The media integration target keeps its existing serial-runner setting and
-Swift Testing suite isolation. CI deliberately does not pass the global
-`-parallel-testing-enabled YES` override, which would override that target setting.
-Local `project.yml` keeps serial execution. No extra hosted jobs or build copies
-are added, and every UI and integration test remains in the required check.
+CI partitions the complete scheme into two complementary jobs:
+
+| Shard | Selection |
+| --- | --- |
+| `player` | `-only-testing:NativeFoundationUITests/PlayerUITests` |
+| `remaining` | `-skip-testing:NativeFoundationUITests/PlayerUITests` |
+
+Both selections derive from the same class identifier in the workflow. The first
+runs the longest UI class; the second runs every other UI test and all media
+integration tests. New tests automatically enter one of these complementary sets.
+Each job uses its own standard hosted runner, builds its own test products and
+passes `-parallel-testing-enabled NO`, retaining one simulator and the existing
+Swift Testing suite isolation. This repeats setup to avoid simulator contention.
+There are no paid larger runners or external providers.
+
+The matrix uses `fail-fast: false` so a failure in one shard does not suppress the
+other shard's results. Each result summary must be nonempty, fully passing and
+contain zero failed or skipped tests. The required `ci-native-tests` job runs
+with `always()` and accepts only an aggregate shard result of `success`; failures,
+cancellations and skipped shards cannot make the required check green. Release
+approval still depends on this exact required check name.
 
 UI tests run in Debug because the retry test uses a Debug-only failure injection.
 Before starting XCUITest, a separate five-minute preparation step waits for
@@ -76,12 +89,12 @@ no attached drawer, and no premature cancellation completion. Timeout failures n
 dictionary cleanup, include captured assertion values, and stop the test. Media deadlines are unchanged.
 CI reports every assertion message for failed test cases, not only the first message
 from Xcode's summary. Device metadata and source locations remain excluded.
-The native job has a 40-minute budget, including cold simulator setup and test-product
+Each native shard has a 40-minute budget, including cold simulator setup and test-product
 compilation; the test step itself remains bounded at 30 minutes. A previous 30-minute
 job limit cancelled the expanded suite before Xcode could finalize its result bundle.
 Only test-case lifecycle lines and the final test verdict are streamed from Xcode's
 verbose output; shell `pipefail` preserves test failures through that filter. The result
-summary reports an interrupted run explicitly when no finalized bundle is available.
+summary fails explicitly when no finalized bundle is available.
 Parallel test output omits simulator clone names. The result report also lists the
 ten slowest test cases by duration, without device metadata or source locations.
 Both Debug and Release products are inspected for JavaScript resources, excluded
@@ -113,34 +126,42 @@ spent 27m 26s and 28m 55s in `ci-native-tests`. The latest run broke down as fol
 All 73 tests passed: 39 UI tests and 34 integration tests. UI test durations summed
 to 20m 25s, with `PlayerUITests` accounting for 10m 23s. This makes UI execution the
 first optimization target; checkout took two seconds and the other required jobs
-finished within 3m 20s. Two workers target that serial work without paying for
-additional hosted checkouts or full builds.
+finished within 3m 20s. The split therefore balances the long player class against
+the remaining suite, while accounting for repeated setup on separate runners.
 
 This applies the measurement and setup-cost principles from
 [Linear's CI optimization report](https://linear.app/now/ci-bottleneck-reworked).
-Build caching and more hosted shards need separate measurements; their restore,
-save and repeated setup costs are not assumed to be free. Hosted improvement must
-be measured after this workflow is pushed; local timing is not a hosted result.
+Build caching and further shards need separate measurements; their restore,
+save and repeated setup costs are not assumed to be free.
 
-### Local verification
+### Rejected same-runner experiment
 
-On 2026-09-29, the same compiled test bundle was run with Xcode 27.0 on a dedicated
-iOS 27.0 simulator, first with `-parallel-testing-enabled NO`, then with the CI
-scheme and `-parallel-testing-worker-count 2`:
+On 2026-09-29, two UI workers on one local Mac reduced the full test command from
+23m 24s to 17m 13s, with the same 73 tests passing. This did not transfer to hosted
+CI: the first hosted run took 34m 17s overall and 28m 53s in the test step, with
+72 tests passing and `testSaveFailureRetryDoesNotDuplicateCreditOrAutoplay` failing.
+The assertion text did not distinguish which checkpoint failed. Several unrelated
+UI tests also slowed substantially: the largest-text graph test took 256s versus
+71s in the previous serial hosted run.
 
-| Test command | Elapsed | Passed | Failed / skipped |
-| --- | --- | --- | --- |
-| Serial | 23m 24s | 73 | 0 / 0 |
-| Two UI workers | 17m 13s | 73 | 0 / 0 |
+The standard arm64 runner has 3 CPU cores and 7 GB RAM; see
+[GitHub's runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+Shared-runner contention is the leading explanation for the broad slowdown, not
+proof of the exact failed assertion. The final workflow removes concurrent Xcode
+workers from each machine. Save-retry and fixture assertions now name their
+checkpoints without changing test behavior, expected values or timeouts.
 
-The `test-without-building` command was 26.4% faster, saving 6m 11s. Both finalized
-result bundles contained identical test-identifier multisets. This is one local
-sample on a shared Mac with other simulator work active, not a hosted estimate.
-Times include Xcode test-runner setup and result finalization, but exclude the
-shared build and the separate app-install/launch preflight. Parallel simulator
-startup is included. The configuration regression test, actionlint, shellcheck,
-and result/log reporting checks also passed. In particular, interleaved Xcode
-diagnostics cannot retain a simulator destination suffix in parallel test output.
+The current compiled inventory contains 73 tests, partitioned by class into 17
+player tests and 56 remaining tests. A local targeted execution verified combined
+`-only-testing` and `-skip-testing` filtering and ran the save-retry test twice;
+both iterations passed with the unchanged timeouts. The configuration guard,
+actionlint, shellcheck, nonempty-result validation and required-gate failure cases
+also passed. Xcode enumeration lists tests outside class-level filters, so its
+filtered output is not used as proof that a shard executed the correct set.
+
+Compare complete hosted shard results against the 73-test inventory and record
+hosted timings in the PR. The earlier 26.4% local improvement is not a result for
+the final workflow.
 
 ## Branch and release protection
 

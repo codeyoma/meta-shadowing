@@ -21,15 +21,15 @@ if ! xcodegen generate --spec "$fixture/native-ios/project-ci.yml" --quiet; then
     exit 1
 fi
 
-# Keep every test enabled exactly once. Only XCUITest classes may be distributed
-# across simulator clones; the media integration target retains its serial runner.
+# Keep the complete scheme intact. CI partitions it at invocation time and runs
+# one simulator per hosted runner, with no Xcode worker clones.
 scheme="$fixture/native-ios/MetaShadowingNative.xcodeproj/xcshareddata/xcschemes/MetaShadowingNative.xcscheme"
-parallel_contract='count(/Scheme/TestAction/Testables/TestableReference) = 2
-    and count(//TestableReference[@skipped="NO" and @parallelizable="YES"][BuildableReference/@BlueprintName="NativeFoundationUITests"]) = 1
+test_contract='count(/Scheme/TestAction/Testables/TestableReference) = 2
+    and count(//TestableReference[@skipped="NO" and @parallelizable="NO"][BuildableReference/@BlueprintName="NativeFoundationUITests"]) = 1
     and count(//TestableReference[@skipped="NO" and @parallelizable="NO"][BuildableReference/@BlueprintName="NativeMediaIntegrationTests"]) = 1
     and count(//SkippedTests | //SelectedTests) = 0'
-if [ "$(/usr/bin/xmllint --xpath "$parallel_contract" "$scheme")" != true ]; then
-    echo 'FAIL: CI must include both complete test targets and parallelize only UI tests.' >&2
+if [ "$(/usr/bin/xmllint --xpath "$test_contract" "$scheme")" != true ]; then
+    echo 'FAIL: CI must include both complete test targets with serial execution.' >&2
     exit 1
 fi
 

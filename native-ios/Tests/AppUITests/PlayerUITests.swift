@@ -357,14 +357,14 @@ final class PlayerUITests: XCTestCase {
                                "--ui-test-product-fixture", mode] + extra
         app.launch()
         let book = app.buttons["book-ui-fixture-v1"]
-        XCTAssertTrue(book.waitForExistence(timeout: 15))
+        XCTAssertTrue(book.waitForExistence(timeout: 15), "The isolated fixture book must finish loading")
         if !book.exists { return app }
         for _ in 0..<5 where !book.isHittable { app.scrollViews.firstMatch.swipeUp() }
-        XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10), "The fixture book must be tappable")
         book.tap()
         let row = app.buttons["stage-\(stage)"]
         for _ in 0..<10 where !row.isHittable { app.swipeUp() }
-        XCTAssertTrue(row.isHittable)
+        XCTAssertTrue(row.isHittable, "The requested fixture stage must be reachable")
         if row.isHittable { row.tap() }
         return app
     }
@@ -410,17 +410,17 @@ final class PlayerUITests: XCTestCase {
         let app = fixture(stage: 1, mode: "audio", extra: ["--ui-test-product-fail-save"])
         let main = app.buttons["player-main"]
         guard main.waitForExistence(timeout: 10) else { XCTFail("Player unavailable"); return }
-        XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+        XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 10), "Audio completion must enable explicit confirmation")
         main.tap()
         let retry = app.buttons["player-save-retry"]
-        XCTAssertTrue(retry.waitForExistence(timeout: 5))
+        XCTAssertTrue(retry.waitForExistence(timeout: 5), "The injected save failure must expose its retry action")
         retry.tap()
-        XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+        XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5), "Retry must leave playback paused")
         app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5), "Retry must commit exactly one XP before leaving the player")
         app.terminate(); app.launch()
-        XCTAssertTrue(app.staticTexts["header-xp"].waitForExistence(timeout: 15))
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "1 / 100 XP")
+        XCTAssertTrue(app.staticTexts["header-xp"].waitForExistence(timeout: 15), "Relaunch must restore the fixture profile")
+        XCTAssertEqual(app.staticTexts["header-xp"].label, "1 / 100 XP", "Relaunch must preserve exactly one committed XP")
     }
 
     @MainActor func testRealAudioConfirmationAndPausedMenu() {
