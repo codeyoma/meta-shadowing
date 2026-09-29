@@ -58,13 +58,19 @@ jobs:
       - name: Reference tools tests
         run: swift test --package-path native-ios/Packages/LearningReference
 
-  ci-native-tests:
-    name: ci-native-tests
+  ci-native-test-shards:
+    name: Native tests (${{ matrix.shard }})
     runs-on: xcode-27
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [player, remaining]
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-27-0
+      CI_TEST_SHARD: ${{ matrix.shard }}
+      CI_PLAYER_TEST_CLASS: NativeFoundationUITests/PlayerUITests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -74,6 +80,8 @@ jobs:
           command -v xcodegen || brew install xcodegen
           xcodebuild -version
           xcodegen --version
+          echo "CPU cores: $(sysctl -n hw.ncpu)"
+          echo "Memory bytes: $(sysctl -n hw.memsize)"
           xcodegen generate --spec native-ios/project-ci.yml
       - name: Wait for iOS 27 Simulator readiness
         id: simulator
@@ -111,32 +119,69 @@ jobs:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
           set -o pipefail
+          # One class and its exact complement cover the full scheme once.
+          case "$CI_TEST_SHARD" in
+            player) ci_selection="-only-testing:$CI_PLAYER_TEST_CLASS" ;;
+            remaining) ci_selection="-skip-testing:$CI_PLAYER_TEST_CLASS" ;;
+            *) echo 'Unknown native test shard.' >&2; exit 1 ;;
+          esac
           xcodebuild test-without-building -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme MetaShadowingNative -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
-            -parallel-testing-enabled NO \
+            -parallel-testing-enabled NO "$ci_selection" \
             -collect-test-diagnostics never \
             -resultBundlePath "$RUNNER_TEMP/native-ui.xcresult" \
             CODE_SIGNING_ALLOWED=NO 2>&1 |
-            awk '/^Test Case / && / (started|passed|failed)[ .]/ { print; fflush() } /^\*\* TEST/ { print; fflush() }'
+            awk '
+              /^Test Case / && / (started|passed|failed)[ .]/ { print; fflush() }
+              /^Test case / && / (passed|failed) on / {
+                # Xcode may interleave diagnostics inside the destination suffix.
+                sub(/ on .*/, ""); print; fflush()
+              }
+              /^\*\* TEST/ { print; fflush() }
+            '
       - name: Report UI test results without account or device metadata
         if: always()
         run: |
           set -o pipefail
           if [ -f "$RUNNER_TEMP/native-ui.xcresult/Info.plist" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/native-ui.xcresult" |
-              jq '{result, totalTestCount, passedTests, failedTests, skippedTests, testFailures}'
+              jq '{result, totalTestCount, passedTests, failedTests, skippedTests, testFailures}' > "$RUNNER_TEMP/native-ui-summary.json"
+            cat "$RUNNER_TEMP/native-ui-summary.json"
             # The summary includes only the first assertion per failed test.
             # Export all assertion messages, never device metadata or source locations.
             xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/native-ui.xcresult" |
-              jq '[.testNodes[] | .. | objects |
-                select(.nodeType? == "Test Case" and .result? == "Failed") |
-                {test: .nodeIdentifier, durationInSeconds,
-                 failures: [.. | objects | select(.nodeType? == "Failure Message") | .name]}]'
+              jq '[.testNodes[] | .. | objects | select(.nodeType? == "Test Case")] as $tests |
+                [$tests[] | select(.result == "Failed") |
+                  {test: .nodeIdentifier, durationInSeconds,
+                   failures: [.. | objects | select(.nodeType? == "Failure Message") | .name]}],
+                ($tests | map({test: .nodeIdentifier, result, durationInSeconds}) |
+                  sort_by(.durationInSeconds // 0) | reverse | .[:10])'
+            jq -e '.result == "Passed" and .totalTestCount > 0 and
+              .passedTests == .totalTestCount and .failedTests == 0 and .skippedTests == 0' \
+              "$RUNNER_TEMP/native-ui-summary.json" > /dev/null
           else
             echo 'No finalized XCTest result bundle; the test command did not finish.'
+            exit 1
           fi
+
+  ci-native-tests:
+    name: ci-native-tests
+    if: always()
+    needs: [ci-native-test-shards]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every native test shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.ci-native-test-shards.result }}
+        run: |
+          if [ "$SHARD_RESULT" != success ]; then
+            echo 'Native tests require every shard to succeed.' >&2
+            exit 1
+          fi
+          echo 'Both native test shards passed.'
 
   ci-ios-build:
     name: ci-ios-build
