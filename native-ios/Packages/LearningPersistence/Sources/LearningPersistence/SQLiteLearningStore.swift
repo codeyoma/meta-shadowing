@@ -8,6 +8,8 @@ public actor SQLiteLearningStore: LearningStore {
     let calendar: Calendar
     var connections: [String: SQLiteConnection] = [:]
     var leases: [UUID: LearningSnapshot] = [:]
+    var leaseGenerations: [UUID: UUID] = [:]
+    var revisionListeners: [String: [UUID: AsyncStream<Int64>.Continuation]] = [:]
     var failBeforeCommit: Set<String> = []
     public init(root: URL, now: @escaping @Sendable () -> Date = Date.init, calendar: Calendar = .current) {
         self.root = root; self.now = now; self.calendar = calendar
@@ -40,6 +42,8 @@ public actor SQLiteLearningStore: LearningStore {
         guard leases[writerID] == nil else { throw LearningStoreError.staleWriter }
         _ = try preferences.validated()
         let db = try connection(plan.scope.profileID)
+        let (snapshot, generation) = try db.transaction {
+        guard try readServiceState(db).resetIntent == nil else { throw LearningStoreError.staleWriter }
         let ledger = try readLedger(db)
         var state = try LearningSession.start(plan: plan, preferences: preferences)
         if let row = try db.query("SELECT state FROM checkpoints WHERE package=? AND stage=?", [.text(plan.scope.packageKey), .integer(Int64(plan.scope.stage))]).first {
@@ -57,7 +61,10 @@ public actor SQLiteLearningStore: LearningStore {
         }
         let handle = LearningHandle(writerID: writerID, scope: plan.scope, planID: state.plan.runID)
         let snapshot = LearningSnapshot(handle: handle, writerVersion: 0, session: state, progress: try progress(ledger, db: db, scope: plan.scope, today: day()))
+        return (snapshot, try readServiceState(db).writerGeneration)
+        }
         leases[writerID] = snapshot
+        leaseGenerations[writerID] = generation
         return snapshot
     }
     public func readProgress(scope: LearningScope, today: StudyDay) throws -> LearningProgress {
@@ -70,20 +77,25 @@ public actor SQLiteLearningStore: LearningStore {
     public func savePreferences(_ value: ProfilePreferences, profileID: String) throws -> Int64 {
         let value = try value.validated()
         let data = try encode(value), db = try connection(profileID)
-        return try db.transaction {
-            if try db.query("SELECT state FROM preferences WHERE id=1").first?["state"]?.data == data { return try revision(db) }
+        let (committed, changed) = try db.transaction {
+            guard try readServiceState(db).resetIntent == nil else { throw LearningStoreError.staleWriter }
+            if try db.query("SELECT state FROM preferences WHERE id=1").first?["state"]?.data == data { return (try revision(db), false) }
             let oldRow = try db.query("SELECT state,clock,selection_clock FROM preferences WHERE id=1").first
             let old = try decode(ProfilePreferences.self, oldRow?["state"]), stamp = try nextStamp(db)
             let settingsStamp = old.learning == value.learning ? oldRow?["clock"]?.text ?? "" : stamp
             let selectionStamp = old.libraryLanguage == value.libraryLanguage && old.libraryBook == value.libraryBook && old.libraryPackageKey == value.libraryPackageKey ? oldRow?["selection_clock"]?.text ?? "" : stamp
             try db.execute("UPDATE preferences SET state=?,clock=?,selection_clock=? WHERE id=1", [.blob(data), .text(settingsStamp), .text(selectionStamp)])
-            return try incrementRevision(db)
+            return (try incrementRevision(db), true)
         }
+        if changed { publishRevision(committed, profileID: profileID) }
+        return committed
     }
     public func revoke(profileID: String) {
+        let writers = leases.values.filter { $0.handle.scope.profileID == profileID }.map { $0.handle.writerID }
+        for writer in writers { leaseGenerations[writer] = nil }
         leases = leases.filter { $0.value.handle.scope.profileID != profileID }
     }
-    public func revoke(writerID: UUID) { leases.removeValue(forKey: writerID) }
+    public func revoke(writerID: UUID) { leases.removeValue(forKey: writerID); leaseGenerations[writerID] = nil }
     func readLedger(_ db: SQLiteConnection) throws -> RewardLedger {
         let runs = try db.query("SELECT state FROM reward_runs").map { try decode(RewardRun.self, $0["state"]) }
         let completed = try db.query("SELECT state FROM completions").map { try decode(CompletionReceipt.self, $0["state"]) }

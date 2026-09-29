@@ -24,12 +24,25 @@ fi
 # Keep the complete scheme intact. CI partitions it at invocation time and runs
 # one simulator per hosted runner, with no Xcode worker clones.
 scheme="$fixture/native-ios/MetaShadowingNative.xcodeproj/xcshareddata/xcschemes/MetaShadowingNative.xcscheme"
-test_contract='count(/Scheme/TestAction/Testables/TestableReference) = 2
+test_contract='count(/Scheme/TestAction/Testables/TestableReference) = 3
     and count(//TestableReference[@skipped="NO" and @parallelizable="NO"][BuildableReference/@BlueprintName="NativeFoundationUITests"]) = 1
     and count(//TestableReference[@skipped="NO" and @parallelizable="NO"][BuildableReference/@BlueprintName="NativeMediaIntegrationTests"]) = 1
+    and count(//TestableReference[@skipped="NO" and @parallelizable="NO"][BuildableReference/@BlueprintName="NativeAppleServiceTests"]) = 1
     and count(//SkippedTests | //SelectedTests) = 0'
 if [ "$(/usr/bin/xmllint --xpath "$test_contract" "$scheme")" != true ]; then
-    echo 'FAIL: CI must include both complete test targets with serial execution.' >&2
+    echo 'FAIL: CI must include all three complete test targets with serial execution.' >&2
+    exit 1
+fi
+
+# StoreKit setup must use the same app host, in a separate process/scheme, without
+# filtering or replacing any of the three behavioral test targets above.
+setup_scheme="$fixture/native-ios/MetaShadowingNative.xcodeproj/xcshareddata/xcschemes/StoreKitFixtureSetup.xcscheme"
+setup_contract='count(/Scheme/TestAction/Testables/TestableReference) = 1
+    and count(//TestableReference[@skipped="NO" and @parallelizable="NO"][BuildableReference/@BlueprintName="NativeStoreKitFixtureSetup"]) = 1
+    and count(/Scheme/BuildAction/BuildActionEntries/BuildActionEntry/BuildableReference[@BlueprintName="MetaShadowingNative"]) = 1
+    and count(//SkippedTests | //SelectedTests) = 0'
+if [ "$(/usr/bin/xmllint --xpath "$setup_contract" "$setup_scheme")" != true ]; then
+    echo 'FAIL: StoreKit setup must run separately against the app host with no filtered tests.' >&2
     exit 1
 fi
 

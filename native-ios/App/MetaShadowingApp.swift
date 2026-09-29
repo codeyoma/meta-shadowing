@@ -1,16 +1,22 @@
 import AppFoundation
+import AppleServices
 import LearningDomain
 import LearningPersistence
 import SwiftUI
 
 @main
 struct MetaShadowingApp: App {
-    @State private var model: ProductModel
+    @State private var profiles: ProductProfileOwner
+    @State private var serviceOwner: ServiceOwner
+    private var model: ProductModel { profiles.model }
+    private var services: ProductServicesModel? { serviceOwner.model }
+    private struct ServiceOwner { let model: ProductServicesModel? }
 
     init() {
         let root = Self.productRoot
         var catalog: any ProductCatalog = BundledProductCatalog(root: Bundle.main.bundleURL.appending(path: "sample"))
-        var store: any LearningStore = SQLiteLearningStore(root: root)
+        let persistent = SQLiteLearningStore(root: root)
+        var store: any LearningStore = persistent
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         if UUID(uuidString: root.lastPathComponent) != nil,
@@ -26,8 +32,47 @@ struct MetaShadowingApp: App {
             catalog = FailFirstProductCatalog(base: catalog)
         }
         #endif
-        model = ProductModel(workspace: ProductWorkspace(store: store,
-            catalog: catalog, profileID: "local"))
+        do {
+            var values = (Bundle.main.infoDictionary ?? [:]).compactMapValues { $0 as? String }
+            for key in ["FreeDuoEnabled", "NativeInternalContent"] {
+                if Bundle.main.object(forInfoDictionaryKey: key) as? Bool == true { values[key] = "true" }
+            }
+            #if DEBUG
+            // UI fixtures never inherit signed service identifiers or account access.
+            if UUID(uuidString: root.lastPathComponent) != nil { values = [:] }
+            #endif
+            var localVideoRoot: URL?
+            #if DEBUG
+            if UUID(uuidString: root.lastPathComponent) == nil {
+                localVideoRoot = Bundle.main.bundleURL.appending(path: "LocalVideo")
+            }
+            #endif
+            let configuration = try ProductServiceConfiguration(values: values, sampleRoot: Bundle.main.bundleURL.appending(path: "sample"), localVideoRoot: localVideoRoot)
+            var packages = configuration.packages, books = configuration.books
+            var assetSource: @Sendable (HostedPackage) -> (any AssetDelivery)? = { package in
+                if let local = configuration.localVideo, local.package.descriptor == package.descriptor { return local }
+                return ContentDelivery.appleTransport(package)
+            }
+            #if DEBUG
+            if UUID(uuidString: root.lastPathComponent) != nil, arguments.contains("--ui-test-services") {
+                let sample = Bundle.main.bundleURL.appending(path: "sample")
+                let fixture = try ServiceTestAssets.package(root: sample)
+                packages = [fixture.0]; books = [fixture.1]
+                assetSource = { _ in ServiceTestAssets(root: sample) }
+            }
+            #endif
+            let ownership = OwnershipService(productID: configuration.productID)
+            let access = PackageAccess(store: ownership)
+            let delivery = try ContentDelivery(root: root.appending(path: "content"), packages: packages, paidLease: access.lease, transport: assetSource)
+            catalog = InstalledProductCatalog(bundled: catalog, delivery: delivery, listings: books)
+            let owner = ProductProfileOwner(store: store, catalog: catalog)
+            profiles = owner
+            serviceOwner = ServiceOwner(model: ProductServicesModel(profiles: owner, store: persistent, ownership: ownership, access: access,
+                delivery: delivery, transport: NativeCloudTransport(root: root.appending(path: "cloud-cache")), packages: packages))
+        } catch {
+            profiles = ProductProfileOwner(store: store, catalog: catalog)
+            serviceOwner = ServiceOwner(model: nil)
+        }
     }
 
     var body: some Scene {
@@ -38,10 +83,10 @@ struct MetaShadowingApp: App {
                     SyntheticMediaProbeView(root: root, mode: Self.mediaMode)
                 } else { SyntheticLearningProbeView(root: root) }
             } else {
-                LaunchGateView(model: model)
+                LaunchGateView(model: model, profiles: profiles, services: services)
             }
             #else
-            LaunchGateView(model: model)
+            LaunchGateView(model: model, profiles: profiles, services: services)
             #endif
         }
     }

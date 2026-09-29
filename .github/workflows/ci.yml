@@ -57,6 +57,10 @@ jobs:
         run: swift test --package-path native-ios/Packages/LearningMedia
       - name: Reference tools tests
         run: swift test --package-path native-ios/Packages/LearningReference
+      - name: Apple service contracts and recovery tests
+        run: swift test --package-path native-ios/Packages/AppleServices
+      - name: Internal video build boundary
+        run: swift native-ios/scripts/copy-local-video.swift --self-test
 
   ci-native-test-shards:
     name: Native tests (${{ matrix.shard }})
@@ -93,15 +97,56 @@ jobs:
           xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
           echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
           echo 'Required iOS 27.0 Simulator finished booting.'
-      - name: Build native test products
+      - name: Build StoreKit fixture setup products
+        if: matrix.shard == 'remaining'
+        timeout-minutes: 10
         env:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
           xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme StoreKitFixtureSetup -configuration Debug \
+            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
+            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -quiet
+      - name: Prepare local StoreKit fixture in a separate host process
+        if: matrix.shard == 'remaining'
+        timeout-minutes: 5
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
+          set -o pipefail
+          # Install the fixture before launching the process that exercises purchases.
+          # This is setup, not a retry of failing tests or a sandbox-account login.
+          ci_setup_status=0
+          xcodebuild test-without-building -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme StoreKitFixtureSetup -configuration Debug \
+            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
+            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
+            -parallel-testing-enabled NO -collect-test-diagnostics never \
+            -resultBundlePath "$RUNNER_TEMP/native-storekit-setup.xcresult" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 |
+            awk '/^Test Case / || /^\*\* TEST/ { print; fflush() }' || ci_setup_status=$?
+          if [ ! -f "$RUNNER_TEMP/native-storekit-setup.xcresult/Info.plist" ]; then
+            echo 'StoreKit fixture setup did not produce a finalized test result.' >&2
+            exit 1
+          fi
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/native-storekit-setup.xcresult" |
+            jq '{result, totalTestCount, passedTests, failedTests, skippedTests, testFailures}' > "$RUNNER_TEMP/native-storekit-setup-summary.json"
+          cat "$RUNNER_TEMP/native-storekit-setup-summary.json"
+          jq -e '.result == "Passed" and .totalTestCount == 1 and
+            .passedTests == 1 and .failedTests == 0 and .skippedTests == 0' \
+            "$RUNNER_TEMP/native-storekit-setup-summary.json" > /dev/null
+          exit "$ci_setup_status"
+      - name: Build native test products
+        env:
+          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
+        run: |
+          # Build the complete test graph last; setup may relink the same app host.
+          xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme MetaShadowingNative -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
-            CODE_SIGNING_ALLOWED=NO -quiet
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -quiet
       - name: Verify isolated app launch before XCTest
         timeout-minutes: 3
         env:
@@ -132,7 +177,7 @@ jobs:
             -parallel-testing-enabled NO "$ci_selection" \
             -collect-test-diagnostics never \
             -resultBundlePath "$RUNNER_TEMP/native-ui.xcresult" \
-            CODE_SIGNING_ALLOWED=NO 2>&1 |
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 |
             awk '
               /^Test Case / && / (started|passed|failed)[ .]/ { print; fflush() }
               /^Test case / && / (passed|failed) on / {
@@ -201,6 +246,10 @@ jobs:
           xcodegen --version
       - name: Verify clean-checkout CI configuration
         run: bash native-ios/scripts/test-ci-configuration.sh
+      - name: Verify service configuration and exact entitlement policy
+        run: swift native-ios/scripts/configure-apple-services.swift --self-test
+      - name: Build fictional managed downloader without account access
+        run: bash native-ios/scripts/test-service-build.sh
       - name: Generate standalone Swift app
         run: xcodegen generate --spec native-ios/project-ci.yml
       - name: Build and inspect Debug and Release without signing credentials

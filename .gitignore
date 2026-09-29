@@ -38,6 +38,7 @@ expo-env.d.ts
 native-ios/*.xcodeproj/
 native-ios/DerivedData/
 native-ios/Generated/Info.plist
+native-ios/Generated/Services/
 native-ios/Config/Local.xcconfig
 native-ios/Packages/*/.build/
 native-ios/Packages/*/.swiftpm/

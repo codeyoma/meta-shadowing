@@ -7,6 +7,22 @@ import LearningReference
 @testable import MetaShadowingNative
 
 @MainActor @Suite(.serialized) struct ReferenceLifecycleTests {
+    @Test func allowedAuthorityReplacementDisablesTheExistingRuntime() async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = RevocableReferenceCatalog(root: root)
+        let flow = LearningFlow(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root.appending(path: "store")),
+            catalog: catalog, profileID: "reference-test"))
+        await flow.open(packageKey: "ui-fixture-v1", stage: 1)
+        let runtime = try #require(flow.runtime)
+        _ = await runtime.coordinator.perform(.resume)
+        try await waitForMedia { runtime.coordinator.remoteState.actionable }
+        await catalog.replaceAuthority()
+        try await waitForMedia { !runtime.coordinator.remoteState.actionable }
+        #expect(!runtime.coordinator.remoteState.actionable)
+        #expect(runtime.controls.xp == 0)
+        await flow.close()
+    }
     @Test func cancelledDictionaryPreparationCannotReopenOptionsGate() async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -99,4 +115,5 @@ private actor RevocableReferenceCatalog: ProductCatalog {
     func syntax(packageKey: String) async throws -> InstalledSyntaxFile? { try await base.syntax(packageKey: packageKey) }
     func referenceChanges() -> AsyncStream<Void> { stream.stream }
     func revoke() { allowed = false; stream.continuation.yield(()) }
+    func replaceAuthority() { stream.continuation.yield(()) }
 }

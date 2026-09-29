@@ -42,10 +42,25 @@ extension SQLiteLearningStore {
         return try db.transaction { try backupReceipt(db, backup: snapshotBackup(db)) }
     }
     public func mergeBackup(_ data: Data, profileID: String) throws -> BackupSnapshot {
-        let incoming = try LearningBackupCodec.decode(data)
+        try mergeBackups([data], profileID: profileID)
+    }
+    public func mergeBackups(_ payloads: [Data], profileID: String) throws -> BackupSnapshot {
+        try mergeBackups(payloads, profileID: profileID, lease: nil)
+    }
+    public func mergeBackups(_ payloads: [Data], lease: ServiceProfileLease) throws -> BackupSnapshot {
+        try mergeBackups(payloads, profileID: lease.profileID, lease: lease)
+    }
+    private func mergeBackups(_ payloads: [Data], profileID: String, lease: ServiceProfileLease?) throws -> BackupSnapshot {
+        guard payloads.count <= 256,
+              payloads.reduce(0, { $0 + min($1.count, 67_108_865) }) <= 67_108_864 else { throw LearningError.invalidState }
+        let incoming = try payloads.map(LearningBackupCodec.decode)
         let db = try connection(profileID)
         return try db.transaction {
-            let current = try snapshotBackup(db), merged = try current.merged(with: incoming)
+            if let lease {
+                guard try validateService(lease, db: db).resetIntent == nil else { throw LearningStoreError.staleWriter }
+            }
+            let current = try snapshotBackup(db)
+            let merged = try incoming.reduce(current) { try $0.merged(with: $1) }
             if current == merged { return try backupReceipt(db, backup: current) }
             try installBackup(merged, db: db, profileID: profileID)
             _ = try incrementRevision(db)

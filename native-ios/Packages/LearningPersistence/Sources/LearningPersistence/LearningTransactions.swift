@@ -6,6 +6,8 @@ extension SQLiteLearningStore {
         guard let prior = leases[command.handle.writerID], prior.handle.scope == command.handle.scope else { throw LearningStoreError.staleWriter }
         let db = try connection(command.handle.scope.profileID), payload = try encode(command)
         let receipt = try db.transaction {
+            let service = try readServiceState(db)
+            guard service.resetIntent == nil, service.writerGeneration == leaseGenerations[command.handle.writerID] else { throw LearningStoreError.staleWriter }
             if let saved = try db.query("SELECT payload,receipt FROM commands WHERE id=?", [.text(command.id.uuidString)]).first {
                 guard saved["payload"]?.data == payload else { throw LearningStoreError.commandConflict }
                 let result = try decode(CommitReceipt.self, saved["receipt"])
@@ -61,7 +63,10 @@ extension SQLiteLearningStore {
             return result
         }
         // COMMIT has succeeded. A delayed duplicate must never replace a newer lease.
-        if receipt.disposition == .applied { leases[command.handle.writerID] = receipt.snapshot }
+        if receipt.disposition == .applied {
+            leases[command.handle.writerID] = receipt.snapshot
+            publishRevision(receipt.backupRevision, profileID: command.handle.scope.profileID)
+        }
         return receipt
     }
     func writeLedger(_ ledger: RewardLedger, db: SQLiteConnection) throws {

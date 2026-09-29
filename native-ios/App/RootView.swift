@@ -4,10 +4,15 @@ import SwiftUI
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     let model: ProductModel
+    var profiles: ProductProfileOwner? = nil
+    var services: ProductServicesModel? = nil
 
     var body: some View {
         Group {
-            if model.snapshot != nil { ProductTabsView(model: model) }
+            if model.snapshot != nil {
+                ProductTabsView(model: model, profiles: profiles, services: services)
+                    .id(profiles?.presentationID)
+            }
             else if model.failed {
                 ContentUnavailableView {
                     Label("도서를 열 수 없어요", systemImage: "exclamationmark.triangle")
@@ -20,12 +25,18 @@ struct RootView: View {
             } else { ProgressView("도서를 준비하고 있어요") }
         }
         .task(id: scenePhase) {
-            if scenePhase == .active { await model.activate() }
+            if scenePhase == .active {
+                await model.activate()
+                await services?.setActive(true)
+            }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { model.deactivate() }
+            if phase != .active {
+                model.deactivate()
+                Task { await services?.setActive(false) }
+            }
         }
-        .onDisappear { model.deactivate() }
+        .onDisappear { model.deactivate(); Task { await services?.setActive(false) } }
     }
 
 }

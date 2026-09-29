@@ -10,8 +10,8 @@ Expo reference CI lane; the reference source remains available for migration.
 | Required check | Evidence |
 | --- | --- |
 | `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
-| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation`, `LearningMedia` and `LearningReference` |
-| `ci-native-tests` | Debug XCUITest plus actual iOS audio/video, lifecycle, artwork decoding and Core Haptics construction tests |
+| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation`, `LearningMedia`, `LearningReference` and `AppleServices` |
+| `ci-native-tests` | Debug XCUITest plus actual iOS media/lifecycle/feedback adapters and isolated StoreKit fixtures |
 | `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
 
 The generic branch-policy script still uses Node 24 without npm installation.
@@ -35,8 +35,8 @@ config contains a fictional simulator identity and disables signing. It does
 not include, create or overwrite private `Local.xcconfig`. A regression test
 generates a disposable copy without that local file and verifies the resolved
 identity, compiler, deployment and signing settings for both configurations.
-It also verifies that both complete test targets occur exactly once, with no
-selected or skipped tests in the scheme and serial execution for both targets.
+It also verifies that all three complete test targets occur exactly once, with no
+selected or skipped tests in the scheme and serial execution for every target.
 
 CI partitions the complete scheme into two complementary jobs:
 
@@ -59,6 +59,35 @@ contain zero failed or skipped tests. The required `ci-native-tests` job runs
 with `always()` and accepts only an aggregate shard result of `success`; failures,
 cancellations and skipped shards cannot make the required check green. Release
 approval still depends on this exact required check name.
+
+Test-product build and execution override signing with `CODE_SIGNING_ALLOWED=YES
+CODE_SIGN_IDENTITY=-`. This is an ad-hoc simulator signature, not account-based signing.
+The Debug app includes `get-task-allow` so StoreKitTest can intercept purchases. Unsigned
+product inspection stays unchanged. Missing StoreKit fixture setup fails before purchase.
+The `remaining` shard first runs the separate `StoreKitFixtureSetup` scheme against
+the same app identity and simulator. Its single required check installs the local
+catalog with `SKTestSession`, validates the fixture product, and leaves no purchases.
+It must report exactly one passing test with zero skipped or failed tests. The normal
+suite then starts a new app process; all existing purchase/restore/refund assertions
+remain intact. This explicit preparation is not a retry of failed tests.
+Setup compilation has its own ten-minute budget and execution has five minutes.
+The complete main scheme is built after setup so its full app/test dependency graph
+owns the final products used by `test-without-building`.
+
+A clean iOS 27 reproduction showed fixture product and entitlement queries using
+Xcode's local store while `Product.purchase()` in the same initial process requested
+Sandbox authentication. A minimal host reproduced it without application services.
+Installing the fixture in an earlier process, followed by a new host launch, allowed
+the same real purchase to return a verified `.xcode` transaction without any login.
+The app also avoids opening StoreKit transaction streams or querying entitlements
+when no product is configured. Local verification must include a newly created
+simulator; a previously initialized simulator alone cannot detect this setup failure.
+Local verification on 2026-09-29 passed the setup check and all 79 `remaining` tests
+on the newly created simulator, plus all 17 player tests on the existing dedicated
+simulator. All 337 package tests passed. These are local results, not a claim that
+the subsequent hosted run has completed.
+The build job also validates the service configuration mapper and builds a fictional,
+unsigned ExtensionKit downloader without launching it or contacting Apple services.
 
 UI tests run in Debug because the retry test uses a Debug-only failure injection.
 Before starting XCUITest, a separate five-minute preparation step waits for
@@ -181,7 +210,9 @@ delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
 not deleted. Native W4 tests now cover the migrated media/feedback boundaries;
 W5 tests cover normal browsing, settings and the audio/video/silent player;
 W6 tests cover syntax, scoped analysis, graphs and dictionary ownership;
-#98–#99 must add the remaining feature tests as those features migrate.
+W7 tests cover verified purchase authority, hosted installation, profile isolation,
+conditional private sync, restart recovery and distinct deletion controls. #99 still owns
+remaining parity and cutover evidence. See [the service contract](swift-native/apple-services-contract.md).
 
 Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains

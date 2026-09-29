@@ -11,17 +11,25 @@ struct LearningRoute: Identifiable {
 struct LearningPlayerView: View {
     let route: LearningRoute
     let model: ProductModel
+    let profiles: ProductProfileOwner?
+    @State private var boundaryToken: UUID?
     @State private var flow: LearningFlow
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    init(route: LearningRoute, model: ProductModel) {
-        self.route = route; self.model = model
+    init(route: LearningRoute, model: ProductModel, profiles: ProductProfileOwner? = nil) {
+        self.route = route; self.model = model; self.profiles = profiles
         flow = LearningFlow(workspace: model.workspace)
     }
     var body: some View {
         NavigationStack {
             Group {
-                if let runtime = flow.runtime {
+                if flow.accessInvalidated {
+                    ContentUnavailableView {
+                        Label("도서 이용 상태가 변경되었어요", systemImage: "lock")
+                    } description: { Text("도서 목록에서 구매와 다운로드 상태를 다시 확인해 주세요.") } actions: {
+                        Button("스테이지로 돌아가기") { Task { await exit() } }
+                    }
+                } else if let runtime = flow.runtime {
                     if runtime.controls.session.phase == .complete {
                         ContentUnavailableView {
                             Label("스테이지 완료", systemImage: "checkmark.seal.fill")
@@ -78,10 +86,17 @@ struct LearningPlayerView: View {
         .sheet(item: Binding(get: { flow.options }, set: { if $0 == nil { flow.dismissOptions() } })) { option in
             LearningOptionsView(flow: flow, model: model, initial: option, exit: exit)
         }
-        .task { await flow.open(packageKey: route.packageKey, stage: route.stage) }
+        .task { [flow] in
+            boundaryToken = profiles?.registerBoundary { [weak flow] in try await flow?.prepareServiceBoundary() }
+            await flow.open(packageKey: route.packageKey, stage: route.stage)
+        }
         .onChange(of: scenePhase) { _, phase in if phase != .active { flow.suspend() } }
         .onChange(of: flow.runtime?.controls) { _, _ in flow.validateReference() }
-        .onDisappear { Task { await flow.close() } }
+        .onChange(of: flow.closedByService) { if flow.closedByService { dismiss() } }
+        .onDisappear {
+            if let boundaryToken { profiles?.unregisterBoundary(boundaryToken) }
+            Task { await flow.close() }
+        }
     }
     private func exit() async {
         await flow.close()

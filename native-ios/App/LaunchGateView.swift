@@ -4,6 +4,8 @@ import SwiftUI
 
 struct LaunchGateView: View {
     let model: ProductModel
+    var profiles: ProductProfileOwner? = nil
+    var services: ProductServicesModel? = nil
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var playback = LaunchPlayback()
@@ -18,7 +20,7 @@ struct LaunchGateView: View {
     }
     var body: some View {
         ZStack {
-            RootView(model: model).allowsHitTesting(!isShowing).accessibilityHidden(isShowing)
+            RootView(model: model, profiles: profiles, services: services).allowsHitTesting(!isShowing).accessibilityHidden(isShowing)
             if isShowing {
                 LaunchArtworkView(artwork: artwork, wordmark: wordmark, still: still, playback: playback)
                     .ignoresSafeArea()
