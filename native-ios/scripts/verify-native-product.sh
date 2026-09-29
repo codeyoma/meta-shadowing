@@ -15,6 +15,9 @@ executable=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$plist")
 test -f "$app/$executable" || { echo 'Missing app executable' >&2; exit 1; }
 minimum=$(/usr/libexec/PlistBuddy -c 'Print MinimumOSVersion' "$plist")
 test "$minimum" = '26.0' || { echo 'Unexpected deployment minimum' >&2; exit 1; }
+if [[ "$configuration" == Release && -e "$app/LocalVideo" ]]; then
+    echo 'Internal video resource leaked into Release' >&2; exit 1
+fi
 for resource in talking-pup-512.webp talking-pup-still.png launch-wordmark.png; do
     cmp -s "$app/$resource" "$native_root/../assets/brand/$resource" || {
         echo 'Missing or changed bundled launch artwork' >&2; exit 1;
@@ -43,7 +46,7 @@ while IFS= read -r -d '' artifact; do
         native_binaries=$((native_binaries + 1))
         dependencies=$(otool -L "$artifact")
         symbols=$(nm -u "$artifact")
-        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-learning-media|media-probe-video|ui-test-learning-storage|SyntheticLearningProbe|ProductTestCatalog|ProductTestStore|ui-test-product' >/dev/null; then
+        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-learning-media|media-probe-video|ui-test-learning-storage|SyntheticLearningProbe|ProductTestCatalog|ProductTestStore|ui-test-product|ServiceTestAssets|ui-test-services' >/dev/null; then
             echo 'Debug probe code leaked into Release' >&2; exit 1
         fi
         if printf '%s\n%s\n' "$dependencies" "$symbols" |
@@ -56,17 +59,19 @@ done < <(rg --files --hidden --no-ignore --null "$app")
 test "$native_binaries" -gt 0 || { echo 'No native executable found' >&2; exit 1; }
 
 # A simulator build may be unsigned. Signed builds must have readable,
-# minimal entitlements; account services remain outside the native media slice.
+# exact configured entitlements; identity values stay in ignored build inputs.
 if codesign -d "$app" >/dev/null 2>&1; then
     entitlements=$(codesign -d --entitlements :- "$app" 2>/dev/null)
     if test -n "$entitlements"; then
-        keys=$(printf '%s' "$entitlements" | plutil -convert json -o - -- - | jq -r 'keys[]')
-        while IFS= read -r key; do
-            case "$key" in
-                ''|application-identifier|com.apple.developer.team-identifier|get-task-allow|com.apple.security.get-task-allow) ;;
-                *) echo 'Unexpected app entitlement' >&2; exit 1 ;;
-            esac
-        done <<< "$keys"
+        printf '%s' "$entitlements" | swift "$native_root/scripts/configure-apple-services.swift" --verify-entitlements "$plist" app
     fi
 fi
-echo 'PASS: iOS 26.0 minimum; unchanged launch artwork; no excluded runtimes or service entitlements.'
+while IFS= read -r extension_info; do
+    extension=${extension_info%/Info.plist}
+    if codesign -d "$extension" >/dev/null 2>&1; then
+        extension_entitlements=$(codesign -d --entitlements :- "$extension" 2>/dev/null)
+        test -n "$extension_entitlements" || { echo 'Missing downloader entitlements' >&2; exit 1; }
+        printf '%s' "$extension_entitlements" | swift "$native_root/scripts/configure-apple-services.swift" --verify-entitlements "$plist" extension
+    fi
+done < <(rg --files --hidden --no-ignore "$app" | rg '/Extensions/[^/]+\.appex/Info\.plist$' || true)
+echo 'PASS: iOS 26.0 minimum; unchanged launch artwork; no excluded runtimes or unexpected entitlements.'

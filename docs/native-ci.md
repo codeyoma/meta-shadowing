@@ -10,8 +10,8 @@ Expo reference CI lane; the reference source remains available for migration.
 | Required check | Evidence |
 | --- | --- |
 | `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
-| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation`, `LearningMedia` and `LearningReference` |
-| `ci-native-tests` | Debug XCUITest plus actual iOS audio/video, lifecycle, artwork decoding and Core Haptics construction tests |
+| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation`, `LearningMedia`, `LearningReference` and `AppleServices` |
+| `ci-native-tests` | Debug XCUITest plus actual iOS media/lifecycle/feedback adapters and isolated StoreKit fixtures |
 | `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
 
 The generic branch-policy script still uses Node 24 without npm installation.
@@ -35,6 +35,13 @@ config contains a fictional simulator identity and disables signing. It does
 not include, create or overwrite private `Local.xcconfig`. A regression test
 generates a disposable copy without that local file and verifies the resolved
 identity, compiler, deployment and signing settings for both configurations.
+
+Test-product build and execution override signing with `CODE_SIGNING_ALLOWED=YES
+CODE_SIGN_IDENTITY=-`. This is an ad-hoc simulator signature, not account-based signing.
+The Debug app includes `get-task-allow` so StoreKitTest can intercept purchases. Unsigned
+product inspection stays unchanged. Missing StoreKit fixture setup fails before purchase.
+The build job also validates the service configuration mapper and builds a fictional,
+unsigned ExtensionKit downloader without launching it or contacting Apple services.
 
 UI tests run in Debug because the retry test uses a Debug-only failure injection.
 Before starting XCUITest, a separate five-minute preparation step waits for
@@ -103,7 +110,9 @@ delivery, audio, fonts, dictionary and haptics fixtures. Those sources/tests are
 not deleted. Native W4 tests now cover the migrated media/feedback boundaries;
 W5 tests cover normal browsing, settings and the audio/video/silent player;
 W6 tests cover syntax, scoped analysis, graphs and dictionary ownership;
-#98–#99 must add the remaining feature tests as those features migrate.
+W7 tests cover verified purchase authority, hosted installation, profile isolation,
+conditional private sync, restart recovery and distinct deletion controls. #99 still owns
+remaining parity and cutover evidence. See [the service contract](swift-native/apple-services-contract.md).
 
 Simulator CI does not prove real purchases, account switching, CloudKit signing,
 hosted delivery, physical-device behavior or release parity. Android remains

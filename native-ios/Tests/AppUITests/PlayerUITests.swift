@@ -179,7 +179,7 @@ final class PlayerUITests: XCTestCase {
         app.buttons["완료"].tap()
         XCTAssertEqual(first.value as? String, "175")
         XCTAssertEqual(active.label, "현재 S1 · 150 WPM")
-        XCTAssertFalse(app.buttons["active-reveal-level-1"].isSelected)
+        XCTAssertTrue(app.buttons["active-reveal-level-1"].wait(for: \.isSelected, toEqual: false, timeout: 5))
         app.buttons["active-reveal-level-1"].tap()
         XCTAssertTrue(active.wait(for: \.label, toEqual: "현재 S1 · 175 WPM", timeout: 5))
         app.navigationBars["단어 공개 속도"].buttons["BackButton"].tap()
@@ -191,6 +191,7 @@ final class PlayerUITests: XCTestCase {
     }
 
     @MainActor func testProgressTrackWidthSurvivesCounterDigitBoundary() {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
         app.launch()
@@ -201,7 +202,10 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))
         func selectSource(_ index: Int) {
             app.buttons["player-options"].tap()
-            app.buttons["전체 문장"].tap()
+            let sentences = app.buttons["전체 문장"]
+            XCTAssertTrue(sentences.wait(for: \.isHittable, toEqual: true, timeout: 5))
+            sentences.tap()
+            XCTAssertTrue(app.navigationBars["전체 문장"].waitForExistence(timeout: 5))
             let row = app.buttons["source-\(index)"]
             for _ in 0..<8 where !row.isHittable { app.swipeUp() }
             XCTAssertTrue(row.isHittable)

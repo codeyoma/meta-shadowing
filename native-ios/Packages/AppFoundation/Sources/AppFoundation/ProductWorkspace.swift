@@ -131,6 +131,7 @@ public actor ProductWorkspace {
         return await catalog.permitsPractice(packageKey: scope.packageKey)
     }
     public func referenceChanges() async -> AsyncStream<Void> { await catalog.referenceChanges() }
+    public func referenceChanges(packageKey: String) async -> AsyncStream<Void> { await catalog.referenceChanges(packageKey: packageKey) }
     public func readAnalysis(_ request: AnalysisRequest) async throws -> [AnalysisSentence] {
         guard await permitsPractice(request.scope) else { throw AnalysisError.denied }
         let material = try await catalog.materials(packageKey: request.scope.packageKey)

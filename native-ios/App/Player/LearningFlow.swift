@@ -14,6 +14,8 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     private(set) var video: VideoSegmentTransport?
     private(set) var loading = false
     private(set) var failed = false
+    private(set) var accessInvalidated = false
+    private(set) var closedByService = false
     private(set) var title = ""
     private(set) var options: LearningOptionRoute?
     private(set) var analysis: AnalysisModel?
@@ -40,7 +42,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         let request = generation
         await releaseResources()
         guard request == generation, !Task.isCancelled else { return }
-        loading = true; failed = false
+        loading = true; failed = false; accessInvalidated = false; closedByService = false
         let task = Task { [workspace] in
             try await workspace.openLesson(packageKey: packageKey, stage: stage,
                                            verifiedTestAccess: StagePathView.testAccess)
@@ -75,12 +77,14 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
                 makeTransport: { _ in if let video { video } else { AudioQueueTransport() } })
             self.runtime = runtime
             accessChanges = Task { [weak self, workspace] in
-                let changes = await workspace.referenceChanges()
+                let changes = await workspace.referenceChanges(packageKey: packageKey)
                 for await _ in changes {
                     guard !Task.isCancelled else { return }
                     // Any authority revision invalidates old content, even if access is regranted.
                     self?.invalidateAnalysis()
                     self?.playerDictionary.cancel()
+                    self?.accessInvalidated = true
+                    self?.runtime?.setAccess(false)
                 }
             }
             title = opened.materials.book.title
@@ -118,6 +122,16 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     func close() async {
         generation += 1; loading = false; options = nil
         await releaseResources()
+    }
+    func prepareServiceBoundary() async throws {
+        if let runtime {
+            let paused = await runtime.coordinator.perform(.pause)
+            guard paused.controller.active, !paused.controller.saveFailed, paused.controller.paused else {
+                throw ProductError.busy
+            }
+        }
+        await close()
+        closedByService = true
     }
     private func releaseResources() async {
         playerDictionary.cancel()

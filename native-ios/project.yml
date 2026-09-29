@@ -15,6 +15,8 @@ settings:
     CURRENT_PROJECT_VERSION: '1'
     TARGETED_DEVICE_FAMILY: '1'
 packages:
+  AppleServices:
+    path: Packages/AppleServices
   LearningDomain:
     path: Packages/LearningDomain
   AppFoundation:
@@ -26,9 +28,28 @@ packages:
   LearningReference:
     path: Packages/LearningReference
 targets:
+  NativeAppleServiceTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/AppleServiceIntegrationTests
+        excludes: [Fixtures]
+      - path: Tests/AppleServiceIntegrationTests/Fixtures
+        buildPhase: resources
+    dependencies:
+      - target: MetaShadowingNative
+      - package: AppleServices
+      - sdk: StoreKitTest.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).servicetests
   MetaShadowingNative:
     type: application
     platform: iOS
+    postBuildScripts:
+      - name: Prepare optional internal video
+        script: '/usr/bin/env -u SDKROOT /usr/bin/xcrun --sdk macosx swift "$SRCROOT/scripts/copy-local-video.swift"'
+        basedOnDependencyAnalysis: false
     sources:
       - path: App
       - path: ../assets/sample
@@ -43,12 +64,16 @@ targets:
       - path: ../assets/brand/launch-wordmark.png
         buildPhase: resources
     dependencies:
+      - package: AppleServices
       - package: LearningDomain
       - package: AppFoundation
       - package: LearningMedia
       - package: LearningPersistence
       - package: LearningReference
     settings:
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Config/Debug.entitlements
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER)
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
@@ -96,5 +121,6 @@ schemes:
         MetaShadowingNative: all
         NativeFoundationUITests: [test]
         NativeMediaIntegrationTests: [test]
+        NativeAppleServiceTests: [test]
     test:
-      targets: [NativeFoundationUITests, NativeMediaIntegrationTests]
+      targets: [NativeFoundationUITests, NativeMediaIntegrationTests, NativeAppleServiceTests]

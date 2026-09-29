@@ -36,8 +36,10 @@ public protocol ProductCatalog: Sendable {
     func syntax(packageKey: String) async throws -> InstalledSyntaxFile?
     /// Mutable catalogs emit on entitlement, installation or account changes.
     func referenceChanges() async -> AsyncStream<Void>
+    func referenceChanges(packageKey: String) async -> AsyncStream<Void>
 }
 public extension ProductCatalog {
     func syntax(packageKey: String) async throws -> InstalledSyntaxFile? { nil }
     func referenceChanges() async -> AsyncStream<Void> { AsyncStream { $0.finish() } }
+    func referenceChanges(packageKey: String) async -> AsyncStream<Void> { await referenceChanges() }
 }

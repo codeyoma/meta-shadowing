@@ -14,6 +14,7 @@ public enum ProductLoadState: Equatable, Sendable {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var pending: Task<ProductSnapshot, any Error>?
     @ObservationIgnored private var retryOperation: Operation = .load
+    @ObservationIgnored private var retired = false
     private enum Operation {
         case load, select(String, String?), preferences(LearningPreferences)
     }
@@ -35,8 +36,14 @@ public enum ProductLoadState: Equatable, Sendable {
         generation += 1; pending?.cancel(); pending = nil; busy = false
         if case .loading = state { state = snapshot.map(ProductLoadState.ready) ?? .idle }
     }
+    public func quiesce() async {
+        retired = true
+        let operation = pending
+        deactivate()
+        _ = try? await operation?.value
+    }
     private func perform(_ operation: Operation) async -> Bool {
-        guard !busy, !Task.isCancelled else { return false }
+        guard !retired, !busy, !Task.isCancelled else { return false }
         generation += 1
         let request = generation
         busy = true; retryOperation = operation

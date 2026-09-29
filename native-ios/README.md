@@ -7,7 +7,8 @@ bundled for offline learning. The player supports all sixteen domain stages,
 paused options, sentence navigation and shared typography/speed/grouping editors.
 Native analysis, relation graphs and Apple dictionary are implemented under #97.
 The bundled sample has no syntax, so analysis remains unavailable for that book.
-Apple purchase/delivery/sync remains #98; those destinations report unavailability.
+Native ownership, hosted delivery and optional private sync are connected under #98.
+Missing service configuration leaves those services unavailable without blocking the bundled book.
 Debug storage/media probes remain isolated verification tools.
 The Expo app remains the behavioral reference until the later migration tickets land.
 
@@ -18,11 +19,13 @@ The Expo app remains the behavioral reference until the later migration tickets 
 - `AppFoundation`: local workspaces, committed-state controller and observable bootstrap.
 - `LearningMedia`: native transport, wired monitoring, lifecycle, remote commands, launch and haptics.
 - `LearningReference`: offline syntax validation, confined reads and relation projections.
+- `AppleServices`: verified ownership, atomic hosted installation and private-cloud reconciliation.
 - `App`: the composition root, native navigation and scene lifecycle integration.
 - `Tests/AppUITests`: launch, navigation, foreground, relaunch, Dynamic Type and retry.
 
 Only the app root constructs the product workspace, under Application Support's
-`SwiftNativeProduct/v1`, with a local profile and sync disabled. No reference
+`SwiftNativeProduct/v1`, with a guest profile and sync initially disabled. Account profiles
+are isolated, and their selected local profile remains usable after an offline restart. No reference
 directories are scanned, migrated or erased. The bundled manifest, byte counts,
 hashes and confined local paths are validated before practice. Corrupt or
 inaccessible content fails without resetting progress. The learning store uses an injected namespace;
@@ -66,6 +69,7 @@ swift test --package-path native-ios/Packages/LearningPersistence
 swift test --package-path native-ios/Packages/AppFoundation
 swift test --package-path native-ios/Packages/LearningMedia
 swift test --package-path native-ios/Packages/LearningReference
+swift test --package-path native-ios/Packages/AppleServices
 
 NATIVE_SIM_ID="$(xcrun simctl create 'MetaShadowing Native W2 iOS 27' \
   com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
@@ -80,7 +84,7 @@ xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
   -scheme MetaShadowingNative -configuration Debug \
   -destination "platform=iOS Simulator,id=$NATIVE_SIM_ID" \
   -derivedDataPath native-ios/DerivedData -parallel-testing-enabled NO \
-  CODE_SIGNING_ALLOWED=NO test
+  -collect-test-diagnostics never CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
 
 xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
   -scheme MetaShadowingNative -configuration Release \
@@ -99,6 +103,8 @@ failure for retry testing. It does not edit storage and is absent from Release.
 opens the W4 probe; supported modes are `audio`, `video` and `silent`. These use
 disposable `ProbeProfiles` namespaces, real SQLite and generated fixtures.
 No playback-ended test button substitutes for native media completion.
+StoreKit fixture execution requires an ad-hoc Debug signature with `get-task-allow`;
+it never requires an Apple account. Do not run purchase fixtures in an unsigned host.
 The product UI tests use `--ui-test-product --ui-test-probe-id <UUID>` for isolated
 SQLite profiles. Optional Debug-only `--ui-test-product-fixture audio|video|long|video-long`
 selects generated public fixtures; `--ui-test-product-fail-save` injects one failed
@@ -142,8 +148,10 @@ is not run by hosted CI. Required check names and branch protections are unchang
 their app-check implementations now validate Swift. Local success does not claim
 a hosted CI result.
 
-W7–W8 still own Apple services, delivery and
-replacement/release acceptance. See [the product UI contract](../docs/swift-native/product-ui-contract.md)
+W7 live-service evidence and W8 replacement/release acceptance remain separate.
+See [the Apple service contract](../docs/swift-native/apple-services-contract.md) for private
+configuration, fixture coverage and pending signed-device/service trials.
+See [the product UI contract](../docs/swift-native/product-ui-contract.md)
 for #96's implemented boundaries and verification. W4 hardware acceptance remains separate from
 automated tests; see [the media contract](../docs/swift-native/media-feedback-contract.md). No performance
 benchmarks or improvement targets are required. Physical-device replacement,

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct LibraryView: View {
     let snapshot: ProductSnapshot
+    var services: ProductServicesModel? = nil
     let select: (BookStudySummary) -> Void
     @Environment(\.dynamicTypeSize) private var textSize
     var body: some View {
@@ -12,7 +13,7 @@ struct LibraryView: View {
             } else {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16),
                                          count: textSize.isAccessibilitySize ? 1 : 2), spacing: 16) {
-                    ForEach(snapshot.books) { book in BookCardView(summary: book) { select(book) } }
+                    ForEach(snapshot.books) { book in BookCardView(summary: book, services: services) { select(book) } }
                 }.padding(16)
                 Text("기본 샘플은 앱에 포함되어 오프라인으로 사용할 수 있어요.")
                     .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
