@@ -34,9 +34,14 @@ public struct CommitReceipt: Codable, Equatable, Sendable {
     public let snapshot: LearningSnapshot
     public let backupRevision: Int64
     public let earnedXP: Int64
+    private let originalEarnedXP: Int64?
+    /// The award made by the original transaction, for a receipt that has not yet been presented.
+    /// A duplicate still has earnedXP == 0; displaying this value never awards credit.
+    public var committedXP: Int64 { originalEarnedXP ?? earnedXP }
     public let disposition: Disposition
-    public init(snapshot: LearningSnapshot, backupRevision: Int64, earnedXP: Int64, disposition: Disposition) {
+    public init(snapshot: LearningSnapshot, backupRevision: Int64, earnedXP: Int64, disposition: Disposition, committedXP: Int64? = nil) {
         self.snapshot = snapshot; self.backupRevision = backupRevision; self.earnedXP = earnedXP; self.disposition = disposition
+        originalEarnedXP = committedXP
     }
 }
 public struct ProfilePreferences: Codable, Equatable, Sendable {

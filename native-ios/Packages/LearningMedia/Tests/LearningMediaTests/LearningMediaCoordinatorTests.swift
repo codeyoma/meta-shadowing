@@ -44,7 +44,8 @@ import LearningMedia
     let driver: PlatformTransportFixture
     let coordinator: LearningMediaCoordinator
 
-    init(stage: Int = 1, clock: MediaClock = .live) async throws {
+    init(stage: Int = 1, clock: MediaClock = .live,
+         authorize: @escaping @Sendable (LearningScope) async -> Bool = { _ in true }) async throws {
         root = URL.temporaryDirectory.appending(path: UUID().uuidString)
         let scope = try mediaScope(stage: stage)
         plan = try LearningPlan.make(scope: scope, runID: "media-run", sources: [
@@ -57,7 +58,7 @@ import LearningMedia
             sources: [.audio(file: root.appending(path: "one.wav")), .audio(file: root.appending(path: "two.wav"))])
         let driver = driver
         coordinator = LearningMediaCoordinator(controller: controller, initial: await controller.state, catalog: catalog,
-            authorize: { _ in true }, makeTransport: { _ in driver }, clock: clock)
+            authorize: authorize, makeTransport: { _ in driver }, clock: clock)
     }
 
     func close() async {
@@ -67,6 +68,25 @@ import LearningMedia
 }
 
 @MainActor struct LearningMediaCoordinatorTests {
+    @Test func closingDuringNextCyclePreparationCannotSavePreviousCyclePosition() async throws {
+        let authority = DeferredMediaAuthority()
+        let f = try await MediaCoordinatorFixture(authorize: { _ in await authority.check() })
+        _ = await f.coordinator.perform(.resume)
+        try await eventually { f.driver.playing }
+        f.driver.position = .init(seconds: 1, duration: 1)
+        f.driver.send(.ended(.init(seconds: 1, duration: 1)))
+        try await eventually { f.coordinator.state.controller.snapshot.session.phase == .speaking && !f.coordinator.state.busy }
+        authority.blocked = true
+        _ = await f.coordinator.perform(.confirm)
+        try await eventually { authority.waiting }
+        await f.coordinator.close()
+        authority.release()
+        let reopened = try await f.store.open(plan: f.plan, preferences: .fresh, writerID: UUID())
+        #expect(reopened.session.current.confirmed == 1)
+        #expect(reopened.session.positionSeconds == 0)
+        #expect(reopened.progress.xp == 1)
+        await f.close()
+    }
     @Test func cycleOutlineFollowsPlaybackButCheckRequiresConfirmation() async throws {
         let f = try await MediaCoordinatorFixture()
         _ = await f.coordinator.perform(.resume)
@@ -361,4 +381,15 @@ import LearningMedia
         #expect(result.controller.snapshot.progress.xp == 3)
         await f.close()
     }
+}
+
+@MainActor private final class DeferredMediaAuthority {
+    var blocked = false
+    var waiting: Bool { continuation != nil }
+    private var continuation: CheckedContinuation<Bool, Never>?
+    func check() async -> Bool {
+        if !blocked { return true }
+        return await withCheckedContinuation { continuation = $0 }
+    }
+    func release() { blocked = false; continuation?.resume(returning: true); continuation = nil }
 }

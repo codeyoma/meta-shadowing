@@ -15,6 +15,10 @@ executable=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$plist")
 test -f "$app/$executable" || { echo 'Missing app executable' >&2; exit 1; }
 minimum=$(/usr/libexec/PlistBuddy -c 'Print MinimumOSVersion' "$plist")
 test "$minimum" = '26.0' || { echo 'Unexpected deployment minimum' >&2; exit 1; }
+icon_name=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$plist" 2>/dev/null || true)
+test "$icon_name" = AppIcon && test -f "$app/Assets.car" || {
+    echo 'Missing compiled primary app icon' >&2; exit 1;
+}
 if [[ "$configuration" == Release && -e "$app/LocalVideo" ]]; then
     echo 'Internal video resource leaked into Release' >&2; exit 1
 fi
@@ -46,7 +50,7 @@ while IFS= read -r -d '' artifact; do
         native_binaries=$((native_binaries + 1))
         dependencies=$(otool -L "$artifact")
         symbols=$(nm -u "$artifact")
-        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-learning-media|media-probe-video|ui-test-learning-storage|SyntheticLearningProbe|ProductTestCatalog|ProductTestStore|ui-test-product|ServiceTestAssets|ui-test-services' >/dev/null; then
+        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-|media-probe-video|SyntheticLearningProbe|ProductTestCatalog|ProductTestStore|ServiceTestAssets|ServiceTestCloud|DeveloperToolsView|DeveloperDownload|DeveloperAnalysis' >/dev/null; then
             echo 'Debug probe code leaked into Release' >&2; exit 1
         fi
         if printf '%s\n%s\n' "$dependencies" "$symbols" |
@@ -74,4 +78,4 @@ while IFS= read -r extension_info; do
         printf '%s' "$extension_entitlements" | swift "$native_root/scripts/configure-apple-services.swift" --verify-entitlements "$plist" extension
     fi
 done < <(rg --files --hidden --no-ignore "$app" | rg '/Extensions/[^/]+\.appex/Info\.plist$' || true)
-echo 'PASS: iOS 26.0 minimum; unchanged launch artwork; no excluded runtimes or unexpected entitlements.'
+echo 'PASS: iOS 26.0 minimum; compiled app icon; unchanged launch artwork; no excluded runtimes or unexpected entitlements.'

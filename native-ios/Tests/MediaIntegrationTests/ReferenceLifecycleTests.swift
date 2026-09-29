@@ -7,6 +7,44 @@ import LearningReference
 @testable import MetaShadowingNative
 
 @MainActor @Suite(.serialized) struct ReferenceLifecycleTests {
+    @Test func lateReferenceResultAfterCloseCannotReopenReplacement() async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SQLiteLearningStore(root: root.appending(path: "store"))
+        let catalog = DeferredReferenceAccessCatalog(root: root)
+        let flow = LearningFlow(workspace: ProductWorkspace(store: store, catalog: catalog, profileID: "reference-test"))
+        await flow.open(packageKey: "ui-fixture-v1", stage: 1)
+        await flow.presentOptions(.menu); flow.dismissOptions()
+        let old = try #require(flow.runtime)
+        await catalog.deferNextAccess()
+        let lookup = Task { await flow.lookupPlayer(term: "Secret", permitsWord: { true }) }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !(await catalog.waiting), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await catalog.waiting)
+        await flow.close()
+        await flow.open(packageKey: "ui-fixture-v1", stage: 1)
+        // Stage entry can start playback. Explicitly pause the new lesson before releasing the old response.
+        await flow.presentOptions(.menu); flow.dismissOptions()
+        let replacement = try #require(flow.runtime)
+        await catalog.release()
+        await lookup.value
+
+        #expect(replacement !== old)
+        #expect(!old.state.controller.active)
+        #expect(replacement.state.controller.active && replacement.state.controller.paused)
+        #expect(!flow.playerDictionary.busy)
+        #expect(!flow.playerDictionary.failed)
+        #expect(flow.options == nil)
+        #expect(flow.analysis == nil)
+        #expect(replacement.controls.xp == 0)
+        let progress = try await store.readProgress(scope: replacement.state.controller.snapshot.session.plan.scope,
+            today: StudyDay("2026-09-29"))
+        #expect(progress.xp == 0)
+        #expect(progress.completedRuns.isEmpty)
+        await flow.close()
+    }
     @Test func allowedAuthorityReplacementDisablesTheExistingRuntime() async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -87,6 +125,7 @@ private actor DeferredReferenceAccessCatalog: ProductCatalog {
     var shouldDefer = false
     var pending: CheckedContinuation<Bool, Never>?
     var entered: CheckedContinuation<Void, Never>?
+    var waiting: Bool { pending != nil }
     init(root: URL) { base = ProductTestCatalog(root: root.appending(path: "assets"), mode: "analysis") }
     func books() async -> [CatalogBook] { await base.books() }
     func materials(packageKey: String) async throws -> BookMaterials { try await base.materials(packageKey: packageKey) }

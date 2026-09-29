@@ -64,7 +64,7 @@ public actor LearningController {
             var receipt = try await store.apply(command)
             guard active, generation == lifetime else { return result() }
             if receipt.disposition == .applied || (retrying && receipt.disposition == .duplicate),
-               let feedback = CommittedLearningFeedback.observed(command: command, before: before.session, after: receipt.snapshot.session),
+               let feedback = CommittedLearningFeedback.observed(command: command, before: before, after: receipt),
                !unpublishedFeedback.contains(where: { $0.commandID == feedback.commandID }) {
                 unpublishedFeedback.append(feedback)
             }

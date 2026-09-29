@@ -92,7 +92,11 @@ a reopened gate, and a pre-transition press cannot become valid again afterward.
 `CommittedLearningFeedback` is keyed by the original command ID and derived
 from committed source progress, not aggregate XP. Retry, lost replies and failed
 recovery pauses preserve a single unpublished event. State reads and restoration
-are quiet. Third-cycle Repeat has its own pulse; already-confirmed Next is quiet.
+are quiet. Third-cycle Repeat has its own pulse; already-confirmed Next has no additional haptic.
+Visual receipts use the original transaction's committed XP award, including a recovered
+lost reply, never a difference between language-wide totals. An imported award is not a new
+local award. Newly committed completion can show a short visual celebration without
+another cycle haptic. Receipts expire, honor Reduce Motion, and stop on inactivity or exit.
 The coordinator consumes events once, discarding obsolete navigation feedback.
 
 Cycle 1/4 has two pulses, cycle 2 three, cycle 3/5 four, and Repeat one.

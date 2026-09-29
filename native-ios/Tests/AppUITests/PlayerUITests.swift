@@ -1,6 +1,58 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    @MainActor func testCommittedRewardAppearsOnceAndCompletionDoesNotReplayOnRelaunch() {
+        continueAfterFailure = false
+        let app = fixture(stage: 11, mode: "audio")
+        let main = app.buttons["player-main"]
+        XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+        main.tap()
+        let reward = app.staticTexts["player-xp-receipt"]
+        XCTAssertTrue(reward.waitForExistence(timeout: 3))
+        XCTAssertEqual(reward.label, "3 XP 획득")
+        XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 10))
+        main.tap()
+        XCTAssertTrue(app.staticTexts["스테이지 완료"].waitForExistence(timeout: 5))
+        let completion = app.staticTexts["player-completion-receipt"]
+        XCTAssertTrue(completion.exists)
+        XCTAssertTrue(completion.waitForNonExistence(timeout: 5))
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "6 / 100 XP", timeout: 20))
+        XCTAssertFalse(reward.exists)
+        XCTAssertFalse(completion.exists)
+    }
+    @MainActor func testInstalledLessonReopensWithoutServiceAccessOrExtraCredit() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let book = app.buttons["book-morning-notes-v1"]
+        XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 20))
+        book.tap()
+        app.buttons["stage-1"].tap()
+        let main = app.buttons["player-main"]
+        XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
+        main.tap()
+        let timeline = app.descendants(matching: .any)["cycle-timeline"]
+        XCTAssertTrue(timeline.wait(for: \.label, toEqual: "확인한 반복 1/3", timeout: 5))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 20))
+        XCTAssertEqual(app.staticTexts["header-xp"].label, "1 / 100 XP")
+        XCTAssertFalse(main.exists, "Relaunch must not automatically reopen or play a lesson")
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["iCloud 동기화"].tap()
+        XCTAssertTrue(app.staticTexts["자동 동기화, 꺼짐"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["도서 목록"].tap()
+        book.tap()
+        app.buttons["stage-1"].tap()
+        XCTAssertTrue(timeline.wait(for: \.label, toEqual: "확인한 반복 1/3", timeout: 10))
+        app.buttons["player-options"].tap()
+        app.buttons["options-close"].tap()
+        XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+    }
     @MainActor func testRevealLevelWaitsForPendingPresetSave() {
         continueAfterFailure = false
         let app = fixture(stage: 15, mode: "audio", extra: ["--ui-test-product-delay-reveal-save"])
