@@ -111,6 +111,7 @@ targets:
     platform: iOS
     sources: [Tests/MediaIntegrationTests]
     dependencies:
+      - package: AppleServices
       - target: MetaShadowingNative
       - package: LearningMedia
       - package: LearningDomain

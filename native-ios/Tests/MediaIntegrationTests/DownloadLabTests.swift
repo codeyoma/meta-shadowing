@@ -6,6 +6,101 @@ import Testing
 @testable import MetaShadowingNative
 
 @Suite @MainActor struct DownloadLabTests {
+    @Test func terminalProgressKeepsTransferOwnershipUntilCallbackReturns() async throws {
+        let transport = DeveloperDownloadLabTransport(root: Bundle.main.bundleURL.appending(path: "sample"), stepDuration: .milliseconds(1))
+        let gate = LabDrainGate()
+        let transfer = Task {
+            try await transport.download { value in
+                if value == 1 { await gate.wait() }
+            }
+        }
+        defer { transfer.cancel() }
+        try await waitForDrain(gate)
+        do {
+            try await transport.download { _ in }
+            Issue.record("Expiring controls must not admit a second owned transfer")
+        } catch {
+            #expect((error as? DeliveryError) == .busy)
+        }
+        await gate.release()
+        try await transfer.value
+    }
+
+    @Test func inactiveTransportRejectsControlsBeforeAndAfterDownload() async throws {
+        let transport = DeveloperDownloadLabTransport(root: Bundle.main.bundleURL.appending(path: "sample"), stepDuration: .milliseconds(1))
+        #expect(await transport.setPaused(true) == false)
+        #expect(await transport.fail() == false)
+        try await transport.download { _ in }
+        #expect(await transport.setPaused(true) == false)
+        #expect(await transport.setPaused(false) == false)
+        #expect(await transport.fail() == false)
+        #expect(await transport.failRequested == false)
+    }
+
+    @Test func activeTransportAcknowledgesControlsAndSettlesInjectedFailure() async throws {
+        let transport = DeveloperDownloadLabTransport(root: Bundle.main.bundleURL.appending(path: "sample"), stepDuration: .milliseconds(1))
+        let gate = LabDrainGate()
+        let transfer = Task {
+            try await transport.download { value in
+                if value == 0 { await gate.wait() }
+            }
+        }
+        defer { transfer.cancel() }
+        try await waitForDrain(gate)
+        #expect(await transport.setPaused(true))
+        #expect(await transport.setPaused(false))
+        #expect(await transport.fail())
+        #expect(await transport.setPaused(true) == false)
+        #expect(await transport.fail() == false)
+        await gate.release()
+        do {
+            try await transfer.value
+            Issue.record("An acknowledged failure must terminate the transfer")
+        } catch {
+            #expect((error as? URLError)?.code == .networkConnectionLost)
+        }
+    }
+
+    @Test func terminalProgressRejectsTransferControlsBeforeInstallation() async throws {
+        let transport = DeveloperDownloadLabTransport(root: Bundle.main.bundleURL.appending(path: "sample"), stepDuration: .milliseconds(1))
+        let gate = LabDrainGate()
+        let transfer = Task {
+            try await transport.download { value in
+                if value == 1 { await gate.wait() }
+            }
+        }
+        defer { transfer.cancel() }
+        try await waitForDrain(gate)
+        let paused = await transport.setPaused(true)
+        let failed = await transport.fail()
+        #expect(!paused)
+        #expect(!failed)
+        #expect(await transport.failRequested == false)
+        await gate.release()
+        try await transfer.value
+    }
+
+    @Test func immediatePauseNeverReportsFrozenProgressForAnIgnoredCommand() async throws {
+        let root = labRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = DeveloperDownloadLabModel(root: root, stepDuration: .milliseconds(10))
+        await model.open()
+        model.startDownload()
+        await model.pauseTransfer()
+        // An acknowledged pause must freeze progress; a rejected early request must not claim a pause.
+        try await Task.sleep(for: .milliseconds(30))
+        if model.paused {
+            let stopped = model.status.progress
+            try await Task.sleep(for: .milliseconds(100))
+            #expect(model.status.progress == stopped)
+            #expect(!model.installed)
+        }
+        await model.resumeTransfer()
+        try await waitForLab { !model.downloading }
+        #expect(model.installed && model.result == .installVerified)
+        await model.close()
+    }
+
     @Test func immediateCancellationDoesNotStartOrInstallTransfer() async throws {
         let root = labRoot()
         defer { try? FileManager.default.removeItem(at: root) }

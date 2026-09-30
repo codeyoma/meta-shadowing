@@ -465,6 +465,35 @@ The refreshed feature matrix distinguishes earlier development-channel failures,
 later TestFlight owner observations, observed two-device Production recovery and
 still-unperformed live gates. No fixture result replaces a real-service check.
 
+## PR review: transfer-control acknowledgements — 2026-09-30
+
+PR #109's review identified a Debug-lab race: the model's download operation
+includes startup and installation, but the transport accepts pause/failure only
+during transfer. An immediate-pause regression reproduced a displayed pause while
+progress advanced from 5% to 27.5%. The model now applies pause/resume state only
+after transport acknowledgement and checks its lifetime again after suspension.
+Injected-failure verification reads the transport's accepted request rather than
+an optimistic model flag.
+
+The transport distinguishes idle, transferring and finishing. Controls expire
+before the final progress callback yields, while transfer ownership remains busy
+until that callback returns. A terminal-callback regression reproduced accepted
+late controls; an ownership regression also caught early release in the
+intermediate fix. All thirteen final lab cases passed, including active-control
+acceptance, inactive/terminal rejection, cancellation, retry, local recovery and
+closing/reopening. The media integration target explicitly links AppleServices
+to assert the real busy error, without changing the hosted workflow.
+
+The revised native source tree is
+`e52746a21e4b1b0ea4a988daf3bce22e2cec3e77`. All six unchanged package suites
+passed 360 tests. Debug and fresh Release products passed the native-product guard,
+and disposable CI configuration generation passed. The separate local StoreKit
+setup passed its one case. The complete, unfiltered iOS 27 native scheme passed
+all 123 cases with zero failures or skips: 53 UI, 51 media/reference integration
+and 19 local StoreKit cases. The four existing nonfatal reveal-WPM frame warnings
+remain separate from those passing results. Hosted CI is not inferred from local
+success. These checks do not access a real account, purchase, cloud database or phone.
+
 ## Device preparation — 2026-09-30
 
 - The direct development-device channel successfully queried the designated iOS 27 iPhone and its existing native installation. Xcode's earlier offline listing did not prevent that query. Installation identity and container locations remain private.

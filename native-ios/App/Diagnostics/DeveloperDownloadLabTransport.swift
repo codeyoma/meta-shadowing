@@ -4,11 +4,12 @@ import Foundation
 
 /// Only the external transfer is controlled. ContentDelivery still validates and installs real files.
 actor DeveloperDownloadLabTransport: AssetDelivery {
+    private enum Phase { case idle, transferring, finishing }
     private let source: ServiceTestAssets
     private let stepDuration: Duration
     private var paused = false
-    private var failRequested = false
-    private var active = false
+    private(set) var failRequested = false
+    private var phase = Phase.idle
     private var waiters: [UUID: AsyncStream<Void>.Continuation] = [:]
 
     init(root: URL, stepDuration: Duration) {
@@ -17,28 +18,32 @@ actor DeveloperDownloadLabTransport: AssetDelivery {
     }
 
     func download(progress: @escaping AssetDeliveryProgress) async throws {
-        guard !active else { throw DeliveryError.busy }
-        active = true; paused = false; failRequested = false
-        defer { active = false; paused = false; wakeWaiters() }
+        guard phase == .idle else { throw DeliveryError.busy }
+        phase = .transferring; paused = false; failRequested = false
+        defer { phase = .idle; paused = false; wakeWaiters() }
         await progress(0)
         for step in 1...40 {
             try await Task.sleep(for: stepDuration)
             try await waitUntilResumed()
             try Task.checkCancellation()
             if failRequested { throw URLError(.networkConnectionLost) }
+            // The final progress callback yields, but transfer controls have already expired.
+            if step == 40 { phase = .finishing }
             await progress(Double(step) / 40)
         }
     }
 
-    func setPaused(_ value: Bool) {
-        guard active else { return }
+    @discardableResult func setPaused(_ value: Bool) -> Bool {
+        guard phase == .transferring, !failRequested else { return false }
         paused = value
         if !paused { wakeWaiters() }
+        return true
     }
 
-    func fail() {
-        guard active else { return }
+    @discardableResult func fail() -> Bool {
+        guard phase == .transferring, !failRequested else { return false }
         failRequested = true; paused = false; wakeWaiters()
+        return true
     }
 
     nonisolated func contents(_ file: String) throws -> Data { try source.contents(file) }

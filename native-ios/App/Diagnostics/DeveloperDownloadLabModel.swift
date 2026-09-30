@@ -48,7 +48,6 @@ import Observation
     @ObservationIgnored private var observer: Task<Void, Never>?
     @ObservationIgnored private var closing: (id: UUID, task: Task<Void, Never>)?
     @ObservationIgnored private var cancellation: (id: UUID, task: Task<Void, Never>)?
-    @ObservationIgnored private var failureRequested = false
 
     init(root: URL, stepDuration: Duration = .milliseconds(250),
          drainDelivery: @escaping @Sendable (ContentDelivery) async -> Void = { await $0.cancelAll() }) {
@@ -79,6 +78,7 @@ import Observation
                     for await state in try await prepared.statuses(packageKey: key) {
                         guard let self, self.lifetime == ticket, !Task.isCancelled else { return }
                         self.status = state
+                        if state.phase != "downloading" { self.paused = false }
                     }
                 } catch { if self?.lifetime == ticket { self?.result = .failed } }
             }
@@ -88,7 +88,7 @@ import Observation
     func startDownload() {
         guard ready, !downloading, cancellation == nil, !historyBusy, !installed, let delivery else { return }
         let ticket = lifetime, key = key
-        downloading = true; paused = false; result = .none; failureRequested = false
+        downloading = true; paused = false; result = .none
         operation = Task { [weak self] in
             do {
                 try Task.checkCancellation()
@@ -105,8 +105,10 @@ import Observation
                     try await self.refreshFacts()
                     guard self.lifetime == ticket else { return }
                     let state = try await delivery.state(packageKey: key)
+                    let failureRequested = await self.transport.failRequested
+                    guard self.lifetime == ticket else { return }
                     self.status = state
-                    let injected = self.failureRequested && (error as? URLError)?.code == .networkConnectionLost
+                    let injected = failureRequested && (error as? URLError)?.code == .networkConnectionLost
                     self.result = injected && !self.installed && state.phase == "failed" ? .failureVerified : .failed
                 } catch { if self.lifetime == ticket { self.result = .failed } }
             }
@@ -141,9 +143,29 @@ import Observation
         guard cancellation?.id == id, closing == nil else { return }
         downloading = false; paused = false; operation = nil; cancellation = nil
     }
-    func pauseTransfer() async { guard downloading else { return }; await transport.setPaused(true); paused = downloading }
-    func resumeTransfer() async { await transport.setPaused(false); paused = false }
-    func failTransfer() async { guard downloading else { return }; failureRequested = true; await transport.fail(); paused = false }
+    func pauseTransfer() async {
+        guard ready, downloading, cancellation == nil, closing == nil else { return }
+        let ticket = lifetime
+        let accepted = await transport.setPaused(true)
+        guard lifetime == ticket, downloading, cancellation == nil, accepted else { return }
+        paused = true
+    }
+
+    func resumeTransfer() async {
+        guard ready, downloading, cancellation == nil, closing == nil else { return }
+        let ticket = lifetime
+        let accepted = await transport.setPaused(false)
+        guard lifetime == ticket, downloading, cancellation == nil, accepted else { return }
+        paused = false
+    }
+
+    func failTransfer() async {
+        guard ready, downloading, cancellation == nil, closing == nil else { return }
+        let ticket = lifetime
+        let accepted = await transport.fail()
+        guard lifetime == ticket, downloading, cancellation == nil, accepted else { return }
+        paused = false
+    }
 
     func removeDownload() async {
         guard ready, !downloading, !historyBusy, let delivery else { return }

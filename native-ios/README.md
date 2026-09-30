@@ -149,6 +149,9 @@ profile, account, arbitrary path or paid package.
   Its normal byte/hash/manifest validation and atomic file installation remain in
   place. Result text is based on settled delivery state and verified installation,
   not on the progress animation. Removing the test download preserves its history.
+  Pause/resume and failure injection require transport acknowledgement during its
+  actual transfer phase. Early or late requests cannot claim a pause or injected
+  failure, and the finishing callback retains ownership until it returns.
 - **합성 기록·백업 준비** explicitly creates one synthetic reveal confirmation
   through the learning store's normal command boundary and saves its local backup.
   It is not audible practice or native playback acceptance. The normal
