@@ -51,7 +51,7 @@ import UIKit
             guard let self else { return }
             self.monitorState = self.monitoring.state; self.monitorGain = self.monitoring.gain
         }
-        graph.onInvalidation = { [weak self] in self?.monitoring.interrupted() }
+        graph.onInvalidation = { [weak self] in self?.monitoring.graphInvalidated() }
         remote.onPress = { [weak self] event in Task { @MainActor in
             guard let self, !self.closed else { return }; _ = await self.coordinator.receiveRemote(event)
         } }
@@ -97,10 +97,16 @@ import UIKit
         case .active: context.foreground = true; applyContext()
         case .inactive: feedback = nil; context.foreground = false; applyContext()
         case .routeChanged: feedback = nil; coordinator.suspend(.routeChange); monitoring.routeChanged(); haptics.stop()
-        case .interrupted, .reset:
+        case let .interruptionEnded(shouldResume):
+            monitoring.interruptionEnded(shouldResume: shouldResume)
+        case .interrupted:
             feedback = nil
             session.invalidate()
             coordinator.suspend(.interruption); monitoring.interrupted(); haptics.stop()
+        case .reset:
+            feedback = nil
+            session.invalidate()
+            coordinator.suspend(.interruption); monitoring.reset(); haptics.stop()
         }
     }
 }

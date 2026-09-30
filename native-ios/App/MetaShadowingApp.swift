@@ -90,7 +90,9 @@ struct MetaShadowingApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let root = Self.probeRoot {
+            if let root = Self.downloadLabRoot {
+                DeveloperDownloadLabView(root: root)
+            } else if let root = Self.probeRoot {
                 if ProcessInfo.processInfo.arguments.contains("--ui-test-learning-media") {
                     SyntheticMediaProbeView(root: root, mode: Self.mediaMode)
                 } else { SyntheticLearningProbeView(root: root) }
@@ -115,6 +117,13 @@ struct MetaShadowingApp: App {
     }
 
     #if DEBUG
+    private static var downloadLabRoot: URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--ui-test-download-lab"), let index = arguments.firstIndex(of: "--ui-test-probe-id"),
+              index + 1 < arguments.count, let id = UUID(uuidString: arguments[index + 1]) else { return nil }
+        return URL.applicationSupportDirectory.appending(path: "NativeDiagnostics/\(id.uuidString)")
+    }
+
     private static var probeRoot: URL? {
         let arguments = ProcessInfo.processInfo.arguments
         guard arguments.contains("--ui-test-learning-storage") || arguments.contains("--ui-test-learning-media") else { return nil }

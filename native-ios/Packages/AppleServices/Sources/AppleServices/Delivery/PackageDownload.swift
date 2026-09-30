@@ -51,6 +51,8 @@ actor PackageDownload {
   private func removeListener(_ id: UUID) { listeners[id] = nil }
 
   func start(_ package: DeliveryPackage, publication: @escaping PackagePublication = { try $0() }) async throws {
+    // A cancelled caller must not create a fresh, independently owned transfer.
+    try Task.checkCancellation()
     guard running == nil && !removing else { throw DeliveryError.busy }
     if try installation.isInstalled(package) { return }
     guard let transport else { throw DeliveryError.unavailable }

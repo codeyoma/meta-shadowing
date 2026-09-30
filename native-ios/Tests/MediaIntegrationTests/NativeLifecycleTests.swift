@@ -9,6 +9,17 @@ import AppFoundation
 @testable import MetaShadowingNative
 
 @Suite(.serialized) @MainActor struct NativeLifecycleTests {
+    @Test(arguments: [true, false])
+    func interruptionEndIsForwarded(_ mayResume: Bool) {
+        let center = NotificationCenter()
+        var events: [LessonLifecycleEvent] = []
+        let observer = LessonLifecycleObserver(center: center) { events.append($0) }
+        defer { observer.close() }
+        center.post(name: AVAudioSession.interruptionNotification, object: nil,
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue,
+                       AVAudioSessionInterruptionOptionKey: mayResume ? AVAudioSession.InterruptionOptions.shouldResume.rawValue : 0])
+        #expect(events == [.interruptionEnded(shouldResume: mayResume)])
+    }
     @Test(arguments: [AVAudioSession.interruptionNotification,
                       AVAudioSession.mediaServicesWereLostNotification,
                       AVAudioSession.mediaServicesWereResetNotification])
@@ -29,7 +40,8 @@ import AppFoundation
         // Simulate OS-owned state loss, not just the notification that reports it.
         try await simulateLostAudioSessionState()
         NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: nil,
-            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue,
+                       AVAudioSessionInterruptionOptionKey: AVAudioSession.InterruptionOptions.shouldResume.rawValue])
         #expect(runtime.state.controller.paused)
         #expect(audio.category == .ambient)
 
@@ -185,10 +197,10 @@ import AppFoundation
             userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
         center.post(name: AVAudioSession.interruptionNotification, object: nil,
             userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
-        #expect(events == [.inactive, .interrupted])
+        #expect(events == [.inactive, .interrupted, .interruptionEnded(shouldResume: false)])
         observer.close()
         center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-        #expect(events.count == 2)
+        #expect(events.count == 3)
     }
 }
 

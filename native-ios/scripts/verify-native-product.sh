@@ -15,6 +15,9 @@ executable=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$plist")
 test -f "$app/$executable" || { echo 'Missing app executable' >&2; exit 1; }
 minimum=$(/usr/libexec/PlistBuddy -c 'Print MinimumOSVersion' "$plist")
 test "$minimum" = '26.0' || { echo 'Unexpected deployment minimum' >&2; exit 1; }
+plutil -extract UIDeviceFamily json -o - "$plist" | jq -e '. == [1]' >/dev/null || {
+    echo 'Expected iPhone-only device family' >&2; exit 1;
+}
 icon_name=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$plist" 2>/dev/null || true)
 test "$icon_name" = AppIcon && test -f "$app/Assets.car" || {
     echo 'Missing compiled primary app icon' >&2; exit 1;
@@ -72,6 +75,11 @@ if codesign -d "$app" >/dev/null 2>&1; then
 fi
 while IFS= read -r extension_info; do
     extension=${extension_info%/Info.plist}
+    extension_name=$(/usr/libexec/PlistBuddy -c 'Print CFBundleDisplayName' "$extension_info" 2>/dev/null || true)
+    test -n "$extension_name" || { echo 'Missing downloader display name' >&2; exit 1; }
+    plutil -extract UIDeviceFamily json -o - "$extension_info" | jq -e '. == [1]' >/dev/null || {
+        echo 'Expected iPhone-only downloader device family' >&2; exit 1;
+    }
     if codesign -d "$extension" >/dev/null 2>&1; then
         extension_entitlements=$(codesign -d --entitlements :- "$extension" 2>/dev/null)
         test -n "$extension_entitlements" || { echo 'Missing downloader entitlements' >&2; exit 1; }

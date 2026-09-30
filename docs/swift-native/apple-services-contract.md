@@ -71,7 +71,8 @@ swift native-ios/scripts/configure-apple-services.swift \
   --source-info "$REFERENCE_INFO_PLIST" \
   --source-entitlements "$REFERENCE_ENTITLEMENTS" \
   --output native-ios/Generated/Services
-xcodegen generate --spec native-ios/Generated/Services/project.json --project native-ios
+xcodegen generate --spec native-ios/Generated/Services/project.json \
+  --project-root native-ios --project native-ios
 ```
 
 The mapper reads, but never edits, its source files. It copies only matching, whitelisted service
@@ -92,6 +93,14 @@ app and extension. This follows Apple's [Apple-hosted asset-pack setup](https://
 Configured CloudKit allows only the selected container, environment, CloudKit service and matching
 push environment. Product guards reject extra service entitlements; they do not use a broad allow-list.
 Generating configuration or building the fictional extension contacts no account or cloud database.
+
+Distribution signing adds Apple's `beta-reports-active` identity flag. The product
+guard accepts it only when true and `get-task-allow` is explicitly false; configured
+service capabilities must still match exactly. The app and downloader explicitly
+target iPhone, and the generated downloader has a nonempty display name. Built
+product checks enforce these requirements rather than inferring them from project
+defaults. TestFlight uses Production CloudKit entitlements and matching build
+metadata; building or uploading does not authorize schema deployment, sync or resets.
 
 ## Verification boundary
 

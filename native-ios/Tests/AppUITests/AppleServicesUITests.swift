@@ -209,6 +209,51 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].exists)
     }
+    @MainActor func testLocalResetClearsConfirmedProgressButKeepsDownloadedBookAfterRelaunch() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-services", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let bundled = app.buttons["book-morning-notes-v1"]
+        XCTAssertTrue(bundled.wait(for: \.isHittable, toEqual: true, timeout: 20))
+        bundled.tap()
+        app.buttons["stage-1"].tap()
+        let main = app.buttons["player-main"]
+        XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
+        main.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 1/3", timeout: 5))
+        app.buttons["player-exit"].tap()
+        app.tabBars.buttons["도서 목록"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.buttons["download-hosted-morning-notes-v1"].tap()
+        let hosted = app.buttons["book-hosted-morning-notes-v1"]
+        XCTAssertTrue(hosted.wait(for: \.isHittable, toEqual: true, timeout: 10))
+
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["데이터 관리"].tap()
+        app.buttons["remove-local-history"].tap()
+        XCTAssertTrue(app.alerts.buttons["이 기기 기록 삭제"].wait(for: \.isHittable, toEqual: true, timeout: 5))
+        app.alerts.buttons["이 기기 기록 삭제"].tap()
+        app.tabBars.buttons["도서 목록"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 10))
+        XCTAssertTrue(hosted.exists)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(hosted.waitForExistence(timeout: 20))
+        XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
+        XCTAssertFalse(main.exists, "Reset/relaunch must not reopen a player")
+        let settings = app.tabBars.buttons["설정"]
+        XCTAssertTrue(settings.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        settings.tap()
+        app.buttons["iCloud 동기화"].tap()
+        XCTAssertTrue(app.staticTexts["자동 동기화, 꺼짐"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["도서 목록"].tap()
+        bundled.tap()
+        app.buttons["stage-1"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 0/3", timeout: 10))
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+    }
     @MainActor func testLocalAndCloudDeletionHaveSeparateScopedConfirmations() {
         continueAfterFailure = false
         let app = XCUIApplication()

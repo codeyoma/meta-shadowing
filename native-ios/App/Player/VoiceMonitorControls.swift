@@ -7,9 +7,9 @@ struct VoiceMonitorControls: View {
         if runtime.monitorState != .blocked {
             HStack {
                 Button {
-                    Task { await runtime.monitoring.setEnabled(runtime.monitorState != .monitoring) }
+                    runtime.monitoring.toggle()
                 } label: {
-                    Label(runtime.monitorState == .monitoring ? "내 목소리 켜짐" : "내 목소리 듣기",
+                    Label(runtime.monitorState == .suspended ? "내 목소리 복구 대기" : runtime.monitorState == .monitoring ? "내 목소리 켜짐" : "내 목소리 듣기",
                           systemImage: runtime.monitorState == .monitoring ? "mic.fill" : "mic.slash")
                         .frame(minHeight: 44)
                 }.disabled(runtime.monitorState == .requesting || runtime.monitorState == .denied)

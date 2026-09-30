@@ -68,8 +68,8 @@ private struct MediaProbeControls: View {
         }
         Section("Wired microphone monitoring") {
             Text(String(describing: runtime.monitorState))
-            Button(runtime.monitorState == .monitoring ? "Stop monitoring" : "Start monitoring") {
-                Task { await runtime.monitoring.setEnabled(runtime.monitorState != .monitoring) }
+            Button(runtime.monitorState == .monitoring || runtime.monitorState == .suspended ? "Stop monitoring" : "Start monitoring") {
+                runtime.monitoring.toggle()
             }
             Slider(value: Binding(get: { Double(runtime.monitorGain) }, set: { runtime.monitoring.setGain(Float($0)) }), in: 0...1)
                 .accessibilityLabel("Microphone gain")

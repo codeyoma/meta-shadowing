@@ -5,7 +5,7 @@ import SwiftUI
 
 struct DeveloperToolsView: View {
     private struct Route: Identifiable {
-        enum Kind { case analysis, audio, download }
+        enum Kind { case analysis, audio, download, recovery }
         let id = UUID()
         let kind: Kind
         var root: URL { URL.applicationSupportDirectory.appending(path: "NativeDiagnostics/\(id.uuidString)") }
@@ -17,6 +17,7 @@ struct DeveloperToolsView: View {
             Button("문장 분석 실험") { route = Route(kind: .analysis) }
             Button("오디오 · 모니터링 실험") { route = Route(kind: .audio) }
             Button("다운로드 미리보기") { route = Route(kind: .download) }
+            Button("다운로드·복원 검증") { route = Route(kind: .recovery) }
         }.navigationTitle("개발 도구")
             .fullScreenCover(item: $route) { selected in
                 Group {
@@ -24,6 +25,7 @@ struct DeveloperToolsView: View {
                     case .analysis: DeveloperAnalysisView(root: selected.root)
                     case .audio: SyntheticMediaProbeView(root: selected.root, mode: "audio")
                     case .download: DeveloperDownloadView()
+                    case .recovery: DeveloperDownloadLabView(root: selected.root)
                     }
                 }.safeAreaInset(edge: .top) {
                     HStack {

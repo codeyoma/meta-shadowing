@@ -279,6 +279,14 @@ unavailable even after their predecessor is complete.
 
 ## Audio cycle contract (M1)
 
+Swift-only owner amendment, 2026-09-30: previously enabled live voice monitoring
+may recover after a system-permitted interruption end, once the lesson is
+foreground, the menu is closed, permission is granted and the wired route is
+still valid. Manual OFF, route loss, access loss, completion and exit cancel
+recovery. Learning playback still requires explicit Resume. The Expo reference's
+original interruption policy below is unchanged; see the detailed
+[native media contract](swift-native/media-feedback-contract.md#wired-monitoring-and-headset-actions).
+
 - Live voice monitoring is available in Debug and Release. It starts automatically
   in an eligible foreground lesson when wired headphones connect, or on entry already connected,
   after microphone permission. Manual OFF is retained until unplug/replug or a
