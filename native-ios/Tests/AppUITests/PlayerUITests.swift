@@ -7,14 +7,18 @@ final class PlayerUITests: XCTestCase {
         let main = app.buttons["player-main"]
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 10))
         main.tap()
-        let reward = app.staticTexts["player-xp-receipt"]
-        XCTAssertTrue(reward.waitForExistence(timeout: 3))
-        XCTAssertEqual(reward.label, "3 XP 획득")
+        let reward = app.descendants(matching: .any)["player-xp-receipt"]
+        // Verify identifier and exact committed XP in one snapshot before the transient receipt expires.
+        let earned = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == %@ AND label == %@", "player-xp-receipt", "3 XP 획득")).firstMatch
+        XCTAssertTrue(earned.waitForExistence(timeout: 3), "The receipt must expose the committed 3 XP")
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 10))
         main.tap()
+        let completion = app.descendants(matching: .any)["player-completion-receipt"]
+        let completed = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == %@ AND label == %@", "player-completion-receipt", "학습 완료!")).firstMatch
+        XCTAssertTrue(completed.waitForExistence(timeout: 5), "Observe the completion receipt before checking durable state")
         XCTAssertTrue(app.staticTexts["스테이지 완료"].waitForExistence(timeout: 5))
-        let completion = app.staticTexts["player-completion-receipt"]
-        XCTAssertTrue(completion.exists)
         XCTAssertTrue(completion.waitForNonExistence(timeout: 5))
         app.terminate(); app.launch()
         XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "6 / 100 XP", timeout: 20))

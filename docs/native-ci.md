@@ -124,6 +124,22 @@ job limit cancelled the expanded suite before Xcode could finalize its result bu
 Only test-case lifecycle lines and the final test verdict are streamed from Xcode's
 verbose output; shell `pipefail` preserves test failures through that filter. The result
 summary fails explicitly when no finalized bundle is available.
+Transient reward tests match the receipt identifier and exact committed XP label
+in a single accessibility query. Separate existence and label snapshots can race
+the unchanged two-second receipt lifetime on slower runners. Completion receipts
+are observed before checking durable stage state; identifier-only queries still
+verify their disappearance and absence after relaunch. These tests do not extend
+receipt timing, weaken credit assertions or add CI retries.
+
+Local validation on 2026-09-30 reproduced the missing-receipt snapshot with a
+controlled delay between the old existence and label reads. The corrected test
+passed; deliberately expecting the wrong XP label then failed its exact-label
+assertion. After restoring the correct expectation, the complete, unfiltered
+iOS 27 scheme passed all 123 cases with zero failures or skips, including all
+19 player tests. The separate StoreKit setup check and all 360 package tests
+also passed. Four existing reveal-WPM frame warnings remain; these local results
+do not establish a passing hosted run.
+
 Parallel test output omits simulator clone names. The result report also lists the
 ten slowest test cases by duration, without device metadata or source locations.
 Both Debug and Release products are inspected for JavaScript resources, excluded
