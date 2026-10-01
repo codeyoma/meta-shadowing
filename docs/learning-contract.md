@@ -287,13 +287,20 @@ recovery. Learning playback still requires explicit Resume. The Expo reference's
 original interruption policy below is unchanged; see the detailed
 [native media contract](swift-native/media-feedback-contract.md#wired-monitoring-and-headset-actions).
 
+Swift-only owner amendment, 2026-10-01: the device-local microphone control spans
+0...2, reaching eightfold microphone amplitude at 2 (twice the previous maximum).
+Existing saved values in 0...1, mute and the default 0.25 retain their previous
+amplitude. Original lesson playback bypasses this gain path. The Expo reference
+retains its fourfold boost and 0...1 control; processing and validation details
+remain in the native media contract linked above.
+
 - Live voice monitoring is available in Debug and Release. It starts automatically
   in an eligible foreground lesson when wired headphones connect, or on entry already connected,
   after microphone permission. Manual OFF is retained until unplug/replug or a
   new lesson. Menus/background/lock preserve existing capture; they do not start
   new capture in the background. Exit, completion, access loss, interruption or
   unsupported output stops capture. Only a first permission-sheet cancellation
-  may retry once after grant, never an audio interruption. Voice-only 4x gain
+  may retry once after grant, never an audio interruption. Microphone-only gain
   leaves original playback and XP unchanged; no recording or transmission.
 - A wired headphone's center transport button invokes the visible player's main
   action (resume, explicit confirmation, or next), using the same access, busy,
