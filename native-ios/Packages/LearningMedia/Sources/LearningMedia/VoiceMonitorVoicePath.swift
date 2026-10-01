@@ -1,6 +1,6 @@
 import AVFoundation
 
-/// Reuses the reference graph: only microphone audio receives the fourfold gain.
+/// Only microphone audio is amplified; the original 0...1 range retains its level.
 @MainActor final class VoiceMonitorVoicePath {
     private let boost = AVAudioUnitEQ(numberOfBands: 0)
     private let volume = AVAudioMixerNode()
@@ -11,5 +11,10 @@ import AVFoundation
         engine.connect(boost, to: volume, format: format)
         engine.connect(volume, to: engine.mainMixerNode, format: format)
     }
-    func setGain(_ value: Float) { volume.outputVolume = value.isFinite ? min(1, max(0, value)) : 0.25 }
+    func setGain(_ value: Float) {
+        let gain = VoiceMonitoring.normalizedGain(value)
+        // The mixer stays within 0...1; extra amplification belongs to this mic-only EQ.
+        boost.globalGain = 20 * log10(4 * max(1, gain))
+        volume.outputVolume = min(1, gain)
+    }
 }

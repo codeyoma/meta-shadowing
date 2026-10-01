@@ -17,7 +17,6 @@
   replace the reference installation. Never implicitly replace the physical app,
   register an identity or access accounts/cloud services. Keep local identity
   settings and generated build products ignored.
-- Respond in English unless the user explicitly requests another language.
 - Read docs/native-rebuild.md and docs/learning-contract.md before changing behavior.
 - The product roadmap is iPhone first, Android later (owner update 2026-09-13).
   Before platform, purchase, delivery, or sync changes, read the current scope in
@@ -30,7 +29,7 @@
   require separate decisions, not speculative infrastructure now.
   Never use Supabase in the new app; the email/OTP proposal is superseded.
 - Supabase records, Auth, and Storage are protected: no hosted mutations.
-- Keep all Git history. Feature branches use codex/ and target dev; main releases
+- Keep all Git history. Feature PRs target dev; main releases
   need explicit approval. Do not merge, commit, push, deploy, delete historical
   records, or alter remote rulesets without the corresponding user request.
 - Link related tickets with `Refs #<number>` in feature PRs. Issue closure is
