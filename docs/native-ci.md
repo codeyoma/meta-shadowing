@@ -70,9 +70,37 @@ catalog with `SKTestSession`, validates the fixture product, and leaves no purch
 It must report exactly one passing test with zero skipped or failed tests. The normal
 suite then starts a new app process; all existing purchase/restore/refund assertions
 remain intact. This explicit preparation is not a retry of failed tests.
-Setup compilation has its own ten-minute budget and execution has five minutes.
+Setup compilation and main test-product compilation each have a fifteen-minute
+budget; setup execution still has five minutes. Both build steps stream only
+allowlisted phase names and verdicts, never compiler arguments, paths or raw
+diagnostic payloads. Pipeline failure propagation remains enabled, and a regression
+executes both workflow commands to verify progress privacy and compiler exit codes.
 The complete main scheme is built after setup so its full app/test dependency graph
 owns the final products used by `test-without-building`.
+
+The September 30 hosted run timed out during setup compilation at the former
+ten-minute step limit, before setup or behavioral tests ran. The preceding run
+finished that same setup build in 6m 12s. The quiet log cannot distinguish slow
+compilation from a stall; the new progress output exposes the last build phase.
+The compilation allowance remains bounded by the forty-minute shard limit.
+No XCTest deadline, assertion, shard selection, skip or retry policy changed.
+
+On October 1, both actual workflow build commands passed locally using a fresh
+DerivedData directory, followed by the separate one-case StoreKit setup. The
+progress regression failed before the filter existed and failed again when
+pipeline failure propagation was deliberately removed; the restored commands
+passed success, failure and private-output checks. Actionlint, shellcheck,
+clean-checkout configuration generation and the Debug product guard passed.
+All 360 package tests passed. These checks do not reproduce hosted build speed.
+
+The first local integration run passed 69 cases and failed
+`verificationFailureIsNotDefinitiveLossAndCannotCreateOwnership` while waiting
+for fixture entitlements. Diagnostic executions passed the isolated case and
+all 19 ownership cases; the cache probe did not establish a stale-cache cause.
+After removing every temporary probe, the final media/reference and StoreKit
+integration run passed all 70 cases with zero failures or skips. The intermittent
+failure is not claimed fixed by a budget or logging change. App sources,
+behavioral tests and their deadlines remain unchanged; no hosted retry was added.
 
 A clean iOS 27 reproduction showed fixture product and entitlement queries using
 Xcode's local store while `Product.purchase()` in the same initial process requested
@@ -124,6 +152,22 @@ job limit cancelled the expanded suite before Xcode could finalize its result bu
 Only test-case lifecycle lines and the final test verdict are streamed from Xcode's
 verbose output; shell `pipefail` preserves test failures through that filter. The result
 summary fails explicitly when no finalized bundle is available.
+Transient reward tests match the receipt identifier and exact committed XP label
+in a single accessibility query. Separate existence and label snapshots can race
+the unchanged two-second receipt lifetime on slower runners. Completion receipts
+are observed before checking durable stage state; identifier-only queries still
+verify their disappearance and absence after relaunch. These tests do not extend
+receipt timing, weaken credit assertions or add CI retries.
+
+Local validation on 2026-09-30 reproduced the missing-receipt snapshot with a
+controlled delay between the old existence and label reads. The corrected test
+passed; deliberately expecting the wrong XP label then failed its exact-label
+assertion. After restoring the correct expectation, the complete, unfiltered
+iOS 27 scheme passed all 123 cases with zero failures or skips, including all
+19 player tests. The separate StoreKit setup check and all 360 package tests
+also passed. Four existing reveal-WPM frame warnings remain; these local results
+do not establish a passing hosted run.
+
 Parallel test output omits simulator clone names. The result report also lists the
 ten slowest test cases by duration, without device metadata or source locations.
 Both Debug and Release products are inspected for JavaScript resources, excluded

@@ -4,6 +4,24 @@ import Testing
 @testable import AppleServices
 
 struct DeliveryTests {
+  @Test func alreadyCancelledCallerCannotStartOrPublishDelivery() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let data = Data("controlled fixture".utf8)
+    let package = DeliveryPackage(key: "hosted-sample-v1", files: [entry("manifest.json", data), entry("audio/one.m4a", data)])
+    let gate = DownloadGate()
+    await gate.finish()
+    let delivery = PackageDownload(installation: PackageInstallation(root: root), transport: HeldDelivery(gate: gate, data: data))
+    let cancelled = Task {
+      withUnsafeCurrentTask { $0?.cancel() }
+      try await delivery.start(package)
+    }
+    await #expect(throws: CancellationError.self) { try await cancelled.value }
+    #expect(await gate.started == false)
+    #expect(try await delivery.status(package).phase == "idle")
+    #expect(try PackageInstallation(root: root).isInstalled(package) == false)
+  }
+
   @Test func retryDiscardsOnlyItsInterruptedStagingDirectory() throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }

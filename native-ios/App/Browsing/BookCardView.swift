@@ -10,11 +10,10 @@ struct BookCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             // The name-only SwiftUI initializer rendered this loose PNG blank on iOS 27.
             Image(uiImage: UIImage(named: "morning-notes") ?? UIImage()).resizable().scaledToFit()
+                .accessibilityHidden(true)
                 .overlay(alignment: .topTrailing) {
-                    Label("샘플", systemImage: "book").font(.caption.bold())
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(.regularMaterial, in: .capsule).padding(8)
-                }.accessibilityHidden(true)
+                    BookTagsView(book: summary.book, paid: services?.downloads[summary.id]?.paid == true).padding(8)
+                }
             VStack(alignment: .leading, spacing: 8) {
                 let title = Text(summary.book.title).font(.system(.headline, design: .rounded))
                 if dynamicTypeSize.isAccessibilitySize { title.fixedSize(horizontal: false, vertical: true) }

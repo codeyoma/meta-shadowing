@@ -68,6 +68,11 @@ struct LearningPlayerView: View {
                     }
                 } else { ProgressView("학습을 준비하고 있어요") }
             }
+            .overlay {
+                if let feedback = flow.runtime?.feedback {
+                    LearningRewardView(feedback: feedback).id(feedback.commandID)
+                }
+            }
             .navigationTitle(flow.title).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

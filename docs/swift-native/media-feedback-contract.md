@@ -44,9 +44,10 @@ iOS 26 uses the synchronous API off the main actor. A released activation lease
 cannot start playback. Playback cleanup cannot deactivate live monitoring.
 Interruption and media-services loss/reset invalidate cached OS state and pending
 activation generations. The session drains to inactive without dropping logical
-remote ownership. Release, foreground and interruption-end events do not reactivate
-it; the next explicit playback or monitoring request configures and activates it
-again. A late pre-interruption activation cannot restore the invalidated cache.
+remote ownership. Release and foreground events do not reactivate learning playback;
+the next explicit Resume configures and activates playback again. Monitoring has
+the separately approved recovery policy below and reacquires only its own lease.
+A late pre-interruption activation cannot restore the invalidated cache.
 See [Apple's audio-session activation API](https://developer.apple.com/documentation/avfaudio/avaudiosession/activate(options:completionhandler:)).
 
 ## W5 presentation and paused edits
@@ -76,6 +77,24 @@ inactivity cancellation can retry automatically once. No buffers are recorded,
 saved or exported. Microphone-only gain is 4x followed by a device-local 0...1
 control, initially 0.25. Original media bypasses that gain path.
 
+Owner amendment, 2026-09-30: only previously successfully enabled monitoring may
+recover after an interruption. The runtime forwards the end notification's
+`shouldResume` option; recovery waits for a foreground eligible lesson, a closed
+menu, granted microphone permission and the same valid wired connection. Learning
+playback remains paused and needs explicit Resume; recovery grants no credit.
+The suspended state exposes a cancellable monitoring intent, not active capture.
+Manual OFF, unplugging, access loss, completion or exit cancels recovery. An
+interrupted first permission request is not established ON intent. Media-services
+loss/reset, refused permission or a failed restart requires a manual action; no
+retry loop is introduced. Graph invalidation alone cannot restart capture, but
+preserves established intent if the session interruption arrives afterward.
+If graph invalidation aborts a recovery attempt after the end notification,
+another context update cannot reuse that authorization. Explicit manual restart
+or a separately permitted later interruption is required.
+Already-running monitoring can still continue through ordinary menus/background;
+new capture is never started there. This amendment applies to Swift only; the
+Expo reference remains unchanged.
+
 Headset play/pause/toggle means the same guarded main action as the visible
 control; next-track means an actionable third-cycle Repeat. An owner/revision
 gate accepts one press per revision with 0.35-second debounce. Unavailable,
@@ -92,7 +111,11 @@ a reopened gate, and a pre-transition press cannot become valid again afterward.
 `CommittedLearningFeedback` is keyed by the original command ID and derived
 from committed source progress, not aggregate XP. Retry, lost replies and failed
 recovery pauses preserve a single unpublished event. State reads and restoration
-are quiet. Third-cycle Repeat has its own pulse; already-confirmed Next is quiet.
+are quiet. Third-cycle Repeat has its own pulse; already-confirmed Next has no additional haptic.
+Visual receipts use the original transaction's committed XP award, including a recovered
+lost reply, never a difference between language-wide totals. An imported award is not a new
+local award. Newly committed completion can show a short visual celebration without
+another cycle haptic. Receipts expire, honor Reduce Motion, and stop on inactivity or exit.
 The coordinator consumes events once, discarding obsolete navigation feedback.
 
 Cycle 1/4 has two pulses, cycle 2 three, cycle 3/5 four, and Repeat one.
@@ -171,3 +194,24 @@ cycle feedback. Simulator notification injection and pattern construction do not
 prove those hardware behaviors. Installing/replacing the physical app requires
 separate explicit authorization. No account, cloud, purchase, benchmark or
 release operation is part of W4 verification.
+
+### Owner hardware observations — 2026-09-30
+
+On the installed `ea22154` candidate, the owner reported working learning haptics,
+headset buttons, monitoring shutdown on unplugging, and paused learning after
+calls/Siri/screen lock. Wired Apple-earphone monitoring was initially inaudible
+during remote viewing/debugging; after removing those diagnostic sessions, the
+owner confirmed audible monitoring without any gain or product-code change.
+The isolated processing graph also passed a synthetic offline gain/mute probe.
+These observations do not prove every permission, Repeat, duplicate-credit,
+unsupported-route or completion-cleanup edge case. The exact contributor to the
+remote-session capture failure was not isolated. Verify microphone audibility on
+the physical phone without remote screen viewing; never record or export audio
+to collect evidence. At that point, the automatic-recovery change still needed
+its own installed-device interruption check. The owner later confirmed Siri
+recovery on the separately installed signed Debug candidate, then call/lock-return
+recovery and exit cleanup on TestFlight 1.0 (5). Learning remained paused in both
+checks; see [cutover acceptance](cutover-acceptance.md).
+Permission/gain, unsupported-route, completion and the final PR's
+graph-aborted-recovery edge remain separate physical checks, not inferred from
+the local regressions.

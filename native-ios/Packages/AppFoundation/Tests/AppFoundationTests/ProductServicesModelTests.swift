@@ -6,6 +6,30 @@ import Testing
 @testable import AppFoundation
 
 @MainActor struct ProductServicesModelTests {
+    @Test func repeatedServiceForegroundCyclesRejectOldConfirmations() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SQLiteLearningStore(root: root)
+        _ = try await store.savePreferences(.init(libraryLanguage: "french"), profileID: "local")
+        let cloud = PausingCloud()
+        let services = try makeServices(store, cloud: cloud, root: root)
+        await services.setActive(true)
+        let old = services.confirmation(.removeLocal)
+
+        for _ in 0..<3 {
+            await services.setActive(false)
+            await services.setActive(true)
+            #expect(await services.perform(old) == false)
+            #expect(try await store.preferences(profileID: "local").libraryLanguage == "french")
+            #expect(!services.syncState.enabled)
+        }
+        // A stale confirmation must not delete data or turn a foreground event into an upload.
+        #expect(await cloud.writes == 0)
+        #expect(await cloud.discards == 0)
+        _ = try await store.savePreferences(.init(libraryLanguage: "japanese"), profileID: "local")
+        #expect(try await store.preferences(profileID: "local").libraryLanguage == "japanese")
+        await services.setActive(false)
+    }
     @Test func destructiveRetryWithoutCommittedIntentRequestsFreshConfirmation() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -123,6 +147,8 @@ import Testing
 private actor PausingCloud: CloudTransport {
     var listCount = 0
     var stops = 0
+    var writes = 0
+    var discards = 0
     var waiting: Bool { continuation != nil }
     private var pause = false
     private var discardFails = false
@@ -138,10 +164,10 @@ private actor PausingCloud: CloudTransport {
         throw ProgressCloudError.offline
     }
     func read(scope: String, id: String) throws -> Data { throw ProgressCloudError.unavailable }
-    func publish(scope: String, revision: Int64, payload: Data, base: String) throws -> CloudPublication { throw ProgressCloudError.unavailable }
-    func reset(scope: String, requestID: UUID, expectedGeneration: String?, payload: Data) throws -> CloudPublication { throw ProgressCloudError.unavailable }
+    func publish(scope: String, revision: Int64, payload: Data, base: String) throws -> CloudPublication { writes += 1; throw ProgressCloudError.unavailable }
+    func reset(scope: String, requestID: UUID, expectedGeneration: String?, payload: Data) throws -> CloudPublication { writes += 1; throw ProgressCloudError.unavailable }
     func cleanupAdopted(scope: String, base: String, abandoned: String?) throws -> Bool { throw ProgressCloudError.unavailable }
-    func discardLocal(scope: String) throws { if discardFails { throw ProgressCloudError.offline } }
+    func discardLocal(scope: String) throws { discards += 1; if discardFails { throw ProgressCloudError.offline } }
     func stop() { stops += 1 }
 }
 

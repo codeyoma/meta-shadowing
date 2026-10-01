@@ -5,6 +5,88 @@ import Testing
 @testable import AppleServices
 
 @CloudActor struct SyncCoordinatorTests {
+    @Test func twoInstallationsConvergeWithoutDuplicateCreditAfterColdRestart() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = try makeSyncFixture(root.appendingPathComponent("first"))
+        let secondRoot = root.appendingPathComponent("second")
+        let second = try makeSyncFixture(secondRoot, cloud: first.cloud)
+        await first.coordinator.refreshAccount()
+        try await first.coordinator.refresh(generation: first.coordinator.snapshot.generation)
+        let firstProfile = await first.coordinator.snapshot.profileID
+        _ = try await earnFixtureProgress(first.store, profile: firstProfile, run: "first-installation")
+        try await first.coordinator.refresh(generation: first.coordinator.snapshot.generation)
+
+        await second.coordinator.refreshAccount()
+        let initialProfile = await second.coordinator.snapshot.profileID
+        #expect(try await second.store.readLanguageProgress(profileID: initialProfile, language: "english", today: StudyDay("2026-09-27")).xp == 0)
+        #expect(await second.coordinator.snapshot.enabled == false)
+        try await second.coordinator.refresh(generation: second.coordinator.snapshot.generation)
+        let secondProfile = await second.coordinator.snapshot.profileID
+        #expect(try await second.store.readLanguageProgress(profileID: secondProfile, language: "english", today: StudyDay("2026-09-27")).xp == 3)
+        _ = try await earnFixtureProgress(second.store, profile: secondProfile, run: "second-installation")
+        try await second.coordinator.refresh(generation: second.coordinator.snapshot.generation)
+        try await first.coordinator.refresh(generation: first.coordinator.snapshot.generation)
+        #expect(try await first.store.readLanguageProgress(profileID: firstProfile, language: "english", today: StudyDay("2026-09-27")).xp == 6)
+        await second.coordinator.stop()
+
+        let reopened = try makeSyncFixture(secondRoot, cloud: first.cloud)
+        await reopened.coordinator.refreshAccount()
+        #expect(await reopened.coordinator.snapshot.profileID == secondProfile)
+        #expect(await reopened.coordinator.snapshot.enabled == false)
+        let before = try await reopened.store.exportBackup(profileID: secondProfile).payload
+        try await reopened.coordinator.refresh(generation: reopened.coordinator.snapshot.generation)
+        try await reopened.coordinator.refresh(generation: reopened.coordinator.snapshot.generation)
+        #expect(try await reopened.store.readLanguageProgress(profileID: secondProfile, language: "english", today: StudyDay("2026-09-27")).xp == 6)
+        #expect(try await reopened.store.exportBackup(profileID: secondProfile).payload == before)
+        #expect(await first.coordinator.snapshot.enabled == false)
+        #expect(await reopened.coordinator.snapshot.enabled == false)
+        await reopened.coordinator.stop()
+        await first.coordinator.stop()
+    }
+    @Test func coldStaleInstallationAdoptsResetWithoutResurrectingOfflineCredit() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = try makeSyncFixture(root.appendingPathComponent("first"))
+        let secondRoot = root.appendingPathComponent("second")
+        let second = try makeSyncFixture(secondRoot, cloud: first.cloud)
+        let guest = try await earnFixtureProgress(second.store, profile: "local", run: "separate-guest")
+        await first.coordinator.refreshAccount()
+        try await first.coordinator.refresh(generation: first.coordinator.snapshot.generation)
+        let firstProfile = await first.coordinator.snapshot.profileID
+        _ = try await earnFixtureProgress(first.store, profile: firstProfile, run: "before-reset")
+        try await first.coordinator.refresh(generation: first.coordinator.snapshot.generation)
+        await second.coordinator.refreshAccount()
+        try await second.coordinator.refresh(generation: second.coordinator.snapshot.generation)
+        let secondProfile = await second.coordinator.snapshot.profileID
+        _ = try await earnFixtureProgress(second.store, profile: secondProfile, run: "offline-stale-learning")
+        first.cloud.failFetch = true
+        await #expect(throws: ProgressCloudError.offline) {
+            try await second.coordinator.refresh(generation: second.coordinator.snapshot.generation)
+        }
+        #expect(try await second.store.readLanguageProgress(profileID: secondProfile, language: "english", today: StudyDay("2026-09-27")).xp == 6)
+        await second.coordinator.stop()
+        first.cloud.failFetch = false
+
+        try await first.coordinator.deleteCloud(generation: first.coordinator.snapshot.generation)
+        let reset = try #require(await first.store.exportBackup(profileID: firstProfile).resetGeneration)
+        #expect(try await first.store.readLanguageProgress(profileID: firstProfile, language: "english", today: StudyDay("2026-09-27")).xp == 0)
+        await first.coordinator.stop()
+        let reopened = try makeSyncFixture(secondRoot, cloud: first.cloud)
+        await reopened.coordinator.refreshAccount()
+        #expect(try await reopened.store.readLanguageProgress(profileID: secondProfile, language: "english", today: StudyDay("2026-09-27")).xp == 6)
+        try await reopened.coordinator.refresh(generation: reopened.coordinator.snapshot.generation)
+        #expect(try await reopened.store.readLanguageProgress(profileID: secondProfile, language: "english", today: StudyDay("2026-09-27")).xp == 0)
+        #expect(try await reopened.store.exportBackup(profileID: secondProfile).resetGeneration == reset)
+        #expect(try await reopened.store.exportBackup(profileID: "local").payload == guest)
+        #expect(await reopened.coordinator.snapshot.enabled == false)
+        _ = try await earnFixtureProgress(reopened.store, profile: secondProfile, run: "after-reset")
+        try await reopened.coordinator.refresh(generation: reopened.coordinator.snapshot.generation)
+        try await reopened.coordinator.refresh(generation: reopened.coordinator.snapshot.generation)
+        #expect(try await reopened.store.readLanguageProgress(profileID: secondProfile, language: "english", today: StudyDay("2026-09-27")).xp == 3)
+        #expect(try await reopened.store.exportBackup(profileID: secondProfile).resetGeneration == reset)
+        await reopened.coordinator.stop()
+    }
     @Test(arguments: [CloudAccount.unknown, .unavailable], [false, true])
     func reconnectRechecksAccountAndHonorsSavedConsent(initialAccount: CloudAccount, enabled: Bool) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -368,8 +450,8 @@ import Testing
     }
 }
 
-@CloudActor private func makeSyncFixture(_ root: URL) throws -> (cloud: TestCloud, store: SQLiteLearningStore, coordinator: SyncCoordinator) {
-    let cloud = TestCloud()
+@CloudActor private func makeSyncFixture(_ root: URL, cloud sharedCloud: TestCloud? = nil) throws -> (cloud: TestCloud, store: SQLiteLearningStore, coordinator: SyncCoordinator) {
+    let cloud = sharedCloud ?? TestCloud()
     let owner = ProgressCloudOwner(cacheDirectory: { root.appendingPathComponent("cache-\($0)") }, activationAccess: {
         .init(identity: { cloud.account }, makeTransport: {
             try ProgressTransport(directory: root.appendingPathComponent("cache-\($0)"), scope: $0, cloud: cloud)

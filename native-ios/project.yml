@@ -89,6 +89,8 @@ targets:
           CODE_SIGN_ENTITLEMENTS: Config/Debug.entitlements
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER)
+        TARGETED_DEVICE_FAMILY: '1'
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         COMPRESS_PNG_FILES: NO
@@ -109,6 +111,7 @@ targets:
     platform: iOS
     sources: [Tests/MediaIntegrationTests]
     dependencies:
+      - package: AppleServices
       - target: MetaShadowingNative
       - package: LearningMedia
       - package: LearningDomain
@@ -121,9 +124,13 @@ targets:
   NativeFoundationUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [Tests/AppUITests]
+    sources:
+      - path: Tests/AppUITests
+      - path: Tests/AppleServiceIntegrationTests/Fixtures
+        buildPhase: resources
     dependencies:
       - target: MetaShadowingNative
+      - sdk: StoreKitTest.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).uitests

@@ -87,9 +87,11 @@ func generate(info: [String: Any], entitlements: [String: Any], output: URL, int
         targets["SampleDownloader"] = ["type": "extensionkit-extension", "platform": "iOS",
             "sources": [nativeRoot.appendingPathComponent("Extensions/ContentDownloader.swift").path],
             "settings": ["base": ["PRODUCT_BUNDLE_IDENTIFIER": "$(NATIVE_APP_BUNDLE_IDENTIFIER).SampleDownloader",
+                "TARGETED_DEVICE_FAMILY": "1",
                 "CODE_SIGN_ENTITLEMENTS": extensionPath, "APPLICATION_EXTENSION_API_ONLY": "YES", "SKIP_INSTALL": "YES"]],
             "info": ["path": output.appendingPathComponent("DownloaderInfo.plist").path,
-                "properties": ["EXAppExtensionAttributes": ["EXExtensionPointIdentifier": "com.apple.background-asset-downloader-extension"]]]]
+                "properties": ["CFBundleDisplayName": "Content Downloader",
+                    "EXAppExtensionAttributes": ["EXExtensionPointIdentifier": "com.apple.background-asset-downloader-extension"]]]]
     }
     targets["MetaShadowingNative"] = app
     var spec: [String: Any] = ["include": [nativeRoot.appendingPathComponent(ci ? "project-ci.yml" : "project.yml").path], "targets": targets]
@@ -113,7 +115,10 @@ func require(_ condition: @autoclosure () -> Bool) throws {
 }
 
 func verifyEntitlements(info: [String: Any], actual: [String: Any], role: String) throws {
-    let identities: Set<String> = ["application-identifier", "com.apple.developer.team-identifier", "get-task-allow", "com.apple.security.get-task-allow"]
+    if actual["beta-reports-active"] != nil {
+        try require(actual["beta-reports-active"] as? Bool == true && actual["get-task-allow"] as? Bool == false)
+    }
+    let identities: Set<String> = ["application-identifier", "com.apple.developer.team-identifier", "get-task-allow", "com.apple.security.get-task-allow", "beta-reports-active"]
     let serviceValues = actual.filter { !identities.contains($0.key) }
     let expected: [String: Any]
     if role == "app" {
@@ -140,6 +145,36 @@ func selfTest(output: URL? = nil) throws {
     let complete = try serviceConfiguration(info: info, entitlements: authority, internalContent: false)
     try verifyEntitlements(info: info, actual: authority, role: "app")
     try verifyEntitlements(info: [:], actual: ["get-task-allow": true], role: "app")
+    // App Store re-signing adds Apple's beta identity flag, not a service capability.
+    var betaInfo = info, betaAuthority = authority
+    betaInfo["ProgressCloudEnvironment"] = "Production"
+    betaAuthority["com.apple.developer.icloud-container-environment"] = "Production"
+    betaAuthority["aps-environment"] = "production"
+    betaAuthority["get-task-allow"] = false
+    betaAuthority["beta-reports-active"] = true
+    try verifyEntitlements(info: betaInfo, actual: betaAuthority, role: "app")
+    try verifyEntitlements(info: info, actual: ["com.apple.security.application-groups": [group],
+        "get-task-allow": false, "beta-reports-active": true], role: "extension")
+    for invalidFlag: Any in [false, "true"] {
+        var invalidBeta = betaAuthority
+        invalidBeta["beta-reports-active"] = invalidFlag
+        do {
+            try verifyEntitlements(info: betaInfo, actual: invalidBeta, role: "app")
+            throw NSError(domain: "ExpectedInvalidBetaFlagRejection", code: 1)
+        } catch ConfigurationFailure.invalid { }
+    }
+    var debugBeta = betaAuthority
+    debugBeta["get-task-allow"] = true
+    do {
+        try verifyEntitlements(info: betaInfo, actual: debugBeta, role: "app")
+        throw NSError(domain: "ExpectedDebugBetaRejection", code: 1)
+    } catch ConfigurationFailure.invalid { }
+    var excessiveBeta = betaAuthority
+    excessiveBeta["com.apple.developer.healthkit"] = true
+    do {
+        try verifyEntitlements(info: betaInfo, actual: excessiveBeta, role: "app")
+        throw NSError(domain: "ExpectedBetaCapabilityRejection", code: 1)
+    } catch ConfigurationFailure.invalid { }
     var excessive = authority; excessive["com.apple.developer.healthkit"] = true
     do {
         try verifyEntitlements(info: info, actual: excessive, role: "app")

@@ -29,7 +29,7 @@ struct LearningOptionsView: View {
                         NavigationLink("폰트 설정", value: LearningOptionRoute.typography)
                     }
                     Section {
-                        if runtime.monitorState == .monitoring {
+                        if runtime.monitorState == .monitoring || runtime.monitorState == .suspended {
                             Slider(value: Binding(get: { runtime.monitorGain }, set: { runtime.monitoring.setGain($0) }), in: 0...1)
                                 .accessibilityLabel("내 목소리 크기")
                             Button("내 목소리 모니터링 끄기") { Task { await runtime.monitoring.setEnabled(false) } }

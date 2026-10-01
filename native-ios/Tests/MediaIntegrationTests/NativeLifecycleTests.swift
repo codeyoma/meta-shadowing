@@ -9,6 +9,17 @@ import AppFoundation
 @testable import MetaShadowingNative
 
 @Suite(.serialized) @MainActor struct NativeLifecycleTests {
+    @Test(arguments: [true, false])
+    func interruptionEndIsForwarded(_ mayResume: Bool) {
+        let center = NotificationCenter()
+        var events: [LessonLifecycleEvent] = []
+        let observer = LessonLifecycleObserver(center: center) { events.append($0) }
+        defer { observer.close() }
+        center.post(name: AVAudioSession.interruptionNotification, object: nil,
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue,
+                       AVAudioSessionInterruptionOptionKey: mayResume ? AVAudioSession.InterruptionOptions.shouldResume.rawValue : 0])
+        #expect(events == [.interruptionEnded(shouldResume: mayResume)])
+    }
     @Test(arguments: [AVAudioSession.interruptionNotification,
                       AVAudioSession.mediaServicesWereLostNotification,
                       AVAudioSession.mediaServicesWereResetNotification])
@@ -29,7 +40,8 @@ import AppFoundation
         // Simulate OS-owned state loss, not just the notification that reports it.
         try await simulateLostAudioSessionState()
         NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: nil,
-            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue,
+                       AVAudioSessionInterruptionOptionKey: AVAudioSession.InterruptionOptions.shouldResume.rawValue])
         #expect(runtime.state.controller.paused)
         #expect(audio.category == .ambient)
 
@@ -75,6 +87,11 @@ import AppFoundation
         _ = await runtime.coordinator.perform(.confirm)
         #expect(runtime.state.controller.snapshot.session.phase == .complete)
         #expect(MPNowPlayingInfoCenter.default().nowPlayingInfo == nil)
+        #expect(runtime.feedback?.xpAward == 3)
+        #expect(runtime.feedback?.completedRun == true)
+        runtime.suspend()
+        #expect(runtime.feedback == nil)
+        #expect(runtime.controls.xp == 3)
         await runtime.close()
     }
 
@@ -90,6 +107,56 @@ import AppFoundation
         let replacement = try #require(model.runtime)
         #expect(!old.state.controller.active)
         #expect(replacement.state.controller.active && replacement.state.controller.paused)
+        model.close(); await replacement.close()
+    }
+    @Test func repeatedCloseAndReopenKeepsRetiredRuntimesInactive() async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = SyntheticMediaProbeModel(root: root, mode: "audio")
+        let store = SQLiteLearningStore(root: root.appending(path: "audio"))
+        await model.open()
+        let seed = try #require(model.runtime)
+        _ = await seed.coordinator.perform(.resume)
+        try await waitForMedia { seed.controls.session.phase == .speaking && !seed.state.busy }
+        _ = await seed.coordinator.perform(.confirm)
+        #expect(seed.controls.xp == 2)
+        model.close(); await seed.close()
+        let plan = seed.state.controller.snapshot.session.plan
+        let checkpoint = try #require(await store.readCheckpoint(plan: plan))
+        #expect(checkpoint.current.confirmed == 1)
+        #expect(checkpoint.positionSeconds == 0)
+        var retired: [NativeLearningRuntime] = []
+        for _ in 0..<3 {
+            await model.open()
+            let current = try #require(model.runtime)
+            #expect(current.state.controller.active && current.state.controller.paused)
+            #expect(current.controls.xp == 2)
+            #expect(current.controls.session.sourceProgress == checkpoint.sourceProgress)
+            #expect(current.controls.session.unit == checkpoint.unit)
+            _ = await current.coordinator.perform(.resume)
+            try await waitForMedia { current.state.phase == .playing }
+            model.close()
+            await current.close()
+            retired.append(current)
+            for old in retired {
+                #expect(!old.state.controller.active)
+                #expect(old.feedbackCount == 0)
+            }
+            let progress = try await store.readProgress(scope: current.state.controller.snapshot.session.plan.scope,
+                today: StudyDay("2026-09-29"))
+            #expect(progress.xp == 2)
+            #expect(progress.completedRuns.isEmpty)
+            let saved = try #require(await store.readCheckpoint(plan: plan))
+            #expect(saved.sourceProgress == checkpoint.sourceProgress)
+            #expect(saved.unit == checkpoint.unit)
+            #expect(saved.plan.runID == checkpoint.plan.runID)
+        }
+        await model.open()
+        let replacement = try #require(model.runtime)
+        #expect(replacement.state.controller.paused)
+        #expect(replacement.controls.xp == 2)
+        #expect(replacement.controls.session.sourceProgress == checkpoint.sourceProgress)
+        for old in retired { #expect(!old.state.controller.active) }
         model.close(); await replacement.close()
     }
     @Test func inactiveRemoteLeaseCannotClearAnotherOwnersMetadata() {
@@ -130,10 +197,10 @@ import AppFoundation
             userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
         center.post(name: AVAudioSession.interruptionNotification, object: nil,
             userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
-        #expect(events == [.inactive, .interrupted])
+        #expect(events == [.inactive, .interrupted, .interruptionEnded(shouldResume: false)])
         observer.close()
         center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-        #expect(events.count == 2)
+        #expect(events.count == 3)
     }
 }
 

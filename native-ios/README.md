@@ -131,8 +131,52 @@ committed values. These flags and helpers are absent
 from Release. The large-text UI test uses the largest accessibility text category.
 
 The product check inspects resources, all embedded Mach-O dependencies/symbols,
-the deployment minimum and signed entitlements. This is a local W2 guard, not an
+the iPhone-only device family, downloader display name, deployment minimum and
+signed entitlements. App Store beta identity metadata is accepted only for a
+non-debuggable signed product; service capabilities still match exactly.
+This is a local W2 guard, not an
 App Store security review or evidence of later service functionality.
+
+## Debug download and local recovery lab
+
+In a Debug build, open **Settings > Developer Tools > 다운로드·복원 검증**.
+This is separate from the presentation-only download preview. Each opening owns
+a fresh UUID namespace under `NativeDiagnostics`; it cannot select a product
+profile, account, arbitrary path or paid package.
+
+- The controlled external transfer takes about ten seconds. Pause/resume, injected
+  failure and cancellation drive the real `ContentDelivery` implementation.
+  Its normal byte/hash/manifest validation and atomic file installation remain in
+  place. Result text is based on settled delivery state and verified installation,
+  not on the progress animation. Removing the test download preserves its history.
+  Pause/resume and failure injection require transport acknowledgement during its
+  actual transfer phase. Early or late requests cannot claim a pause or injected
+  failure, and the finishing callback retains ownership until it returns.
+- **합성 기록·백업 준비** explicitly creates one synthetic reveal confirmation
+  through the learning store's normal command boundary and saves its local backup.
+  It is not audible practice or native playback acceptance. The normal
+  `SyncCoordinator.removeLocal` path clears only this diagnostic profile, after
+  the tool's confirmation. Downloaded files and the diagnostic backup remain.
+- Local backup recovery validates and merges through SQLite. Repeated recovery
+  must retain exactly the original synthetic credit and checkpoint. The reopen
+  action uses a separate SQLite connection; automated tests also terminate and
+  relaunch the app with the same diagnostic namespace.
+- Backgrounding or closing the tool cancels owned operations and observers.
+  It never constructs a live cloud adapter, contacts StoreKit or operates on a
+  real iCloud database. Its recovery result is a **local backup** result, not a
+  CloudKit pass. Production cloud deletion remains separately authorized.
+
+UI automation can launch Debug with `--ui-test-download-lab --ui-test-probe-id
+<UUID>` to reopen the same isolated namespace. Invalid/missing UUIDs do not select
+the lab. `DownloadLabTests` covers real installation, cancellation, failure,
+cleanup and local reset/recovery; `DownloadLabUITests` exercises the visible
+controls, process relaunch and developer-tool isolation. The tool, transfer
+controls and launch argument are excluded from Release/TestFlight by `#if DEBUG`
+and the existing built-product guard.
+
+These checks do not prove an OS-owned Apple-hosted transfer was interrupted or
+that a real CloudKit reset converges across devices. Record those live results
+separately, even when every lab check passes.
 
 ## Hosted Swift CI
 

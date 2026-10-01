@@ -11,7 +11,8 @@ extension SQLiteLearningStore {
             if let saved = try db.query("SELECT payload,receipt FROM commands WHERE id=?", [.text(command.id.uuidString)]).first {
                 guard saved["payload"]?.data == payload else { throw LearningStoreError.commandConflict }
                 let result = try decode(CommitReceipt.self, saved["receipt"])
-                return CommitReceipt(snapshot: result.snapshot, backupRevision: result.backupRevision, earnedXP: 0, disposition: .duplicate)
+                return CommitReceipt(snapshot: result.snapshot, backupRevision: result.backupRevision, earnedXP: 0,
+                    disposition: .duplicate, committedXP: result.committedXP)
             }
             guard prior.handle == command.handle, prior.writerVersion == command.expectedVersion,
                   prior.writerVersion < Int64.max else { throw LearningStoreError.staleWriter }

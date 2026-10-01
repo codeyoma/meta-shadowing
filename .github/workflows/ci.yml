@@ -99,15 +99,17 @@ jobs:
           echo 'Required iOS 27.0 Simulator finished booting.'
       - name: Build StoreKit fixture setup products
         if: matrix.shard == 'remaining'
-        timeout-minutes: 10
+        timeout-minutes: 15
         env:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
+          set -o pipefail
           xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme StoreKitFixtureSetup -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
-            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -quiet
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 |
+            awk -f native-ios/scripts/ci-build-progress.awk
       - name: Prepare local StoreKit fixture in a separate host process
         if: matrix.shard == 'remaining'
         timeout-minutes: 5
@@ -138,15 +140,18 @@ jobs:
             "$RUNNER_TEMP/native-storekit-setup-summary.json" > /dev/null
           exit "$ci_setup_status"
       - name: Build native test products
+        timeout-minutes: 15
         env:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
+          set -o pipefail
           # Build the complete test graph last; setup may relink the same app host.
           xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme MetaShadowingNative -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
-            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -quiet
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 |
+            awk -f native-ios/scripts/ci-build-progress.awk
       - name: Verify isolated app launch before XCTest
         timeout-minutes: 3
         env:
@@ -245,7 +250,9 @@ jobs:
           xcodebuild -version
           xcodegen --version
       - name: Verify clean-checkout CI configuration
-        run: bash native-ios/scripts/test-ci-configuration.sh
+        run: |
+          bash native-ios/scripts/test-ci-build-progress.sh
+          bash native-ios/scripts/test-ci-configuration.sh
       - name: Verify service configuration and exact entitlement policy
         run: swift native-ios/scripts/configure-apple-services.swift --self-test
       - name: Build fictional managed downloader without account access

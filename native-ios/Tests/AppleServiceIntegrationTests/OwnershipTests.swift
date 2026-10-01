@@ -216,9 +216,15 @@ struct OwnershipServiceTests {
   @Test func explicitRestoreRecoversPurchaseAndNetworkFailureDoesNotRevokeIt() async throws {
     let session = try await session()
     defer { session.clearTransactions() }
-    _ = try await buyProduct(session, identifier: productID)
+    let purchase = try await session.buyProduct(identifier: productID)
+    // Restore must recover server-side purchases even before the entitlement cache
+    // catches up. Verify fixture state, then exercise the real AppStore.sync path.
+    try #require(session.allTransactions().contains {
+      $0.identifier == UInt(purchase.id) && $0.productIdentifier == productID && $0.state == .purchased
+    })
     let store = OwnershipService(productID: productID)
     defer { store.stopObserving() }
+    #expect(store.snapshot.ownership == .unknown)
     await store.restore()
     #expect(store.snapshot.ownership == .owned)
     #expect(store.snapshot.outcome == .restored)

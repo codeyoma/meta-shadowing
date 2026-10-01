@@ -18,6 +18,9 @@ struct SettingsView: View {
                     Text("서비스 설정을 확인해 주세요. 기본 도서는 계속 사용할 수 있어요.").font(.footnote)
                 }
             }
+            #if DEBUG
+            Section { NavigationLink("개발 도구") { DeveloperToolsView() } }
+            #endif
         }.navigationTitle("설정")
     }
 }

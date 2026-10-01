@@ -28,6 +28,7 @@ public struct LearningMediaState: Sendable {
     private var error: MediaFailure?
     private var context = LessonInteractionContext()
     private var driver: (any MediaTransport)?
+    private var preparedDriverToken: TransportToken?
     private var token: TransportToken?
     private var generation = UUID()
     private var preparation: Task<Void, Never>?
@@ -173,8 +174,11 @@ public struct LearningMediaState: Sendable {
         generation = UUID(); preparation?.cancel(); preparation = nil
         if revealing {
             position = MediaPosition(seconds: reveal.pause(), duration: position?.duration ?? 0)
-        } else if let sample = driver?.pause() { position = sample }
+        } else if let sample = driver?.pause(), token != nil, preparedDriverToken == token {
+            position = sample
+        }
         revealing = false; reveal.cancel(); token = nil; phase = .paused
+        preparedDriverToken = nil
         audioSession?.releasePlayback()
         return position
     }
@@ -275,6 +279,7 @@ public struct LearningMediaState: Sendable {
                 try await driver.prepare(.init(token: token, sources: sources, positionSeconds: position, rate: rate))
                 guard self.valid(current, token), await self.authorize(plan.scope) else { throw MediaFailure.accessDenied }
                 guard self.valid(current, token) else { throw MediaFailure.cancelled }
+                self.preparedDriverToken = token
                 if !frameOnly {
                     try await self.audioSession?.acquirePlayback()
                     guard self.valid(current, token) else { throw MediaFailure.cancelled }

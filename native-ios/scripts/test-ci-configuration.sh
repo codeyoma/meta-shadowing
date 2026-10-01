@@ -57,6 +57,7 @@ for configuration in Debug Release; do
         length == 1 and all(.[];
             .PRODUCT_BUNDLE_IDENTIFIER == "com.example.metashadowing.ci" and
             .IPHONEOS_DEPLOYMENT_TARGET == "26.0" and
+            .TARGETED_DEVICE_FAMILY == "1" and
             .SWIFT_VERSION == "6.0" and
             .SWIFT_STRICT_CONCURRENCY == "complete" and
             .CODE_SIGNING_ALLOWED == "NO" and

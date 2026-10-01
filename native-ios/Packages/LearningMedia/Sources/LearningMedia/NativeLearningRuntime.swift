@@ -12,6 +12,7 @@ import UIKit
     public private(set) var monitorState: VoiceMonitoring.State = .off
     public private(set) var monitorGain: Float = 0.25
     public private(set) var feedbackCount = 0
+    public private(set) var feedback: CommittedLearningFeedback?
     public let coordinator: LearningMediaCoordinator
     public let monitoring: VoiceMonitoring
     @ObservationIgnored private let session: LessonAudioSession
@@ -39,16 +40,18 @@ import UIKit
         coordinator.onFeedback = { [weak self] event in
             guard let self, !self.closed else { return }
             self.feedbackCount += 1
+            if event.xpAward > 0 || event.completedRun { self.feedback = event }
             switch event.kind {
             case let .cycle(cycle): if let pattern = HapticPattern.cycle(cycle) { self.haptics.play(pattern) }
             case .repeatChoice: self.haptics.play(.repeatChoice)
+            case .completion: break // Completion does not add another cycle haptic.
             }
         }
         monitoring.onChange = { [weak self] in
             guard let self else { return }
             self.monitorState = self.monitoring.state; self.monitorGain = self.monitoring.gain
         }
-        graph.onInvalidation = { [weak self] in self?.monitoring.interrupted() }
+        graph.onInvalidation = { [weak self] in self?.monitoring.graphInvalidated() }
         remote.onPress = { [weak self] event in Task { @MainActor in
             guard let self, !self.closed else { return }; _ = await self.coordinator.receiveRemote(event)
         } }
@@ -60,12 +63,12 @@ import UIKit
         }
         applyContext()
     }
-    public func setMenuOpen(_ open: Bool) { context.menuOpen = open; applyContext() }
-    public func setAccess(_ access: Bool) { context.access = access; applyContext() }
-    public func suspend() { coordinator.suspend(.inactivity); haptics.stop() }
+    public func setMenuOpen(_ open: Bool) { if open { feedback = nil }; context.menuOpen = open; applyContext() }
+    public func setAccess(_ access: Bool) { if !access { feedback = nil }; context.access = access; applyContext() }
+    public func suspend() { feedback = nil; coordinator.suspend(.inactivity); haptics.stop() }
     public func close() async {
         guard !closed else { return }
-        closed = true; lifecycle?.close(); lifecycle = nil
+        closed = true; feedback = nil; lifecycle?.close(); lifecycle = nil
         monitoring.close(); graph.close(); remote.close(); haptics.stop()
         await coordinator.close()
     }
@@ -92,11 +95,18 @@ import UIKit
         guard !closed else { return }
         switch event {
         case .active: context.foreground = true; applyContext()
-        case .inactive: context.foreground = false; applyContext()
-        case .routeChanged: coordinator.suspend(.routeChange); monitoring.routeChanged(); haptics.stop()
-        case .interrupted, .reset:
+        case .inactive: feedback = nil; context.foreground = false; applyContext()
+        case .routeChanged: feedback = nil; coordinator.suspend(.routeChange); monitoring.routeChanged(); haptics.stop()
+        case let .interruptionEnded(shouldResume):
+            monitoring.interruptionEnded(shouldResume: shouldResume)
+        case .interrupted:
+            feedback = nil
             session.invalidate()
             coordinator.suspend(.interruption); monitoring.interrupted(); haptics.stop()
+        case .reset:
+            feedback = nil
+            session.invalidate()
+            coordinator.suspend(.interruption); monitoring.reset(); haptics.stop()
         }
     }
 }

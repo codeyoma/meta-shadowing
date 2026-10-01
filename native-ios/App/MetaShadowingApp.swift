@@ -56,19 +56,31 @@ struct MetaShadowingApp: App {
             #if DEBUG
             if UUID(uuidString: root.lastPathComponent) != nil, arguments.contains("--ui-test-services") {
                 let sample = Bundle.main.bundleURL.appending(path: "sample")
-                let fixture = try ServiceTestAssets.package(root: sample)
+                let fixture = try ServiceTestAssets.package(root: sample, paid: arguments.contains("--ui-test-paid-card"))
                 packages = [fixture.0]; books = [fixture.1]
                 assetSource = { _ in ServiceTestAssets(root: sample) }
             }
             #endif
-            let ownership = OwnershipService(productID: configuration.productID)
+            var productID = configuration.productID
+            #if DEBUG
+            if UUID(uuidString: root.lastPathComponent) != nil, arguments.contains("--ui-test-storekit-price") {
+                productID = "com.example.packagestore.longprice"
+            }
+            #endif
+            let ownership = OwnershipService(productID: productID)
             let access = PackageAccess(store: ownership)
             let delivery = try ContentDelivery(root: root.appending(path: "content"), packages: packages, paidLease: access.lease, transport: assetSource)
             catalog = InstalledProductCatalog(bundled: catalog, delivery: delivery, listings: books)
             let owner = ProductProfileOwner(store: store, catalog: catalog)
+            var cloud: any CloudTransport = NativeCloudTransport(root: root.appending(path: "cloud-cache"))
+            #if DEBUG
+            if UUID(uuidString: root.lastPathComponent) != nil {
+                cloud = ServiceTestCloud(available: arguments.contains("--ui-test-cloud-confirmation"))
+            }
+            #endif
             profiles = owner
             serviceOwner = ServiceOwner(model: ProductServicesModel(profiles: owner, store: persistent, ownership: ownership, access: access,
-                delivery: delivery, transport: NativeCloudTransport(root: root.appending(path: "cloud-cache")), packages: packages))
+                delivery: delivery, transport: cloud, packages: packages))
         } catch {
             profiles = ProductProfileOwner(store: store, catalog: catalog)
             serviceOwner = ServiceOwner(model: nil)
@@ -78,7 +90,9 @@ struct MetaShadowingApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if let root = Self.probeRoot {
+            if let root = Self.downloadLabRoot {
+                DeveloperDownloadLabView(root: root)
+            } else if let root = Self.probeRoot {
                 if ProcessInfo.processInfo.arguments.contains("--ui-test-learning-media") {
                     SyntheticMediaProbeView(root: root, mode: Self.mediaMode)
                 } else { SyntheticLearningProbeView(root: root) }
@@ -103,6 +117,13 @@ struct MetaShadowingApp: App {
     }
 
     #if DEBUG
+    private static var downloadLabRoot: URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--ui-test-download-lab"), let index = arguments.firstIndex(of: "--ui-test-probe-id"),
+              index + 1 < arguments.count, let id = UUID(uuidString: arguments[index + 1]) else { return nil }
+        return URL.applicationSupportDirectory.appending(path: "NativeDiagnostics/\(id.uuidString)")
+    }
+
     private static var probeRoot: URL? {
         let arguments = ProcessInfo.processInfo.arguments
         guard arguments.contains("--ui-test-learning-storage") || arguments.contains("--ui-test-learning-media") else { return nil }
