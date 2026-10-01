@@ -140,25 +140,25 @@ final class PlayerUITests: XCTestCase {
         for largeText in [false, true] {
             let extra = largeText ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] : []
             let app = fixture(stage: 1, mode: "audio", extra: extra)
-            XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10), "Player options unavailable; largeText=\(largeText)")
             app.buttons["player-options"].tap()
             let leave = app.buttons["스테이지로 돌아가기"]
             XCTAssertTrue(leave.wait(for: \.isHittable, toEqual: true, timeout: 5), "Stage exit must be visible without scrolling")
             let footerY = leave.frame.midY
             app.swipeUp()
-            XCTAssertTrue(leave.isHittable)
+            XCTAssertTrue(leave.isHittable, "Stage exit became inaccessible after scrolling; largeText=\(largeText), optionsVisible=\(app.buttons["options-close"].exists), exitExists=\(leave.exists)")
             XCTAssertEqual(leave.frame.midY, footerY, accuracy: 1)
             app.swipeDown()
             let rate = app.buttons["배속"]
-            XCTAssertTrue(rate.wait(for: \.isHittable, toEqual: true, timeout: 5))
+            XCTAssertTrue(rate.wait(for: \.isHittable, toEqual: true, timeout: 5), "Rate row inaccessible after returning to the top; largeText=\(largeText), optionsVisible=\(app.buttons["options-close"].exists), playerVisible=\(app.buttons["player-options"].exists)")
             rate.tap()
-            XCTAssertTrue(app.sliders["재생 속도"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.sliders["재생 속도"].waitForExistence(timeout: 5), "Rate destination unavailable; largeText=\(largeText)")
             XCTAssertTrue(leave.isHittable, "Nested options must keep the fixed stage-exit action")
             XCTAssertEqual(leave.frame.midY, footerY, accuracy: 1)
-            XCTAssertTrue(app.buttons["학습 이어하기"].isHittable)
+            XCTAssertTrue(app.buttons["학습 이어하기"].isHittable, "Resume action inaccessible in nested options; largeText=\(largeText), optionsVisible=\(app.buttons["options-close"].exists)")
             leave.tap()
-            XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+            XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5), "Stage exit did not return to stages; largeText=\(largeText)")
+            XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5), "Opening and leaving options changed XP; largeText=\(largeText)")
             app.terminate()
         }
     }
