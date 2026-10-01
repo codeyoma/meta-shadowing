@@ -71,7 +71,7 @@ private struct MediaProbeControls: View {
             Button(runtime.monitorState == .monitoring || runtime.monitorState == .suspended ? "Stop monitoring" : "Start monitoring") {
                 runtime.monitoring.toggle()
             }
-            Slider(value: Binding(get: { Double(runtime.monitorGain) }, set: { runtime.monitoring.setGain(Float($0)) }), in: 0...1)
+            Slider(value: Binding(get: { runtime.monitorGain }, set: { runtime.monitoring.setGain($0) }), in: VoiceMonitoring.gainRange)
                 .accessibilityLabel("Microphone gain")
         }
     }

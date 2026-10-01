@@ -74,8 +74,14 @@ permission. Existing capture may continue through temporary menus/background;
 exit, access loss, completion, route loss or interruption stops it. Manual OFF
 persists for the current connection. Only the initial permission-sheet
 inactivity cancellation can retry automatically once. No buffers are recorded,
-saved or exported. Microphone-only gain is 4x followed by a device-local 0...1
-control, initially 0.25. Original media bypasses that gain path.
+saved or exported. The device-local microphone control spans 0...2, initially
+0.25. Its original 0...1 range retains the fourfold microphone-only boost and
+the same volume at every saved value. Values above 1 increase the microphone-only
+EQ boost, reaching eightfold amplitude at 2 (twice the previous maximum).
+The mixer volume remains within 0...1; mute and the default level are unchanged.
+Original media bypasses that gain path. Non-finite values use the default; finite
+values outside the control range are clamped. Higher gain may distort loud input;
+doubling signal amplitude does not promise twice the perceived loudness.
 
 Owner amendment, 2026-09-30: only previously successfully enabled monitoring may
 recover after an interruption. The runtime forwards the end notification's

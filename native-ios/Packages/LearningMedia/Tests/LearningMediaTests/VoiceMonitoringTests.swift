@@ -34,6 +34,39 @@ import LearningMedia
 }
 
 @MainActor struct VoiceMonitoringTests {
+    @Test func extendedGainSurvivesMonitorRecreation() throws {
+        let namespace = "voice-gain-test-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: namespace))
+        defer { defaults.removePersistentDomain(forName: namespace) }
+        let monitor = VoiceMonitoring(hardware: MonitorHardwareFixture(), defaults: defaults)
+        defer { monitor.close() }
+        monitor.setGain(2)
+        let restored = VoiceMonitoring(hardware: MonitorHardwareFixture(), defaults: defaults)
+        defer { restored.close() }
+        #expect(restored.gain == 2)
+    }
+
+    @Test(arguments: [(Float(0), Float(0)), (0.25, 0.25), (0.6, 0.6), (1, 1),
+                      (1.5, 1.5), (2, 2), (3, 2), (-1, 0), (.nan, 0.25), (.infinity, 0.25)])
+    func gainRemainsBoundedAndPreservesExistingLevels(_ requested: Float, _ expected: Float) {
+        let monitor = VoiceMonitoring(hardware: MonitorHardwareFixture())
+        defer { monitor.close() }
+        #expect(monitor.gain == 0.25)
+        monitor.setGain(requested)
+        #expect(monitor.gain == expected)
+    }
+
+    @Test func extendedGainReachesHardwareOnStartAndLiveAdjustment() async {
+        let hardware = MonitorHardwareFixture()
+        let monitor = VoiceMonitoring(hardware: hardware)
+        defer { monitor.close() }
+        monitor.setGain(2)
+        await monitor.setEnabled(true)
+        #expect(hardware.capturedGain == 2)
+        monitor.setGain(1.5)
+        #expect(hardware.capturedGain == 1.5)
+    }
+
     @Test func manualEnableCannotStartDuringInterruption() async {
         let hardware = MonitorHardwareFixture()
         let monitor = VoiceMonitoring(hardware: hardware)
@@ -165,14 +198,14 @@ import LearningMedia
         let monitor = VoiceMonitoring(hardware: hardware)
         defer { monitor.close() }
         await monitor.setEnabled(true)
-        monitor.setGain(0.6)
+        monitor.setGain(2)
         monitor.interrupted()
         #expect(!hardware.running && monitor.state == .suspended)
         monitor.update(.init()); await waitForMonitor(monitor)
         #expect(!hardware.running)
         monitor.interruptionEnded(shouldResume: true); await waitForMonitor(monitor)
         #expect(hardware.running && monitor.state == .monitoring)
-        #expect(hardware.capturedGain == 0.6)
+        #expect(hardware.capturedGain == 2)
     }
 
     @Test func permittedEndWaitsForForegroundAndMenuDismissal() async {

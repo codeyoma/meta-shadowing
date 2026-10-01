@@ -30,7 +30,7 @@ struct LearningOptionsView: View {
                     }
                     Section {
                         if runtime.monitorState == .monitoring || runtime.monitorState == .suspended {
-                            Slider(value: Binding(get: { runtime.monitorGain }, set: { runtime.monitoring.setGain($0) }), in: 0...1)
+                            Slider(value: Binding(get: { runtime.monitorGain }, set: { runtime.monitoring.setGain($0) }), in: VoiceMonitoring.gainRange)
                                 .accessibilityLabel("내 목소리 크기")
                             Button("내 목소리 모니터링 끄기") { Task { await runtime.monitoring.setEnabled(false) } }
                         } else { Text("유선 헤드폰을 연결하면 학습 화면에서 내 목소리를 들을 수 있어요.").font(.footnote) }

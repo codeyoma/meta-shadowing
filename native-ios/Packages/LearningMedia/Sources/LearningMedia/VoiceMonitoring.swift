@@ -15,6 +15,10 @@ public enum MicrophonePermission: Sendable { case undetermined, denied, granted 
 
 /// Connection-scoped microphone intent, adapted from the reference monitor policy.
 @MainActor public final class VoiceMonitoring {
+    public static let gainRange: ClosedRange<Float> = 0...2
+    static func normalizedGain(_ value: Float) -> Float {
+        value.isFinite ? min(gainRange.upperBound, max(gainRange.lowerBound, value)) : 0.25
+    }
     public enum State: Sendable { case off, requesting, monitoring, suspended, blocked, denied, failed }
     public private(set) var state: State = .off { didSet { onChange?() } }
     public private(set) var gain: Float
@@ -33,7 +37,7 @@ public enum MicrophonePermission: Sendable { case undetermined, denied, granted 
     public init(hardware: any VoiceMonitorHardware, defaults: UserDefaults? = nil) {
         self.hardware = hardware; self.defaults = defaults
         let value = (defaults?.object(forKey: "voice-monitor.local-gain.v1") as? NSNumber)?.floatValue ?? 0.25
-        gain = value.isFinite ? min(1, max(0, value)) : 0.25
+        gain = Self.normalizedGain(value)
     }
 
     public func update(_ context: LessonInteractionContext) {
@@ -144,7 +148,7 @@ public enum MicrophonePermission: Sendable { case undetermined, denied, granted 
         disable(suppress: true)
     }
     public func setGain(_ value: Float) {
-        gain = value.isFinite ? min(1, max(0, value)) : 0.25
+        gain = Self.normalizedGain(value)
         defaults?.set(gain, forKey: "voice-monitor.local-gain.v1")
         if state == .monitoring { hardware.setGain(gain) }
         onChange?()
