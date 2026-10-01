@@ -6,7 +6,7 @@ import Foundation
 /// Public bundled bytes behind the normal download boundary; no Apple-hosted request.
 nonisolated struct ServiceTestAssets: AssetDelivery {
     let root: URL
-    static func package(root: URL, paid: Bool = false) throws -> (HostedPackage, CatalogBook) {
+    static func package(root: URL) throws -> (HostedPackage, CatalogBook) {
         struct Specification: Decodable { let key: String; let metadata: DeliveryPackage.Entry }
         struct Manifest: Decodable { let phrases: [DeliveryPackage.Entry] }
         let raw = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
@@ -14,7 +14,7 @@ nonisolated struct ServiceTestAssets: AssetDelivery {
         let files = try JSONDecoder().decode(Manifest.self, from: raw).phrases
         let descriptor = DeliveryPackage(key: specification.key, files: [specification.metadata] + files)
         let parsed = try PackageManifest.decode(raw, descriptor: descriptor)
-        return (.init(descriptor: descriptor, assetPackID: nil, paid: paid),
+        return (.init(descriptor: descriptor, assetPackID: nil),
                 .init(id: descriptor.key, book: parsed.learningBookID, language: parsed.language,
                       title: "Morning Notes · Download fixture", sentenceCount: parsed.phrases.count))
     }

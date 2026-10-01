@@ -4,6 +4,16 @@ Fresh specification, not reused implementation. The approved reference is the
 latest legacy behavior at be3761f, including its amended confirmation rules;
 earlier planning documents can contain superseded behavior.
 
+## Swift free-package access — 2026-10-01
+
+The active Swift product offers configured packages as free explicit downloads.
+No StoreKit product, receipt, ownership or purchase restoration is required.
+Practice and references still require the correct profile, stage policy and fully
+validated installed package. Package identities, checkpoints, XP, settings and
+optional private iCloud recovery remain unchanged. No download, access refresh,
+relaunch or restoration confirms practice. Historical paid requirements below
+apply only to the retained reference, not the current Swift app.
+
 ## Current stage expansion — 2026-09-20
 
 ### Video packages — stages 1–16
@@ -200,8 +210,9 @@ spans or cross-sentence edges are inferred. Embedded dictionary content remains 
 App Store stage access still requires three real predecessor completions.
 Development and verified TestFlight builds may select any implemented stage;
 unverified, unavailable, failed, or timed-out distribution checks remain locked.
-The map and direct player route use the same policy. Ownership and verified local
-installation remain required. Test access never writes completion records.
+The map and direct player route use the same policy. Verified local installation
+remains required; Swift access has no purchase-ownership gate. Test access never
+writes completion records.
 
 ## Word lookup — stages 1–16
 

@@ -29,7 +29,7 @@ export -f xcodebuild
 ruby -ryaml -ropen3 -e '
   steps = YAML.load_file(ARGV.fetch(0)).fetch("jobs").fetch("ci-native-test-shards").fetch("steps")
   commands = steps.map { |step| step["run"] }.compact.select { |run| run.include?("xcodebuild build-for-testing") }
-  abort "FAIL: expected both native test-product build commands" unless commands.length == 2
+  abort "FAIL: expected one complete native test-product build command" unless commands.length == 1
   commands.each do |command|
     [0, 42].each do |exit_code|
       output, status = Open3.capture2e(
@@ -46,5 +46,5 @@ ruby -ryaml -ropen3 -e '
       abort "FAIL: build verdict is missing" unless output.include?(verdict)
     end
   end
-  puts "PASS: both workflow builds report safe progress and preserve compiler failure exit codes."
+  puts "PASS: the workflow build reports safe progress and preserves compiler failure exit codes."
 ' .github/workflows/ci.yml

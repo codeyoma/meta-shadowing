@@ -34,7 +34,7 @@ public protocol ProductCatalog: Sendable {
     func materials(packageKey: String) async throws -> BookMaterials
     func permitsPractice(packageKey: String) async -> Bool
     func syntax(packageKey: String) async throws -> InstalledSyntaxFile?
-    /// Mutable catalogs emit on entitlement, installation or account changes.
+    /// Mutable catalogs emit on installation or account changes.
     func referenceChanges() async -> AsyncStream<Void>
     func referenceChanges(packageKey: String) async -> AsyncStream<Void>
 }

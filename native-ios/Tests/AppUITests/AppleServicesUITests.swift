@@ -1,7 +1,24 @@
 import XCTest
-import StoreKitTest
 
 final class AppleServicesUITests: XCTestCase {
+    @MainActor func testFreeDownloadsAndSettingsHaveNoCommerceControls() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-services", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 20))
+        let download = app.buttons["download-hosted-morning-notes-v1"]
+        XCTAssertTrue(download.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        XCTAssertFalse(app.buttons["구매 확인"].exists)
+        download.tap()
+        XCTAssertTrue(app.buttons["book-hosted-morning-notes-v1"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
+        app.tabBars.buttons["설정"].tap()
+        XCTAssertTrue(app.buttons["iCloud 동기화"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["데이터 관리"].exists)
+        XCTAssertFalse(app.buttons["구매 복원"].exists)
+        XCTAssertFalse(app.buttons["restore-purchases"].exists)
+    }
     @MainActor func testServiceConfirmationsInLightAndDarkAtLargestText() {
         continueAfterFailure = false
         let original = XCUIDevice.shared.appearance
@@ -120,54 +137,23 @@ final class AppleServicesUITests: XCTestCase {
         app.tabBars.buttons["도서 목록"].tap()
         XCTAssertFalse(app.buttons["book-hosted-morning-notes-v1"].exists)
     }
-    @MainActor func testLongStoreKitPriceRemainsCompleteAndActionsReachable() throws {
-        continueAfterFailure = false
-        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "Books", withExtension: "storekit"))
-        let session = try SKTestSession(contentsOf: fixture)
-        session.resetToDefaultState()
-        session.locale = Locale(identifier: "en_US")
-        session.storefront = "USA"
-        defer { session.resetToDefaultState() }
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-product", "--ui-test-storekit-price", "--ui-test-probe-id", UUID().uuidString,
-            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
-        app.launch()
-        XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 20))
-        XCTAssertTrue(app.tabBars.buttons["설정"].wait(for: \.isHittable, toEqual: true, timeout: 10))
-        app.tabBars.buttons["설정"].tap()
-        let purchaseSettings = app.buttons["구매 복원"]
-        for _ in 0..<6 where !purchaseSettings.isHittable { app.swipeUp() }
-        XCTAssertTrue(purchaseSettings.isHittable)
-        purchaseSettings.tap()
-        let price = app.staticTexts["가격, $99,999,999.99"]
-        XCTAssertTrue(price.waitForExistence(timeout: 10))
-        let buy = app.buttons["구매 · $99,999,999.99"]
-        for _ in 0..<6 where !buy.isHittable { app.swipeUp() }
-        XCTAssertTrue(buy.isHittable)
-        XCTAssertGreaterThanOrEqual(buy.frame.height, 44)
-        let restore = app.buttons["restore-purchases"]
-        for _ in 0..<6 where !restore.isHittable { app.swipeUp() }
-        XCTAssertTrue(restore.isHittable)
-        XCTAssertGreaterThanOrEqual(restore.frame.height, 44)
-        XCTAssertTrue(session.allTransactions().isEmpty, "Layout verification must never buy a product")
-        app.terminate()
-    }
-    @MainActor func testPaidBookIsNotLabeledAsSampleAndEstimateDoesNotGrantXP() {
+    @MainActor func testSampleAndDownloadEstimateDoNotGrantXP() {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-test-product", "--ui-test-services", "--ui-test-paid-card",
+        app.launchArguments = ["--ui-test-product", "--ui-test-services",
             "--ui-test-probe-id", UUID().uuidString]
         app.launch()
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 20))
         XCTAssertEqual(app.staticTexts["book-kind-morning-notes-v1"].label, "샘플")
-        XCTAssertEqual(app.staticTexts["book-kind-hosted-morning-notes-v1"].label, "유료 도서")
+        XCTAssertEqual(app.staticTexts["book-kind-hosted-morning-notes-v1"].label, "샘플")
         let estimate = app.staticTexts["book-xp-hosted-morning-notes-v1"]
         XCTAssertTrue(estimate.exists)
         XCTAssertTrue(estimate.label.contains("1,728"))
         XCTAssertTrue(estimate.label.contains("추가 사이클 제외"))
         XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
         XCTAssertFalse(app.buttons["book-hosted-morning-notes-v1"].exists)
-        XCTAssertTrue(app.buttons["구매 확인"].exists)
+        XCTAssertTrue(app.buttons["download-hosted-morning-notes-v1"].exists)
+        XCTAssertFalse(app.buttons["구매 확인"].exists)
     }
     @MainActor func testServiceSettingsRemainReachableWithLargestText() {
         continueAfterFailure = false
@@ -181,6 +167,7 @@ final class AppleServicesUITests: XCTestCase {
         let settings = app.tabBars.buttons["설정"]
         XCTAssertTrue(settings.wait(for: \.isHittable, toEqual: true, timeout: 10))
         settings.tap()
+        XCTAssertFalse(app.buttons["구매 복원"].exists)
         let cloud = app.buttons["iCloud 동기화"]
         XCTAssertTrue(cloud.wait(for: \.isHittable, toEqual: true, timeout: 5))
         cloud.tap()
@@ -225,11 +212,45 @@ final class AppleServicesUITests: XCTestCase {
         app.buttons["player-exit"].tap()
         app.tabBars.buttons["도서 목록"].tap()
         XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["학습 설정"].tap()
+        app.buttons["다구간 학습 사이즈"].tap()
+        let grouping = app.segmentedControls.buttons["3구간"]
+        XCTAssertTrue(grouping.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        grouping.tap()
+        XCTAssertTrue(grouping.wait(for: \.isSelected, toEqual: true, timeout: 5))
+        app.navigationBars["다구간 학습 사이즈"].buttons["BackButton"].tap()
+        app.navigationBars["학습 설정"].buttons["BackButton"].tap()
+        app.tabBars.buttons["도서 목록"].tap()
         app.buttons["download-hosted-morning-notes-v1"].tap()
         let hosted = app.buttons["book-hosted-morning-notes-v1"]
         XCTAssertTrue(hosted.wait(for: \.isHittable, toEqual: true, timeout: 10))
 
+        hosted.tap()
+        app.buttons["stage-1"].tap()
+        for confirmed in 1...2 {
+            XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
+            main.tap()
+            XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 \(confirmed)/3", timeout: 5))
+        }
+        app.buttons["player-exit"].tap()
+        app.tabBars.buttons["도서 목록"].tap()
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(hosted.wait(for: \.isHittable, toEqual: true, timeout: 20))
+        XCTAssertEqual(app.staticTexts["header-xp"].label, "3 / 100 XP")
+        XCTAssertFalse(main.exists, "Relaunch must not auto-confirm or reopen a player")
+        hosted.tap()
+        app.buttons["stage-1"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 2/3", timeout: 10))
+        app.buttons["player-exit"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
         app.tabBars.buttons["설정"].tap()
+        app.buttons["학습 설정"].tap()
+        app.buttons["다구간 학습 사이즈"].tap()
+        XCTAssertTrue(grouping.wait(for: \.isSelected, toEqual: true, timeout: 5))
+        app.navigationBars["다구간 학습 사이즈"].buttons["BackButton"].tap()
+        app.navigationBars["학습 설정"].buttons["BackButton"].tap()
         app.buttons["데이터 관리"].tap()
         app.buttons["remove-local-history"].tap()
         XCTAssertTrue(app.alerts.buttons["이 기기 기록 삭제"].wait(for: \.isHittable, toEqual: true, timeout: 5))

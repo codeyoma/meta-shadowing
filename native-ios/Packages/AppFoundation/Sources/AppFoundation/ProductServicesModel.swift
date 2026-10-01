@@ -17,24 +17,20 @@ public struct ServiceConfirmation: Identifiable, Sendable {
 
 @MainActor @Observable public final class DownloadModel {
     public let key: String
-    public let paid: Bool
     public internal(set) var status = DeliveryStatus(phase: "idle", progress: 0)
     public internal(set) var busy = false
     public internal(set) var failed = false
-    init(key: String, paid: Bool) { self.key = key; self.paid = paid }
+    init(key: String) { self.key = key }
 }
 
-/// One root-owned service lifetime. View dismissal does not own purchase or download work.
+/// One root-owned service lifetime. View dismissal does not own download work.
 @MainActor @Observable public final class ProductServicesModel {
     public let profiles: ProductProfileOwner
-    public private(set) var ownershipState: OwnershipSnapshot
     public private(set) var syncState = SyncSnapshot()
     public private(set) var actionBusy = false
     public private(set) var error: String?
     public var retryConfirmation: ServiceConfirmation?
     public let downloads: [String: DownloadModel]
-    private let ownership: OwnershipService
-    private let access: PackageAccess
     private let delivery: ContentDelivery
     private let transport: any CloudTransport
     private let sync: SyncCoordinator
@@ -43,18 +39,15 @@ public struct ServiceConfirmation: Identifiable, Sendable {
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     @ObservationIgnored private var downloadTasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var transition: Task<Void, Never>?
-    @ObservationIgnored private var accessToken: UUID?
-    @ObservationIgnored private var authorityTask: Task<Void, Never>?
     @ObservationIgnored private var network: ProgressNetworkAvailability?
     @ObservationIgnored private var networkTask: Task<Void, Never>?
     @ObservationIgnored private var failedAction: ServiceConfirmation?
 
-    public init(profiles: ProductProfileOwner, store: any ServiceProfileStore, ownership: OwnershipService,
-                access: PackageAccess, delivery: ContentDelivery, transport: any CloudTransport, packages: [HostedPackage]) {
-        self.profiles = profiles; self.ownership = ownership; self.access = access
+    public init(profiles: ProductProfileOwner, store: any ServiceProfileStore,
+                delivery: ContentDelivery, transport: any CloudTransport, packages: [HostedPackage]) {
+        self.profiles = profiles
         self.delivery = delivery; self.transport = transport
-        ownershipState = ownership.snapshot
-        downloads = Dictionary(uniqueKeysWithValues: packages.map { ($0.descriptor.key, DownloadModel(key: $0.descriptor.key, paid: $0.paid)) })
+        downloads = Dictionary(uniqueKeysWithValues: packages.map { ($0.descriptor.key, DownloadModel(key: $0.descriptor.key)) })
         sync = SyncCoordinator(store: store, transport: transport, prepareBoundary: { try await profiles.prepareBoundary() })
     }
     public func confirmation(_ action: ServiceAction) -> ServiceConfirmation {
@@ -84,22 +77,11 @@ public struct ServiceConfirmation: Identifiable, Sendable {
         tasks.forEach { $0.cancel() }; tasks = []
         downloadTasks.values.forEach { $0.cancel() }; downloadTasks = [:]
         for model in downloads.values { model.busy = false }
-        authorityTask?.cancel(); authorityTask = nil
         networkTask?.cancel(); networkTask = nil
         network?.stop(); network = nil
-        if let accessToken { access.unsubscribe(accessToken) }
-        accessToken = nil
-        ownership.stopObserving()
         actionBusy = false
     }
     private func observe(_ ticket: UUID) {
-        ownership.startObserving()
-        tasks.append(Task { [weak self, ownership] in
-            for await value in await ownership.snapshots() {
-                guard let self, !Task.isCancelled, self.lifetime == ticket else { return }
-                self.ownershipState = value
-            }
-        })
         tasks.append(Task { [weak self, sync] in
             for await value in await sync.snapshots() {
                 guard let self, !Task.isCancelled, self.lifetime == ticket else { return }
@@ -129,11 +111,6 @@ public struct ServiceConfirmation: Identifiable, Sendable {
                 } catch { if self?.lifetime == ticket { model.failed = true } }
             })
         }
-        accessToken = access.subscribe { [weak self, delivery] _ in
-            guard let self, self.lifetime == ticket else { return }
-            self.authorityTask?.cancel()
-            self.authorityTask = Task { await delivery.authorityChanged() }
-        }
         let network = ProgressNetworkAvailability()
         network.observe { [weak self, sync] in
             guard let self, self.lifetime == ticket else { return }
@@ -141,7 +118,6 @@ public struct ServiceConfirmation: Identifiable, Sendable {
             self.networkTask = Task { await sync.networkAvailable() }
         }
         self.network = network
-        tasks.append(Task { [ownership] in await ownership.refresh() })
     }
     private func consume(_ value: SyncSnapshot, ticket: UUID) async {
         guard lifetime == ticket, value.generation == (await sync.snapshot.generation) else { return }
@@ -159,7 +135,6 @@ public struct ServiceConfirmation: Identifiable, Sendable {
         await sync.refreshAccount()
         await consume(sync.snapshot, ticket: ticket)
     }
-    public func purchase() async { guard active else { return }; await ownership.purchase() }
     public func retrySync() async {
         guard active, !actionBusy else { return }
         if let request = failedAction, !syncState.resetPending {
@@ -187,8 +162,6 @@ public struct ServiceConfirmation: Identifiable, Sendable {
         await sync.retry()
         await consume(sync.snapshot, ticket: ticket)
     }
-    public func restore() async { guard active else { return }; await ownership.restore() }
-    public func refreshOwnership() async { guard active else { return }; await ownership.refresh() }
     public func download(_ key: String) {
         guard active, let model = downloads[key], !model.busy else { return }
         let ticket = lifetime

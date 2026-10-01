@@ -24,7 +24,7 @@ public struct LocalVideoSource: AssetDelivery {
         let manifest = try PackageManifest.decode(data, descriptor: descriptor)
         guard manifest.bookID.hasPrefix("video-"), case .video = manifest.phrases.first?.media else { throw DeliveryError.invalidPackage }
         self.manifest = manifest
-        package = HostedPackage(descriptor: descriptor, assetPackID: nil, paid: false)
+        package = HostedPackage(descriptor: descriptor, assetPackID: nil)
     }
     public func download(progress: @escaping AssetDeliveryProgress) async throws {
         try Task.checkCancellation()

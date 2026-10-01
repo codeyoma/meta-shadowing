@@ -1,26 +1,26 @@
 # Native Apple service boundary
 
-This is the #98 implementation contract, not evidence of live Apple-service acceptance.
+This is the #98 service boundary, amended for #108's free-only product on 2026-10-01.
+See [free-package acceptance](free-package-acceptance.md) for current verification.
 The reference runtime remains untouched. The shipped target links Swift packages only.
 
 ## Authority and content
 
-- StoreKit verified, current, matching non-consumable transactions are the only paid-content authority.
-  Installed files and product metadata never grant ownership. Offline access uses verified local
-  StoreKit evidence, not a persisted application flag or an invented grace period.
-- Foreground refresh does not force account synchronization. Only explicit Purchase and Restore
-  actions can open the corresponding StoreKit interactions. Pending, cancellation, unavailable,
-  unverified and failure states remain distinct.
-- A replaced authority invalidates an open paid lesson even when access remains allowed. Its
-  references, playback, remote controls and monitoring stop; it never resumes automatically.
+- Every configured catalog package is free to download explicitly. StoreKit products, transactions,
+  receipts, revocations and purchase restoration have no active path in the Swift product.
+  Unknown keys stay unavailable. Internal-content flags remain independent restrictions.
+- A validated installed package permits offline practice/reference access without a purchase or
+  iCloud account. Stage, profile, reference eligibility and media permission checks remain intact.
+  Removing or invalidating installed content still stops its active learning/reference resources.
 - Hosted package keys and pinned descriptors come from native build configuration. Installation
-  validates bytes, hashes and semantic manifests before publishing a ready directory under the
-  current authorization revision. Large media reads are memory-mapped after checking file size.
+  validates bytes, hashes and semantic manifests before atomic publication. Cancellation checks
+  remain owned by the download/installation operation, not a paid authorization lease.
+  Large media reads are memory-mapped after checking file size.
 - The hosted Morning Notes sample retains its separate `hosted-morning-notes` learning identity;
   its pinned wire manifest and audio remain the original sample. Other book identities are unchanged.
 - Download progress is streamed without polling. Cancellation remains owned by the service,
   not by a card's view lifetime. Cache-purge failure is reported even after local materials are removed.
-  Removing downloads cannot delete learning history or purchase authority.
+  Removing downloads cannot delete learning history or alter package fingerprints.
 - The existing internal local-video journey uses an explicitly supplied Debug bundle source,
   the normal library/download controls, immutable installation and original segment timing.
   Optional `syntax.json` is pinned and associated only with that installed package. It is not
@@ -28,7 +28,7 @@ The reference runtime remains untouched. The shipped target links Swift packages
 
 ## Profiles, sync and reset
 
-- StoreKit and iCloud accounts are separate authorities. Cloud profile identity is derived from
+- iCloud authorizes only private progress recovery, never free-package access. Cloud profile identity is derived from
   the verified account scope, which includes container and environment. Scope identifiers stay private.
 - The selected local profile is remembered independently of cloud authorization. An unknown/offline
   lookup does not mean sign-out. An explicit no-account result selects guest storage. Switching closes
@@ -60,8 +60,8 @@ The reference runtime remains untouched. The shipped target links Swift packages
 ## Private build configuration
 
 CI uses `project-ci.yml`, a fictional app identity and no private configuration or Apple account.
-Normal product inspection remains unsigned. StoreKit fixture execution uses an ad-hoc Debug
-signature with `get-task-allow`; it does not require a team, provisioning profile or account.
+Normal product inspection remains unsigned. Native UI/integration tests use an ad-hoc Debug
+signature; no purchase fixture, StoreKit setup process or sandbox account is required.
 
 For a designated owner-signed build, reuse the existing reference app's generated native Info.plist
 and entitlements. Do not register new identities or paste their values into tracked files.
@@ -76,8 +76,10 @@ xcodegen generate --spec native-ios/Generated/Services/project.json \
 ```
 
 The mapper reads, but never edits, its source files. It copies only matching, whitelisted service
-keys into the ignored output directory. `Local.xcconfig` still supplies the existing app identity
-and any owner-managed signing settings. Internal free DUO content requires the explicit
+keys into the ignored output directory. `Local.xcconfig` still supplies the existing app identity.
+Legacy purchase product identifiers are ignored, not emitted. Historical `PaidDuo` delivery
+keys remain compatibility inputs for the same immutable package, now offered free.
+Any owner-managed signing settings remain unchanged. Internal free DUO content requires the explicit
 `--allow-internal-content` option and remains marked as internal in the generated Info.plist.
 The base and CI specs never include these generated service files implicitly.
 
@@ -102,7 +104,11 @@ product checks enforce these requirements rather than inferring them from projec
 defaults. TestFlight uses Production CloudKit entitlements and matching build
 metadata; building or uploading does not authorize schema deployment, sync or resets.
 
-## Verification boundary
+## Historical #98 verification boundary
+
+The evidence below records the original #98 implementation, including the former
+purchase tests. #108 retires commerce requirements rather than claiming their live
+acceptance. Current tests and remaining free-download gates are recorded separately.
 
 ### Local verification — 2026-09-29
 

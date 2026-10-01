@@ -122,10 +122,8 @@ import Testing
         let store = SQLiteLearningStore(root: root)
         _ = try await store.savePreferences(.init(libraryLanguage: "french"), profileID: "local")
         let profiles = ProductProfileOwner(store: store, catalog: ServiceTestCatalog())
-        let ownership = OwnershipService(productID: "", currentEntitlements: { [] })
-        let access = PackageAccess(store: ownership)
         let delivery = try ContentDelivery(root: root.appendingPathComponent("content"), packages: [])
-        let services = ProductServicesModel(profiles: profiles, store: store, ownership: ownership, access: access,
+        let services = ProductServicesModel(profiles: profiles, store: store,
             delivery: delivery, transport: UnavailableCloud(), packages: [])
         await services.setActive(true)
         await services.refreshAccount()
@@ -140,8 +138,7 @@ import Testing
 
 @MainActor private func makeServices(_ store: SQLiteLearningStore, cloud: any CloudTransport, root: URL) throws -> ProductServicesModel {
     let profiles = ProductProfileOwner(store: store, catalog: ServiceTestCatalog())
-    let ownership = OwnershipService(productID: "", currentEntitlements: { [] })
-    return ProductServicesModel(profiles: profiles, store: store, ownership: ownership, access: PackageAccess(store: ownership),
+    return ProductServicesModel(profiles: profiles, store: store,
         delivery: try ContentDelivery(root: root.appendingPathComponent("content"), packages: []), transport: cloud, packages: [])
 }
 private actor PausingCloud: CloudTransport {

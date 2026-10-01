@@ -2,6 +2,20 @@
 
 <!-- impeccable:product-schema 1 -->
 
+## Current free-app direction — 2026-10-01
+
+The active iPhone product is Swift-native and free. Configured learning packages
+use explicit free downloads with complete validation and atomic installation.
+There is no purchase, price, receipt, ownership or purchase-restoration path.
+Existing package identities, installed materials, checkpoints, XP and settings
+remain intact. Optional private iCloud progress recovery remains separate.
+
+Purchases may be reconsidered in roughly six months through a separate approved
+design; there is no automatic activation. Ads are optional future work, not
+integrated here. Earlier paid requirements are superseded, not passed tests.
+See [the current acceptance record](docs/swift-native/free-package-acceptance.md).
+
+
 ## Platform
 
 ios
@@ -9,46 +23,53 @@ ios
 ## Users
 
 People practicing spoken language through listening and repeating downloaded
-sentences. M1 is the owner's iPhone-first, local-only prototype, developed and
-checked in iPhone Simulator before a separate physical-device acceptance pass.
+audio/video lessons and silent text-reveal exercises. The current app is
+Swift-native and iPhone first; Android is a later Kotlin-native phase.
 
 ## Product Purpose
 
 Make repeated spoken practice easy to start and safely resume, including the
-current unfinished cycle. The device keeps the primary learning record in M1.
+current unfinished cycle. Installed lessons and device-local progress remain
+usable offline; learning never waits for a server acknowledgement.
 
 ## Operating Context
 
 Three icon-only native tabs: language-filtered books, the selected book's stages,
 and settings. A shared top bar shows the language flag/picker, real level/XP and
-streak. The learning player is outside this browsing shell. One controlled
-12-sentence English/Korean package exercises subtitle shadowing, stages 1 and 2;
-stages 3–16 are visibly unavailable until their methods are implemented.
+streak. The learning player is outside this browsing shell. The controlled
+12-sentence English/Korean sample is bundled; configured packages download
+explicitly. All sixteen learning stages use the current learning contract.
 
 The picker supports English (UK flag), Japanese, Chinese, German, Spanish and
 French, in that order. Languages without books remain selectable and show empty
 Books/Stages screens; they never borrow the English package or its progress.
 
-Settings opens a category menu; its Learning Settings row opens a 0.25–3× speed
-slider with icon-only native Back. Confirmation is always manual, including
-restored legacy automatic sessions. No explanatory footer or mode picker is shown.
-No unimplemented categories are
-invented. The language picker uses a normal row background with an emphasized
-selected border and checkmark. The Books screen omits instructional intro and
-prototype/offline footer copy.
+Settings covers learning preferences, optional iCloud recovery and scoped data
+management, without purchase restoration. Player options pause/checkpoint before
+settings or references. Closing a sheet or returning to the foreground does not
+implicitly resume or confirm practice.
 
 ## Capabilities and Constraints
 
-- Expo / React Native / TypeScript, native files, SQLite and audio.
-- Fully validate a package before allowing practice.
-- Three confirmed cycles, then an explicit Next or two additional Repeat cycles.
-- Backgrounding pauses; explicit resume restores the saved phase and position.
-- No server acknowledgement in playback. M1 has no accounts, sync or commerce.
-- Local language-specific XP and streaks; one eligible stage per book/day, with
-  2/3 rewarded repetitions. See `docs/learning-contract.md` for exact rules.
-- Preserve learning behavior and data during this visual redesign.
-- Other learning methods, dictionary, analysis and additional platforms are later work.
-- Do not modify hosted Supabase data or publish changes without authorization.
+- Swift 6, SwiftUI/UIKit, native SQLite and AVFoundation. Minimum iOS is 26.0;
+  current simulator verification uses iOS 27. No shipped Expo or JavaScript runtime.
+- Free explicit downloads use Apple-hosted Background Assets. Verify manifests,
+  versions, languages, bytes/hashes and confined paths before atomic installation.
+- Cancellation, explicit retry and download removal preserve learning history.
+  Legacy package identities remain stable; internal content is not made public.
+- Audio/video stages 1–10 retain explicit cycle confirmation and optional Repeat.
+  Silent stages 11–16 retain manual reveal confirmation. Media end is not practice.
+- Checkpoints, XP and completion commit atomically; reopening never awards credit.
+  Language-specific progress follows [the learning contract](docs/learning-contract.md).
+- Preserve learning preferences, installed sentence analysis and Apple dictionary.
+  Wired monitoring is live only; no recording or transmission. Microphone gain
+  spans 0...2 without changing original lesson playback.
+- Optional private CloudKit progress recovery is separate from content access;
+  sync starts disabled and never silently overwrites existing cloud history.
+- Preserve the Expo reference, Git history and unrelated local edits. Never mutate
+  hosted Supabase records or delete App Store Connect products for this transition.
+- Account/device tests, uploads and release require separate explicit approval.
+  Ads, future commerce and additional platforms are outside this change.
 
 ## Brand Commitments
 
@@ -62,8 +83,11 @@ proprietary fonts. Preserve the supplied artwork rather than redrawing it.
 
 ## Evidence on Hand
 
-The native prototype, controlled lesson assets, domain tests, and a live iPhone
-Simulator. Device acceptance, paid packages and cloud recovery are not claimed.
+The Swift app contains learning/storage, media/feedback, normal product screens,
+reference tools, hosted delivery and optional private recovery. The free-only
+transition has its own [acceptance record](docs/swift-native/free-package-acceptance.md).
+Package, simulator, physical-device and hosted-CI evidence remain distinct.
+No public release or live free-download acceptance is inferred from local tests.
 
 ## Product Principles
 

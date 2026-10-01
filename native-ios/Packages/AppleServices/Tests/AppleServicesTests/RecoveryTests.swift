@@ -64,7 +64,7 @@ struct RecoveryTests {
   }
 
   @Test(arguments: [false, true])
-  func corruptManagedCacheRequiresExplicitAuthorizedRetry(missing: Bool) async throws {
+  func corruptManagedCacheRequiresExplicitRetry(missing: Bool) async throws {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let bytes = Data("controlled cache fixture".utf8)
@@ -72,20 +72,11 @@ struct RecoveryTests {
     let installer = PackageInstallation(root: root)
     let cache = RecoveryCache(bytes: bytes, missing: missing)
     let download = PackageDownload(installation: installer, transport: cache, purgeCache: { cache.repair() })
-    let lease = PackageAccessLease()
-    lease.update(true)
-    let paid = PaidPackageDownload(download: download, authorize: {
-      let value = lease.snapshot; return (value.revision, value.allowed)
-    }, publish: { revision, commit in try lease.withAuthorization(revision: revision, commit) })
-    await #expect(throws: (any Error).self) { try await paid.start(package) }
-    #expect(try await paid.status(package).phase == "failed")
+    await #expect(throws: (any Error).self) { try await download.start(package) }
+    #expect(try await download.status(package).phase == "failed")
     #expect(try !installer.isInstalled(package))
-    lease.update(false)
-    await #expect(throws: DeliveryError.unauthorized) { try await paid.start(package) }
-    #expect(try !installer.isInstalled(package))
-    lease.update(true)
-    try await paid.start(package)
-    #expect(try await paid.status(package).phase == "ready")
+    try await download.start(package)
+    #expect(try await download.status(package).phase == "ready")
   }
 
   @Test(arguments: [false, true])

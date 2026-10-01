@@ -7,7 +7,10 @@ bundled for offline learning. The player supports all sixteen domain stages,
 paused options, sentence navigation and shared typography/speed/grouping editors.
 Native analysis, relation graphs and Apple dictionary are implemented under #97.
 The bundled sample has no syntax, so analysis remains unavailable for that book.
-Native ownership, hosted delivery and optional private sync are connected under #98.
+Hosted delivery and optional private sync are connected under #98. Under #108,
+the active Swift app offers free downloads only: no purchase/restore UI, StoreKit
+observers, receipts or paid entitlement gates. Existing package identities and
+installed content remain unchanged; private/internal content is not published.
 Missing service configuration leaves those services unavailable without blocking the bundled book.
 Debug storage/media probes remain isolated verification tools.
 The Expo app remains the behavioral reference until the later migration tickets land.
@@ -19,7 +22,7 @@ The Expo app remains the behavioral reference until the later migration tickets 
 - `AppFoundation`: local workspaces, committed-state controller and observable bootstrap.
 - `LearningMedia`: native transport, wired monitoring, lifecycle, remote commands, launch and haptics.
 - `LearningReference`: offline syntax validation, confined reads and relation projections.
-- `AppleServices`: verified ownership, atomic hosted installation and private-cloud reconciliation.
+- `AppleServices`: atomic hosted installation and private-cloud reconciliation.
 - `App`: the composition root, native navigation and scene lifecycle integration.
 - `Tests/AppUITests`: launch, navigation, foreground, relaunch, Dynamic Type and retry.
 
@@ -83,13 +86,6 @@ xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
   -destination "platform=iOS Simulator,id=$NATIVE_SIM_ID" \
   -derivedDataPath native-ios/DerivedData CODE_SIGNING_ALLOWED=NO build
 
-# Install the local fixture in an earlier app process, including on a clean simulator.
-xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
-  -scheme StoreKitFixtureSetup -configuration Debug \
-  -destination "platform=iOS Simulator,id=$NATIVE_SIM_ID" \
-  -derivedDataPath native-ios/DerivedData -parallel-testing-enabled NO \
-  -collect-test-diagnostics never CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- test
-
 xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
   -scheme MetaShadowingNative -configuration Debug \
   -destination "platform=iOS Simulator,id=$NATIVE_SIM_ID" \
@@ -113,15 +109,8 @@ failure for retry testing. It does not edit storage and is absent from Release.
 opens the W4 probe; supported modes are `audio`, `video` and `silent`. These use
 disposable `ProbeProfiles` namespaces, real SQLite and generated fixtures.
 No playback-ended test button substitutes for native media completion.
-StoreKit fixture execution requires an ad-hoc Debug signature with `get-task-allow`;
-it never requires an Apple account. Do not run purchase fixtures in an unsigned host.
-Use the fictional CI configuration for these checks. Run `StoreKitFixtureSetup`
-successfully on the same simulator before `MetaShadowingNative` tests. On a cold
-iOS 27 simulator, loading the fixture within the purchase-test process can leave
-purchases routed to Sandbox even though product queries use the local catalog.
-The separate setup scheme installs and validates the catalog without purchasing;
-the behavioral suite then launches a new host process and resets its own fixture
-transactions. This is not a test retry or a substitute for purchase assertions.
+Use the fictional CI configuration and ad-hoc simulator signing for native tests.
+The free product has no StoreKit fixture, purchase setup scheme or sandbox login.
 The product UI tests use `--ui-test-product --ui-test-probe-id <UUID>` for isolated
 SQLite profiles. Optional Debug-only `--ui-test-product-fixture audio|video|long|video-long`
 selects generated public fixtures; `--ui-test-product-fail-save` injects one failed
@@ -196,7 +185,7 @@ xcodegen generate --spec native-ios/project-ci.yml
 
 The configuration test generates a disposable copy without local configuration
 and checks the resolved Debug/Release identity, signing and compiler settings.
-It also requires all three full test targets exactly once, with serial execution.
+It also requires both full non-commerce test targets exactly once, with serial execution.
 Generating the CI project replaces only the ignored generated Xcode project;
 run `xcodegen generate --spec native-ios/project.yml` to return to local settings.
 Package tests, Debug/Release builds and product checks use the same commands above.
@@ -216,6 +205,8 @@ their app-check implementations now validate Swift. Local success does not claim
 a hosted CI result.
 
 W7 live-service evidence and W8 replacement/release acceptance remain separate.
+The #108 free-only change has its own [acceptance record](../docs/swift-native/free-package-acceptance.md).
+Earlier purchase acceptance requirements are superseded, not passing tests.
 See [the Apple service contract](../docs/swift-native/apple-services-contract.md) for private
 configuration, fixture coverage and pending signed-device/service trials.
 See [the product UI contract](../docs/swift-native/product-ui-contract.md)

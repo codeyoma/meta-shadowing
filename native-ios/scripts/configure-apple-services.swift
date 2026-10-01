@@ -14,9 +14,6 @@ func serviceConfiguration(info: [String: Any], entitlements: [String: Any], inte
               value.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]+$", options: .regularExpression) != nil else { throw ConfigurationFailure.invalid }
         return value
     }
-    if let product = info["LearningBookProductID"] as? String, !product.isEmpty {
-        result.info["LearningBookProductID"] = try identifier(product)
-    }
     var packs: Set<String> = []
     for prefix in ["Sample", "FreeDuo", "PaidDuo"] {
         guard info[prefix + "AssetPackID"] != nil else { continue }
@@ -30,7 +27,6 @@ func serviceConfiguration(info: [String: Any], entitlements: [String: Any], inte
             result.info["FreeDuoEnabled"] = true
             result.info["NativeInternalContent"] = true
         }
-        if prefix == "PaidDuo" { try require(result.info["LearningBookProductID"] != nil) }
         for suffix in prefix == "Sample" ? ["Descriptor"] : ["Descriptor", "Manifest"] {
             guard let json = info[prefix + suffix] as? String, json.utf8.count <= 20_000_000,
                   (try JSONSerialization.jsonObject(with: Data(json.utf8))) is [String: Any] else { throw ConfigurationFailure.invalid }
@@ -143,6 +139,13 @@ func selfTest(output: URL? = nil) throws {
         "com.apple.developer.icloud-container-identifiers": [container], "com.apple.developer.icloud-services": ["CloudKit"],
         "com.apple.developer.icloud-container-environment": "Development", "aps-environment": "development"]
     let complete = try serviceConfiguration(info: info, entitlements: authority, internalContent: false)
+    try require(complete.info["LearningBookProductID"] == nil)
+    var legacy = info
+    legacy["LearningBookProductID"] = nil
+    legacy["PaidDuoAssetPackID"] = "fixture-duo"
+    legacy["PaidDuoDescriptor"] = "{}"; legacy["PaidDuoManifest"] = "{}"
+    let legacyResult = try serviceConfiguration(info: legacy, entitlements: authority, internalContent: false)
+    try require(legacyResult.delivery && legacyResult.info["PaidDuoAssetPackID"] as? String == "fixture-duo")
     try verifyEntitlements(info: info, actual: authority, role: "app")
     try verifyEntitlements(info: [:], actual: ["get-task-allow": true], role: "app")
     // App Store re-signing adds Apple's beta identity flag, not a service capability.

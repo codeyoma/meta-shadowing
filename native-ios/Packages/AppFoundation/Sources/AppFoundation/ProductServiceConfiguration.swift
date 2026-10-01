@@ -4,12 +4,10 @@ import Foundation
 
 /// Uses the existing native service keys; absent configuration grants no service authority.
 public struct ProductServiceConfiguration: Sendable {
-    public let productID: String
     public let packages: [HostedPackage]
     public let books: [CatalogBook]
     public let localVideo: LocalVideoSource?
     public init(values: [String: String], sampleRoot: URL, localVideoRoot: URL? = nil) throws {
-        productID = values["LearningBookProductID"] ?? ""
         var packages: [HostedPackage] = [], books: [CatalogBook] = []
         for prefix in ["Sample", "FreeDuo", "PaidDuo"] {
             guard let asset = values[prefix + "AssetPackID"], !asset.isEmpty else { continue }
@@ -17,8 +15,7 @@ public struct ProductServiceConfiguration: Sendable {
                 guard values["FreeDuoEnabled"] == "true", values["NativeInternalContent"] == "true" else { throw ProductError.invalidContent }
             }
             guard let group = values["BAAppGroupID"], !group.isEmpty,
-                  let raw = values[prefix + "Descriptor"], raw.utf8.count <= 2_000_000,
-                  prefix != "PaidDuo" || !productID.isEmpty else { throw ProductError.invalidContent }
+                  let raw = values[prefix + "Descriptor"], raw.utf8.count <= 2_000_000 else { throw ProductError.invalidContent }
             let descriptor = try JSONDecoder().decode(DeliveryPackage.self, from: Data(raw.utf8))
             let manifest: Data
             if prefix == "Sample" {
@@ -40,7 +37,7 @@ public struct ProductServiceConfiguration: Sendable {
             default: ["duo-33-v1"]
             }
             guard permitted.contains(descriptor.key), asset != "delivery-diagnostic-v1" else { throw ProductError.invalidContent }
-            packages.append(HostedPackage(descriptor: descriptor, assetPackID: asset, paid: prefix == "PaidDuo"))
+            packages.append(HostedPackage(descriptor: descriptor, assetPackID: asset))
             books.append(CatalogBook(id: descriptor.key, book: parsed.learningBookID, language: parsed.language,
                                      title: parsed.title, sentenceCount: parsed.phrases.count))
         }
