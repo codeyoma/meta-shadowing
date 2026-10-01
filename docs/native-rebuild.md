@@ -1,5 +1,19 @@
 # Native rebuild: decisions and milestones
 
+## Current Swift scope — 2026-10-01
+
+The active iPhone implementation is Swift/SwiftUI, with a free app and free learning
+package downloads. #108 removes purchases and purchase restoration while retaining
+Apple-hosted delivery, complete package validation, offline learning, durable
+progress and optional private iCloud recovery. Ads and future purchases require
+separate decisions; neither is enabled here.
+
+The Expo stack, paid milestones and prototype restrictions in the older decisions
+below are historical. Preserve their source and outcomes rather than interpreting
+them as current release prerequisites. The current roadmap is #91; the approved
+[free-package design](superpowers/specs/2026-10-01-free-learning-packages-design.md)
+governs this transition. No benchmark target or new platform is required.
+
 ## Current execution update — 2026-09-13
 
 The product is **iPhone first, Android later**. The current #44–#52 tickets and

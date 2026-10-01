@@ -12,7 +12,7 @@ struct BookCardView: View {
             Image(uiImage: UIImage(named: "morning-notes") ?? UIImage()).resizable().scaledToFit()
                 .accessibilityHidden(true)
                 .overlay(alignment: .topTrailing) {
-                    BookTagsView(book: summary.book, paid: services?.downloads[summary.id]?.paid == true).padding(8)
+                    BookTagsView(book: summary.book).padding(8)
                 }
             VStack(alignment: .leading, spacing: 8) {
                 let title = Text(summary.book.title).font(.system(.headline, design: .rounded))

@@ -28,34 +28,6 @@ packages:
   LearningReference:
     path: Packages/LearningReference
 targets:
-  NativeStoreKitFixtureSetup:
-    type: bundle.unit-test
-    platform: iOS
-    sources:
-      - path: Tests/StoreKitFixtureSetup
-      - path: Tests/AppleServiceIntegrationTests/Fixtures
-        buildPhase: resources
-    dependencies:
-      - target: MetaShadowingNative
-      - sdk: StoreKitTest.framework
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).storekitsetup
-  NativeAppleServiceTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources:
-      - path: Tests/AppleServiceIntegrationTests
-        excludes: [Fixtures]
-      - path: Tests/AppleServiceIntegrationTests/Fixtures
-        buildPhase: resources
-    dependencies:
-      - target: MetaShadowingNative
-      - package: AppleServices
-      - sdk: StoreKitTest.framework
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).servicetests
   MetaShadowingNative:
     type: application
     platform: iOS
@@ -126,28 +98,17 @@ targets:
     platform: iOS
     sources:
       - path: Tests/AppUITests
-      - path: Tests/AppleServiceIntegrationTests/Fixtures
-        buildPhase: resources
     dependencies:
       - target: MetaShadowingNative
-      - sdk: StoreKitTest.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER).uitests
 schemes:
-  StoreKitFixtureSetup:
-    build:
-      targets:
-        MetaShadowingNative: all
-        NativeStoreKitFixtureSetup: [test]
-    test:
-      targets: [NativeStoreKitFixtureSetup]
   MetaShadowingNative:
     build:
       targets:
         MetaShadowingNative: all
         NativeFoundationUITests: [test]
         NativeMediaIntegrationTests: [test]
-        NativeAppleServiceTests: [test]
     test:
-      targets: [NativeFoundationUITests, NativeMediaIntegrationTests, NativeAppleServiceTests]
+      targets: [NativeFoundationUITests, NativeMediaIntegrationTests]

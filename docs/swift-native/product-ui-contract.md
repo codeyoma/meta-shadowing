@@ -1,5 +1,17 @@
 # Native product UI (W5 / #96)
 
+## Current free-product amendment — #108
+
+Library offers explicit free Download, cancel/retry, learning and scoped material
+removal. Settings retains learning preferences, optional iCloud progress recovery
+and separate data management. Purchase, price, ownership and purchase-restoration
+controls/routes are removed. Package validation, stable identity, stage policies,
+profile isolation and durable learning remain unchanged. No download or relaunch
+earns practice credit. See [current acceptance](free-package-acceptance.md).
+
+Earlier W5 integration limits and test counts below are historical, not a claim
+about the present service implementation or owner-confirmed physical acceptance.
+
 ## Implemented boundary
 
 The normal Swift app now presents Books, Stages and Settings. Language selection

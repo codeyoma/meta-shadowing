@@ -1,5 +1,20 @@
 # iPhone-first foundation — #44
 
+## Current Swift commercial scope — 2026-10-01
+
+The current iPhone app is free, with free explicitly downloaded learning packages.
+#108 removes active Swift purchases, transaction observers, paid gates and purchase
+restoration. Apple-hosted delivery, validation, installed offline learning and
+optional private CloudKit recovery remain. Package and learning identities stay
+unchanged. Existing private/internal content is not made public.
+
+The purchase requirements and Expo setup in the earlier foundation below are
+historical, not current Swift release gates. Purchases may be reconsidered in
+roughly six months through a separate approved ticket; there is no automatic
+activation. Ads remain optional future work, not part of this change. Existing
+App Store Connect products, hosted records, identities and reference source stay
+untouched. See [the free-package design](superpowers/specs/2026-10-01-free-learning-packages-design.md).
+
 ## Current platform direction — 2026-09-13
 
 The owner confirmed **iPhone first, Android later**. "Apple-only" in the original

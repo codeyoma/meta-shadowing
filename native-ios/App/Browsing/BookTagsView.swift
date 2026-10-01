@@ -3,9 +3,7 @@ import SwiftUI
 
 struct BookTagsView: View {
     let book: CatalogBook
-    let paid: Bool
     private var kind: String {
-        if paid { return "유료 도서" }
         return ["morning-notes-v1", "hosted-morning-notes-v1"].contains(book.id) ? "샘플" : "무료 도서"
     }
     private var minimumXP: Int? {

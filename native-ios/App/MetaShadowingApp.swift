@@ -56,20 +56,12 @@ struct MetaShadowingApp: App {
             #if DEBUG
             if UUID(uuidString: root.lastPathComponent) != nil, arguments.contains("--ui-test-services") {
                 let sample = Bundle.main.bundleURL.appending(path: "sample")
-                let fixture = try ServiceTestAssets.package(root: sample, paid: arguments.contains("--ui-test-paid-card"))
+                let fixture = try ServiceTestAssets.package(root: sample)
                 packages = [fixture.0]; books = [fixture.1]
                 assetSource = { _ in ServiceTestAssets(root: sample) }
             }
             #endif
-            var productID = configuration.productID
-            #if DEBUG
-            if UUID(uuidString: root.lastPathComponent) != nil, arguments.contains("--ui-test-storekit-price") {
-                productID = "com.example.packagestore.longprice"
-            }
-            #endif
-            let ownership = OwnershipService(productID: productID)
-            let access = PackageAccess(store: ownership)
-            let delivery = try ContentDelivery(root: root.appending(path: "content"), packages: packages, paidLease: access.lease, transport: assetSource)
+            let delivery = try ContentDelivery(root: root.appending(path: "content"), packages: packages, transport: assetSource)
             catalog = InstalledProductCatalog(bundled: catalog, delivery: delivery, listings: books)
             let owner = ProductProfileOwner(store: store, catalog: catalog)
             var cloud: any CloudTransport = NativeCloudTransport(root: root.appending(path: "cloud-cache"))
@@ -79,7 +71,7 @@ struct MetaShadowingApp: App {
             }
             #endif
             profiles = owner
-            serviceOwner = ServiceOwner(model: ProductServicesModel(profiles: owner, store: persistent, ownership: ownership, access: access,
+            serviceOwner = ServiceOwner(model: ProductServicesModel(profiles: owner, store: persistent,
                 delivery: delivery, transport: cloud, packages: packages))
         } catch {
             profiles = ProductProfileOwner(store: store, catalog: catalog)

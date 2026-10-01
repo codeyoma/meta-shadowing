@@ -3,7 +3,7 @@ import Foundation
 import LearningDomain
 import LearningReference
 
-/// Library metadata can be visible before download; installed bytes never confer ownership.
+/// Library metadata can be visible before download; validated installation permits offline practice.
 public actor InstalledProductCatalog: ProductCatalog {
     private let bundled: any ProductCatalog
     private let delivery: ContentDelivery

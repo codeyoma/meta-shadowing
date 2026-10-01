@@ -9,9 +9,7 @@ struct BookDownloadActions: View {
     @State private var removal: ServiceConfirmation?
     var body: some View {
         VStack(spacing: 8) {
-            if download.paid && (services.ownershipState.ownership != .owned || services.ownershipState.entitlementIssue != .none) {
-                NavigationLink { PurchaseRestoreView(services: services) } label: { Label("구매 확인", systemImage: "lock") }
-            } else if download.busy {
+            if download.busy {
                 HStack {
                     ProgressView(value: download.status.progress)
                     Text(download.status.progress, format: .percent.precision(.fractionLength(0))).font(.caption).monospacedDigit()
@@ -39,6 +37,6 @@ struct BookDownloadActions: View {
         }.alert("다운로드를 삭제할까요?", item: $removal) { request in
             Button("다운로드 삭제", role: .destructive) { Task { await services.perform(request) } }
             Button("취소", role: .cancel) { }
-        } message: { _ in Text("\(summary.book.title)의 다운로드만 삭제합니다. 학습 기록과 구매 내역은 남습니다.") }
+        } message: { _ in Text("\(summary.book.title)의 다운로드만 삭제합니다. 학습 기록은 남습니다.") }
     }
 }

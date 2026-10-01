@@ -6,9 +6,8 @@ import BackgroundAssets
 public struct HostedPackage: Codable, Sendable {
     public let descriptor: DeliveryPackage
     public let assetPackID: String?
-    public let paid: Bool
-    public init(descriptor: DeliveryPackage, assetPackID: String?, paid: Bool) {
-        self.descriptor = descriptor; self.assetPackID = assetPackID; self.paid = paid
+    public init(descriptor: DeliveryPackage, assetPackID: String?) {
+        self.descriptor = descriptor; self.assetPackID = assetPackID
     }
 }
 
@@ -23,13 +22,12 @@ public actor ContentDelivery {
     private struct Entry {
         let package: HostedPackage
         let download: PackageDownload
-        let authority: PackageAccessLease
     }
     private let root: URL
     private let entries: [String: Entry]
     private var listeners: [UUID: (String?, AsyncStream<Void>.Continuation)] = [:]
 
-    public init(root: URL, packages: [HostedPackage], paidLease: PackageAccessLease? = nil,
+    public init(root: URL, packages: [HostedPackage],
                 transport: @Sendable (HostedPackage) -> (any AssetDelivery)? = ContentDelivery.appleTransport,
                 purgeCache: @escaping @Sendable (HostedPackage) async throws -> Void = ContentDelivery.applePurge) throws {
         guard root.isFileURL, packages.count <= 100,
@@ -44,12 +42,10 @@ public actor ContentDelivery {
             if let asset = package.assetPackID {
                 guard asset.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$", options: .regularExpression) != nil else { throw DeliveryError.invalidPackage }
             }
-            let lease = package.paid ? paidLease ?? PackageAccessLease() : PackageAccessLease()
-            if !package.paid { lease.update(true) }
             let download = PackageDownload(installation: installation, transport: transport(package), purgeCache: {
                 try await purgeCache(package)
             })
-            entries[package.descriptor.key] = Entry(package: package, download: download, authority: lease)
+            entries[package.descriptor.key] = Entry(package: package, download: download)
         }
         self.entries = entries
     }
@@ -69,10 +65,7 @@ public actor ContentDelivery {
 
     public func state(packageKey: String) async throws -> DeliveryStatus {
         let entry = try entry(packageKey)
-        guard entry.authority.snapshot.allowed else { return DeliveryStatus(phase: "unauthorized", progress: 0) }
-        let state = try await entry.download.status(entry.package.descriptor)
-        guard entry.authority.snapshot.allowed else { return DeliveryStatus(phase: "unauthorized", progress: 0) }
-        return state
+        return try await entry.download.status(entry.package.descriptor)
     }
     public func statuses(packageKey: String) async throws -> AsyncStream<DeliveryStatus> {
         let entry = try entry(packageKey)
@@ -82,13 +75,9 @@ public actor ContentDelivery {
         for entry in entries.values { await entry.download.cancel() }
     }
     public func download(packageKey: String) async throws {
-        let entry = try entry(packageKey), lease = entry.authority
-        let access = lease.snapshot
-        guard access.allowed else { throw DeliveryError.unauthorized }
+        let entry = try entry(packageKey)
         defer { changed(packageKey) }
-        try await entry.download.start(entry.package.descriptor, publication: { operation in
-            try lease.withAuthorization(revision: access.revision, operation)
-        })
+        try await entry.download.start(entry.package.descriptor)
     }
     public func cancel(packageKey: String) async {
         await entries[packageKey]?.download.cancel()
@@ -102,13 +91,10 @@ public actor ContentDelivery {
     }
     public func installation(packageKey: String) async throws -> InstalledPackage {
         let entry = try entry(packageKey)
-        let access = entry.authority.snapshot
-        guard access.allowed else { throw DeliveryError.unauthorized }
         guard try await entry.download.status(entry.package.descriptor).phase == "ready" else { throw DeliveryError.unavailable }
         try Task.checkCancellation()
         let directory = root.appendingPathComponent(packageKey)
         let manifest = try PackageManifest.read(root: directory, descriptor: entry.package.descriptor)
-        try entry.authority.withAuthorization(revision: access.revision) {}
         return InstalledPackage(descriptor: entry.package.descriptor, root: directory, manifest: manifest)
     }
     public func changes(packageKey: String? = nil) -> AsyncStream<Void> {
@@ -117,10 +103,6 @@ public actor ContentDelivery {
         listeners[id] = (packageKey, continuation)
         continuation.onTermination = { [weak self] _ in Task { await self?.removeListener(id) } }
         return stream
-    }
-    public func authorityChanged() async {
-        for entry in entries.values where !entry.authority.snapshot.allowed { await entry.download.cancel() }
-        for entry in entries.values where entry.package.paid { changed(entry.package.descriptor.key) }
     }
     private func entry(_ key: String) throws -> Entry {
         guard let entry = entries[key] else { throw DeliveryError.invalidPackage }
