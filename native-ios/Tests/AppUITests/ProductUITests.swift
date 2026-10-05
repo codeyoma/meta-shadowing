@@ -142,6 +142,11 @@ final class ProductUITests: XCTestCase {
         XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10))
         book.tap()
         XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
+        // Choosing a book pushes its stages inside Books; tabs never switch on their own.
+        XCTAssertTrue(app.tabBars.buttons["도서 목록"].isSelected)
+        XCTAssertTrue(app.staticTexts["header-xp"].exists)
+        app.tabBars.buttons["스테이지"].tap()
+        XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
         app.tabBars.buttons["설정"].tap()
         XCTAssertTrue(app.buttons["학습 설정"].waitForExistence(timeout: 5))
         // Learning status belongs to the browsing screens' toolbars, not Settings.

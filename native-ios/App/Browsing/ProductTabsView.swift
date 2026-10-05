@@ -7,20 +7,23 @@ struct ProductTabsView: View {
     var services: ProductServicesModel? = nil
     @State private var tab = 0
     @State private var learningRoute: LearningRoute?
+    @State private var libraryPath: [String] = []
     var body: some View {
         if let snapshot = model.snapshot {
             TabView(selection: $tab) {
                 Tab("도서 목록", systemImage: "books.vertical", value: 0) {
-                    NavigationStack {
+                    NavigationStack(path: $libraryPath) {
                         LibraryView(snapshot: snapshot, services: services) { book in
                             Task {
                                 await model.select(language: book.book.language, packageKey: book.id)
-                                if !model.failed { tab = 1 }
+                                if !model.failed, libraryPath.last != book.id { libraryPath.append(book.id) }
                             }
                         }.disabled(model.busy || profiles?.changing == true)
                             .toolbar { statusToolbar(snapshot) }
                             .browsingRecovery(model: model, services: services)
+                            .navigationDestination(for: String.self) { id in bookStages(id) }
                     }
+                    .onChange(of: snapshot.books.map(\.id)) { _, ids in libraryPath.removeAll { !ids.contains($0) } }
                 }
                 Tab("스테이지", systemImage: "map", value: 1) {
                     NavigationStack {
@@ -48,9 +51,19 @@ struct ProductTabsView: View {
             .fullScreenCover(item: $learningRoute) { route in LearningPlayerView(route: route, model: model, profiles: profiles) }
         }
     }
-    private func statusToolbar(_ snapshot: ProductSnapshot) -> StudyStatusToolbar {
+    @ViewBuilder private func bookStages(_ id: String) -> some View {
+        if let snapshot = model.snapshot, let book = snapshot.books.first(where: { $0.id == id }) {
+            StagePathView(summary: book) { learningRoute = LearningRoute(packageKey: book.id, stage: $0) }
+                .disabled(profiles?.changing == true)
+                .toolbar { statusToolbar(snapshot, includesLanguage: false) }
+        } else {
+            ContentUnavailableView("도서를 찾을 수 없어요", systemImage: "book")
+        }
+    }
+    private func statusToolbar(_ snapshot: ProductSnapshot, includesLanguage: Bool = true) -> StudyStatusToolbar {
         StudyStatusToolbar(language: StudyLanguage(rawValue: snapshot.preferences.libraryLanguage ?? "") ?? .english,
-                           progress: snapshot.progress, disabled: model.busy || profiles?.changing == true) { language in
+                           progress: snapshot.progress, disabled: model.busy || profiles?.changing == true,
+                           includesLanguage: includesLanguage) { language in
             Task { await model.select(language: language.rawValue, packageKey: nil) }
         }
     }

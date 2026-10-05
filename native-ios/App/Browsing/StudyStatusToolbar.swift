@@ -16,8 +16,16 @@ struct StudyStatusToolbar: ToolbarContent {
     let language: StudyLanguage
     let progress: LanguageStudyProgress
     let disabled: Bool
+    /// Pushed screens keep the back button in the leading slot.
+    var includesLanguage = true
     let select: (StudyLanguage) -> Void
     var body: some ToolbarContent {
+        if includesLanguage { languageMenu }
+        ToolbarItem(placement: .topBarTrailing) {
+            StudyStatusView(progress: progress)
+        }.sharedBackgroundVisibility(.hidden)
+    }
+    private var languageMenu: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             Menu {
                 Picker("학습 언어", selection: Binding(get: { language }, set: { if $0 != language { select($0) } })) {
@@ -33,9 +41,6 @@ struct StudyStatusToolbar: ToolbarContent {
             .accessibilityLabel("학습 언어, \(language.title)")
             .accessibilityIdentifier("language-menu")
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            StudyStatusView(progress: progress)
-        }.sharedBackgroundVisibility(.hidden)
     }
 }
 
