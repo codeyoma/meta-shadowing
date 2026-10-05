@@ -39,10 +39,10 @@ struct CloudSyncView: View {
     }
     private var accountStatus: String {
         switch services.syncState.account {
-        case .available: "현재 iCloud 계정"
-        case .noAccount: "iPhone 설정에서 iCloud에 로그인해 주세요"
-        case .unavailable: "이 빌드에서는 사용할 수 없음"
-        case .unknown: "계정을 확인할 수 없음 · 기기 기록은 사용 가능"
+        case .available: String(localized: "현재 iCloud 계정")
+        case .noAccount: String(localized: "iPhone 설정에서 iCloud에 로그인해 주세요")
+        case .unavailable: String(localized: "이 빌드에서는 사용할 수 없음")
+        case .unknown: String(localized: "계정을 확인할 수 없음 · 기기 기록은 사용 가능")
         }
     }
 }
@@ -65,12 +65,12 @@ struct ServiceStatusView: View {
     }
     private var errorMessage: String {
         switch services.syncState.error {
-        case .offline: "연결할 수 없어요. 기기의 학습 기록은 보존되며 연결 후 다시 시도합니다."
-        case .quota: "iCloud 저장 공간이 부족해요. 공간을 확보한 뒤 다시 시도해 주세요."
-        case .permission: "iCloud 접근이 허용되지 않았어요. 계정과 앱의 iCloud 설정을 확인해 주세요."
-        case .corrupt, .tooLarge: "지원하지 않거나 손상된 백업이에요. 기록을 덮어쓰지 않았습니다."
-        case .conflict: "다른 기기에서 기록이 변경되었어요. 다시 시도해 주세요."
-        default: "작업을 완료하지 못했어요. 계정과 연결 상태를 확인해 주세요. 저장된 기록은 보존됩니다."
+        case .offline: String(localized: "연결할 수 없어요. 기기의 학습 기록은 보존되며 연결 후 다시 시도합니다.")
+        case .quota: String(localized: "iCloud 저장 공간이 부족해요. 공간을 확보한 뒤 다시 시도해 주세요.")
+        case .permission: String(localized: "iCloud 접근이 허용되지 않았어요. 계정과 앱의 iCloud 설정을 확인해 주세요.")
+        case .corrupt, .tooLarge: String(localized: "지원하지 않거나 손상된 백업이에요. 기록을 덮어쓰지 않았습니다.")
+        case .conflict: String(localized: "다른 기기에서 기록이 변경되었어요. 다시 시도해 주세요.")
+        default: String(localized: "작업을 완료하지 못했어요. 계정과 연결 상태를 확인해 주세요. 저장된 기록은 보존됩니다.")
         }
     }
 }

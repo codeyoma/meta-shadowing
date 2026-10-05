@@ -6,8 +6,8 @@ enum StudyLanguage: String, CaseIterable, Identifiable {
     case english, japanese, chinese, german, spanish, french
     var id: String { rawValue }
     var title: String { switch self {
-    case .english: "영어"; case .japanese: "일본어"; case .chinese: "중국어"
-    case .german: "독일어"; case .spanish: "스페인어"; case .french: "프랑스어"
+    case .english: String(localized: "영어"); case .japanese: String(localized: "일본어"); case .chinese: String(localized: "중국어")
+    case .german: String(localized: "독일어"); case .spanish: String(localized: "스페인어"); case .french: String(localized: "프랑스어")
     } }
     var flag: String { switch self {
     case .english: "🇬🇧"; case .japanese: "🇯🇵"; case .chinese: "🇨🇳"

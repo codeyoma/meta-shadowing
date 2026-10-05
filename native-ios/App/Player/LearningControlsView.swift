@@ -40,7 +40,7 @@ struct LearningControlsView: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: session.showsThirdCycleChoices)
     }
     private func label(_ action: LearningEvent?) -> String {
-        switch action { case .resume: "학습 이어하기"; case .next: "다음 학습"; case .confirm: "학습 확인"; default: "재생 중" }
+        switch action { case .resume: String(localized: "학습 이어하기"); case .next: String(localized: "다음 학습"); case .confirm: String(localized: "학습 확인"); default: String(localized: "재생 중") }
     }
 }
 private struct CycleTimelineView: View {

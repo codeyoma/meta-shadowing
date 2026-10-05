@@ -26,7 +26,7 @@ final class LaunchCanvas: UIView, CAAnimationDelegate {
         super.init(frame: frame)
         backgroundColor = .white
         for image in [puppy, wordmark] { image.contentsGravity = .resizeAspect; layer.addSublayer(image) }
-        isAccessibilityElement = true; accessibilityLabel = "쉐도잉 시작 화면"
+        isAccessibilityElement = true; accessibilityLabel = String(localized: "쇄도잉 시작 화면")
         accessibilityIdentifier = "launch-screen"
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }

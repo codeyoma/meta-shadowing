@@ -4,7 +4,7 @@ import SwiftUI
 struct BookTagsView: View {
     let book: CatalogBook
     private var kind: String {
-        return ["morning-notes-v1", "hosted-morning-notes-v1"].contains(book.id) ? "샘플" : "무료 도서"
+        return ["morning-notes-v1", "hosted-morning-notes-v1"].contains(book.id) ? String(localized: "샘플") : String(localized: "무료 도서")
     }
     private var minimumXP: Int? {
         // Sixteen stages, three required runs, three base cycles per source.
