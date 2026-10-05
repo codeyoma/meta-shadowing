@@ -27,8 +27,8 @@ struct BookCardView: View {
                 if let services, let download = services.downloads[summary.id] {
                     BookDownloadActions(services: services, download: download, summary: summary, select: select)
                 } else {
-                    Button(action: select) { Image(systemName: "play.fill").font(.subheadline) }
-                        .buttonStyle(LearningActionStyle())
+                    Button(action: select) { Image(systemName: "play.fill").font(.subheadline).frame(maxWidth: .infinity) }
+                        .buttonStyle(.primaryAction)
                         .accessibilityLabel("\(summary.book.title) 스테이지 선택")
                         .accessibilityIdentifier("book-\(summary.id)")
                 }

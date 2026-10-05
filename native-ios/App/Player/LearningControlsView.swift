@@ -24,7 +24,8 @@ struct LearningControlsView: View {
                 if session.showsThirdCycleChoices || session.canRepeat {
                     Button { Task { _ = await runtime.coordinator.perform(.repeat) } } label: {
                         Image(systemName: "repeat").frame(maxWidth: .infinity)
-                    }.accessibilityLabel("두 번 더 연습하기").accessibilityIdentifier("player-repeat")
+                    }.buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.large)
+                        .accessibilityLabel("두 번 더 연습하기").accessibilityIdentifier("player-repeat")
                         .disabled(!controls.repeatable).frame(maxWidth: 80)
                 }
                 Button {
@@ -34,7 +35,7 @@ struct LearningControlsView: View {
                         .frame(maxWidth: .infinity)
                 }.accessibilityLabel(label(controls.mainAction)).accessibilityIdentifier("player-main")
                     .disabled(controls.mainAction == nil)
-            }.buttonStyle(LearningActionStyle())
+            }.buttonStyle(.primaryAction)
         }.padding().background(.bar)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: session.showsThirdCycleChoices)
     }

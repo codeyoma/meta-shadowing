@@ -35,7 +35,7 @@ struct DeveloperDownloadView: View {
                                 Button("미리보기 다운로드 삭제", role: .destructive) { reset() }.frame(minHeight: 44)
                             } else {
                                 Button { } label: { Image(systemName: "play.fill") }
-                                    .buttonStyle(LearningActionStyle()).accessibilityLabel("학습 미리보기")
+                                    .buttonStyle(.primaryAction).accessibilityLabel("학습 미리보기")
                                     .accessibilityIdentifier("book-hosted-morning-notes-v1")
                             }
                         } else {

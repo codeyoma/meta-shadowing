@@ -19,7 +19,7 @@ struct BookTagsView: View {
             if let minimumXP {
                 Text("\(minimumXP.formatted()) XP +")
                     .padding(.horizontal, 8).padding(.vertical, 3)
-                    .foregroundStyle(BrandStyle.ink).background(BrandStyle.green, in: .capsule)
+                    .foregroundStyle(BrandStyle.ink).background(BrandStyle.yellow, in: .capsule)
                     .accessibilityLabel("전체 16스테이지를 각 3회 학습하면 최소 \(minimumXP.formatted()) XP, 추가 사이클 제외")
                     .accessibilityIdentifier("book-xp-\(book.id)")
             }

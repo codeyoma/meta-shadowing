@@ -1,17 +1,29 @@
 import SwiftUI
 
+/// Brand roles from the asset catalog. Each color defines light, dark and
+/// Increase Contrast appearances; interactive tint comes from AccentColor.
 enum BrandStyle {
-    static let yellow = Color(red: 1, green: 200.0 / 255, blue: 0)
-    static let orange = Color(red: 1, green: 150.0 / 255, blue: 0)
-    static let ink = Color(red: 4.0 / 255, green: 44.0 / 255, blue: 96.0 / 255)
-    static let green = Color(red: 88.0 / 255, green: 204.0 / 255, blue: 2.0 / 255)
+    /// Bee yellow: the primary-action fill, XP and reward surfaces.
+    static let yellow = Color(.brandYellow)
+    /// Navy ink: drawn only on Bee yellow fills.
+    static let ink = Color(.brandInk)
+    /// Completion strokes and fills that must stay visible on grouped surfaces.
+    static let green = Color(.brandGreen)
 }
-struct LearningActionStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var enabled
+
+/// The single primary action on a surface: Bee yellow fill, navy label.
+/// Pressed and disabled states come from the system prominent style.
+struct PrimaryActionButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.frame(maxWidth: .infinity, minHeight: 44)
+        Button(configuration)
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(BrandStyle.yellow)
             .foregroundStyle(BrandStyle.ink)
-            .background(configuration.isPressed ? BrandStyle.orange : BrandStyle.yellow, in: .rect(cornerRadius: 12))
-            .opacity(enabled ? 1 : 0.45)
     }
+}
+
+extension PrimitiveButtonStyle where Self == PrimaryActionButtonStyle {
+    static var primaryAction: PrimaryActionButtonStyle { PrimaryActionButtonStyle() }
 }

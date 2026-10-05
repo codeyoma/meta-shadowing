@@ -17,8 +17,8 @@ struct BookDownloadActions: View {
                         .accessibilityLabel("다운로드 취소").frame(minWidth: 44, minHeight: 44)
                 }
             } else if summary.available {
-                Button(action: select) { Image(systemName: "play.fill") }
-                    .buttonStyle(LearningActionStyle()).accessibilityLabel("\(summary.book.title) 스테이지 선택")
+                Button(action: select) { Image(systemName: "play.fill").frame(maxWidth: .infinity) }
+                    .buttonStyle(.primaryAction).accessibilityLabel("\(summary.book.title) 스테이지 선택")
                     .accessibilityIdentifier("book-\(summary.id)")
                 Menu {
                     Button("다운로드 삭제", role: .destructive) { removal = services.confirmation(.removeDownload(download.key)) }

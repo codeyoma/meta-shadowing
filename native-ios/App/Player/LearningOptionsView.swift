@@ -57,7 +57,7 @@ struct LearningOptionsView: View {
                 }.buttonStyle(.bordered)
                 Button { flow.dismissOptions() } label: {
                     Text("학습 이어하기").frame(maxWidth: .infinity, minHeight: 44)
-                }.buttonStyle(.borderedProminent)
+                }.buttonStyle(.primaryAction)
             }.padding().frame(maxWidth: .infinity).background(.bar)
         }
         .presentationDragIndicator(.visible)

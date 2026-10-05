@@ -52,7 +52,7 @@ struct ProductTabsView: View {
                         NavigationStack { SettingsView(model: model, services: services, changingProfile: profiles?.changing == true) }
                     }
                 }.sensoryFeedback(.impact(weight: .light), trigger: tab)
-            }.tint(.primary)
+            }
                 .background { if let services { ServiceRetryConfirmationView(services: services) } }
                 .accessibilityHidden(learningRoute != nil)
                 .fullScreenCover(item: $learningRoute) { route in LearningPlayerView(route: route, model: model, profiles: profiles) }
