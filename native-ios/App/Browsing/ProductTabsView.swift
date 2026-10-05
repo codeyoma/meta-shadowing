@@ -70,7 +70,7 @@ private struct ServiceRetryConfirmationView: View {
             switch request.action {
             case .deleteCloud: Text("현재 iCloud 계정과 이 기기의 해당 프로필 학습 기록을 삭제합니다. 자동 동기화는 꺼집니다.")
             case .removeLocal: Text("현재 프로필의 기기 학습 기록만 삭제합니다. iCloud 기록과 다운로드한 도서는 남습니다. 자동 동기화는 꺼집니다.")
-            default: Text("선택한 도서의 다운로드만 삭제합니다. 학습 기록과 구매 내역은 남습니다.")
+            default: Text("선택한 도서의 다운로드만 삭제합니다. 학습 기록은 남습니다.")
             }
         }
     }

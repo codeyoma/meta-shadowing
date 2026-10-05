@@ -58,7 +58,8 @@ struct MetaShadowingApp: App {
                 let sample = Bundle.main.bundleURL.appending(path: "sample")
                 let fixture = try ServiceTestAssets.package(root: sample)
                 packages = [fixture.0]; books = [fixture.1]
-                assetSource = { _ in ServiceTestAssets(root: sample) }
+                let offline = arguments.contains("--ui-test-services-offline")
+                assetSource = { _ in ServiceTestAssets(root: sample, offline: offline) }
             }
             #endif
             let delivery = try ContentDelivery(root: root.appending(path: "content"), packages: packages, transport: assetSource)

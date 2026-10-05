@@ -47,6 +47,8 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+          command -v rg || brew install ripgrep
+          command -v jq || brew install jq
       - name: Test learning domain
         run: swift test --package-path native-ios/Packages/LearningDomain
       - name: Test app foundation
@@ -61,6 +63,8 @@ jobs:
         run: swift test --package-path native-ios/Packages/AppleServices
       - name: Internal video build boundary
         run: swift native-ios/scripts/copy-local-video.swift --self-test
+      - name: Offline acceptance runner failure and isolation contract
+        run: bash native-ios/scripts/test-offline-acceptance-runner.sh
 
   ci-native-test-shards:
     name: Native tests (${{ matrix.shard }})

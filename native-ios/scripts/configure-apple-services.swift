@@ -45,14 +45,16 @@ func serviceConfiguration(info: [String: Any], entitlements: [String: Any], inte
         try require((entitlements["com.apple.developer.icloud-container-identifiers"] as? [String])?.contains(container) == true)
         try require((entitlements["com.apple.developer.icloud-services"] as? [String])?.contains("CloudKit") == true)
         try require(entitlements["com.apple.developer.icloud-container-environment"] as? String == environment)
-        try require(entitlements["aps-environment"] as? String == environment.lowercased())
+        // APNs follows the provisioning profile, not the selected CloudKit database environment.
+        guard let pushEnvironment = entitlements["aps-environment"] as? String,
+              ["development", "production"].contains(pushEnvironment) else { throw ConfigurationFailure.invalid }
         result.info["ProgressCloudConfigured"] = true
         result.info["ProgressCloudContainer"] = container; result.info["ProgressCloudEnvironment"] = environment
         result.info["UIBackgroundModes"] = ["audio", "remote-notification"]
         result.entitlements["com.apple.developer.icloud-container-identifiers"] = [container]
         result.entitlements["com.apple.developer.icloud-services"] = ["CloudKit"]
         result.entitlements["com.apple.developer.icloud-container-environment"] = environment
-        result.entitlements["aps-environment"] = environment.lowercased()
+        result.entitlements["aps-environment"] = pushEnvironment
     }
     return result
 }
@@ -113,6 +115,9 @@ func require(_ condition: @autoclosure () -> Bool) throws {
 func verifyEntitlements(info: [String: Any], actual: [String: Any], role: String) throws {
     if actual["beta-reports-active"] != nil {
         try require(actual["beta-reports-active"] as? Bool == true && actual["get-task-allow"] as? Bool == false)
+        if role == "app", info["ProgressCloudConfigured"] as? Bool == true {
+            try require(actual["aps-environment"] as? String == "production")
+        }
     }
     let identities: Set<String> = ["application-identifier", "com.apple.developer.team-identifier", "get-task-allow", "com.apple.security.get-task-allow", "beta-reports-active"]
     let serviceValues = actual.filter { !identities.contains($0.key) }
@@ -156,6 +161,35 @@ func selfTest(output: URL? = nil) throws {
     betaAuthority["get-task-allow"] = false
     betaAuthority["beta-reports-active"] = true
     try verifyEntitlements(info: betaInfo, actual: betaAuthority, role: "app")
+    // Device development signing may use sandbox APNs with the existing production CloudKit namespace.
+    var productionDeviceAuthority = betaAuthority
+    productionDeviceAuthority.removeValue(forKey: "beta-reports-active")
+    productionDeviceAuthority["get-task-allow"] = true
+    productionDeviceAuthority["aps-environment"] = "development"
+    try verifyEntitlements(info: betaInfo, actual: productionDeviceAuthority, role: "app")
+    let productionDevice = try serviceConfiguration(info: betaInfo, entitlements: productionDeviceAuthority, internalContent: false)
+    try require(productionDevice.info["ProgressCloudEnvironment"] as? String == "Production")
+    try require(productionDevice.entitlements["aps-environment"] as? String == "development")
+    for invalidPush: Any in ["", "Production", "staging", true] {
+        var invalid = productionDeviceAuthority
+        invalid["aps-environment"] = invalidPush
+        do {
+            try verifyEntitlements(info: betaInfo, actual: invalid, role: "app")
+            throw NSError(domain: "ExpectedPushEnvironmentRejection", code: 1)
+        } catch ConfigurationFailure.invalid { }
+    }
+    var mismatchedCloud = productionDeviceAuthority
+    mismatchedCloud["com.apple.developer.icloud-container-environment"] = "Development"
+    do {
+        try verifyEntitlements(info: betaInfo, actual: mismatchedCloud, role: "app")
+        throw NSError(domain: "ExpectedCloudEnvironmentRejection", code: 1)
+    } catch ConfigurationFailure.invalid { }
+    var sandboxBeta = betaAuthority
+    sandboxBeta["aps-environment"] = "development"
+    do {
+        try verifyEntitlements(info: betaInfo, actual: sandboxBeta, role: "app")
+        throw NSError(domain: "ExpectedSandboxBetaRejection", code: 1)
+    } catch ConfigurationFailure.invalid { }
     try verifyEntitlements(info: info, actual: ["com.apple.security.application-groups": [group],
         "get-task-allow": false, "beta-reports-active": true], role: "extension")
     for invalidFlag: Any in [false, "true"] {

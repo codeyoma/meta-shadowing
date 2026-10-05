@@ -18,6 +18,13 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(app.buttons["데이터 관리"].exists)
         XCTAssertFalse(app.buttons["구매 복원"].exists)
         XCTAssertFalse(app.buttons["restore-purchases"].exists)
+        app.buttons["데이터 관리"].tap()
+        let downloadHelp = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "다운로드 삭제는")).firstMatch
+        XCTAssertTrue(downloadHelp.waitForExistence(timeout: 5), "Data management must explain the download/history boundary")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "구매")).firstMatch.exists,
+                       "The free app must not imply retained purchase records")
+        XCTAssertTrue(app.buttons["remove-local-history"].exists)
+        XCTAssertTrue(app.buttons["delete-cloud-history"].exists)
     }
     @MainActor func testServiceConfirmationsInLightAndDarkAtLargestText() {
         continueAfterFailure = false

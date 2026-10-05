@@ -99,6 +99,9 @@ xcodebuild -project native-ios/MetaShadowingNative.xcodeproj \
 
 bash native-ios/scripts/verify-native-product.sh \
   native-ios/DerivedData/Build/Products/Release-iphonesimulator/MetaShadowingNative.app
+
+bash native-ios/scripts/test-native-runtime-inspection.sh \
+  native-ios/DerivedData/Build/Products/Release-iphonesimulator/MetaShadowingNative.app
 ```
 
 XcodeBuildMCP can run the same scheme with the dedicated simulator selected.
@@ -125,6 +128,11 @@ signed entitlements. App Store beta identity metadata is accepted only for a
 non-debuggable signed product; service capabilities still match exactly.
 This is a local W2 guard, not an
 App Store security review or evidence of later service functionality.
+
+The runtime-inspection regression copies a built Release app into a disposable
+export-named directory, then verifies that a real forbidden Mach-O dependency is
+rejected. It does not install the copied app, alter the original build or weaken
+the no-JavaScript guard. Its C fixtures are outside the app's source/resources.
 
 ## Debug download and local recovery lab
 
@@ -166,6 +174,47 @@ and the existing built-product guard.
 These checks do not prove an OS-owned Apple-hosted transfer was interrupted or
 that a real CloudKit reset converges across devices. Record those live results
 separately, even when every lab check passes.
+
+## Repeatable controlled-offline acceptance
+
+With exactly one dedicated `MetaShadowing Native ...` iOS 27 simulator already
+booted, run from the worktree root:
+
+```sh
+bash native-ios/scripts/test-offline-acceptance.sh
+```
+
+If multiple dedicated simulators are booted, pass `--simulator-id` with the ID
+of the intended iOS 27 device. The command refuses an older runtime, a reference
+simulator, an unresolved destination or a physical device. It does not boot,
+erase, delete or change network settings. It generates the fictional CI project
+without reading or overwriting `Local.xcconfig`; generated project files remain
+ignored. Results and private diagnostics are retained in a new temporary directory.
+
+The command runs all six Swift package suites, the controlled-offline UI journeys,
+all reference UI journeys and the complete native media/lifecycle integration
+target. That includes microphone policy/recovery tests and the actual AVAudioEngine
+gain graph rendered from generated signals, not recorded microphone audio.
+Success requires a nonempty finalized result, no failure or skip, and actual cases
+from each selected group. The runner's failure/isolation regression also runs in
+`ci-quality`; the new UI tests automatically enter the existing `remaining` shard.
+Required check names and release approval are unchanged.
+
+`--ui-test-services-offline` is Debug-only and works only with `--ui-test-services`
+inside a valid UUID-scoped product-test profile. It makes external asset acquisition
+and source reads throw `notConnectedToInternet`, while installed files use the normal
+validated catalog and native player. UI tests first download through the controlled
+transport and explicitly confirm one cycle in that disposable profile. They then
+relaunch with acquisition unavailable, verify the saved cycle/preferences and
+local source navigation, and require menu dismissal/relaunch to add no credit or
+implicit playback. Removing the fixture download must make offline re-acquisition
+fail; a later explicit online retry restores materials without changing history.
+The normal bundled book remains usable after an acquisition failure.
+
+These are deterministic application-boundary tests, not proof of physical Airplane
+Mode, Apple-server transfer or perceived headset sound/haptics. The Apple dictionary
+tests verify presentation/ownership, not availability or contents of OS definitions.
+No live account, cloud database, real profile or installed phone app is used.
 
 ## Hosted Swift CI
 

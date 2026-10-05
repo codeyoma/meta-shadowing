@@ -15,7 +15,7 @@ struct DataManagementView: View {
                     .disabled(services.syncState.account.scope == nil)
             }.disabled(services.actionBusy || services.syncState.busy || services.syncState.resetPending)
             Section {
-                Text("다운로드 삭제는 도서 카드의 메뉴에서 할 수 있어요. 학습 기록과 구매 내역은 그대로 남습니다.")
+                Text("다운로드 삭제는 도서 카드의 메뉴에서 할 수 있어요. 학습 기록은 그대로 남습니다.")
                 ServiceStatusView(services: services)
             }
         }.navigationTitle("데이터 관리")

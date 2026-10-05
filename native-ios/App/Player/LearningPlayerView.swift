@@ -26,7 +26,7 @@ struct LearningPlayerView: View {
                 if flow.accessInvalidated {
                     ContentUnavailableView {
                         Label("도서 이용 상태가 변경되었어요", systemImage: "lock")
-                    } description: { Text("도서 목록에서 구매와 다운로드 상태를 다시 확인해 주세요.") } actions: {
+                    } description: { Text("도서 목록에서 다운로드 상태를 다시 확인해 주세요.") } actions: {
                         Button("스테이지로 돌아가기") { Task { await exit() } }
                     }
                 } else if let runtime = flow.runtime {
