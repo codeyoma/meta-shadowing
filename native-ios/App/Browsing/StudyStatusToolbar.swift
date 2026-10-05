@@ -1,0 +1,101 @@
+import AppFoundation
+import LearningDomain
+import SwiftUI
+
+enum StudyLanguage: String, CaseIterable, Identifiable {
+    case english, japanese, chinese, german, spanish, french
+    var id: String { rawValue }
+    var title: String { switch self {
+    case .english: String(localized: "영어"); case .japanese: String(localized: "일본어"); case .chinese: String(localized: "중국어")
+    case .german: String(localized: "독일어"); case .spanish: String(localized: "스페인어"); case .french: String(localized: "프랑스어")
+    } }
+}
+
+/// Language, level/XP and streak for the browsing screens' navigation bars.
+struct StudyStatusToolbar: ToolbarContent {
+    let language: StudyLanguage
+    let progress: LanguageStudyProgress
+    let disabled: Bool
+    let select: (StudyLanguage) -> Void
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Menu {
+                Picker("학습 언어", selection: Binding(get: { language }, set: { if $0 != language { select($0) } })) {
+                    ForEach(StudyLanguage.allCases) { Text($0.title).tag($0) }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(language.title)
+                    Image(systemName: "chevron.down").font(.caption.bold()).accessibilityHidden(true)
+                }
+            }
+            .disabled(disabled)
+            .accessibilityLabel("학습 언어, \(language.title)")
+            .accessibilityIdentifier("language-menu")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            StudyStatusView(progress: progress)
+        }.sharedBackgroundVisibility(.hidden)
+    }
+}
+
+private struct StudyStatusView: View {
+    let progress: LanguageStudyProgress
+    var body: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 2) {
+                Image(systemName: "flame.fill").foregroundStyle(progress.streak > 0 ? .orange : .secondary)
+                Text(progress.streak, format: .number).monospacedDigit()
+            }.font(.subheadline.bold())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("연속 학습 \(progress.streak)일")
+            VStack(alignment: .trailing, spacing: 0) {
+                Text("Lv. \(progress.level.level)").font(.caption.bold())
+                Text(progress.level.maxLevel ? "MAX" : "\(progress.level.current) / \(progress.level.required) XP")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("header-xp")
+            }.monospacedDigit().fixedSize()
+        }
+        .accessibilityShowsLargeContentViewer {
+            Label("Lv. \(progress.level.level) · \(progress.level.current) / \(progress.level.required) XP · \(progress.streak)",
+                  systemImage: "flame.fill")
+        }
+    }
+}
+
+/// Actionable recovery for failed saves and service operations, inline on each
+/// browsing screen. It never moves the tab bar and stays silent on success.
+struct BrowsingRecoveryBar: ViewModifier {
+    let model: ProductModel
+    let services: ProductServicesModel?
+    func body(content: Content) -> some View {
+        content.safeAreaBar(edge: .top) {
+            if model.failed || services?.error != nil {
+                VStack(spacing: 8) {
+                    if model.failed {
+                        notice("변경을 저장하지 못했어요.") { Task { await model.retry() } }
+                    }
+                    if let services, services.error != nil {
+                        notice("서비스 작업을 완료하지 못했어요.") { Task { await services.retrySync() } }
+                            .disabled(services.actionBusy || services.syncState.busy)
+                    }
+                }.padding(.horizontal).padding(.bottom, 8)
+            }
+        }
+    }
+    private func notice(_ message: LocalizedStringKey, retry: @escaping () -> Void) -> some View {
+        HStack {
+            Label(message, systemImage: "exclamationmark.triangle.fill").font(.subheadline)
+                .symbolRenderingMode(.multicolor)
+            Spacer(minLength: 8)
+            Button("다시 시도", action: retry).buttonStyle(.bordered).buttonBorderShape(.capsule)
+        }.padding(12).glassEffect(.regular, in: .rect(cornerRadius: 16))
+            .accessibilityElement(children: .contain)
+    }
+}
+
+extension View {
+    func browsingRecovery(model: ProductModel, services: ProductServicesModel?) -> some View {
+        modifier(BrowsingRecoveryBar(model: model, services: services))
+    }
+}

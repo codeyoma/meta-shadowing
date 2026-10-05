@@ -32,9 +32,6 @@
     "%@의 다운로드만 삭제합니다. 학습 기록은 남습니다." : {
 
     },
-    "%lld" : {
-
-    },
     "%lld / %lld XP" : {
       "localizations" : {
         "ko" : {
@@ -146,6 +143,16 @@
     },
     "Lv. %lld" : {
 
+    },
+    "Lv. %lld · %lld / %lld XP · %lld" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Lv. %1$lld · %2$lld / %3$lld XP · %4$lld"
+          }
+        }
+      }
     },
     "MAX" : {
 
@@ -873,6 +880,9 @@
 
     },
     "학습 안내" : {
+
+    },
+    "학습 언어" : {
 
     },
     "학습 언어, %@" : {
