@@ -6,6 +6,8 @@ import Foundation
 /// Public bundled bytes behind the normal download boundary; no Apple-hosted request.
 nonisolated struct ServiceTestAssets: AssetDelivery {
     let root: URL
+    let offline: Bool
+    init(root: URL, offline: Bool = false) { self.root = root; self.offline = offline }
     static func package(root: URL) throws -> (HostedPackage, CatalogBook) {
         struct Specification: Decodable { let key: String; let metadata: DeliveryPackage.Entry }
         struct Manifest: Decodable { let phrases: [DeliveryPackage.Entry] }
@@ -19,10 +21,14 @@ nonisolated struct ServiceTestAssets: AssetDelivery {
                       title: "Morning Notes · Download fixture", sentenceCount: parsed.phrases.count))
     }
     func download(progress: @escaping AssetDeliveryProgress) async throws {
+        guard !offline else { throw URLError(.notConnectedToInternet) }
         await progress(0.5)
         try await Task.sleep(for: .milliseconds(300))
         await progress(1)
     }
-    func contents(_ file: String) throws -> Data { try Data(contentsOf: root.appendingPathComponent(file), options: .mappedIfSafe) }
+    func contents(_ file: String) throws -> Data {
+        guard !offline else { throw URLError(.notConnectedToInternet) }
+        return try Data(contentsOf: root.appendingPathComponent(file), options: .mappedIfSafe)
+    }
 }
 #endif

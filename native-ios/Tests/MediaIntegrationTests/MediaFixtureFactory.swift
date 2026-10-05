@@ -52,7 +52,9 @@ enum MediaFixtureFactory {
     static func root() throws -> URL {
         let root = URL.temporaryDirectory.appending(path: "native-media-fixture-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        return root
+        // iOS temporary directories may use an alias that missing fixture files cannot resolve.
+        // Canonicalize the existing parent before deriving unmaterialized media references.
+        return root.standardizedFileURL.resolvingSymlinksInPath()
     }
 
     static func tone(in root: URL, name: String = "tone", duration: Double = 0.25, compressed: Bool = false) throws -> URL {

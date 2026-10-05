@@ -92,8 +92,14 @@ filesystem fixtures to verify installation, analysis association and cleanup.
 
 Configured hosted delivery adds an ExtensionKit downloader and the exact shared App Group to the
 app and extension. This follows Apple's [Apple-hosted asset-pack setup](https://developer.apple.com/documentation/backgroundassets/downloading-apple-hosted-asset-packs).
-Configured CloudKit allows only the selected container, environment, CloudKit service and matching
-push environment. Product guards reject extra service entitlements; they do not use a broad allow-list.
+Configured CloudKit allows only the selected container, environment and CloudKit service.
+The CloudKit entitlement must match the configured database environment. APNs is validated
+separately as `development` or `production` and its provisioning value is preserved:
+development signing can use sandbox APNs while retaining an existing Production CloudKit
+namespace. Apple's [APNs entitlement documentation](https://developer.apple.com/documentation/bundleresources/entitlements/aps-environment)
+defines this signing dependency; it is not a reason to change the learning profile or cloud environment.
+CloudKit-enabled beta app signing still requires production APNs. Product guards reject extra
+service entitlements; they do not use a broad allow-list.
 Generating configuration or building the fictional extension contacts no account or cloud database.
 
 Distribution signing adds Apple's `beta-reports-active` identity flag. The product

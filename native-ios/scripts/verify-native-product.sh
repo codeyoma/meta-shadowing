@@ -51,7 +51,8 @@ while IFS= read -r -d '' artifact; do
     fi
     if file -b "$artifact" | grep -q 'Mach-O'; then
         native_binaries=$((native_binaries + 1))
-        dependencies=$(otool -L "$artifact")
+        # otool's unindented binary header is a path, not a linked dependency.
+        dependencies=$(otool -L "$artifact" | sed -n '/^[[:space:]]/p')
         symbols=$(nm -u "$artifact")
         if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-|media-probe-video|SyntheticLearningProbe|ProductTestCatalog|ProductTestStore|ServiceTestAssets|ServiceTestCloud|DeveloperToolsView|DeveloperDownload|DeveloperAnalysis' >/dev/null; then
             echo 'Debug probe code leaked into Release' >&2; exit 1

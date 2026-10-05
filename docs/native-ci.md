@@ -249,6 +249,23 @@ TestFlight or submit an App Store release. Feature PRs target `dev`.
 
 ## Coverage limits
 
+The #108 controlled-offline acceptance journeys run in the existing `remaining`
+shard. A Debug-only transport failure is enabled only in UUID-isolated product
+profiles. Tests retain real validation, installation, SQLite and native playback;
+they verify offline relaunch, saved cycles/preferences, local source navigation,
+no implicit confirmation and explicit recovery after failed re-acquisition.
+Package tests reconstruct the installed syntax catalog without any delivery
+transport. Existing reference UI, monitoring policy and native AVAudioEngine gain
+tests remain part of the same complete checks, not replaced by the new journey.
+
+`native-ios/scripts/test-offline-acceptance.sh` runs the repeatable local subset
+plus all six complete package suites on an already booted dedicated iOS 27
+simulator. Its runner regression executes in `ci-quality` and rejects package/build
+failure, missing/empty results, skipped tests, missing selected groups and an older
+or unresolved destination. Controlled external-service failure is not physical
+radio-off, Apple-server delivery, dictionary-definition or perceived-microphone
+acceptance. The runner never changes radios, accounts or a physical installation.
+
 The current Swift app includes the migrated learning/storage, media/feedback,
 product UI, reference tools, hosted delivery and optional private recovery boundaries.
 Green Swift CI proves only the implemented package/app boundaries. It no longer

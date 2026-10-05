@@ -85,6 +85,23 @@ struct InstalledProductCatalogTests {
         let opened = try await workspace.openLesson(packageKey: book.id, stage: 1, verifiedTestAccess: false)
         #expect(try await workspace.readAnalysis(AnalysisRequest(state: opened.initial)).map(\.text) == ["Hello"])
         await opened.controller.deactivate()
+        let before = try await workspace.load()
+        // Reconstruct every owner without a delivery transport. References must
+        // come from the validated installation, not the original source adapter.
+        let coldDelivery = try ContentDelivery(root: root.appendingPathComponent("installed"),
+            packages: configuration.packages, transport: { _ in nil })
+        let coldCatalog = InstalledProductCatalog(bundled: EmptyInstalledCatalog(), delivery: coldDelivery,
+            listings: configuration.books)
+        let coldWorkspace = ProductWorkspace(store: SQLiteLearningStore(root: root.appendingPathComponent("learning")),
+            catalog: coldCatalog, profileID: "local")
+        #expect(try await coldWorkspace.load() == before)
+        try await coldDelivery.download(packageKey: book.id)
+        let restored = try await coldWorkspace.openLesson(packageKey: book.id, stage: 1, verifiedTestAccess: false)
+        #expect(!restored.initial.snapshot.session.running)
+        #expect(restored.initial.snapshot.progress.xp == 0)
+        #expect(try await coldWorkspace.readAnalysis(AnalysisRequest(state: restored.initial)).map(\.text) == ["Hello"])
+        #expect(try await coldWorkspace.load() == before)
+        await restored.controller.deactivate()
         try await delivery.remove(packageKey: book.id)
         #expect(await !catalog.permitsPractice(packageKey: book.id))
         #expect(try Data(contentsOf: source.appendingPathComponent("video/source.mp4")) == video)
