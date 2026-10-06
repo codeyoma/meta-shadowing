@@ -187,6 +187,10 @@ The light accent is Bee yellow deepened so tinted text keeps at least 4.5:1 cont
 
 Surfaces, text and separators use system semantic colors, such as the grouped backgrounds and the primary and secondary label styles. Views never hard-code brand values and never switch colors on the color scheme by hand.
 
+### Swift app icon
+
+The Swift app uses a layered Icon Composer icon. The owner's original mascot sits on the Bee yellow-to-orange gradient, with a warm near-black fill for the dark appearance. The system renders the clear and tinted appearances from the same layers. `assets/brand/README.md` records each layer's provenance.
+
 ### Swift button hierarchy
 
 - **Primary:** at most one per surface. It uses the system prominent bordered style with a capsule shape, a large control size, a BrandYellow fill and a BrandInk label. The system supplies pressed and disabled states.
