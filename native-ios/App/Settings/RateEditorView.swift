@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// The shared playback-speed control: a native slider in quarter steps with
+/// system tick marks at 0.25×, 1×, 2× and 3× and the live rate on the right.
 struct RateEditorView: View {
     let rate: Double
     let change: (Double) -> Void
@@ -10,22 +12,17 @@ struct RateEditorView: View {
     var body: some View {
         Section("배속") {
             HStack {
-                Slider(value: $draft, in: 0.25...3, step: 0.25) { editing in
-                    if !editing { change(draft) }
-                }.accessibilityLabel("재생 속도")
-                    .overlay(alignment: .bottom) { markers.offset(y: 8) }
+                // Stepped sliders draw a tick at every step; explicit ticks keep only the four marks.
+                Slider(value: Binding(get: { draft }, set: { draft = Self.quarterStep($0) }), in: 0.25...3,
+                       label: { Text("재생 속도") },
+                       ticks: { SliderTick(0.25); SliderTick(1.0); SliderTick(2.0); SliderTick(3.0) },
+                       onEditingChanged: { editing in if !editing { change(draft) } })
+                    .accessibilityValue(Text("\(draft.formatted())×"))
                 Text("\(draft.formatted())×").monospacedDigit().frame(minWidth: 45)
-            }.padding(.bottom, 8)
+            }
         }.onChange(of: rate) { _, value in draft = value }
     }
-    private var markers: some View {
-        GeometryReader { geometry in
-            ForEach([0.25, 1, 2, 3], id: \.self) { value in
-                Circle().fill(.secondary).frame(width: 4, height: 4)
-                    .position(x: geometry.size.width * (value - 0.25) / 2.75, y: 2)
-            }
-        }
-        .frame(height: 4).padding(.horizontal, 14)
-        .accessibilityHidden(true).allowsHitTesting(false)
+    static func quarterStep(_ value: Double) -> Double {
+        min(3, max(0.25, (value * 4).rounded() / 4))
     }
 }

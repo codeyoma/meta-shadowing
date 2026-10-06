@@ -27,7 +27,7 @@ struct CloudSyncView: View {
             }
         }.navigationTitle("iCloud 동기화")
             .confirmationDialog("현재 iCloud 계정의 기록을 합칠까요?", item: $confirmation, titleVisibility: .visible) { request in
-                Button("계속") { Task { await services.perform(request) } }
+                Button(confirmTitle(request.action)) { Task { await services.perform(request) } }
                 Button("취소", role: .cancel) { }
             } message: { request in
                 switch request.action {
@@ -36,6 +36,13 @@ struct CloudSyncView: View {
                 default: Text("현재 계정 기록을 한 번 합칩니다. 자동 동기화 설정은 바뀌지 않습니다.")
                 }
             }
+    }
+    private func confirmTitle(_ action: ServiceAction) -> String {
+        switch action {
+        case .enable(importGuest: true): String(localized: "합치고 동기화 켜기")
+        case .enable: String(localized: "복원하고 동기화 켜기")
+        default: String(localized: "지금 합치기")
+        }
     }
     private var accountStatus: String {
         switch services.syncState.account {

@@ -90,9 +90,11 @@ final class ProductUITests: XCTestCase {
         XCTAssertTrue(typography.waitForExistence(timeout: 5))
         guard typography.exists else { return }
         typography.tap()
-        app.buttons["original-size-plus"].tap()
+        let stepper = app.steppers["original-size-stepper"]
+        XCTAssertTrue(stepper.waitForExistence(timeout: 5))
+        stepper.buttons.element(boundBy: 1).tap() // Increment follows decrement.
         XCTAssertEqual(app.textFields["original-size"].value as? String, "21")
-        XCTAssertTrue(app.buttons["original-size-plus"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        XCTAssertTrue(stepper.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].wait(for: \.isHittable, toEqual: true, timeout: 10))
