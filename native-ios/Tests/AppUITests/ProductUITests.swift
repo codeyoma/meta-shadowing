@@ -43,8 +43,8 @@ final class ProductUITests: XCTestCase {
         let names = ["자막 쉐도잉", "자막 쉐도잉", "무자막 쉐도잉", "다구간 쉐도잉",
                      "다구간 무자막", "속사포 영한", "속사포 한영", "속사포 한글"]
         for stage in 1...16 {
-            XCTAssertEqual(app.buttons["stage-\(stage)"].label,
-                           "Stage \(stage), \(names[(stage - 1) / 2]), 완료 0/3")
+            XCTAssertEqual(app.buttons["stage-\(stage)"].label, "스테이지 \(stage), \(names[(stage - 1) / 2])")
+            XCTAssertEqual(app.buttons["stage-\(stage)"].value as? String, "완료 0/3")
         }
         let stage = app.buttons["stage-3"]
         for _ in 0..<5 where !stage.isHittable { app.swipeUp() }
