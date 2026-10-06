@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 final class ReferenceToolsUITests: XCTestCase {
@@ -82,9 +83,15 @@ final class ReferenceToolsUITests: XCTestCase {
             scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25))
                 .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.75)))
         }
-        XCTAssertTrue(copy.isHittable); copy.tap()
-        // The confirmation lasts 1.5 seconds; a full-hierarchy wait at this text size can miss it.
-        XCTAssertEqual(copy.label, "복사됨")
+        XCTAssertTrue(copy.isHittable)
+        // The visible confirmation lasts 1.5 seconds, which a largest-text snapshot can
+        // outlast on slower hosts. The pasteboard change count proves the copy without
+        // reading its contents or prompting for paste access.
+        let changeCount = UIPasteboard.general.changeCount
+        copy.tap()
+        let copied = expectation(for: NSPredicate { _, _ in UIPasteboard.general.changeCount > changeCount },
+                                 evaluatedWith: nil)
+        wait(for: [copied], timeout: 5)
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "Reference graph at largest Dynamic Type"
         evidence.lifetime = .keepAlways
