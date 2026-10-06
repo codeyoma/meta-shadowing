@@ -78,7 +78,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertEqual(active.label, "현재 S1 · 150 WPM", "Saving a preset must not change the active run")
         level.tap()
         XCTAssertTrue(active.wait(for: \.label, toEqual: "현재 S1 · 175 WPM", timeout: 5))
-        app.buttons["학습 이어하기"].tap()
+        app.buttons["options-close"].tap()
         app.buttons["player-exit"].tap()
         XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
@@ -103,7 +103,7 @@ final class PlayerUITests: XCTestCase {
         for _ in 0..<5 where !rewards.isHittable { app.swipeUp() }
         XCTAssertTrue(rewards.isHittable)
         XCTAssertTrue(rewards.label.contains("원본 구간 수"))
-        app.buttons["학습 이어하기"].tap()
+        app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.buttons["player-exit"].tap()
         XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
@@ -136,27 +136,26 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
 
-    @MainActor func testStageExitStaysFixedAcrossOptionsAndLargeText() {
+    @MainActor func testOptionsSheetHasOneCloseAndAListExit() {
         continueAfterFailure = false
         for largeText in [false, true] {
             let extra = largeText ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] : []
             let app = fixture(stage: 1, mode: "audio", extra: extra)
             XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10), "Player options unavailable; largeText=\(largeText)")
             app.buttons["player-options"].tap()
-            let leave = app.buttons["스테이지로 돌아가기"]
-            XCTAssertTrue(leave.wait(for: \.isHittable, toEqual: true, timeout: 5), "Stage exit must be visible without scrolling")
-            let footerY = leave.frame.midY
-            app.swipeUp()
-            XCTAssertTrue(leave.isHittable, "Stage exit became inaccessible after scrolling; largeText=\(largeText), optionsVisible=\(app.buttons["options-close"].exists), exitExists=\(leave.exists)")
-            XCTAssertEqual(leave.frame.midY, footerY, accuracy: 1)
-            app.swipeDown()
+            let close = app.buttons["options-close"]
+            XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: 5), "Options need a close control; largeText=\(largeText)")
+            XCTAssertEqual(app.buttons.matching(identifier: "options-close").count, 1, "Each page has one dismiss control")
             let rate = app.buttons["배속"]
-            XCTAssertTrue(rate.wait(for: \.isHittable, toEqual: true, timeout: 5), "Rate row inaccessible after returning to the top; largeText=\(largeText), optionsVisible=\(app.buttons["options-close"].exists), playerVisible=\(app.buttons["player-options"].exists)")
+            XCTAssertTrue(rate.wait(for: \.isHittable, toEqual: true, timeout: 5), "Rate row inaccessible; largeText=\(largeText)")
             rate.tap()
             XCTAssertTrue(app.sliders["재생 속도"].waitForExistence(timeout: 5), "Rate destination unavailable; largeText=\(largeText)")
-            XCTAssertTrue(leave.isHittable, "Nested options must keep the fixed stage-exit action")
-            XCTAssertEqual(leave.frame.midY, footerY, accuracy: 1)
-            XCTAssertTrue(app.buttons["학습 이어하기"].isHittable, "Resume action inaccessible in nested options; largeText=\(largeText), optionsVisible=\(app.buttons["options-close"].exists)")
+            XCTAssertTrue(close.isHittable, "Nested options keep the single close control; largeText=\(largeText)")
+            let leave = app.buttons["options-exit"]
+            XCTAssertFalse(leave.exists && leave.isHittable, "The stage exit belongs to the options list, not a fixed footer")
+            app.navigationBars["배속"].buttons["BackButton"].tap()
+            for _ in 0..<6 where !leave.isHittable { app.swipeUp() }
+            XCTAssertTrue(leave.isHittable, "Stage exit must be reachable in the options list; largeText=\(largeText)")
             leave.tap()
             XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5), "Stage exit did not return to stages; largeText=\(largeText)")
             XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5), "Opening and leaving options changed XP; largeText=\(largeText)")

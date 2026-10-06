@@ -23,11 +23,6 @@ struct AnalysisBrowserView: View {
             } else { ProgressView("문장 분석 로딩 중") }
         }
         .navigationTitle("문장 분석")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("닫기") { flow.dismissOptions() }.accessibilityIdentifier("options-close")
-            }
-        }
         .task { if flow.analysis == nil { await flow.loadAnalysis() } }
     }
 }

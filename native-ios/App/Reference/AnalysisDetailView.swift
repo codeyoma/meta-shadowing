@@ -24,8 +24,8 @@ struct AnalysisDetailView: View {
         }
         .navigationTitle("문장 관계")
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("닫기") { flow.dismissOptions() }.accessibilityIdentifier("options-close")
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .close) { flow.dismissOptions() }.accessibilityIdentifier("options-close")
             }
         }
         .background { DictionaryHost(presenter: flow.analysisPresenter).frame(width: 0, height: 0) }

@@ -83,7 +83,8 @@ final class ReferenceToolsUITests: XCTestCase {
                 .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.75)))
         }
         XCTAssertTrue(copy.isHittable); copy.tap()
-        XCTAssertTrue(copy.wait(for: \.label, toEqual: "복사됨", timeout: 5))
+        // The confirmation lasts 1.5 seconds; a full-hierarchy wait at this text size can miss it.
+        XCTAssertEqual(copy.label, "복사됨")
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "Reference graph at largest Dynamic Type"
         evidence.lifetime = .keepAlways
@@ -117,7 +118,7 @@ final class ReferenceToolsUITests: XCTestCase {
         dictionary.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.05)).tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         XCTAssertTrue(token.isSelected)
-        app.buttons["학습 이어하기"].tap()
+        app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.buttons["player-exit"].tap()
         XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))

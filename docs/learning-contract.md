@@ -394,9 +394,13 @@ remain in the native media contract linked above.
   back. It pauses/checkpoints first and offers speed, return, and a Cardinal
   “스테이지로 돌아가기” action. Closing the drawer never automatically resumes.
   The drawer body uses an iOS native stack for menu-to-option push/pop transitions,
-  with platform timing and interactive back swipe. The outer header and bottom
-  actions remain fixed. Reduced Motion uses a fade. Back returns to the menu;
-  close and continue dismiss the entire drawer, including from a nested option.
+  with platform timing and interactive back swipe. Reduced Motion uses a fade.
+  Owner decision 2026-10-06 (#119): the drawer is a resizable sheet with medium
+  and large heights, and nested options open at the large height. Each page has
+  one close control; it and a downward swipe dismiss the entire drawer, including
+  from a nested option. “스테이지로 돌아가기” is an action row in the options list
+  rather than a fixed footer, and there is no separate continue button. A failed
+  save keeps an actionable retry visible on every page. Back returns to the menu.
   A directly opened speed editor returns to the menu without dismissing the sheet.
   The header shows sentence progress and position, not XP. The counter is aligned
   to the right content margin; native text measurement reserves both digit slots
