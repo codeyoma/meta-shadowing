@@ -7,6 +7,8 @@ import SwiftUI
 struct StagePathView: View {
     let summary: BookStudySummary
     let open: (Int) -> Void
+    /// Matches the row symbol so separators start at the title, as in system lists.
+    @ScaledMetric(relativeTo: .body) private var symbolSize = 44
     static var testAccess: Bool {
         #if DEBUG
         true
@@ -30,13 +32,13 @@ struct StagePathView: View {
                     }
                 }.padding(.horizontal, 20)
                 ForEach(1...8, id: \.self) { level in
-                    StageSection(title: "Lv \(level) · \(StageMethod.title(level * 2))") {
+                    StageSection(title: String(localized: "Lv \(level) · \(StageMethod.title(level * 2))")) {
                         ForEach([level * 2 - 1, level * 2], id: \.self) { stage in
                             StageRow(stage: stage, completions: summary.completedRuns[stage, default: 0],
                                 checkpoint: summary.checkpoints[stage],
                                 enabled: summary.available && StageProgress.canOpen(stage: stage,
                                     completedRuns: summary.completedRuns, verifiedTestAccess: Self.testAccess)) { open(stage) }
-                            if stage.isMultiple(of: 2) == false { Divider().padding(.leading, 76) }
+                            if stage.isMultiple(of: 2) == false { Divider().padding(.leading, symbolSize + 32) }
                         }
                     }
                 }

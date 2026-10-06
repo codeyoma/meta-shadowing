@@ -23,6 +23,9 @@
     "%@×" : {
 
     },
+    "%@배속" : {
+
+    },
     "%@의 다운로드만 삭제합니다. 학습 기록은 남습니다." : {
 
     },
@@ -152,15 +155,35 @@
     "Lv %lld" : {
 
     },
-    "Lv. %lld" : {
-
-    },
-    "Lv. %lld · %lld / %lld XP · %lld" : {
+    "Lv %lld · %@" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Lv. %1$lld · %2$lld / %3$lld XP · %4$lld"
+            "value" : "Lv %1$lld · %2$@"
+          }
+        }
+      }
+    },
+    "Lv. %lld" : {
+
+    },
+    "Lv. %lld · %lld / %lld XP · 연속 %lld일" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Lv. %1$lld · %2$lld / %3$lld XP · 연속 %4$lld일"
+          }
+        }
+      }
+    },
+    "Lv. %lld · MAX · 연속 %lld일" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Lv. %1$lld · MAX · 연속 %2$lld일"
           }
         }
       }
@@ -512,6 +535,9 @@
     "번역" : {
 
     },
+    "번역 크기" : {
+
+    },
     "번역 폰트" : {
 
     },
@@ -525,6 +551,9 @@
 
     },
     "분석 자료 열기" : {
+
+    },
+    "사전 닫기" : {
 
     },
     "사전 보기" : {
@@ -664,6 +693,9 @@
 
     },
     "원문 음성은 끝까지 재생되고, 각 문장의 첫 단어만 힌트로 보여요. 번역은 항상 보여요. 자막 보기를 누르면 현재 학습 구간의 원문 전체를 볼 수 있어요." : {
+
+    },
+    "원문 크기" : {
 
     },
     "원문 폰트" : {

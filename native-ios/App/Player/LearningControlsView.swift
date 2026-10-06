@@ -28,6 +28,7 @@ struct LearningControlsView: View {
                     }.buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
                         .accessibilityLabel("두 번 더 연습하기").accessibilityIdentifier("player-repeat")
                         .disabled(!controls.repeatable).frame(maxWidth: 80)
+                        .accessibilityShowsLargeContentViewer()
                 }
                 Button {
                     if let action = runtime.controls.mainAction { Task { _ = await runtime.coordinator.perform(action) } }
@@ -37,8 +38,8 @@ struct LearningControlsView: View {
                 }.accessibilityIdentifier("player-main")
                     .disabled(controls.mainAction == nil)
                     .buttonStyle(.floatingPrimaryAction)
+                    .accessibilityShowsLargeContentViewer()
             }
-            .accessibilityShowsLargeContentViewer()
         }.padding()
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: session.showsThirdCycleChoices)
     }

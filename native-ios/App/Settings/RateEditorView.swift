@@ -17,7 +17,7 @@ struct RateEditorView: View {
                        label: { Text("재생 속도") },
                        ticks: { SliderTick(0.25); SliderTick(1.0); SliderTick(2.0); SliderTick(3.0) },
                        onEditingChanged: { editing in if !editing { change(draft) } })
-                    .accessibilityValue(Text("\(draft.formatted())×"))
+                    .accessibilityValue(Text("\(draft.formatted())배속"))
                 Text("\(draft.formatted())×").monospacedDigit().frame(minWidth: 45)
             }
         }.onChange(of: rate) { _, value in draft = value }

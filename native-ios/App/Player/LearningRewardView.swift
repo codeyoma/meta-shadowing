@@ -35,7 +35,7 @@ struct LearningRewardView: View {
         }
         .allowsHitTesting(false)
         .task {
-            AccessibilityNotification.Announcement(announcement).post()
+            if !announcement.isEmpty { AccessibilityNotification.Announcement(announcement).post() }
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) { raised = true }
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { visible = false }

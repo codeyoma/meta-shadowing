@@ -8,10 +8,9 @@ struct RevealSpeedEditorView: View {
         let displayed = LearningRevealSpeedDraft.normalized(values)
         Section("단어 공개 속도 (WPM)") {
             ForEach(0..<4, id: \.self) { index in
-                let minimum = index == 0 ? 100 : displayed[index - 1] + 50
-                let maximum = index == 0 ? 200 : displayed[index - 1] + 150
-                RevealPresetRow(level: index + 1, value: displayed[index], range: minimum...maximum,
-                                step: index == 0 ? 25 : 50) { value in
+                let bounds = LearningRevealSpeedDraft.editBounds(values, index: index)
+                RevealPresetRow(level: index + 1, value: displayed[index], range: bounds.range,
+                                step: bounds.step) { value in
                     let updated = LearningRevealSpeedDraft.changing(values, index: index, value: value)
                     change(updated)
                     return updated[index]

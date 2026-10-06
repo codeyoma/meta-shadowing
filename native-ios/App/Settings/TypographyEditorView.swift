@@ -13,7 +13,7 @@ struct TypographyEditorView: View {
             Picker("원문 폰트", selection: Binding(get: { value.originalTextFont ?? "system" }, set: { font in
                 var next = value; next.originalTextFont = font; change(next)
             })) { ForEach(fonts, id: \.0) { Text($0.1).tag($0.0) } }
-            TextSizeControl(title: "원문 크기", identifier: "original-size", value: value.originalTextSize ?? 20) { size in
+            TextSizeControl(title: String(localized: "원문 크기"), identifier: "original-size", value: value.originalTextSize ?? 20) { size in
                 var next = value; next.originalTextSize = size; change(next)
             }
         }
@@ -21,7 +21,7 @@ struct TypographyEditorView: View {
             Picker("번역 폰트", selection: Binding(get: { value.translationTextFont ?? "system" }, set: { font in
                 var next = value; next.translationTextFont = font; change(next)
             })) { ForEach(fonts, id: \.0) { Text($0.1).tag($0.0) } }
-            TextSizeControl(title: "번역 크기", identifier: "translation-size", value: value.translationTextSize ?? 18) { size in
+            TextSizeControl(title: String(localized: "번역 크기"), identifier: "translation-size", value: value.translationTextSize ?? 18) { size in
                 var next = value; next.translationTextSize = size; change(next)
             }
         }

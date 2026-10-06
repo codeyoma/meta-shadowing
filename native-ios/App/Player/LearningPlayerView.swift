@@ -130,22 +130,21 @@ private struct PlayerHeaderView: View {
                 HStack {
                     Button { Task { await flow.presentOptions(.guide) } } label: {
                         Text("Lv \((session.plan.scope.stage + 1) / 2)").frame(minWidth: 32)
-                    }
+                    }.accessibilityShowsLargeContentViewer()
                     Spacer()
                     Button {
                         Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate) }
                     } label: {
                         Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
                             .monospacedDigit().frame(minWidth: 32)
-                    }.accessibilityLabel("학습 속도")
+                    }.accessibilityLabel("학습 속도").accessibilityShowsLargeContentViewer()
                     Spacer()
                     Button { Task { await flow.presentOptions(.analysis) } } label: {
                         Image(systemName: "text.magnifyingglass").frame(minWidth: 32)
                     }
-                        .accessibilityLabel("문장 분석")
+                        .accessibilityLabel("문장 분석").accessibilityShowsLargeContentViewer()
                 }
                 .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
-                .accessibilityShowsLargeContentViewer()
             }
         }.padding(.horizontal).padding(.top, 8)
     }

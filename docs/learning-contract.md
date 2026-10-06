@@ -355,9 +355,9 @@ remain in the native media contract linked above.
   saved preference; unfinished sessions retain their checkpoint's speed. The
   player options drawer can explicitly change that paused session's speed without
   changing the phrase, cycle, or saved audio position.
-  All playback-speed editors reuse `PlaybackRateControl`: the “배속”
-  heading, one-line native slider with live rate on the right, and four dots at
-  the 0.25×/1×/2×/3× positions instead of scale labels. The settings heading sits
+  All playback-speed editors reuse one rate control: the “배속”
+  heading, one-line native slider with live rate on the right, and system tick
+  marks at the 0.25×/1×/2×/3× positions instead of scale labels. The settings heading sits
   outside the card. The settings preference and paused-session rate keep their separate
   persistence scopes; sharing the layout must not overwrite either implicitly.
 - Entering the player from a stage (new or restored) and each newly selected

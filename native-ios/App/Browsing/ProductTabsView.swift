@@ -1,13 +1,16 @@
 import AppFoundation
 import SwiftUI
 
+/// A book's stage list pushed inside the Books tab.
+struct BookRoute: Hashable { let id: String }
+
 struct ProductTabsView: View {
     let model: ProductModel
     var profiles: ProductProfileOwner? = nil
     var services: ProductServicesModel? = nil
     @State private var tab = 0
     @State private var learningRoute: LearningRoute?
-    @State private var libraryPath: [String] = []
+    @State private var libraryPath: [BookRoute] = []
     var body: some View {
         if let snapshot = model.snapshot {
             TabView(selection: $tab) {
@@ -16,14 +19,14 @@ struct ProductTabsView: View {
                         LibraryView(snapshot: snapshot, services: services) { book in
                             Task {
                                 await model.select(language: book.book.language, packageKey: book.id)
-                                if !model.failed, libraryPath.last != book.id { libraryPath.append(book.id) }
+                                if !model.failed, libraryPath.last?.id != book.id { libraryPath.append(BookRoute(id: book.id)) }
                             }
                         }.disabled(model.busy || profiles?.changing == true)
                             .toolbar { statusToolbar(snapshot) }
                             .browsingRecovery(model: model, services: services)
-                            .navigationDestination(for: String.self) { id in bookStages(id) }
+                            .navigationDestination(for: BookRoute.self) { route in bookStages(route.id) }
                     }
-                    .onChange(of: snapshot.books.map(\.id)) { _, ids in libraryPath.removeAll { !ids.contains($0) } }
+                    .onChange(of: snapshot.books.map(\.id)) { _, ids in libraryPath.removeAll { !ids.contains($0.id) } }
                 }
                 Tab("스테이지", systemImage: "map", value: 1) {
                     NavigationStack {
@@ -56,6 +59,7 @@ struct ProductTabsView: View {
             StagePathView(summary: book) { learningRoute = LearningRoute(packageKey: book.id, stage: $0) }
                 .disabled(profiles?.changing == true)
                 .toolbar { statusToolbar(snapshot, includesLanguage: false) }
+                .browsingRecovery(model: model, services: services)
         } else {
             ContentUnavailableView("도서를 찾을 수 없어요", systemImage: "book")
         }

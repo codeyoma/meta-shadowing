@@ -1,8 +1,8 @@
 import AppFoundation
 import SwiftUI
 
-/// One tappable book. The artwork and details repeat the primary action for a
-/// larger target; VoiceOver reaches the labeled primary action instead.
+/// One tappable book. Tapping the artwork or details repeats the primary action;
+/// VoiceOver reads the details and reaches that action through its labeled button.
 struct BookCardView: View {
     let summary: BookStudySummary
     var services: ProductServicesModel? = nil
@@ -12,9 +12,9 @@ struct BookCardView: View {
     private var download: DownloadModel? { services?.downloads[summary.id] }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button(action: primaryAction) { details }
-                .buttonStyle(.plain)
-                .accessibilityHidden(true)
+            details
+                .onTapGesture(perform: primaryAction)
+                .accessibilityElement(children: .contain)
             Group {
                 if let services, let download {
                     BookDownloadActions(services: services, download: download, summary: summary,
