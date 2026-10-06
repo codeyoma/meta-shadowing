@@ -189,7 +189,7 @@ Surfaces, text and separators use system semantic colors, such as the grouped ba
 
 ### Swift app icon
 
-The Swift app uses a layered Icon Composer icon. The owner's original mascot sits on the Bee yellow-to-orange gradient, with a warm near-black fill for the dark appearance. The system renders the clear and tinted appearances from the same layers. `assets/brand/README.md` records each layer's provenance.
+The Swift app uses a layered Icon Composer icon. Owner decision: Default and Dark keep the existing icon unchanged. Clear and Tinted show the owner's original mascot, which the system renders monochrome. `assets/brand/README.md` records each layer's provenance.
 
 ### Swift button hierarchy
 

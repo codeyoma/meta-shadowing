@@ -5,20 +5,20 @@
       "srgb:0.99608,0.43922,0.00392,1.00000"
     ]
   },
-  "fill-specializations" : [
-    {
-      "appearance" : "dark",
-      "value" : {
-        "linear-gradient" : [
-          "srgb:0.23137,0.17647,0.05882,1.00000",
-          "srgb:0.10980,0.06667,0.01569,1.00000"
-        ]
-      }
-    }
-  ],
   "groups" : [
     {
       "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "app-icon.png",
+          "name" : "app-icon",
+          "opacity-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : 0
+            }
+          ]
+        },
         {
           "glass" : false,
           "image-name" : "mascot.png",
