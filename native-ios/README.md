@@ -131,9 +131,11 @@ from Release. The large-text UI test uses the largest accessibility text categor
 accessibility audits (element description, trait and element detection) on the library,
 stages, player, options, rate editor, settings and typography screens in light, dark and
 the largest text size, and any finding fails the test. It also checks the labels, values
-and reading order that VoiceOver announces. Contrast, hit-region, Dynamic Type and
+and reading order exposed to UI automation. Contrast, hit-region, Dynamic Type and
 clipping audits are attached to the result for review but do not fail the gate. The
-gate verifies the accessibility tree, not VoiceOver's spoken output.
+gate verifies Apple's audits and UI automation snapshots, not VoiceOver's spoken
+output or focus behavior. The snapshots also require the book-kind and XP-estimate
+labels to remain present; snapshot presence alone does not prove VoiceOver eligibility.
 
 The product check inspects resources, all embedded Mach-O dependencies/symbols,
 the iPhone-only device family, downloader display name, deployment minimum and

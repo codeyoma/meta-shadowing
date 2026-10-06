@@ -2,9 +2,9 @@ import XCTest
 
 /// VoiceOver semantics that CI can verify without a human listener. The gate runs
 /// Apple's VoiceOver-related audits (element descriptions, traits and element
-/// detection) on every principal screen and checks the labels, values and order
-/// VoiceOver announces. Visual audits are attached for review but do not gate.
-/// Spoken output itself is not captured.
+/// detection) on every principal screen and checks labels, values and order in
+/// UI automation snapshots. Visual audits are attached for review but do not gate.
+/// Snapshots alone do not prove VoiceOver eligibility, focus or spoken output.
 final class VoiceOverSemanticsUITests: XCTestCase {
     private static let voiceOverAudits: XCUIAccessibilityAuditType = [.sufficientElementDescription, .trait, .elementDetection]
     private static let visualAudits: XCUIAccessibilityAuditType = [.contrast, .hitRegion, .dynamicType, .textClipped]
@@ -24,6 +24,12 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         }
         app.launch()
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].wait(for: \.isHittable, toEqual: true, timeout: 20))
+        let kind = app.staticTexts["book-kind-morning-notes-v1"]
+        XCTAssertTrue(kind.exists, "Book kind must remain in the UI accessibility snapshot")
+        XCTAssertEqual(kind.label, "샘플")
+        let estimate = app.staticTexts["book-xp-morning-notes-v1"]
+        XCTAssertTrue(estimate.exists, "XP estimate must remain in the UI accessibility snapshot")
+        XCTAssertEqual(estimate.label, "전체 16스테이지를 각 3회 학습하면 최소 1,728 XP, 추가 사이클 제외")
         return app
     }
 
@@ -89,7 +95,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         report()
     }
 
-    /// The names, values and order VoiceOver reads on the browsing and learning screens.
+    /// The names, values and order in browsing and learning UI automation snapshots.
     @MainActor func testVoiceOverLabelsValuesAndOrder() throws {
         let app = launch()
         XCTAssertEqual(app.buttons["language-menu"].label, "학습 언어, 영어")

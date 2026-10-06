@@ -40,12 +40,12 @@ struct BookCardView: View {
     }
     private var details: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // The name-only SwiftUI initializer rendered this loose PNG blank on iOS 27.
-            Image(uiImage: UIImage(named: "morning-notes") ?? UIImage()).resizable().scaledToFit()
-                .accessibilityHidden(true) // Decorative cover; the title and tags carry the meaning.
-                .overlay(alignment: .topTrailing) {
-                    BookTagsView(book: summary.book).padding(8)
-                }
+            ZStack(alignment: .topTrailing) {
+                // The name-only SwiftUI initializer rendered this loose PNG blank on iOS 27.
+                Image(uiImage: UIImage(named: "morning-notes") ?? UIImage()).resizable().scaledToFit()
+                    .accessibilityHidden(true) // Only the artwork is decorative; tags are siblings.
+                BookTagsView(book: summary.book).padding(8)
+            }
             VStack(alignment: .leading, spacing: 8) {
                 let title = Text(summary.book.title).font(.headline)
                 if dynamicTypeSize.isAccessibilitySize { title.fixedSize(horizontal: false, vertical: true) }
