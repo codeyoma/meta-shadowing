@@ -22,22 +22,28 @@ struct LearningControlsView: View {
             }
             HStack(spacing: 12) {
                 if session.showsThirdCycleChoices || session.canRepeat {
+                    // The learning contract keeps Repeat as a named icon control beside the wider main action.
                     Button { Task { _ = await runtime.coordinator.perform(.repeat) } } label: {
                         Image(systemName: "repeat").frame(maxWidth: .infinity)
-                    }.buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.large)
+                    }.buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
                         .accessibilityLabel("두 번 더 연습하기").accessibilityIdentifier("player-repeat")
                         .disabled(!controls.repeatable).frame(maxWidth: 80)
                 }
                 Button {
                     if let action = runtime.controls.mainAction { Task { _ = await runtime.coordinator.perform(action) } }
                 } label: {
-                    Image(systemName: controls.mainAction == .resume ? "play.fill" : "checkmark")
+                    Label(label(controls.mainAction), systemImage: symbol(controls.mainAction))
                         .frame(maxWidth: .infinity)
-                }.accessibilityLabel(label(controls.mainAction)).accessibilityIdentifier("player-main")
+                }.accessibilityIdentifier("player-main")
                     .disabled(controls.mainAction == nil)
-            }.buttonStyle(.primaryAction)
-        }.padding().background(.bar)
+                    .buttonStyle(.floatingPrimaryAction)
+            }
+            .accessibilityShowsLargeContentViewer()
+        }.padding()
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: session.showsThirdCycleChoices)
+    }
+    private func symbol(_ action: LearningEvent?) -> String {
+        switch action { case .resume: "play.fill"; case .next: "forward.fill"; case .confirm: "checkmark"; default: "waveform" }
     }
     private func label(_ action: LearningEvent?) -> String {
         switch action { case .resume: String(localized: "학습 이어하기"); case .next: String(localized: "다음 학습"); case .confirm: String(localized: "학습 확인"); default: String(localized: "재생 중") }

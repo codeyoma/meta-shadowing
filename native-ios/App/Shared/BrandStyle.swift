@@ -27,3 +27,19 @@ struct PrimaryActionButtonStyle: PrimitiveButtonStyle {
 extension PrimitiveButtonStyle where Self == PrimaryActionButtonStyle {
     static var primaryAction: PrimaryActionButtonStyle { PrimaryActionButtonStyle() }
 }
+
+/// The primary action in a floating bar: the same roles on Liquid Glass.
+struct FloatingPrimaryActionButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button(configuration)
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(BrandStyle.yellow)
+            .foregroundStyle(BrandStyle.ink)
+    }
+}
+
+extension PrimitiveButtonStyle where Self == FloatingPrimaryActionButtonStyle {
+    static var floatingPrimaryAction: FloatingPrimaryActionButtonStyle { FloatingPrimaryActionButtonStyle() }
+}

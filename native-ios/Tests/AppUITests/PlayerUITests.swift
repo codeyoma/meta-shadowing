@@ -122,9 +122,10 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(text.exists)
         let videoFrame = video.frame, headerY = header.frame.minY, footerY = footer.frame.minY
         let textY = text.frame.minY
-        let scroll = app.scrollViews.firstMatch
-        scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
-            .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)))
+        // Content scrolls under the player's safe-area bars, so drag inside the
+        // visible text region between the fixed video and the bottom controls.
+        video.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1.6))
+            .press(forDuration: 0.05, thenDragTo: video.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1.1)))
         XCTAssertLessThan(text.frame.minY, textY, "The lesson text must actually scroll")
         XCTAssertEqual(video.frame.minY, videoFrame.minY, accuracy: 1, "Video must remain outside the scrolling text")
         XCTAssertEqual(video.frame.height, videoFrame.height, accuracy: 1)
