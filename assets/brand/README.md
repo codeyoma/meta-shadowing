@@ -63,3 +63,21 @@ and local records remain unchanged by this branding update.
 `mascot.png` is the owner's transparent 1254 × 1254 mascot attachment supplied
 on 2026-09-12, preserved byte-for-byte with no redraw or background. It appears
 in its original colors as an inert 36-point item at the left of the browsing bar.
+
+## Layered app icon (Swift app, #122)
+
+The Swift app's `native-ios/App/AppIcon.icon` is an Icon Composer document that replaced
+the flat asset-catalog icon on 2026-10-06. Owner decision: the Default and Dark
+appearances keep the existing icon unchanged, and only the system Clear and Tinted
+appearances use a separate mascot layer. It contains no new raster:
+
+- Top layer `app-icon.png`: the existing 1024 × 1024 icon (resized from
+  `app-icon-full-bleed.png`), copied byte-for-byte from the former `AppIcon.appiconset`.
+  It is fully opaque in Default and Dark and transparent in the mono (Clear and Tinted)
+  rendering.
+- Lower layer `mascot.png`: copied byte-for-byte (SHA-256
+  60553a77a5250ee0c2285077d7fbba2cf0b229d59f4000a6d3efd5c78dee9bb3), scaled to 66%
+  and centered. It is only visible in Clear and Tinted, where the system renders it
+  monochrome.
+
+The original `app-icon.png`, `app-icon-full-bleed.png` and `mascot.png` are unchanged.
