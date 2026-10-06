@@ -45,7 +45,7 @@ CI partitions the complete scheme into two complementary jobs:
 | `player` | `-only-testing:NativeFoundationUITests/PlayerUITests` |
 | `remaining` | `-skip-testing:NativeFoundationUITests/PlayerUITests` |
 
-Both selections derive from the same class identifier in the workflow. The first
+The `remaining` shard includes `VoiceOverSemanticsUITests`, so VoiceOver audits and label checks run on every PR. Both selections derive from the same class identifier in the workflow. The first
 runs the longest UI class; the second runs every other UI test and all media
 integration tests. New tests automatically enter one of these complementary sets.
 Each job uses its own standard hosted runner, builds its own test products and
