@@ -9,12 +9,13 @@ struct LearningOptionsView: View {
     let initial: LearningOptionRoute
     let exit: () async -> Void
     @State private var path: [LearningOptionRoute]
+    @State private var detent: PresentationDetent
     init(flow: LearningFlow, model: ProductModel, initial: LearningOptionRoute, exit: @escaping () async -> Void) {
         self.flow = flow; self.model = model; self.initial = initial; self.exit = exit
         path = initial == .menu ? [] : [initial]
+        detent = initial == .menu ? .medium : .large
     }
     var body: some View {
-        VStack(spacing: 0) {
         NavigationStack(path: $path) {
             List {
                 if let runtime = flow.runtime {
@@ -35,36 +36,44 @@ struct LearningOptionsView: View {
                             Button("내 목소리 모니터링 끄기") { Task { await runtime.monitoring.setEnabled(false) } }
                         } else { Text("유선 헤드폰을 연결하면 학습 화면에서 내 목소리를 들을 수 있어요.").font(.footnote) }
                     }
-                }
-            }.navigationTitle("학습 옵션")
-                .navigationDestination(for: LearningOptionRoute.self) { route in destination(route) }
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("닫기") { flow.dismissOptions() }.accessibilityIdentifier("options-close")
+                    Section {
+                        // Leaving keeps the durable pause and never confirms learning.
+                        Button { Task { await exit() } } label: {
+                            Label("스테이지로 돌아가기", systemImage: "rectangle.portrait.and.arrow.right")
+                        }.accessibilityIdentifier("options-exit")
                     }
                 }
-        }
-        // Keep the footer outside the stack so every pushed destination receives
-        // the reduced viewport, including UIKit-backed navigation transitions.
-            VStack {
-                if let runtime = flow.runtime, runtime.controls.saveFailed {
-                    Text("저장하지 못했어요.").foregroundStyle(.red)
-                    Button("저장 다시 시도") { Task { _ = await runtime.coordinator.retrySave() } }
-                        .accessibilityIdentifier("options-save-retry")
+            }.navigationTitle("학습 옵션")
+                .navigationDestination(for: LearningOptionRoute.self) { route in
+                    destination(route).toolbar { closeButton }
                 }
-                Button { Task { await exit() } } label: {
-                    Text("스테이지로 돌아가기").frame(maxWidth: .infinity, minHeight: 44)
-                }.buttonStyle(.bordered)
-                Button { flow.dismissOptions() } label: {
-                    Text("학습 이어하기").frame(maxWidth: .infinity, minHeight: 44)
-                }.buttonStyle(.borderedProminent)
-            }.padding().frame(maxWidth: .infinity).background(.bar)
+                .toolbar { closeButton }
         }
+        // A failed save stays actionable on every page, outside the navigation stack.
+        .safeAreaBar(edge: .bottom) {
+            if let runtime = flow.runtime, runtime.controls.saveFailed {
+                HStack {
+                    Label("저장하지 못했어요.", systemImage: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor)
+                    Spacer(minLength: 8)
+                    Button("저장 다시 시도") { Task { _ = await runtime.coordinator.retrySave() } }
+                        .buttonStyle(.glass).accessibilityIdentifier("options-save-retry")
+                }.padding()
+            }
+        }
+        // Nested pages need the full height; only the menu offers the medium height.
+        .presentationDetents(path.isEmpty ? [.medium, .large] : [.large], selection: $detent)
         .presentationDragIndicator(.visible)
         .onChange(of: path) { old, new in
+            if !new.isEmpty { detent = .large }
             if old.contains(.analysis), !new.contains(.analysis) { flow.leaveAnalysis() }
         }
         .onDisappear { flow.leaveAnalysis() }
+    }
+    /// The single dismiss control on every page. Swiping down dismisses as well.
+    private var closeButton: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button(role: .close) { flow.dismissOptions() }.accessibilityIdentifier("options-close")
+        }
     }
     @ViewBuilder private func destination(_ route: LearningOptionRoute) -> some View {
         if let runtime = flow.runtime {

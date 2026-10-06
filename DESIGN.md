@@ -166,6 +166,36 @@ This guide records the implemented native visual system. Sources are `src/compon
 
 Portable token sizes use `px` for DESIGN.md tooling; each numeric value represents a React Native logical point at font scale 1, not a CSS implementation or physical screen pixel. Frontmatter owns primitives. The sidecar's HTML/CSS is only a documentation preview: it uses local font fallbacks and simple SVG icon surrogates, not the native font bundle or SF Symbols renderer. Its synthesized tonal ramps are preview metadata, not additional app colors.
 
+## Swift-native direction (iOS 26+)
+
+Owner decision, 2026-10-06 (#113): the standalone Swift app in `native-ios/` follows Apple-native structure. It uses system typography, semantic system colors, standard navigation, and iOS 26 bars and controls. Bee yellow remains the brand accent: it fills the primary action and marks XP, progress and reward moments.
+
+For the Swift app, this direction supersedes the raised-lip buttons and Nunito display lettering described in the sections below. Those sections still describe the Expo reference, which does not change.
+
+### Swift color roles
+
+The colors are defined in the app's asset catalog. Each color has Any, Dark, Increased Contrast and Dark Increased Contrast appearances.
+
+| Asset | Role | Light | Dark | Light, high contrast | Dark, high contrast |
+| --- | --- | --- | --- | --- | --- |
+| AccentColor | Global tint: tabs, toolbar items, links, toggles, tinted text and symbols | #866500 | #FFC800 | #6A5000 | #FFD84D |
+| BrandYellow | Primary-action fill, XP and reward surfaces, stage symbols | #FFC800 | #FFC800 | #FFC800 | #FFD84D |
+| BrandInk | Text and symbols drawn on BrandYellow, and nowhere else | #042C60 | #042C60 | #042C60 | #042C60 |
+| BrandGreen | Completion strokes, confirmed cycles and stage progress | #4A8F00 | #58CC02 | #3B7500 | #7BE33A |
+
+The light accent is Bee yellow deepened so tinted text keeps at least 4.5:1 contrast on system backgrounds. BrandGreen keeps at least 3:1 contrast against grouped surfaces, and BrandInk keeps at least 4.5:1 contrast on BrandYellow. A palette test enforces these ratios in all four appearances.
+
+Surfaces, text and separators use system semantic colors, such as the grouped backgrounds and the primary and secondary label styles. Views never hard-code brand values and never switch colors on the color scheme by hand.
+
+### Swift button hierarchy
+
+- **Primary:** at most one per surface. It uses the system prominent bordered style with a capsule shape, a large control size, a BrandYellow fill and a BrandInk label. The system supplies pressed and disabled states.
+- **Secondary:** the system bordered style with the accent tint.
+- **Inline:** borderless buttons and list rows.
+- **Floating controls in bars:** the system glass styles.
+
+Never place the system prominent style's default white label on BrandYellow.
+
 ## Colors
 
 Bright Bee and Macaw accents sit against white or deep navy surfaces, with appearance-specific text and structural colors.

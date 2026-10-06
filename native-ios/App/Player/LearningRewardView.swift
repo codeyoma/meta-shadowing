@@ -7,6 +7,12 @@ struct LearningRewardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visible = true
     @State private var raised = false
+    private var announcement: String {
+        var parts: [String] = []
+        if feedback.xpAward > 0 { parts.append(String(localized: "\(feedback.xpAward) XP 획득")) }
+        if feedback.completedRun { parts.append(String(localized: "학습 완료!")) }
+        return parts.joined(separator: ", ")
+    }
     var body: some View {
         Group {
             if visible {
@@ -29,6 +35,7 @@ struct LearningRewardView: View {
         }
         .allowsHitTesting(false)
         .task {
+            if !announcement.isEmpty { AccessibilityNotification.Announcement(announcement).post() }
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) { raised = true }
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { visible = false }

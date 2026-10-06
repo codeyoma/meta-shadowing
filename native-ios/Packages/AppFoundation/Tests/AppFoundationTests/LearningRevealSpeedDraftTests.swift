@@ -34,4 +34,15 @@ import AppFoundation
     func editsSnapAndPreserveLaterIntervals(_ input: ([Int], Int, Int, [Int])) {
         #expect(LearningRevealSpeedDraft.changing(input.0, index: input.1, value: input.2) == input.3)
     }
+
+    @Test(arguments: [
+        ([150, 200, 250, 300], 0, 100...200, 25),
+        ([150, 200, 250, 300], 1, 200...300, 50),
+        ([160, 210, 260, 310], 3, 300...400, 50)
+    ])
+    func editBoundsMatchTheSnappingRules(_ input: ([Int], Int, ClosedRange<Int>, Int)) {
+        let bounds = LearningRevealSpeedDraft.editBounds(input.0, index: input.1)
+        #expect(bounds.range == input.2)
+        #expect(bounds.step == input.3)
+    }
 }

@@ -46,18 +46,19 @@ struct LearningPlayerView: View {
                             }.padding()
                         }
                         .background(Color(uiColor: .systemGroupedBackground))
-                        .safeAreaInset(edge: .top) {
+                        .safeAreaBar(edge: .top) {
                             VStack(spacing: 0) {
                                 PlayerHeaderView(runtime: runtime, flow: flow)
                                 if let video = flow.video {
+                                    // The video stays fixed above the scrolling text and is never obscured.
                                     LessonVideoSurface(transport: video).aspectRatio(16 / 9, contentMode: .fit)
                                         .clipShape(.rect(cornerRadius: 16)).accessibilityLabel("학습 영상")
                                         .accessibilityIdentifier("lesson-video")
                                         .padding([.horizontal, .top])
                                 }
-                            }.background(Color(uiColor: .systemGroupedBackground))
+                            }
                         }
-                        .safeAreaInset(edge: .bottom) { LearningControlsView(runtime: runtime) }
+                        .safeAreaBar(edge: .bottom) { LearningControlsView(runtime: runtime) }
                     }
                 } else if flow.failed {
                     ContentUnavailableView {
@@ -76,12 +77,14 @@ struct LearningPlayerView: View {
             .navigationTitle(flow.title).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { Task { await flow.presentOptions(.menu) } } label: { Image(systemName: "line.3.horizontal") }
-                        .accessibilityLabel("학습 옵션").accessibilityIdentifier("player-options")
-                        .disabled(flow.runtime == nil)
+                    Button(role: .close) { Task { await exit() } }.accessibilityIdentifier("player-exit")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("닫기") { Task { await exit() } }.accessibilityIdentifier("player-exit")
+                    Button { Task { await flow.presentOptions(.menu) } } label: {
+                        Label("학습 옵션", systemImage: "slider.horizontal.3")
+                    }
+                    .accessibilityIdentifier("player-options")
+                    .disabled(flow.runtime == nil)
                 }
             }
         }
@@ -123,23 +126,26 @@ private struct PlayerHeaderView: View {
                     Text("\(session.unit + 1)/\(session.unitCount)")
                 }.monospacedDigit().font(.caption.bold()).fixedSize()
             }
-            HStack {
-                Button { Task { await flow.presentOptions(.guide) } } label: {
-                    Text("Lv \((session.plan.scope.stage + 1) / 2)").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
+            GlassEffectContainer {
+                HStack {
+                    Button { Task { await flow.presentOptions(.guide) } } label: {
+                        Text("Lv \((session.plan.scope.stage + 1) / 2)").frame(minWidth: 32)
+                    }.accessibilityShowsLargeContentViewer()
+                    Spacer()
+                    Button {
+                        Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate) }
+                    } label: {
+                        Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
+                            .monospacedDigit().frame(minWidth: 32)
+                    }.accessibilityLabel("학습 속도").accessibilityShowsLargeContentViewer()
+                    Spacer()
+                    Button { Task { await flow.presentOptions(.analysis) } } label: {
+                        Image(systemName: "text.magnifyingglass").frame(minWidth: 32)
+                    }
+                        .accessibilityLabel("문장 분석").accessibilityShowsLargeContentViewer()
                 }
-                Spacer()
-                Button {
-                    Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate) }
-                } label: {
-                    Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
-                        .frame(minWidth: 44, minHeight: 44).contentShape(.rect)
-                }.accessibilityLabel("학습 속도")
-                Spacer()
-                Button { Task { await flow.presentOptions(.analysis) } } label: {
-                    Image(systemName: "text.magnifyingglass").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
-                }
-                    .accessibilityLabel("문장 분석")
-            }.buttonStyle(.borderless)
-        }.padding(.horizontal).padding(.top, 8).background(.bar)
+                .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
+            }
+        }.padding(.horizontal).padding(.top, 8)
     }
 }

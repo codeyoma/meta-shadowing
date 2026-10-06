@@ -13,7 +13,7 @@ struct TypographyEditorView: View {
             Picker("원문 폰트", selection: Binding(get: { value.originalTextFont ?? "system" }, set: { font in
                 var next = value; next.originalTextFont = font; change(next)
             })) { ForEach(fonts, id: \.0) { Text($0.1).tag($0.0) } }
-            TextSizeControl(title: "원문 크기", identifier: "original-size", value: value.originalTextSize ?? 20) { size in
+            TextSizeControl(title: String(localized: "원문 크기"), identifier: "original-size", value: value.originalTextSize ?? 20) { size in
                 var next = value; next.originalTextSize = size; change(next)
             }
         }
@@ -21,7 +21,7 @@ struct TypographyEditorView: View {
             Picker("번역 폰트", selection: Binding(get: { value.translationTextFont ?? "system" }, set: { font in
                 var next = value; next.translationTextFont = font; change(next)
             })) { ForEach(fonts, id: \.0) { Text($0.1).tag($0.0) } }
-            TextSizeControl(title: "번역 크기", identifier: "translation-size", value: value.translationTextSize ?? 18) { size in
+            TextSizeControl(title: String(localized: "번역 크기"), identifier: "translation-size", value: value.translationTextSize ?? 18) { size in
                 var next = value; next.translationTextSize = size; change(next)
             }
         }
@@ -45,16 +45,12 @@ private struct TextSizeControl: View {
         HStack {
             Text(title)
             Spacer()
-            Button { focused = false; change(max(12, value - 1)) } label: {
-                Image(systemName: "minus").frame(width: 44, height: 44)
-            }.buttonStyle(.borderless).disabled(value <= 12).accessibilityLabel("\(title) 줄이기")
-            TextField(title, text: $draft).keyboardType(.numberPad).multilineTextAlignment(.center)
-                .frame(minWidth: 44, maxWidth: 64).focused($focused).accessibilityIdentifier(identifier)
-                .onSubmit(commit)
-            Button { focused = false; change(min(48, value + 1)) } label: {
-                Image(systemName: "plus").frame(width: 44, height: 44)
-            }.buttonStyle(.borderless).disabled(value >= 48)
-                .accessibilityLabel("\(title) 늘리기").accessibilityIdentifier("\(identifier)-plus")
+            TextField(title, text: $draft).keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                .monospacedDigit().frame(minWidth: 44, maxWidth: 64).focused($focused)
+                .accessibilityIdentifier(identifier).onSubmit(commit)
+            Stepper(title, value: Binding(get: { value }, set: { focused = false; change($0) }), in: 12...48)
+                .labelsHidden()
+                .accessibilityIdentifier("\(identifier)-stepper")
         }
         .onChange(of: value) { _, new in draft = String(new) }
         .onChange(of: focused) { _, active in if !active { commit() } }

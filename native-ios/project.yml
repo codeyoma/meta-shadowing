@@ -1,5 +1,6 @@
 name: MetaShadowingNative
 options:
+  developmentLanguage: ko
   deploymentTarget:
     iOS: '26.0'
 configFiles:
@@ -63,11 +64,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(NATIVE_APP_BUNDLE_IDENTIFIER)
         TARGETED_DEVICE_FAMILY: '1'
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         COMPRESS_PNG_FILES: NO
         STRIP_PNG_TEXT: NO
-        INFOPLIST_KEY_CFBundleDisplayName: 쉐도잉 Native
+        INFOPLIST_KEY_CFBundleDisplayName: 쇄도잉
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 유선 헤드폰으로 내 목소리를 실시간 모니터링합니다. 녹음하거나 전송하지 않습니다.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES

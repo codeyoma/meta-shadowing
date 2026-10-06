@@ -43,8 +43,8 @@ final class ProductUITests: XCTestCase {
         let names = ["자막 쉐도잉", "자막 쉐도잉", "무자막 쉐도잉", "다구간 쉐도잉",
                      "다구간 무자막", "속사포 영한", "속사포 한영", "속사포 한글"]
         for stage in 1...16 {
-            XCTAssertEqual(app.buttons["stage-\(stage)"].label,
-                           "Stage \(stage), \(names[(stage - 1) / 2]), 완료 0/3")
+            XCTAssertEqual(app.buttons["stage-\(stage)"].label, "스테이지 \(stage), \(names[(stage - 1) / 2])")
+            XCTAssertEqual(app.buttons["stage-\(stage)"].value as? String, "완료 0/3")
         }
         let stage = app.buttons["stage-3"]
         for _ in 0..<5 where !stage.isHittable { app.swipeUp() }
@@ -90,9 +90,11 @@ final class ProductUITests: XCTestCase {
         XCTAssertTrue(typography.waitForExistence(timeout: 5))
         guard typography.exists else { return }
         typography.tap()
-        app.buttons["original-size-plus"].tap()
+        let stepper = app.steppers["original-size-stepper"]
+        XCTAssertTrue(stepper.waitForExistence(timeout: 5))
+        stepper.buttons.element(boundBy: 1).tap() // Increment follows decrement.
         XCTAssertEqual(app.textFields["original-size"].value as? String, "21")
-        XCTAssertTrue(app.buttons["original-size-plus"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        XCTAssertTrue(stepper.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].wait(for: \.isHittable, toEqual: true, timeout: 10))
@@ -142,10 +144,21 @@ final class ProductUITests: XCTestCase {
         XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10))
         book.tap()
         XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
+        // Choosing a book pushes its stages inside Books; tabs never switch on their own.
+        XCTAssertTrue(app.tabBars.buttons["도서 목록"].isSelected)
+        XCTAssertTrue(app.staticTexts["header-xp"].exists)
+        app.tabBars.buttons["스테이지"].tap()
+        XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
         app.tabBars.buttons["설정"].tap()
         XCTAssertTrue(app.buttons["학습 설정"].waitForExistence(timeout: 5))
+        // Learning status belongs to the browsing screens' toolbars, not Settings.
+        XCTAssertFalse(app.buttons["language-menu"].exists)
+        XCTAssertFalse(app.staticTexts["header-xp"].exists)
+        app.tabBars.buttons["스테이지"].tap()
         app.buttons["language-menu"].tap()
+        XCTAssertTrue(app.buttons["영어"].wait(for: \.isSelected, toEqual: true, timeout: 5))
         app.buttons["일본어"].tap()
+        XCTAssertTrue(app.buttons["language-menu"].wait(for: \.label, toEqual: "학습 언어, 일본어", timeout: 5))
         app.tabBars.buttons["도서 목록"].tap()
         XCTAssertTrue(app.staticTexts["이 언어의 도서가 아직 없어요"].waitForExistence(timeout: 5))
         app.tabBars.buttons["스테이지"].tap()

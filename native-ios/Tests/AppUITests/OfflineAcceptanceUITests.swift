@@ -85,6 +85,9 @@ final class OfflineAcceptanceUITests: XCTestCase {
         app.buttons["다구간 학습 사이즈"].tap()
         XCTAssertTrue(grouping.wait(for: \.isSelected, toEqual: true, timeout: 5))
         app.tabBars.buttons["도서 목록"].tap()
+        // Books keeps the pushed stage list; return to the library root.
+        let back = app.navigationBars.buttons["BackButton"]
+        if back.waitForExistence(timeout: 2) { back.tap() }
         app.buttons["manage-hosted-morning-notes-v1"].tap()
         app.buttons["다운로드 삭제"].tap()
         XCTAssertTrue(app.alerts["다운로드를 삭제할까요?"].waitForExistence(timeout: 5))

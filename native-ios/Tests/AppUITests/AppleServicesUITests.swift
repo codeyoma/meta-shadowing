@@ -140,8 +140,8 @@ final class AppleServicesUITests: XCTestCase {
         app.buttons["미리보기 다운로드 삭제"].tap()
         XCTAssertTrue(download.waitForExistence(timeout: 5))
         app.buttons["diagnostic-close"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
         app.tabBars.buttons["도서 목록"].tap()
+        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
         XCTAssertFalse(app.buttons["book-hosted-morning-notes-v1"].exists)
     }
     @MainActor func testSampleAndDownloadEstimateDoNotGrantXP() {

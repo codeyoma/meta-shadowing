@@ -17,12 +17,20 @@ public enum LearningRevealSpeedDraft {
         return result
     }
 
-    public static func changing(_ saved: [Int], index: Int, value: Int) -> [Int] {
+    /// The values one preset may take: S1 spans 100–200 in steps of 25; later
+    /// levels sit 50–150 above the previous level in steps of 50.
+    public static func editBounds(_ saved: [Int], index: Int) -> (range: ClosedRange<Int>, step: Int) {
         precondition((0..<4).contains(index))
+        if index == 0 { return (100...200, 25) }
+        let previous = normalized(saved)[index - 1]
+        return (previous + 50...previous + 150, 50)
+    }
+
+    public static func changing(_ saved: [Int], index: Int, value: Int) -> [Int] {
         var result = normalized(saved)
-        let minimum = index == 0 ? 100 : result[index - 1] + 50
-        let maximum = index == 0 ? 200 : result[index - 1] + 150
-        let difference = snap(value, minimum: minimum, maximum: maximum, step: index == 0 ? 25 : 50) - result[index]
+        let bounds = editBounds(saved, index: index)
+        let difference = snap(value, minimum: bounds.range.lowerBound, maximum: bounds.range.upperBound,
+                              step: bounds.step) - result[index]
         for level in index..<4 { result[level] += difference }
         return result
     }

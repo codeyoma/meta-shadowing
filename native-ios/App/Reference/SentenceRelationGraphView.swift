@@ -6,12 +6,10 @@ struct SentenceRelationGraphView: View {
     let selected: Int?
     let select: (Int?) -> Void
     @State private var boxes: [Int: CGRect] = [:]
-    @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric private var arcHeight: CGFloat = 96
     var body: some View {
         let projection = SentenceRelations.project(sentence, selected: selected)
         let allEdges = SentenceRelations.project(sentence, selected: nil).edges
-        let linkColor = colorScheme == .dark ? Color(red: 141.0 / 255, green: 216.0 / 255, blue: 1) : BrandStyle.ink
         VStack(alignment: .leading, spacing: 12) {
             Text("화살표는 역할을 하는 단어에서 연결된 중심어를 향해요.").font(.caption).foregroundStyle(.secondary)
             RelationGraphScroll {
@@ -42,8 +40,8 @@ struct SentenceRelationGraphView: View {
                                     Text(AnalysisVocabulary.pos(token.pos)).font(.caption)
                                     Text(AnalysisVocabulary.pos(token.pos, english: true)).font(.caption)
                                 }.fixedSize().padding(8).frame(minWidth: 44, minHeight: 64)
-                                    .foregroundStyle(selected == index ? BrandStyle.yellow : projection.connected.contains(index) ? linkColor : .primary)
-                                    .background(selected == index ? BrandStyle.yellow.opacity(0.12) : .clear, in: .rect(cornerRadius: 8))
+                                    .foregroundStyle(selected == index ? BrandStyle.ink : projection.connected.contains(index) ? Color.accentColor : .primary)
+                                    .background(selected == index ? BrandStyle.yellow : .clear, in: .rect(cornerRadius: 8))
                             }.buttonStyle(.plain)
                                 .accessibilityLabel("단어 \(index + 1): \(token.text), \(AnalysisVocabulary.pos(token.pos))")
                                 .accessibilityValue(selected != index && projection.connected.contains(index) ? "선택한 단어와 직접 연결됨" : "")

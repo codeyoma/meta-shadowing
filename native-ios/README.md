@@ -104,6 +104,11 @@ bash native-ios/scripts/test-native-runtime-inspection.sh \
   native-ios/DerivedData/Build/Products/Release-iphonesimulator/MetaShadowingNative.app
 ```
 
+Korean is the development language. User-facing strings live in `App/Localizable.xcstrings`;
+strings computed outside SwiftUI text APIs use `String(localized:)` so the compiler extracts them.
+Xcode updates the catalog when it builds in the IDE. After a command-line Debug build, run
+`bash native-ios/scripts/sync-string-catalog.sh` to merge newly extracted strings.
+
 XcodeBuildMCP can run the same scheme with the dedicated simulator selected.
 The Debug-only `--ui-test-fail-first-load` argument injects one synthetic load
 failure for retry testing. It does not edit storage and is absent from Release.

@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 final class ReferenceToolsUITests: XCTestCase {
@@ -82,8 +83,15 @@ final class ReferenceToolsUITests: XCTestCase {
             scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25))
                 .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.75)))
         }
-        XCTAssertTrue(copy.isHittable); copy.tap()
-        XCTAssertTrue(copy.wait(for: \.label, toEqual: "복사됨", timeout: 5))
+        XCTAssertTrue(copy.isHittable)
+        // The visible confirmation lasts 1.5 seconds, which a largest-text snapshot can
+        // outlast on slower hosts. The pasteboard change count proves the copy without
+        // reading its contents or prompting for paste access.
+        let changeCount = UIPasteboard.general.changeCount
+        copy.tap()
+        let copied = expectation(for: NSPredicate { _, _ in UIPasteboard.general.changeCount > changeCount },
+                                 evaluatedWith: nil)
+        wait(for: [copied], timeout: 5)
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "Reference graph at largest Dynamic Type"
         evidence.lifetime = .keepAlways
@@ -117,7 +125,7 @@ final class ReferenceToolsUITests: XCTestCase {
         dictionary.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.05)).tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         XCTAssertTrue(token.isSelected)
-        app.buttons["학습 이어하기"].tap()
+        app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.buttons["player-exit"].tap()
         XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
