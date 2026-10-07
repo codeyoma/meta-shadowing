@@ -1,6 +1,47 @@
 import XCTest
 
 final class AppleServicesUITests: XCTestCase {
+    @MainActor func testSyncToggleRequiresConsentAndCanTurnOffAfterTransportFailure() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-cloud-confirmation", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["설정"].wait(for: \.isHittable, toEqual: true, timeout: 20))
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["iCloud 동기화"].tap()
+        let sync = app.switches["icloud-sync-toggle"]
+        XCTAssertTrue(sync.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        XCTAssertEqual(sync.value as? String, "0")
+        XCTAssertFalse(app.buttons["한 번만 동기화"].exists)
+        XCTAssertTrue(sync.isEnabled, app.debugDescription)
+        // SwiftUI exposes the Form row and the native thumb as separate switch elements.
+        let thumb = sync.switches.firstMatch
+        XCTAssertTrue(thumb.isHittable)
+        thumb.tap()
+        XCTAssertTrue(app.buttons["복원하고 동기화 켜기"].wait(for: \.isHittable, toEqual: true, timeout: 5), app.debugDescription)
+        XCTAssertTrue(app.buttons["합치고 동기화 켜기"].exists)
+        // iOS presents this as an anchored dialog; tapping outside cancels it.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7)).tap()
+        XCTAssertTrue(app.buttons["복원하고 동기화 켜기"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(sync.value as? String, "0", "Cancelling never grants sync consent")
+        thumb.tap()
+        XCTAssertTrue(app.buttons["복원하고 동기화 켜기"].wait(for: \.isHittable, toEqual: true, timeout: 5))
+        app.buttons["복원하고 동기화 켜기"].tap()
+        // The isolated transport intentionally fails; consent can remain on for retry.
+        XCTAssertTrue(app.buttons["다시 시도"].waitForExistence(timeout: 10))
+        // Account activation replaces the browsing root to isolate the old profile's UI.
+        XCTAssertTrue(app.tabBars.buttons["설정"].wait(for: \.isHittable, toEqual: true, timeout: 5))
+        app.tabBars.buttons["설정"].tap()
+        app.buttons["iCloud 동기화"].tap()
+        XCTAssertTrue(sync.waitForExistence(timeout: 5))
+        XCTAssertEqual(sync.value as? String, "1")
+        XCTAssertTrue(sync.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        thumb.tap()
+        let off = app.switches.matching(NSPredicate(format: "identifier == %@ AND value == %@", "icloud-sync-toggle", "0")).firstMatch
+        XCTAssertTrue(off.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["다시 시도"].exists, "Disabling sync clears the inactive retry UI")
+    }
+
     @MainActor func testFreeDownloadsAndSettingsHaveNoCommerceControls() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -12,7 +53,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertFalse(app.buttons["구매 확인"].exists)
         download.tap()
         XCTAssertTrue(app.buttons["book-hosted-morning-notes-v1"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
+        XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
         app.tabBars.buttons["설정"].tap()
         XCTAssertTrue(app.buttons["iCloud 동기화"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["데이터 관리"].exists)
@@ -20,7 +61,9 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertFalse(app.buttons["restore-purchases"].exists)
         app.buttons["데이터 관리"].tap()
         let downloadHelp = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "다운로드 삭제는")).firstMatch
-        XCTAssertTrue(downloadHelp.waitForExistence(timeout: 5), "Data management must explain the download/history boundary")
+        XCTAssertTrue(app.buttons["remove-local-history"].waitForExistence(timeout: 5))
+        XCTAssertFalse(downloadHelp.exists, "Routine explanations do not belong on the action-only screen")
+        XCTAssertFalse(app.staticTexts["현재 학습 프로필"].exists)
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "구매")).firstMatch.exists,
                        "The free app must not imply retained purchase records")
         XCTAssertTrue(app.buttons["remove-local-history"].exists)
@@ -75,17 +118,18 @@ final class AppleServicesUITests: XCTestCase {
             XCTAssertTrue(cloudReady, app.debugDescription)
             XCTAssertTrue(app.alerts.staticTexts["현재 iCloud 계정의 학습 기록과 이 기기의 해당 프로필 기록을 삭제합니다. 다른 기기도 다음 동기화 때 반영됩니다. 자동 동기화는 꺼집니다."].exists)
             app.alerts.buttons["취소"].tap()
-            app.tabBars.buttons["도서 목록"].tap()
+            app.tabBars.buttons["책장"].tap()
             let download = app.buttons["download-hosted-morning-notes-v1"]
             for _ in 0..<8 where !download.isHittable { app.swipeUp() }
             XCTAssertTrue(download.isHittable)
             download.tap()
             let manage = app.buttons["manage-hosted-morning-notes-v1"]
+            XCTAssertTrue(app.buttons["book-hosted-morning-notes-v1"].wait(for: \.isHittable, toEqual: true, timeout: 10))
             XCTAssertTrue(manage.waitForExistence(timeout: 10))
             for _ in 0..<4 where !manage.isHittable { app.swipeUp() }
             XCTAssertTrue(manage.isHittable)
             manage.tap()
-            app.buttons["다운로드 삭제"].tap()
+            app.buttons["삭제하기"].tap()
             XCTAssertTrue(app.alerts["다운로드를 삭제할까요?"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.alerts.buttons["취소"].isHittable)
             XCTAssertTrue(app.alerts.buttons["다운로드 삭제"].isHittable)
@@ -93,7 +137,7 @@ final class AppleServicesUITests: XCTestCase {
             downloadShot.name = "download-confirmation-\(appearance.rawValue)-largest-text"
             downloadShot.lifetime = .keepAlways; add(downloadShot)
             app.alerts.buttons["취소"].tap()
-            XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
+            XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
             app.terminate()
         }
     }
@@ -140,8 +184,8 @@ final class AppleServicesUITests: XCTestCase {
         app.buttons["미리보기 다운로드 삭제"].tap()
         XCTAssertTrue(download.waitForExistence(timeout: 5))
         app.buttons["diagnostic-close"].tap()
-        app.tabBars.buttons["도서 목록"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.tabBars.buttons["책장"].tap()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
         XCTAssertFalse(app.buttons["book-hosted-morning-notes-v1"].exists)
     }
     @MainActor func testSampleAndDownloadEstimateDoNotGrantXP() {
@@ -157,7 +201,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(estimate.exists)
         XCTAssertTrue(estimate.label.contains("1,728"))
         XCTAssertTrue(estimate.label.contains("추가 사이클 제외"))
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
+        XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
         XCTAssertFalse(app.buttons["book-hosted-morning-notes-v1"].exists)
         XCTAssertTrue(app.buttons["download-hosted-morning-notes-v1"].exists)
         XCTAssertFalse(app.buttons["구매 확인"].exists)
@@ -178,12 +222,12 @@ final class AppleServicesUITests: XCTestCase {
         let cloud = app.buttons["iCloud 동기화"]
         XCTAssertTrue(cloud.wait(for: \.isHittable, toEqual: true, timeout: 5))
         cloud.tap()
-        XCTAssertTrue(app.staticTexts["자동 동기화"].waitForExistence(timeout: 5))
-        // LabeledContent exposes the value through its combined accessibility row.
-        XCTAssertTrue(app.staticTexts["자동 동기화, 꺼짐"].exists)
-        let retry = app.buttons["계정 다시 확인"]
-        for _ in 0..<6 where !retry.isHittable { app.swipeUp() }
-        XCTAssertTrue(retry.isHittable)
+        let sync = app.switches["icloud-sync-toggle"]
+        XCTAssertTrue(sync.waitForExistence(timeout: 5))
+        XCTAssertEqual(sync.value as? String, "0")
+        XCTAssertFalse(sync.isEnabled, "An unconfigured fixture cannot enable iCloud")
+        XCTAssertFalse(app.buttons["한 번만 동기화"].exists)
+        XCTAssertFalse(app.buttons["계정 다시 확인"].exists)
     }
     @MainActor func testDownloadAndRemovalUseNormalBookControls() {
         continueAfterFailure = false
@@ -196,11 +240,11 @@ final class AppleServicesUITests: XCTestCase {
         let book = app.buttons["book-hosted-morning-notes-v1"]
         XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10))
         app.buttons["manage-hosted-morning-notes-v1"].tap()
-        app.buttons["다운로드 삭제"].tap()
+        app.buttons["삭제하기"].tap()
         XCTAssertTrue(app.alerts["다운로드를 삭제할까요?"].waitForExistence(timeout: 3))
         app.alerts.buttons["다운로드 삭제"].tap()
         XCTAssertTrue(download.wait(for: \.isHittable, toEqual: true, timeout: 10))
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
+        XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].exists)
     }
     @MainActor func testLocalResetClearsConfirmedProgressButKeepsDownloadedBookAfterRelaunch() {
@@ -216,9 +260,9 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
         main.tap()
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 1/3", timeout: 5))
-        app.buttons["player-exit"].tap()
-        app.tabBars.buttons["도서 목록"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        app.tabBars.buttons["책장"].tap()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         app.buttons["다구간 학습 사이즈"].tap()
@@ -228,7 +272,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(grouping.wait(for: \.isSelected, toEqual: true, timeout: 5))
         app.navigationBars["다구간 학습 사이즈"].buttons["BackButton"].tap()
         app.navigationBars["학습 설정"].buttons["BackButton"].tap()
-        app.tabBars.buttons["도서 목록"].tap()
+        app.tabBars.buttons["책장"].tap()
         app.buttons["download-hosted-morning-notes-v1"].tap()
         let hosted = app.buttons["book-hosted-morning-notes-v1"]
         XCTAssertTrue(hosted.wait(for: \.isHittable, toEqual: true, timeout: 10))
@@ -240,18 +284,18 @@ final class AppleServicesUITests: XCTestCase {
             main.tap()
             XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 \(confirmed)/3", timeout: 5))
         }
-        app.buttons["player-exit"].tap()
-        app.tabBars.buttons["도서 목록"].tap()
+        app.exitLearningThroughOptions()
+        app.tabBars.buttons["책장"].tap()
         app.terminate()
         app.launch()
         XCTAssertTrue(hosted.wait(for: \.isHittable, toEqual: true, timeout: 20))
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "3 / 100 XP")
+        XCTAssertEqual(app.buttons["header-xp"].label, "3 / 100 XP")
         XCTAssertFalse(main.exists, "Relaunch must not auto-confirm or reopen a player")
         hosted.tap()
         app.buttons["stage-1"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 2/3", timeout: 10))
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         app.buttons["다구간 학습 사이즈"].tap()
@@ -262,25 +306,26 @@ final class AppleServicesUITests: XCTestCase {
         app.buttons["remove-local-history"].tap()
         XCTAssertTrue(app.alerts.buttons["이 기기 기록 삭제"].wait(for: \.isHittable, toEqual: true, timeout: 5))
         app.alerts.buttons["이 기기 기록 삭제"].tap()
-        app.tabBars.buttons["도서 목록"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 10))
+        app.tabBars.buttons["책장"].tap()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 10))
         XCTAssertTrue(hosted.exists)
         app.terminate()
         app.launch()
         XCTAssertTrue(hosted.waitForExistence(timeout: 20))
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
+        XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
         XCTAssertFalse(main.exists, "Reset/relaunch must not reopen a player")
         let settings = app.tabBars.buttons["설정"]
         XCTAssertTrue(settings.wait(for: \.isHittable, toEqual: true, timeout: 10))
         settings.tap()
         app.buttons["iCloud 동기화"].tap()
-        XCTAssertTrue(app.staticTexts["자동 동기화, 꺼짐"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["도서 목록"].tap()
+        XCTAssertTrue(app.switches["icloud-sync-toggle"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.switches["icloud-sync-toggle"].value as? String, "0")
+        app.tabBars.buttons["책장"].tap()
         bundled.tap()
         app.buttons["stage-1"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 0/3", timeout: 10))
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
     @MainActor func testLocalAndCloudDeletionHaveSeparateScopedConfirmations() {
         continueAfterFailure = false
@@ -296,7 +341,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertFalse(app.buttons["delete-cloud-history"].isEnabled)
         local.tap()
         XCTAssertTrue(app.buttons["이 기기 기록 삭제"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["다운로드한 도서와 iCloud 기록은 삭제하지 않아요. 자동 동기화는 꺼집니다."].exists)
+        XCTAssertTrue(app.staticTexts["현재 프로필의 학습 기록만 삭제합니다. 다운로드한 도서와 iCloud 기록은 남고, 자동 동기화는 꺼집니다."].exists)
         app.alerts.buttons["취소"].tap()
         XCTAssertTrue(app.buttons["이 기기 기록 삭제"].waitForNonExistence(timeout: 3))
         XCTAssertTrue(local.isEnabled)

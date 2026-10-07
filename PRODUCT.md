@@ -40,14 +40,59 @@ streak. The learning player is outside this browsing shell. The controlled
 12-sentence English/Korean sample is bundled; configured packages download
 explicitly. All sixteen learning stages use the current learning contract.
 
+The books screen and tab are named “책장” (Bookshelf). Each whole book card is its
+primary action, without separate Learn or Download buttons. Undownloaded covers
+are desaturated; tapping starts download or retries a failed transfer. While busy,
+download progress and percentage replace stage progress in the same row. When
+the transfer settles, saved stage progress returns; only successful installation
+restores the full-color cover. Completion stays on Bookshelf rather than
+automatically entering learning.
+Every card has a separate top-right ellipsis menu. It offers cancellation during
+transfer and download-only deletion with confirmation for installed optional books.
+Bundled samples and uninstalled books have deletion disabled. History is retained.
+
+Tapping an installed book card selects that book and switches to the Stages tab
+after the selection saves successfully. Stage screens exist only in that tab;
+Bookshelf always returns directly to the library. Selecting a book never starts
+playback or awards XP.
+
 The picker supports English (UK flag), Japanese, Chinese, German, Spanish and
 French, in that order. Languages without books remain selectable and show empty
 Books/Stages screens; they never borrow the English package or its progress.
 
 Settings covers learning preferences, optional iCloud recovery and scoped data
-management, without purchase restoration. Player options pause/checkpoint before
-settings or references. Closing a sheet or returning to the foreground does not
+management, without purchase restoration. Each learning-settings menu row shows
+a small, wrapping summary of its saved options and refreshes after edits or resets.
+Player options show current-value summaries and are opened from the upper-left
+button. The centered book title sits above its progress track, which extends to
+the counter at the right content margin; the separate player close
+button is removed. The stage exit remains inside options, including during loading
+or errors. Options always open at the full native sheet height. Short learning
+content is vertically centered between the fixed controls; long content remains
+scrollable. The main action uses only an icon for Confirm, Resume, Next and Playing,
+while retaining accessible names, disabled states and explicit confirmation behavior.
+Cycle rings retain stroke clearance inside the timeline so playback does not clip them.
+Committed XP appears as text only, without a background, at a bounded random
+position above the action. It uses adaptive primary text, black in light mode
+and white in dark mode, and starts fading immediately, disappearing in half a
+second. Reduce Motion uses a stationary fade. These receipts never create learning credit.
+Browsing tab and available stage activations produce one light native haptic;
+programmatic tab routing and locked stages do not. Stage rows show three check
+circles, turning one green for each confirmed full run (up to three), while
+retaining the spoken completion count for accessibility.
+Player options pause/checkpoint before settings or references.
+Closing a sheet or returning to the foreground does not
 implicitly resume or confirm practice.
+
+iCloud settings use one sync toggle. Enabling asks for explicit consent and,
+for guest records, whether to include them; disabling stops automatic sync.
+The main data-management screen contains only scoped deletion actions. Consent,
+destructive confirmations and actionable errors remain explicit. Display and
+font previews share two longer, separately quoted bilingual examples. Previews
+and active learning share alternating chat bubbles or continuous left-aligned
+list text inside one padded, rounded card, keeping each original and translation
+together. Video uses list mode without changing the saved preference for lessons
+without video.
 
 ## Capabilities and Constraints
 

@@ -39,7 +39,7 @@ final class NativeFoundationUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["도서 목록"].tap()
+        app.tabBars.buttons["책장"].tap()
         XCTAssertTrue(sample.waitForExistence(timeout: 5))
         app.terminate()
         app.launch()

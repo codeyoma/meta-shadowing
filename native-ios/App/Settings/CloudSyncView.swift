@@ -3,71 +3,85 @@ import SwiftUI
 
 struct CloudSyncView: View {
     let services: ProductServicesModel
-    @State private var confirmation: ServiceConfirmation?
+    @State private var confirmation: SyncEnableChoice?
+    private var busy: Bool { services.syncState.busy || services.actionBusy }
     var body: some View {
         Form {
             Section {
-                LabeledContent("계정", value: accountStatus)
-                LabeledContent("자동 동기화", value: services.syncState.enabled ? "켜짐" : "꺼짐")
-                if services.syncState.busy || services.actionBusy { ProgressView("기록 확인 중") }
-            } footer: { Text("학습은 기기에 먼저 저장돼요. iCloud를 켜면 현재 계정의 기록을 먼저 확인한 뒤 합칩니다.") }
-            Section {
-                if services.syncState.enabled {
-                    Button("자동 동기화 끄기") { Task { await services.perform(services.confirmation(.disable)) } }
-                } else {
-                    Button("iCloud 기록으로 시작") { confirmation = services.confirmation(.enable(importGuest: false)) }
-                    Button("이 기기 기록도 합쳐서 시작") { confirmation = services.confirmation(.enable(importGuest: true)) }
+                Toggle(isOn: Binding(get: { services.syncState.enabled }, set: setSyncEnabled)) {
+                    HStack {
+                        Text("동기화")
+                        if busy { ProgressView().controlSize(.small).accessibilityHidden(true) }
+                    }
                 }
-                Button("한 번만 동기화") { confirmation = services.confirmation(.refresh(importGuest: false)) }
-            }.disabled(services.actionBusy || services.syncState.busy || services.syncState.account.scope == nil || services.syncState.resetPending)
-            Section {
-                Button("계정 다시 확인") { Task { await services.refreshAccount() } }
-                    .disabled(services.actionBusy || services.syncState.busy)
-                ServiceStatusView(services: services)
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("icloud-sync-toggle")
+                .disabled(busy || services.syncState.resetPending || (!services.syncState.enabled && services.syncState.account.scope == nil))
+            } footer: {
+                if !busy, !services.syncState.enabled, services.syncState.account.scope == nil {
+                    Text(accountStatus)
+                }
             }
+            ServiceStatusView(services: services)
         }.navigationTitle("iCloud 동기화")
-            .confirmationDialog("현재 iCloud 계정의 기록을 합칠까요?", item: $confirmation, titleVisibility: .visible) { request in
-                Button(confirmTitle(request.action)) { Task { await services.perform(request) } }
+            .refreshable { await services.refreshAccount() }
+            .confirmationDialog("iCloud 동기화를 켤까요?", item: $confirmation, titleVisibility: .visible) { choice in
+                Button("복원하고 동기화 켜기") { Task { await services.perform(choice.restore) } }
+                if choice.restore.profileID == "local" {
+                    Button("합치고 동기화 켜기") { Task { await services.perform(choice.merge) } }
+                }
                 Button("취소", role: .cancel) { }
-            } message: { request in
-                switch request.action {
-                case .enable(importGuest: true): Text("이 기기의 게스트 학습 기록을 현재 iCloud 계정 기록에 합치고 자동 동기화를 켭니다.")
-                case .enable: Text("현재 iCloud 계정 기록을 복원하고 자동 동기화를 켭니다. 게스트 기록은 별도로 보관합니다.")
-                default: Text("현재 계정 기록을 한 번 합칩니다. 자동 동기화 설정은 바뀌지 않습니다.")
+            } message: { choice in
+                if choice.restore.profileID == "local" {
+                    Text("iCloud 기록을 복원합니다. 이 기기 기록도 합칠지 선택해 주세요. 합치지 않은 기록은 기기에 남습니다.")
+                } else {
+                    Text("현재 iCloud 계정의 학습 기록을 동기화합니다.")
                 }
             }
     }
-    private func confirmTitle(_ action: ServiceAction) -> String {
-        switch action {
-        case .enable(importGuest: true): String(localized: "합치고 동기화 켜기")
-        case .enable: String(localized: "복원하고 동기화 켜기")
-        default: String(localized: "지금 합치기")
+    private func setSyncEnabled(_ enabled: Bool) {
+        guard enabled != services.syncState.enabled, !busy, !services.syncState.resetPending else { return }
+        if enabled {
+            guard services.syncState.account.scope != nil else { return }
+            confirmation = SyncEnableChoice(restore: services.confirmation(.enable(importGuest: false)),
+                                            merge: services.confirmation(.enable(importGuest: true)))
+        } else {
+            let request = services.confirmation(.disable)
+            Task { await services.perform(request) }
         }
     }
     private var accountStatus: String {
         switch services.syncState.account {
-        case .available: String(localized: "현재 iCloud 계정")
+        case .available: ""
         case .noAccount: String(localized: "iPhone 설정에서 iCloud에 로그인해 주세요")
-        case .unavailable: String(localized: "이 빌드에서는 사용할 수 없음")
-        case .unknown: String(localized: "계정을 확인할 수 없음 · 기기 기록은 사용 가능")
+        case .unavailable: String(localized: "이 빌드에서는 iCloud를 사용할 수 없어요.")
+        case .unknown: String(localized: "iCloud 계정을 확인할 수 없어요.")
         }
     }
+}
+
+/// Both choices retain the account/profile boundary captured when the user tapped ON.
+private struct SyncEnableChoice: Identifiable {
+    let restore: ServiceConfirmation
+    let merge: ServiceConfirmation
+    var id: UUID { restore.id }
 }
 
 struct ServiceStatusView: View {
     let services: ProductServicesModel
     var body: some View {
         if services.syncState.resetPending {
-            Text("기록 삭제가 아직 완료되지 않았어요. 다시 시도해 주세요.").foregroundStyle(.secondary)
-            Button("삭제 다시 시도") { Task { await services.retrySync() } }
-                .disabled(services.syncState.busy || services.actionBusy)
-        } else if services.syncState.error != nil || services.error != nil {
-            Text(errorMessage)
-                .font(.footnote).foregroundStyle(.secondary)
-            Button("다시 시도") { Task { await services.retrySync() } }
-                .disabled(services.syncState.busy || services.actionBusy)
-        } else if services.syncState.cleanupPending {
-            Text("기록은 저장되었고 이전 백업 정리를 기다리고 있어요.").font(.footnote)
+            Section {
+                Text("기록 삭제가 아직 완료되지 않았어요. 다시 시도해 주세요.").foregroundStyle(.secondary)
+                Button("삭제 다시 시도") { Task { await services.retrySync() } }
+                    .disabled(services.syncState.busy || services.actionBusy)
+            }
+        } else if (services.syncState.enabled && services.syncState.error != nil) || services.error != nil {
+            Section {
+                Text(errorMessage).font(.footnote).foregroundStyle(.secondary)
+                Button("다시 시도") { Task { await services.retrySync() } }
+                    .disabled(services.syncState.busy || services.actionBusy)
+            }
         }
     }
     private var errorMessage: String {

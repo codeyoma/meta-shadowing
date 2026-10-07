@@ -11,19 +11,21 @@ final class OfflineAcceptanceUITests: XCTestCase {
         let download = app.buttons["download-hosted-morning-notes-v1"]
         XCTAssertTrue(download.wait(for: \.isHittable, toEqual: true, timeout: 20))
         download.tap()
-        let retry = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@",
+        let retry = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label ENDSWITH %@",
             "download-hosted-morning-notes-v1", "다운로드 다시 시도")).firstMatch
         XCTAssertTrue(retry.waitForExistence(timeout: 10),
                       "The offline fixture must fail acquisition, not silently install bundled bytes")
+        XCTAssertTrue((retry.value as? String ?? "").contains("연결과 서비스 설정"),
+                      "VoiceOver must receive recovery instructions from the card action")
         XCTAssertFalse(app.buttons["book-hosted-morning-notes-v1"].exists)
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "0 / 100 XP")
+        XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
         app.buttons["book-morning-notes-v1"].tap()
         XCTAssertTrue(app.buttons["stage-1"].wait(for: \.isHittable, toEqual: true, timeout: 5))
         app.buttons["stage-1"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 20),
                       "A failed external transfer must not block bundled native playback")
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
 
     @MainActor func testDownloadedLessonSurvivesOfflineRelaunchWithoutNewCredit() {
@@ -41,8 +43,8 @@ final class OfflineAcceptanceUITests: XCTestCase {
         main.tap() // One explicit confirmation in this disposable profile only.
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(
             for: \.label, toEqual: "확인한 반복 1/3", timeout: 5))
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         app.buttons["다구간 학습 사이즈"].tap()
@@ -59,7 +61,7 @@ final class OfflineAcceptanceUITests: XCTestCase {
         app.launch()
         let book = app.buttons["book-hosted-morning-notes-v1"]
         XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 20))
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "1 / 100 XP")
+        XCTAssertEqual(app.buttons["header-xp"].label, "1 / 100 XP")
         XCTAssertFalse(main.exists, "Offline relaunch must not enter or confirm a lesson")
         openDownloadedStage(app)
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(
@@ -78,27 +80,27 @@ final class OfflineAcceptanceUITests: XCTestCase {
                       "Closing reference options must leave learning paused")
         selectLocalSource(app, index: 1, position: "2/12", cycles: "확인한 반복 0/3")
         selectLocalSource(app, index: 0, position: "1/12", cycles: "확인한 반복 1/3")
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         app.buttons["다구간 학습 사이즈"].tap()
         XCTAssertTrue(grouping.wait(for: \.isSelected, toEqual: true, timeout: 5))
-        app.tabBars.buttons["도서 목록"].tap()
-        // Books keeps the pushed stage list; return to the library root.
-        let back = app.navigationBars.buttons["BackButton"]
-        if back.waitForExistence(timeout: 2) { back.tap() }
-        app.buttons["manage-hosted-morning-notes-v1"].tap()
-        app.buttons["다운로드 삭제"].tap()
+        app.tabBars.buttons["책장"].tap()
+        let manage = app.buttons["manage-hosted-morning-notes-v1"]
+        XCTAssertTrue(manage.wait(for: \.isHittable, toEqual: true, timeout: 5),
+                      "The Books tab opens the library directly")
+        manage.tap()
+        app.buttons["삭제하기"].tap()
         XCTAssertTrue(app.alerts["다운로드를 삭제할까요?"].waitForExistence(timeout: 5))
         app.alerts.buttons["다운로드 삭제"].tap()
         XCTAssertTrue(download.wait(for: \.isHittable, toEqual: true, timeout: 10))
         download.tap()
-        let retry = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@",
+        let retry = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label ENDSWITH %@",
             "download-hosted-morning-notes-v1", "다운로드 다시 시도")).firstMatch
         XCTAssertTrue(retry.waitForExistence(timeout: 10), "The offline branch must really refuse re-acquisition")
         XCTAssertFalse(book.exists)
-        XCTAssertEqual(app.staticTexts["header-xp"].label, "1 / 100 XP")
+        XCTAssertEqual(app.buttons["header-xp"].label, "1 / 100 XP")
 
         app.terminate()
         app.launchArguments = arguments
@@ -108,14 +110,15 @@ final class OfflineAcceptanceUITests: XCTestCase {
         openDownloadedStage(app)
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(
             for: \.label, toEqual: "확인한 반복 1/3", timeout: 10))
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
     }
 
     @MainActor private func openDownloadedStage(_ app: XCUIApplication) {
         let book = app.buttons["book-hosted-morning-notes-v1"]
         XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10))
         book.tap()
+        XCTAssertTrue(app.tabBars.buttons["스테이지"].wait(for: \.isSelected, toEqual: true, timeout: 5))
         let stage = app.buttons["stage-1"]
         XCTAssertTrue(stage.wait(for: \.isHittable, toEqual: true, timeout: 5))
         stage.tap()

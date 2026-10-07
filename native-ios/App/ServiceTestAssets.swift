@@ -7,7 +7,10 @@ import Foundation
 nonisolated struct ServiceTestAssets: AssetDelivery {
     let root: URL
     let offline: Bool
-    init(root: URL, offline: Bool = false) { self.root = root; self.offline = offline }
+    let slow: Bool
+    init(root: URL, offline: Bool = false, slow: Bool = false) {
+        self.root = root; self.offline = offline; self.slow = slow
+    }
     static func package(root: URL) throws -> (HostedPackage, CatalogBook) {
         struct Specification: Decodable { let key: String; let metadata: DeliveryPackage.Entry }
         struct Manifest: Decodable { let phrases: [DeliveryPackage.Entry] }
@@ -22,6 +25,14 @@ nonisolated struct ServiceTestAssets: AssetDelivery {
     }
     func download(progress: @escaping AssetDeliveryProgress) async throws {
         guard !offline else { throw URLError(.notConnectedToInternet) }
+        if slow {
+            for step in 1...20 {
+                try Task.checkCancellation()
+                await progress(Double(step) / 20)
+                try await Task.sleep(for: .milliseconds(500))
+            }
+            return
+        }
         await progress(0.5)
         try await Task.sleep(for: .milliseconds(300))
         await progress(1)

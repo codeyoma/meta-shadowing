@@ -15,8 +15,9 @@ struct LearningContentView: View {
         originalVisible = !((try? StagePolicy.forStage(session.plan.scope.stage).firstWordHints) ?? false)
     }
     var body: some View {
+        let displayPreferences = preferences.displayedForVideo(flow?.video != nil)
         if session.isSilent {
-            SilentLearningContent(session: session, motion: motion, preferences: preferences, flow: flow)
+            SilentLearningContent(session: session, motion: motion, preferences: displayPreferences, flow: flow)
         } else {
             VStack(alignment: .trailing, spacing: 8) {
                 if (try? StagePolicy.forStage(session.plan.scope.stage).firstWordHints) == true {
@@ -25,7 +26,7 @@ struct LearningContentView: View {
                 }
                 if let presentation = try? LearningUnitPresentation.make(session: session,
                     revealOriginal: originalVisible, elapsedSeconds: 0) {
-                    LearningTextBlock(presentation: presentation, preferences: preferences, session: session, flow: flow)
+                    LearningTextBlock(presentation: presentation, preferences: displayPreferences, session: session, flow: flow)
                 }
             }
         }
@@ -49,25 +50,15 @@ struct LearningTextBlock: View {
     var session: LearningSession? = nil
     var flow: LearningFlow? = nil
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if preferences.speechView == "bubble" {
-                ForEach(presentation.bubbles) { bubble in
-                    lines(bubble.lines).padding(20)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 24))
-                        .accessibilityElement(children: .contain)
-                        .accessibilityIdentifier("learning-bubble-\(bubble.id)")
-                }
-            } else {
-                lines(presentation.lines).padding(20)
-                    .background(Color(uiColor: .tertiarySystemFill), in: .rect(cornerRadius: 8))
-            }
-        }.frame(maxWidth: .infinity, alignment: .leading)
+        LearningTextLayout(items: presentation.bubbles, speechView: preferences.speechView,
+                           identifierPrefix: "learning") { bubble in
+            lines(bubble.lines)
+        }
     }
     private func lines(_ values: [LearningTextLine]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(values) { line in
                 LearningLineView(line: line, preferences: preferences, session: session, flow: flow)
-                    .padding(.bottom, line.kind == .translation ? 12 : 0)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -78,12 +69,7 @@ private struct LearningLineView: View {
     let session: LearningSession?
     let flow: LearningFlow?
     @State private var active = true
-    @ScaledMetric(relativeTo: .body) private var scale = 1.0
     var body: some View {
-        let target = line.kind == .target
-        let base = target ? preferences.originalTextSize ?? (preferences.speechView == "bubble" ? 29 : 24)
-                          : preferences.translationTextSize ?? (preferences.speechView == "bubble" ? 18 : 16)
-        let font = target ? preferences.originalTextFont : preferences.translationTextFont
         ZStack(alignment: .topLeading) {
             if lookupText != nil, line.spans.allSatisfy(\.visible) {
                 PlayerDictionaryText(text: line.spans.map(\.text).joined(), lookup: lookup)
@@ -95,7 +81,7 @@ private struct LearningLineView: View {
                 }
             }
         }
-        .font(LearningFont.make(font, size: CGFloat(base) * scale))
+        .modifier(LearningTextFont(preferences: preferences, original: line.kind == .target))
         .textSelection(.disabled)
         .accessibilityRepresentation {
             Text(line.accessibleText).accessibilityActions {

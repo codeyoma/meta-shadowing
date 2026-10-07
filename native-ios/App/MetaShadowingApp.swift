@@ -19,6 +19,9 @@ struct MetaShadowingApp: App {
         var store: any LearningStore = persistent
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--development-library") {
+            catalog = DevelopmentLibraryCatalog(bundled: catalog)
+        }
         if UUID(uuidString: root.lastPathComponent) != nil,
            let index = arguments.firstIndex(of: "--ui-test-product-fixture"), index + 1 < arguments.count {
             catalog = ProductTestCatalog(root: root.appending(path: "Assets"), mode: arguments[index + 1])
@@ -54,12 +57,30 @@ struct MetaShadowingApp: App {
                 return ContentDelivery.appleTransport(package)
             }
             #if DEBUG
+            if arguments.contains("--development-library"), UUID(uuidString: root.lastPathComponent) == nil {
+                let source = URL.applicationSupportDirectory.appending(path: "NativeDevelopmentLibrary/duo-33-free-test-v2")
+                if FileManager.default.fileExists(atPath: source.appending(path: "descriptor.json").path) {
+                    let duo = try DevelopmentDuoAssets(root: source)
+                    if let configured = packages.first(where: { $0.descriptor.key == duo.package.descriptor.key }) {
+                        guard configured.descriptor == duo.package.descriptor else { throw ProductError.invalidContent }
+                    } else {
+                        packages.append(duo.package)
+                        books.append(duo.book)
+                    }
+                    let previousSource = assetSource
+                    assetSource = { package in
+                        if package.descriptor == duo.package.descriptor { return duo }
+                        return previousSource(package)
+                    }
+                }
+            }
             if UUID(uuidString: root.lastPathComponent) != nil, arguments.contains("--ui-test-services") {
                 let sample = Bundle.main.bundleURL.appending(path: "sample")
                 let fixture = try ServiceTestAssets.package(root: sample)
                 packages = [fixture.0]; books = [fixture.1]
                 let offline = arguments.contains("--ui-test-services-offline")
-                assetSource = { _ in ServiceTestAssets(root: sample, offline: offline) }
+                let slow = arguments.contains("--ui-test-services-slow")
+                assetSource = { _ in ServiceTestAssets(root: sample, offline: offline, slow: slow) }
             }
             #endif
             let delivery = try ContentDelivery(root: root.appending(path: "content"), packages: packages, transport: assetSource)

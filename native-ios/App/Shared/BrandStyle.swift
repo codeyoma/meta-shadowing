@@ -5,7 +5,7 @@ import SwiftUI
 enum BrandStyle {
     /// Bee yellow: the primary-action fill, XP and reward surfaces.
     static let yellow = Color(.brandYellow)
-    /// Navy ink: drawn only on Bee yellow fills.
+    /// Navy ink: drawn on Bee yellow primary-action fills.
     static let ink = Color(.brandInk)
     /// Completion strokes and fills that must stay visible on grouped surfaces.
     static let green = Color(.brandGreen)

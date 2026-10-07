@@ -27,7 +27,9 @@ public enum ProductLoadState: Equatable, Sendable {
         guard !failed else { return }
         _ = await perform(.load)
     }
-    public func select(language: String, packageKey: String?) async { _ = await perform(.select(language, packageKey)) }
+    @discardableResult public func select(language: String, packageKey: String?) async -> Bool {
+        await perform(.select(language, packageKey))
+    }
     @discardableResult public func saveLearningPreferences(_ value: LearningPreferences) async -> Bool {
         await perform(.preferences(value))
     }

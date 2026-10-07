@@ -19,7 +19,7 @@ final class ProductAccessibilityUITests: XCTestCase {
         stage.tap()
         XCTAssertTrue(app.buttons["player-main"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["player-options"].isHittable)
-        XCTAssertTrue(app.buttons["player-exit"].isHittable)
+        XCTAssertFalse(app.buttons["player-exit"].exists)
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "bilingual")).firstMatch.exists)
         try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
         app.buttons["player-options"].tap()

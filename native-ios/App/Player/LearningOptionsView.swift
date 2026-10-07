@@ -9,26 +9,24 @@ struct LearningOptionsView: View {
     let initial: LearningOptionRoute
     let exit: () async -> Void
     @State private var path: [LearningOptionRoute]
-    @State private var detent: PresentationDetent
     init(flow: LearningFlow, model: ProductModel, initial: LearningOptionRoute, exit: @escaping () async -> Void) {
         self.flow = flow; self.model = model; self.initial = initial; self.exit = exit
         path = initial == .menu ? [] : [initial]
-        detent = initial == .menu ? .medium : .large
     }
     var body: some View {
         NavigationStack(path: $path) {
             List {
                 if let runtime = flow.runtime {
                     Section {
-                        NavigationLink("전체 문장", value: LearningOptionRoute.sentences)
+                        optionLink(.sentences, runtime: runtime)
                         if runtime.controls.session.isSilent {
-                            NavigationLink("단어 공개 속도", value: LearningOptionRoute.revealSpeed)
-                        } else { NavigationLink("배속", value: LearningOptionRoute.rate) }
-                        NavigationLink("다구간 학습 사이즈", value: LearningOptionRoute.group)
-                        NavigationLink("크레이지 스피킹", value: LearningOptionRoute.revealPresets)
-                        NavigationLink("학습 화면", value: LearningOptionRoute.display)
-                        NavigationLink("폰트 설정", value: LearningOptionRoute.typography)
-                    }
+                            optionLink(.revealSpeed, runtime: runtime)
+                        } else { optionLink(.rate, runtime: runtime) }
+                        optionLink(.group, runtime: runtime)
+                        optionLink(.revealPresets, runtime: runtime)
+                        optionLink(.display, runtime: runtime)
+                        optionLink(.typography, runtime: runtime)
+                    }.disabled(runtime.controls.saveFailed || !runtime.controls.active || flow.accessInvalidated)
                     Section {
                         if runtime.monitorState == .monitoring || runtime.monitorState == .suspended {
                             Slider(value: Binding(get: { runtime.monitorGain }, set: { runtime.monitoring.setGain($0) }), in: VoiceMonitoring.gainRange)
@@ -36,12 +34,12 @@ struct LearningOptionsView: View {
                             Button("내 목소리 모니터링 끄기") { Task { await runtime.monitoring.setEnabled(false) } }
                         } else { Text("유선 헤드폰을 연결하면 학습 화면에서 내 목소리를 들을 수 있어요.").font(.footnote) }
                     }
-                    Section {
-                        // Leaving keeps the durable pause and never confirms learning.
-                        Button { Task { await exit() } } label: {
-                            Label("스테이지로 돌아가기", systemImage: "rectangle.portrait.and.arrow.right")
-                        }.accessibilityIdentifier("options-exit")
-                    }
+                }
+                Section {
+                    // Also available while loading or after an error. Leaving never confirms learning.
+                    Button { Task { await exit() } } label: {
+                        Label("스테이지로 돌아가기", systemImage: "rectangle.portrait.and.arrow.right")
+                    }.accessibilityIdentifier("options-exit")
                 }
             }.navigationTitle("학습 옵션")
                 .navigationDestination(for: LearningOptionRoute.self) { route in
@@ -60,14 +58,27 @@ struct LearningOptionsView: View {
                 }.padding()
             }
         }
-        // Nested pages need the full height; only the menu offers the medium height.
-        .presentationDetents(path.isEmpty ? [.medium, .large] : [.large], selection: $detent)
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onChange(of: path) { old, new in
-            if !new.isEmpty { detent = .large }
             if old.contains(.analysis), !new.contains(.analysis) { flow.leaveAnalysis() }
         }
         .onDisappear { flow.leaveAnalysis() }
+    }
+    private func optionLink(_ option: LearningOptionRoute, runtime: NativeLearningRuntime) -> some View {
+        let summary: String
+        switch option {
+        case .sentences:
+            summary = String(localized: "총 \(runtime.controls.session.plan.sources.count)문장")
+        case .revealSpeed:
+            let reveal = runtime.controls.session.reveal
+            summary = "S\(reveal?.level ?? 1) · \(reveal?.WPM ?? 150) WPM"
+        default:
+            summary = option.summary(preferences: activePreferences(runtime).displayedForVideo(flow.video != nil))
+        }
+        return NavigationLink(value: option) {
+            LearningOptionLabel(title: option.title, summary: summary)
+        }.accessibilityLabel(option.title).accessibilityValue(summary)
     }
     /// The single dismiss control on every page. Swiping down dismisses as well.
     private var closeButton: some ToolbarContent {
@@ -89,7 +100,7 @@ struct LearningOptionsView: View {
         }
     }
     private func preferenceEditor(_ route: LearningOptionRoute, runtime: NativeLearningRuntime) -> some View {
-        PreferenceEditorView(option: route, preferences: activePreferences(runtime)) { value in
+        PreferenceEditorView(option: route, preferences: activePreferences(runtime), videoLayout: flow.video != nil) { value in
             switch route {
             case .rate:
                 let result = await runtime.coordinator.editWhilePaused(.changeRate(value.rate))

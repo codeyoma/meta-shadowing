@@ -5,6 +5,51 @@ import Testing
 @testable import AppFoundation
 
 @MainActor @Suite struct ProductModelTests {
+    @Test func bookSelectionReportsOnlyCommittedSuccess() async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = FailingStore(root: root)
+        let model = ProductModel(workspace: ProductWorkspace(store: store,
+            catalog: BundledProductCatalog(root: ProductCatalogTests.sampleRoot), profileID: "selection"))
+        await model.activate()
+        let committed = model.snapshot
+        await store.failNextPreferences()
+        #expect(await model.select(language: "english", packageKey: "morning-notes-v1") == false)
+        #expect(model.snapshot == committed)
+        #expect(model.failed)
+        #expect(await model.select(language: "english", packageKey: "morning-notes-v1") == true)
+        #expect(model.snapshot?.preferences.libraryPackageKey == "morning-notes-v1")
+        #expect(model.snapshot?.progress.xp == 0)
+    }
+
+    @Test func busyBookSelectionDoesNotReportSuccess() async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = DelayedProductCatalog()
+        let model = ProductModel(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root),
+            catalog: catalog, profileID: "selection"))
+        let loading = Task { await model.activate() }
+        while !(await catalog.entered) { await Task.yield() }
+        #expect(await model.select(language: "english", packageKey: "morning-notes-v1") == false)
+        await catalog.release()
+        await loading.value
+        #expect(model.snapshot?.preferences.libraryPackageKey == nil)
+    }
+
+    @Test func deactivationRejectsLateBookSelection() async throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = DelayedProductCatalog()
+        let model = ProductModel(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root),
+            catalog: catalog, profileID: "selection"))
+        let selection = Task { await model.select(language: "english", packageKey: "morning-notes-v1") }
+        while !(await catalog.entered) { await Task.yield() }
+        model.deactivate()
+        await catalog.release()
+        #expect(await selection.value == false)
+        #expect(model.snapshot == nil)
+    }
+
     @Test func startupFailureWaitsForExplicitRetryAcrossActivation() async throws {
         let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

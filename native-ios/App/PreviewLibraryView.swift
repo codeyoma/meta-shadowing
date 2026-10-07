@@ -25,7 +25,7 @@ struct PreviewLibraryView: View {
                     Text("Swift 네이티브 기반을 확인하는 화면이에요. 실제 도서와 학습 기록은 불러오지 않아요.")
                 }
             }
-            .navigationTitle("도서 목록")
+            .navigationTitle("책장")
             .navigationDestination(for: PreviewLesson.self) { lesson in
                 PreviewLessonView(lesson: lesson)
             }

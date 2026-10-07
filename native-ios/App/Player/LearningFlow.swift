@@ -29,6 +29,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var pending: Task<OpenedLesson, any Error>?
     @ObservationIgnored private var teardown: Task<Void, Never>?
+    @ObservationIgnored private var openingPaused = false
     init(workspace: ProductWorkspace) {
         self.workspace = workspace
         let analysis = DictionaryPresenter(), player = DictionaryPresenter()
@@ -89,20 +90,33 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
             }
             title = opened.materials.book.title
             pending = nil; loading = false
-            _ = await runtime.coordinator.perform(.stageEntry)
+            if openingPaused || options != nil {
+                runtime.setMenuOpen(options != nil)
+                _ = await runtime.coordinator.perform(.pause)
+            } else {
+                _ = await runtime.coordinator.perform(.stageEntry)
+            }
         } catch {
             guard request == generation else { return }
             pending = nil; loading = false; failed = true
         }
     }
     func presentOptions(_ route: LearningOptionRoute) async {
-        guard let runtime, options == nil else { return }
+        guard options == nil else { return }
+        guard let runtime else {
+            if route == .menu {
+                // Opening options interrupts launch intent even if dismissed before loading finishes.
+                openingPaused = true
+                options = .menu
+            }
+            return
+        }
         playerDictionary.cancel()
         let request = generation
         runtime.setMenuOpen(true)
         let paused = await runtime.coordinator.perform(.pause)
         guard request == generation, self.runtime === runtime else { return }
-        guard paused.controller.active, !paused.controller.saveFailed else {
+        guard route == .menu || (paused.controller.active && !paused.controller.saveFailed) else {
             runtime.setMenuOpen(false)
             return
         }
@@ -120,7 +134,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         if loading { generation += 1; pending?.cancel(); loading = false; failed = true }
     }
     func close() async {
-        generation += 1; loading = false; options = nil
+        generation += 1; loading = false; options = nil; openingPaused = false
         await releaseResources()
     }
     func prepareServiceBoundary() async throws {

@@ -14,6 +14,15 @@ optional private iCloud recovery remain unchanged. No download, access refresh,
 relaunch or restoration confirms practice. Historical paid requirements below
 apply only to the retained reference, not the current Swift app.
 
+The Swift library screen/tab is “책장” (Bookshelf). Each installed card opens its
+book's Stages tab; an undownloaded, desaturated card starts download or retries
+failure. There are no separate Learn/Download buttons. The card's stage progress
+row becomes transfer progress plus a percentage while acquisition/installation is
+busy, then returns to stage progress after successful installation without
+automatically starting learning. A separate top-right ellipsis menu cancels active
+transfers or requests confirmed download-only removal. Bundled/uninstalled cards
+cannot be deleted. Download removal retains the card, checkpoints, XP and settings.
+
 ## Current stage expansion — 2026-09-20
 
 ### Video packages — stages 1–16
@@ -55,7 +64,8 @@ with first-word hints. Stages 11–16 use silent word reveal as specified below.
   (defaults 150/200/250/300). Fresh runs start at S1; a selected level and its
   WPM remain fixed throughout that run, without automatic speed progression.
 - Changing speed requires a paused checkpoint and preserves partial-word
-  progress. Editing global WPM presets does not silently alter an existing run;
+  progress. The preset editor's reset action restores 150/200/250/300 WPM and
+  discards unfinished numeric input. Editing or resetting global WPM presets does not silently alter an existing run;
   select a speed explicitly to apply its current preset to that run.
 - Each phrase has one reveal pass, without a cycle indicator or Repeat action.
   Finishing the reveal unlocks manual confirmation, which grants 3 XP and moves
@@ -121,7 +131,14 @@ a minimum 44pt touch area; Reduce Motion disables its text fade. Hidden text is 
 selectable and its accessibility label exposes hints only.
 Both bubble and list modes place each source member's translation immediately
 below that member, before the next source member. The large display previews and
-the segmented picker both select the same saved display preference.
+the segmented picker both select the same saved display preference. Bubble mode
+alternates utterance pairs between the leading and trailing sides like a chat.
+Settings previews and the player share this layout and typography. List mode has
+one padded, rounded card around the entire current unit, with no per-utterance
+cards, and reads as continuous, left-aligned paragraphs.
+While a video surface is present, the player and its settings previews always use
+list mode without overwriting the saved preference. Silent stages without video
+continue to honor the saved layout.
 List mode renders only the current saved learning unit, with all its paired
 utterances in one left-aligned vertical list. It is not a scrollable lesson index;
 the separate all-sentences option remains the navigation surface. Long current
@@ -385,35 +402,58 @@ remain in the native media contract linked above.
   the main action in a 1:3 width ratio. Repeat slides in from the left while the
   main action narrows over 220 ms; Reduce Motion applies the final layout directly.
   Repeat reveals two more nodes from the right. Nodes have no visible numbers;
+  each node leaves clearance for its stroke inside the clipped timeline bounds,
+  including partial/full active rings and the first/last nodes.
   explicit confirmation animates the check, then fills the line to the next node.
   Phrase-content transitions affect only the central sentence card. The footer
   has no separator line.
   Back navigation and app interruptions still pause and save; no separate pause
   or restart button is shown. Icon controls retain accessible names and recovery.
+- Swift browsing tab activation and opening an available stage produce one light
+  native impact. Programmatic routing from Library to Stages and disabled stage
+  activation produce no impact. Stage rows show three check circles instead of a
+  numeric fraction: each confirmed full run turns one check green, capped at three.
+  These are stage-run completions, not the player's per-sentence cycles. The row's
+  accessible value retains the completion count, resume position and locked state.
 - Player navigation opens a native options drawer instead of immediately going
   back. It pauses/checkpoints first and offers speed, return, and a Cardinal
   “스테이지로 돌아가기” action. Closing the drawer never automatically resumes.
   The drawer body uses an iOS native stack for menu-to-option push/pop transitions,
   with platform timing and interactive back swipe. Reduced Motion uses a fade.
-  Owner decision 2026-10-06 (#119): the drawer is a resizable sheet with medium
-  and large heights, and nested options open at the large height. Each page has
+  Owner update 2026-10-07: the drawer always opens at the full native sheet height,
+  including the menu and nested options, with no half-height state. Each page has
   one close control; it and a downward swipe dismiss the entire drawer, including
   from a nested option. “스테이지로 돌아가기” is an action row in the options list
   rather than a fixed footer, and there is no separate continue button. A failed
   save keeps an actionable retry visible on every page. Back returns to the menu.
   A directly opened speed editor returns to the menu without dismissing the sheet.
-  The header shows sentence progress and position, not XP. The counter is aligned
-  to the right content margin; native text measurement reserves both digit slots
+  The player options button sits at the upper left, replacing the separate player
+  close button. The options list retains the stage exit during loading or errors;
+  opening it while loading leaves the eventual lesson paused, even if dismissed
+  before loading finishes. Failed saves still block lesson edits until retried.
+  Option subtitles reflect active rate/group size, the current silent-speed level,
+  saved presets/fonts, and the effective video-forced list layout.
+  The book title and sentence progress form one compact header block, with the
+  track and position directly beneath the title. The counter is aligned to the
+  screen's right content margin, beyond the centered title's narrower text area;
+  its completed fill uses the primary-action color, without changing its meaning
+  from completed learning units to XP.
+  native text measurement reserves both digit slots
   from the total phrase count with tabular numerals, so the track stays the same
   width when the current phrase crosses a digit boundary. The row below shows
   method level, speed, and a sentence-analysis placeholder action. Both rows,
   including the three controls' full touch areas, belong to the fixed navigation
-  header and never move with the scrolling phrase content. As requested
+  header. Level/speed labels remain single-line at large text sizes, and main
+  action symbols reserve the same text-scaled height across playback states.
+  These controls never move with the scrolling phrase content. As requested
   in the #57 UI refinement, the level and analysis actions pause/checkpoint and
   open native drawers. The guide identifies the level and method; detailed
   guidance is intentionally empty for now. The analysis drawer shows the current
   sentence menu and target-text/POS detail described in #84 above when installed
   syntax is available; missing analysis has an explicit unavailable message.
+  Short learning content is vertically centered in the reading area between the
+  fixed upper controls (and video when present) and bottom controls. Oversized
+  content starts at the top and remains scrollable without moving those controls.
   Closing either drawer never resumes playback or confirms a cycle.
   Tapping the speed indicator pauses/checkpoints and opens the drawer directly at
   the speed editor; the options icon still opens the complete options menu.
@@ -427,6 +467,9 @@ remain in the native media contract linked above.
   playback ends when extra practice was chosen, or at an already-confirmed
   decision checkpoint. Those actions explicitly confirm the final speaking pass;
   playback time, interruption and restoration never confirm it.
+  The main button displays only its state icon for Confirm, Resume, Next and
+  disabled Playing, retaining accessible names and touch targets. Error recovery
+  labels and all confirmation rules remain unchanged.
 - Navigation outside that choice never confirms skipped practice.
 - Final Next completes a stage/run once. Restoring that state cannot duplicate
   completion history.
@@ -506,6 +549,19 @@ confirmation. The current owner-approved behavior requires explicit confirmation
   protected by an online authority in this local-only prototype.
 - Normal awards and persistence are quiet: update the header and stage status,
   with no routine alerts. Only genuine storage/recovery failures need alerts.
+- The Swift player's transient committed-XP receipt appears immediately above
+  the main action, at a random horizontal position chosen once for each receipt.
+  The text uses adaptive primary ink: black in light mode and white in dark mode,
+  with no background or border. It starts fading as soon
+  as its position is measured and disappears in 0.5 seconds, without a hold.
+  It stays within the available width and never intercepts touches.
+  A permanently reserved footer area contains the complete text and its travel,
+  so long or scrolled lessons cannot appear behind it and awards do not move text.
+  This transient decoration caps its visual text scaling at XXXL; its complete
+  award remains available in the accessibility label and announcement.
+  Reduce Motion retains a stationary fade with no scale or travel. Final-run
+  feedback uses the last action position after the footer disappears. Existing
+  receipt identity, announcements, cancellation and durable reward rules remain.
 - Reward rules cover all sixteen stages; M1 playback still implements only 1–2.
 
 ## Source navigation

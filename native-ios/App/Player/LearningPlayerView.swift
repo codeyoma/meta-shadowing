@@ -14,6 +14,8 @@ struct LearningPlayerView: View {
     let profiles: ProductProfileOwner?
     @State private var boundaryToken: UUID?
     @State private var flow: LearningFlow
+    // Retain the last action frame for the final receipt, after completion removes the footer.
+    @State private var rewardActionFrame: CGRect = .zero
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     init(route: LearningRoute, model: ProductModel, profiles: ProductProfileOwner? = nil) {
@@ -26,7 +28,7 @@ struct LearningPlayerView: View {
                 if flow.accessInvalidated {
                     ContentUnavailableView {
                         Label("도서 이용 상태가 변경되었어요", systemImage: "lock")
-                    } description: { Text("도서 목록에서 다운로드 상태를 다시 확인해 주세요.") } actions: {
+                    } description: { Text("책장에서 다운로드 상태를 다시 확인해 주세요.") } actions: {
                         Button("스테이지로 돌아가기") { Task { await exit() } }
                     }
                 } else if let runtime = flow.runtime {
@@ -45,6 +47,8 @@ struct LearningPlayerView: View {
                                     .id("\(runtime.controls.session.plan.runID)-\(runtime.controls.session.unit)")
                             }.padding()
                         }
+                        // Center content that fits; longer lessons retain normal top-first scrolling.
+                        .defaultScrollAnchor(.center, for: .alignment)
                         .background(Color(uiColor: .systemGroupedBackground))
                         .safeAreaBar(edge: .top) {
                             VStack(spacing: 0) {
@@ -58,7 +62,11 @@ struct LearningPlayerView: View {
                                 }
                             }
                         }
-                        .safeAreaBar(edge: .bottom) { LearningControlsView(runtime: runtime) }
+                        .safeAreaBar(edge: .bottom) {
+                            LearningControlsView(runtime: runtime) { frame in
+                                if !frame.isEmpty { rewardActionFrame = frame }
+                            }
+                        }
                     }
                 } else if flow.failed {
                     ContentUnavailableView {
@@ -71,20 +79,16 @@ struct LearningPlayerView: View {
             }
             .overlay {
                 if let feedback = flow.runtime?.feedback {
-                    LearningRewardView(feedback: feedback).id(feedback.commandID)
+                    LearningRewardView(feedback: feedback, actionFrame: rewardActionFrame).id(feedback.commandID)
                 }
             }
+            .coordinateSpace(.named("player-reward"))
             .navigationTitle(flow.title).navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(role: .close) { Task { await exit() } }.accessibilityIdentifier("player-exit")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { Task { await flow.presentOptions(.menu) } } label: {
-                        Label("학습 옵션", systemImage: "slider.horizontal.3")
-                    }
-                    .accessibilityIdentifier("player-options")
-                    .disabled(flow.runtime == nil)
+            .toolbarVisibility(.hidden, for: .navigationBar)
+            .safeAreaBar(edge: .top) {
+                PlayerTitleView(title: flow.title.isEmpty ? String(localized: "학습") : flow.title,
+                                session: flow.runtime?.controls.session) {
+                    Task { await flow.presentOptions(.menu) }
                 }
             }
         }
@@ -112,31 +116,63 @@ struct LearningPlayerView: View {
         await model.activate()
     }
 }
+private struct PlayerTitleView: View {
+    let title: String
+    let session: LearningSession?
+    let openOptions: () -> Void
+    private let optionsSize: CGFloat = 44
+    private let optionsSpacing: CGFloat = 12
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(title).font(.headline).lineLimit(1)
+                .accessibilityIdentifier("player-book-title")
+                .accessibilityShowsLargeContentViewer()
+                .padding(.horizontal, optionsSize + optionsSpacing)
+                .frame(maxWidth: .infinity)
+            if let session {
+                HStack(spacing: 8) {
+                    ProgressView(value: Double(session.units.filter { $0.confirmed == $0.planned }.count), total: Double(session.unitCount))
+                        .tint(BrandStyle.yellow)
+                        .accessibilityIdentifier("player-progress")
+                    ZStack(alignment: .trailing) {
+                        Text("\(session.unitCount)/\(session.unitCount)").hidden().accessibilityHidden(true)
+                        Text("\(session.unit + 1)/\(session.unitCount)")
+                    }.monospacedDigit().font(.caption2.bold()).fixedSize()
+                }.padding(.leading, optionsSize + optionsSpacing)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: optionsSize)
+        .overlay(alignment: .leading) {
+            Button(action: openOptions) {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 20))
+                    .frame(width: optionsSize, height: optionsSize)
+                    .contentShape(.circle)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }.buttonStyle(.plain).foregroundStyle(.primary)
+                .accessibilityLabel("학습 옵션").accessibilityIdentifier("player-options")
+                .accessibilityShowsLargeContentViewer { Text("학습 옵션") }
+        }
+        .padding(.horizontal).padding(.vertical, 6)
+    }
+}
 private struct PlayerHeaderView: View {
     let runtime: NativeLearningRuntime
     let flow: LearningFlow
     var body: some View {
         let session = runtime.controls.session
         VStack(spacing: 8) {
-            HStack {
-                ProgressView(value: Double(session.units.filter { $0.confirmed == $0.planned }.count), total: Double(session.unitCount))
-                    .accessibilityIdentifier("player-progress")
-                ZStack(alignment: .trailing) {
-                    Text("\(session.unitCount)/\(session.unitCount)").hidden().accessibilityHidden(true)
-                    Text("\(session.unit + 1)/\(session.unitCount)")
-                }.monospacedDigit().font(.caption.bold()).fixedSize()
-            }
             GlassEffectContainer {
                 HStack {
                     Button { Task { await flow.presentOptions(.guide) } } label: {
-                        Text("Lv \((session.plan.scope.stage + 1) / 2)").frame(minWidth: 32)
+                        Text("Lv \((session.plan.scope.stage + 1) / 2)")
+                            .lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
                     }.accessibilityShowsLargeContentViewer()
                     Spacer()
                     Button {
                         Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate) }
                     } label: {
                         Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
-                            .monospacedDigit().frame(minWidth: 32)
+                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
                     }.accessibilityLabel("학습 속도").accessibilityShowsLargeContentViewer()
                     Spacer()
                     Button { Task { await flow.presentOptions(.analysis) } } label: {

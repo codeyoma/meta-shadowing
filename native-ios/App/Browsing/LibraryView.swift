@@ -18,6 +18,6 @@ struct LibraryView: View {
                 Text("기본 샘플은 앱에 포함되어 오프라인으로 사용할 수 있어요.")
                     .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
             }
-        }.background(Color(uiColor: .systemGroupedBackground)).navigationTitle("도서 목록")
+        }.background(Color(uiColor: .systemGroupedBackground)).navigationTitle("책장")
     }
 }

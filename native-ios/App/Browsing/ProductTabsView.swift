@@ -1,32 +1,27 @@
 import AppFoundation
 import SwiftUI
 
-/// A book's stage list pushed inside the Books tab.
-struct BookRoute: Hashable { let id: String }
-
 struct ProductTabsView: View {
     let model: ProductModel
     var profiles: ProductProfileOwner? = nil
     var services: ProductServicesModel? = nil
     @State private var tab = 0
     @State private var learningRoute: LearningRoute?
-    @State private var libraryPath: [BookRoute] = []
     var body: some View {
         if let snapshot = model.snapshot {
-            TabView(selection: $tab) {
-                Tab("도서 목록", systemImage: "books.vertical", value: 0) {
-                    NavigationStack(path: $libraryPath) {
+            TabView(selection: BrowsingTapFeedback.light.selection($tab)) {
+                Tab("책장", systemImage: "books.vertical", value: 0) {
+                    NavigationStack {
                         LibraryView(snapshot: snapshot, services: services) { book in
                             Task {
-                                await model.select(language: book.book.language, packageKey: book.id)
-                                if !model.failed, libraryPath.last?.id != book.id { libraryPath.append(BookRoute(id: book.id)) }
+                                if await model.select(language: book.book.language, packageKey: book.id), tab == 0 {
+                                    tab = 1
+                                }
                             }
                         }.disabled(model.busy || profiles?.changing == true)
                             .toolbar { statusToolbar(snapshot) }
                             .browsingRecovery(model: model, services: services)
-                            .navigationDestination(for: BookRoute.self) { route in bookStages(route.id) }
                     }
-                    .onChange(of: snapshot.books.map(\.id)) { _, ids in libraryPath.removeAll { !ids.contains($0.id) } }
                 }
                 Tab("스테이지", systemImage: "map", value: 1) {
                     NavigationStack {
@@ -54,20 +49,9 @@ struct ProductTabsView: View {
             .fullScreenCover(item: $learningRoute) { route in LearningPlayerView(route: route, model: model, profiles: profiles) }
         }
     }
-    @ViewBuilder private func bookStages(_ id: String) -> some View {
-        if let snapshot = model.snapshot, let book = snapshot.books.first(where: { $0.id == id }) {
-            StagePathView(summary: book) { learningRoute = LearningRoute(packageKey: book.id, stage: $0) }
-                .disabled(profiles?.changing == true)
-                .toolbar { statusToolbar(snapshot, includesLanguage: false) }
-                .browsingRecovery(model: model, services: services)
-        } else {
-            ContentUnavailableView("도서를 찾을 수 없어요", systemImage: "book")
-        }
-    }
-    private func statusToolbar(_ snapshot: ProductSnapshot, includesLanguage: Bool = true) -> StudyStatusToolbar {
+    private func statusToolbar(_ snapshot: ProductSnapshot) -> StudyStatusToolbar {
         StudyStatusToolbar(language: StudyLanguage(rawValue: snapshot.preferences.libraryLanguage ?? "") ?? .english,
-                           progress: snapshot.progress, disabled: model.busy || profiles?.changing == true,
-                           includesLanguage: includesLanguage) { language in
+                           progress: snapshot.progress, disabled: model.busy || profiles?.changing == true) { language in
             Task { await model.select(language: language.rawValue, packageKey: nil) }
         }
     }

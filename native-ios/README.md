@@ -6,6 +6,8 @@ Books, Stages and Settings, with the twelve original Morning Notes audio phrases
 bundled for offline learning. The player supports all sixteen domain stages,
 paused options, sentence navigation and shared typography/speed/grouping editors.
 Native analysis, relation graphs and Apple dictionary are implemented under #97.
+The “책장” (Bookshelf) card selects an installed book and opens the Stages tab. Stage screens
+are not pushed inside Books; returning to Books always shows the library.
 The bundled sample has no syntax, so analysis remains unavailable for that book.
 Hosted delivery and optional private sync are connected under #98. Under #108,
 the active Swift app offers free downloads only: no purchase/restore UI, StoreKit
@@ -120,7 +122,10 @@ No playback-ended test button substitutes for native media completion.
 Use the fictional CI configuration and ad-hoc simulator signing for native tests.
 The free product has no StoreKit fixture, purchase setup scheme or sandbox login.
 The product UI tests use `--ui-test-product --ui-test-probe-id <UUID>` for isolated
-SQLite profiles. Optional Debug-only `--ui-test-product-fixture audio|video|long|video-long`
+SQLite profiles. With `--ui-test-services`, `--ui-test-services-slow` stretches the
+controlled public-byte transfer to ten seconds for card progress/cancellation QA.
+It requires the isolated UUID profile and is absent from Release; it never slows
+real Apple-hosted delivery. Optional Debug-only `--ui-test-product-fixture audio|video|long|video-long`
 selects generated public fixtures; `--ui-test-product-fail-save` injects one failed
 confirmation without replacing the real store. `--ui-test-product-delay-reveal-save`
 delays one changed WPM-preset save to verify that active speed selection waits for
@@ -150,6 +155,24 @@ rejected. It does not install the copied app, alter the original build or weaken
 the no-JavaScript guard. Its C fixtures are outside the app's source/resources.
 
 ## Debug download and local recovery lab
+
+### Development library samples
+
+Launch Debug with `--development-library` to add a long-title practice sample next
+to Morning Notes. It reuses the validated bundled audio, with a separate book and
+package identity so the two books keep independent checkpoints and completions.
+This option and its local content adapter are excluded from Release.
+
+For local DUO 3.3 development, explicitly stage the existing prepared v2 package's
+`descriptor.json`, `manifest.json`, `syntax.json` and `audio/` in the simulator
+app container's `Library/Application Support/NativeDevelopmentLibrary/duo-33-free-test-v2/`.
+With the same launch argument, DUO appears after the two samples. Tapping its
+undownloaded card installs those local bytes through the normal hash/manifest validation and
+atomic installation path. Its existing package identity and 560 source phrases
+stay unchanged. The source files remain private and are never bundled, uploaded,
+or discovered by Release. Removing a download retains its learning history.
+
+### Download and recovery lab
 
 In a Debug build, open **Settings > Developer Tools > 다운로드·복원 검증**.
 This is separate from the presentation-only download preview. Each opening owns
