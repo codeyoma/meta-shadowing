@@ -147,11 +147,12 @@ The build job also validates the service configuration mapper and builds a ficti
 unsigned ExtensionKit downloader without launching it or contacting Apple services.
 
 UI tests run in Debug because the retry test uses a Debug-only failure injection.
-Before starting XCUITest, a separate five-minute preparation step waits for
-`simctl bootstatus -b` to report that the required iOS 27 Simulator has finished
-booting. A readiness failure fails the job; it does not skip or retry failed tests.
-After validating the shared test products, the job performs a single app install/launch preflight
-in a separate UUID-scoped product profile before `test-without-building`. This checks
+Before starting XCUITest, the five-minute platform-preparation step waits for
+`simctl bootstatus -b` and installs the validated app. A separate three-minute
+step launches it once in a UUID-scoped product profile before
+`test-without-building`. This retains the previous total preparation budget of
+five plus three minutes; no test timeout or retry policy changes. A readiness,
+installation or launch failure fails the job. This checks
 the app-launch service as well as simulator boot, and fails if launch cannot succeed.
 Each XCTest still starts a clean app process: [XCUIApplication.launch](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/launch())
 terminates any running preflight instance. No test results are manufactured by the preflight.
@@ -231,6 +232,17 @@ from product to options. They accounted for approximately 194 seconds in the
 previous successful run. Assertions and fixture launches remain unchanged.
 Hosted timing and complete case inventory must be reverified after this change;
 the structural regressions and local portable-product run are not hosted results.
+
+The first hosted shared-product trials exposed a cold-installation budget issue:
+run `37762629769` spent 151 seconds installing the app in the product runner,
+leaving approximately twenty seconds of the combined three-minute preflight for
+launch. The former per-runner compilation had delayed installation after boot.
+Installation now belongs to the existing five-minute platform-preparation step;
+the existing three-minute preflight is reserved for launch. Diagnostics distinguish
+the two boundaries without exposing raw logs. This redistributes the existing
+preparation allowance, not an increase or an automatic retry. A fresh cold local
+simulator accepted the exact hosted artifact; that does not establish hosted
+reliability or explain every runner's installation latency.
 
 ### Earlier four-shard partition
 
