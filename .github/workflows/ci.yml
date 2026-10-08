@@ -134,6 +134,7 @@ jobs:
       IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-27-0
       CI_TEST_SHARD: ${{ matrix.shard }}
       CI_PLAYER_TEST_CLASS: NativeFoundationUITests/PlayerUITests
+      CI_OFFLINE_TEST_CLASS: NativeFoundationUITests/OfflineAcceptanceUITests
       CI_PLAYER_OPTIONS_TEST_METHODS: >-
         testAllSentencesSelectsPausedWithoutCredit
         testFailedGroupingEditRetryUpdatesOpenEditor
@@ -205,7 +206,7 @@ jobs:
           ci_selection=()
           case "$CI_TEST_SHARD" in
             player)
-              ci_selection=("-only-testing:$CI_PLAYER_TEST_CLASS")
+              ci_selection=("-only-testing:$CI_PLAYER_TEST_CLASS" "-only-testing:$CI_OFFLINE_TEST_CLASS")
               for ci_test_method in "${ci_player_option_methods[@]}"; do
                 ci_selection+=("-skip-testing:$CI_PLAYER_TEST_CLASS/$ci_test_method")
               done ;;
@@ -224,7 +225,7 @@ jobs:
                 ci_selection+=("-skip-testing:$ci_test")
               done ;;
             remaining)
-              ci_selection=("-skip-testing:$CI_PLAYER_TEST_CLASS")
+              ci_selection=("-skip-testing:$CI_PLAYER_TEST_CLASS" "-skip-testing:$CI_OFFLINE_TEST_CLASS")
               for ci_test_class in "${ci_product_classes[@]}"; do
                 ci_selection+=("-skip-testing:$ci_test_class")
               done ;;

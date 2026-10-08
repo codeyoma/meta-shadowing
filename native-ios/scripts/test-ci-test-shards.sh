@@ -68,7 +68,8 @@ ruby -ryaml -ropen3 -rtmpdir -e '
     "NativeFoundationUITests/AppleServicesUITests/testRecovery" => "product",
     "NativeFoundationUITests/VoiceOverSemanticsUITests/testLargestText" => "product",
     "NativeFoundationUITests/BookshelfUITests/testCard" => "remaining",
-    "NativeFoundationUITests/OfflineAcceptanceUITests/testOffline" => "remaining",
+    "NativeFoundationUITests/OfflineAcceptanceUITests/testOffline" => "player",
+    "NativeFoundationUITests/OfflineAcceptanceUITests/testFutureOffline" => "player",
     "NativeFoundationUITests/FutureUITests/testFutureUI" => "remaining",
     "NativeMediaIntegrationTests/NativeLifecycleTests/testReopen" => "remaining",
     "FutureTarget/FutureTests/testFutureTarget" => "remaining"
@@ -96,7 +97,7 @@ ruby -ryaml -ropen3 -rtmpdir -e '
   actual.each do |test|
     next if routes.key?(test)
     owner = if extra.include?(test) then "player-options"
-      elsif test.start_with?("NativeFoundationUITests/PlayerUITests/") then "player"
+      elsif test.start_with?("NativeFoundationUITests/PlayerUITests/", "NativeFoundationUITests/OfflineAcceptanceUITests/") then "player"
       elsif job.fetch("env").fetch("CI_PRODUCT_TEST_CLASSES").split.any? { |prefix| test.start_with?(prefix + "/") } then "product"
       else "remaining" end
     routes[test] = owner

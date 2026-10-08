@@ -42,10 +42,10 @@ CI partitions the complete scheme into four disjoint jobs:
 
 | Shard | Selection |
 | --- | --- |
-| `player` | `-only-testing:NativeFoundationUITests/PlayerUITests`, excluding the named options methods |
+| `player` | `PlayerUITests`, excluding the named options methods, plus `OfflineAcceptanceUITests` |
 | `player-options` | Twelve methods in `CI_PLAYER_OPTIONS_TEST_METHODS` plus three settings methods in `CI_OPTIONS_EXTRA_TESTS` |
 | `product` | `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests`, excluding those three settings methods |
-| `remaining` | `-skip-testing` for those four UI classes; every other test remains included |
+| `remaining` | `-skip-testing` for those five UI classes; every other test remains included |
 
 The `product` shard includes VoiceOver audits and label checks on every PR.
 Inclusion and exclusion flags derive from the same class and method identifiers in the workflow.
@@ -267,10 +267,19 @@ the retained real-audio/source-selection UI tests (7/7). Local rendering case ti
 was about three seconds, excluding build/runner startup; it is not a hosted-speed claim.
 
 The paused-rate preference-isolation UI method moves from options to player to
-rebalance the remaining work. The process-boundary selector regression was red
-before this move and green afterward. Four runners, serial execution, required
-checks, no-retry policy and existing UI deadlines remain unchanged. Full hosted
-timings and the executed inventory must be reverified on the updated PR.
+rebalance the remaining work. Run `37788656914` passed all 183 native tests and
+375 package tests. Player execution dropped from 25m 08s to 16m 14s, and the new
+rendering suite occupied approximately seven seconds of the hosted log timeline.
+However, the complete workflow took 34m 26s versus 33m 02s: the remaining shard
+spent 5m 19s before its first test and 19m 48s in its existing UI cases. This is not
+evidence of an overall CI speedup or a diagnosis of the underlying hosted delay.
+
+The two controlled-offline UI journeys therefore move from remaining to player,
+using complementary class selectors. Both routing changes have process-boundary
+red/green regressions; all current and future methods retain exactly one owner.
+Four runners, serial execution, required checks, no-retry policy and existing UI
+deadlines remain unchanged. Reverify hosted timing and the complete executed
+inventory after this rebalance; do not extrapolate a guarantee from one run.
 
 ### October 8 shared-product follow-up
 
@@ -396,7 +405,7 @@ TestFlight or submit an App Store release. Feature PRs target `dev`.
 
 ## Coverage limits
 
-The #108 controlled-offline acceptance journeys run in the existing `remaining`
+The #108 controlled-offline acceptance journeys run in the existing `player`
 shard. A Debug-only transport failure is enabled only in UUID-isolated product
 profiles. Tests retain real validation, installation, SQLite and native playback;
 they verify offline relaunch, saved cycles/preferences, local source navigation,
