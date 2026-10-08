@@ -19,13 +19,10 @@ struct LearningOptionsView: View {
                 if let runtime = flow.runtime {
                     Section {
                         optionLink(.sentences, runtime: runtime)
-                        if runtime.controls.session.isSilent {
-                            optionLink(.revealSpeed, runtime: runtime)
-                        } else { optionLink(.rate, runtime: runtime) }
-                        optionLink(.group, runtime: runtime)
-                        optionLink(.revealPresets, runtime: runtime)
-                        optionLink(.display, runtime: runtime)
-                        optionLink(.typography, runtime: runtime)
+                        ForEach(LearningOptionRoute.preferences) { option in
+                            optionLink(option == .rate && runtime.controls.session.isSilent ? .revealSpeed : option,
+                                       runtime: runtime)
+                        }
                     }.disabled(runtime.controls.saveFailed || !runtime.controls.active || flow.accessInvalidated)
                     Section {
                         if runtime.monitorState == .monitoring || runtime.monitorState == .suspended {

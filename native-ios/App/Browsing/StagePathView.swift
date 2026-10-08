@@ -30,7 +30,10 @@ struct StagePathView: View {
                               systemImage: "exclamationmark.triangle")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
-                }.padding(.horizontal, 20)
+                }
+                .padding(16)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 26))
+                .padding(.horizontal, 16)
                 ForEach(1...8, id: \.self) { level in
                     StageSection(title: String(localized: "Lv \(level) · \(StageMethod.title(level * 2))")) {
                         ForEach([level * 2 - 1, level * 2], id: \.self) { stage in

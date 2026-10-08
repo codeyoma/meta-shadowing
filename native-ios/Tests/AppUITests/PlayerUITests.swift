@@ -262,6 +262,31 @@ final class PlayerUITests: XCTestCase {
         }
     }
 
+    @MainActor func testPlayerOptionsMatchSettingsOrderForAudioAndSilentStages() {
+        continueAfterFailure = false
+        for stage in [1, 11] {
+            let app = fixture(stage: stage, mode: "audio")
+            XCTAssertTrue(app.buttons["player-options"].waitForExistence(timeout: 10))
+            app.buttons["player-options"].tap()
+            let speedTitle = stage == 11 ? "단어 공개 속도" : "배속"
+            let titles = ["전체 문장", "학습 화면", "폰트 설정", speedTitle, "다구간 학습 사이즈", "크레이지 스피킹"]
+            var previousBottom: CGFloat = 0
+            for title in titles {
+                let row = app.buttons[title]
+                XCTAssertTrue(row.waitForExistence(timeout: 5))
+                XCTAssertGreaterThanOrEqual(row.frame.minY, previousBottom,
+                                           "\(title) must follow the shared Settings order in stage \(stage)")
+                previousBottom = row.frame.maxY
+            }
+            app.buttons[speedTitle].tap()
+            XCTAssertTrue(app.navigationBars[speedTitle].waitForExistence(timeout: 5))
+            app.buttons["options-close"].tap()
+            app.exitLearningThroughOptions()
+            XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+            app.terminate()
+        }
+    }
+
     @MainActor func testPlayerOptionsSummariesReflectActiveRunAndVideoLayout() {
         continueAfterFailure = false
         let app = fixture(stage: 7, mode: "video")
@@ -449,6 +474,7 @@ final class PlayerUITests: XCTestCase {
             XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: 5), "Options need a close control; largeText=\(largeText)")
             XCTAssertEqual(app.buttons.matching(identifier: "options-close").count, 1, "Each page has one dismiss control")
             let rate = app.buttons["배속"]
+            for _ in 0..<6 where !rate.isHittable { app.swipeUp() }
             XCTAssertTrue(rate.wait(for: \.isHittable, toEqual: true, timeout: 5), "Rate row inaccessible; largeText=\(largeText)")
             rate.tap()
             XCTAssertTrue(app.sliders["재생 속도"].waitForExistence(timeout: 5), "Rate destination unavailable; largeText=\(largeText)")
