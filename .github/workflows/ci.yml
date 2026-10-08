@@ -263,6 +263,7 @@ jobs:
         if: always()
         run: |
           set -o pipefail
+          bash native-ios/scripts/ci-simulator-resources.sh
           if [ -f "$RUNNER_TEMP/native-ui.xcresult/Info.plist" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/native-ui.xcresult" |
               jq '{result, totalTestCount, passedTests, failedTests, skippedTests, testFailures}' > "$RUNNER_TEMP/native-ui-summary.json"

@@ -155,7 +155,7 @@ five plus three minutes; no test timeout or retry policy changes. A readiness,
 installation or launch failure fails the job. This checks
 the app-launch service as well as simulator boot, and fails if launch cannot succeed.
 Preparation emits allowlisted numeric CPU, memory, load, swap and process counters
-before/after boot and after the step, including failure. These read-only diagnostics
+before/after boot, after preparation and after testing, including failure. These read-only diagnostics
 distinguish whole-runner pressure from an installer-specific stall; raw process
 commands, paths, device identities and command errors are never exported. Missing
 diagnostics do not mask or replace the preparation result.
