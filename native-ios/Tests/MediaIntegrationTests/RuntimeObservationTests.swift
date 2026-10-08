@@ -83,11 +83,11 @@ import MediaPlayer
             center.nowPlayingInfo = [MPMediaItemPropertyTitle: "Other fixture owner"]
             runtime.present()
             try await waitForMedia { hardware.isWaiting }
-            let closing = Task { await runtime.close() }
-            // close() synchronously cancels the activation before awaiting its drain.
-            await Task.yield()
-            hardware.release()
-            await closing.value
+            // This main-actor task cannot release hardware until close reaches its
+            // first suspension, after cancelling remote activation synchronously.
+            let releasing = Task { hardware.release() }
+            await runtime.close()
+            await releasing.value
             #expect(hardware.modes == [.playback, nil])
             #expect(center.nowPlayingInfo?[MPMediaItemPropertyTitle] as? String == "Other fixture owner")
         } else {

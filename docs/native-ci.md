@@ -58,9 +58,9 @@ suite isolation. A separate `ci-native-build` job builds the complete graph once
 using a generic arm64 simulator destination without booting a simulator. It exports
 Xcode's portable `.xctestproducts` package. Four test runners download that exact
 artifact by its producer output ID, validate it, then boot their iOS 27 simulator.
-They do not generate a project or compile again. This also avoids scheduling six
-macOS jobs at once: quality, product inspection and the shared build run first;
-the four test jobs follow the build.
+They do not generate a project or compile again. Test runners start only after the
+shared build; quality and product inspection may still overlap with them if those
+jobs have not finished. This removes duplicated compilation, not a concurrency cap.
 There are no paid larger runners or external providers.
 
 The run-scoped archive preserves executable permissions and portable internal
