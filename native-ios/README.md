@@ -277,10 +277,10 @@ Generating the CI project replaces only the ignored generated Xcode project;
 run `xcodegen generate --spec native-ios/project.yml` to return to local settings.
 Package tests, Debug/Release builds and product checks use the same commands above.
 For CI-style testing, generate `project-ci.yml` and retain
-`-parallel-testing-enabled NO`. CI runs three disjoint selections on separate
-hosted runners: `player`, `product` (settings, service UI and VoiceOver), and
+`-parallel-testing-enabled NO`. CI runs four disjoint selections on separate
+hosted runners: `player`, `player-options`, `product` (settings, service UI and VoiceOver), and
 `remaining` (their exact complement). See [the shard selections](../docs/native-ci.md#toolchain-and-isolation).
-Run all three selections to cover
+Run all four selections to cover
 the full suite, or omit selection filters to run everything on one simulator locally.
 CI supplies disposable build/result paths. See
 [the CI guide](../docs/native-ci.md) for the required jobs and coverage limits.

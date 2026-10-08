@@ -55,6 +55,8 @@ ruby -ryaml -ropen3 -rtmpdir -e '
   routes = {
     "NativeFoundationUITests/PlayerUITests/testPlayer" => "player",
     "NativeFoundationUITests/PlayerUITests/testFuturePlayer" => "player",
+    "NativeFoundationUITests/PlayerUITests/testPlayerOptionsMatchSettingsOrderForAudioAndSilentStages" => "player-options",
+    "NativeFoundationUITests/PlayerUITests/testSubtitleToggleAppearsOnlyForHintStages" => "player-options",
     "NativeFoundationUITests/ProductUITests/testSettings" => "product",
     "NativeFoundationUITests/AppleServicesUITests/testRecovery" => "product",
     "NativeFoundationUITests/VoiceOverSemanticsUITests/testLargestText" => "product",
@@ -64,6 +66,16 @@ ruby -ryaml -ropen3 -rtmpdir -e '
     "NativeMediaIntegrationTests/NativeLifecycleTests/testReopen" => "remaining",
     "FutureTarget/FutureTests/testFutureTarget" => "remaining"
   }
+  player_methods = File.read("native-ios/Tests/AppUITests/PlayerUITests.swift")
+    .scan(/func (test\w+)\(/).flatten
+  option_methods = job.fetch("env").fetch("CI_PLAYER_OPTIONS_TEST_METHODS", "").split
+  abort "FAIL: duplicate player option methods" unless option_methods.uniq == option_methods
+  unknown_methods = option_methods - player_methods
+  abort "FAIL: unknown player option methods: #{unknown_methods.inspect}" unless unknown_methods.empty?
+  player_methods.each do |method|
+    routes["NativeFoundationUITests/PlayerUITests/#{method}"] ||=
+      option_methods.include?(method) ? "player-options" : "player"
+  end
   routes.each do |test, expected|
     owners = selections.map do |shard, arguments|
       only = arguments.grep(/\A-only-testing:/).map { |arg| arg.delete_prefix("-only-testing:") }

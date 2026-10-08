@@ -75,12 +75,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [player, product, remaining]
+        shard: [player, player-options, product, remaining]
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-27-0
       CI_TEST_SHARD: ${{ matrix.shard }}
       CI_PLAYER_TEST_CLASS: NativeFoundationUITests/PlayerUITests
+      CI_PLAYER_OPTIONS_TEST_METHODS: >-
+        testAllSentencesSelectsPausedWithoutCredit
+        testFailedGroupingEditRetryUpdatesOpenEditor
+        testFailedRateEditRetryUpdatesOpenEditor
+        testGuideExplainsActiveStageWithoutGrantingCredit
+        testOptionsOpensAtFullHeightWithoutAnExpansionGesture
+        testOptionsSheetHasOneCloseAndAListExit
+        testPausedRateEditorKeepsGlobalPreferenceSeparate
+        testPlayerOptionsMatchSettingsOrderForAudioAndSilentStages
+        testPlayerOptionsSummariesReflectActiveRunAndVideoLayout
+        testRevealLevelWaitsForPendingPresetSave
+        testSilentSpeedPresetsRequireExplicitRunSelection
+        testSubtitleToggleAppearsOnlyForHintStages
+        testUngroupedPlayerCanEditGlobalGroupAndRevealPresets
       CI_PRODUCT_TEST_CLASSES: >-
         NativeFoundationUITests/ProductUITests
         NativeFoundationUITests/AppleServicesUITests
@@ -137,12 +151,22 @@ jobs:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
           set -o pipefail
-          # Named UI groups and their exact complement cover the full scheme once.
+          # Named UI groups and their exact complements cover the full scheme once.
+          read -r -a ci_player_option_methods <<< "$CI_PLAYER_OPTIONS_TEST_METHODS"
+          test "${#ci_player_option_methods[@]}" -gt 0
           read -r -a ci_product_classes <<< "$CI_PRODUCT_TEST_CLASSES"
           test "${#ci_product_classes[@]}" -gt 0
           ci_selection=()
           case "$CI_TEST_SHARD" in
-            player) ci_selection=("-only-testing:$CI_PLAYER_TEST_CLASS") ;;
+            player)
+              ci_selection=("-only-testing:$CI_PLAYER_TEST_CLASS")
+              for ci_test_method in "${ci_player_option_methods[@]}"; do
+                ci_selection+=("-skip-testing:$CI_PLAYER_TEST_CLASS/$ci_test_method")
+              done ;;
+            player-options)
+              for ci_test_method in "${ci_player_option_methods[@]}"; do
+                ci_selection+=("-only-testing:$CI_PLAYER_TEST_CLASS/$ci_test_method")
+              done ;;
             product)
               for ci_test_class in "${ci_product_classes[@]}"; do
                 ci_selection+=("-only-testing:$ci_test_class")

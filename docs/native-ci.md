@@ -38,26 +38,29 @@ identity, compiler, deployment and signing settings for both configurations.
 It also verifies that both complete non-commerce test targets occur exactly once, with no
 selected or skipped tests in the scheme and serial execution for every target.
 
-CI partitions the complete scheme into three disjoint jobs:
+CI partitions the complete scheme into four disjoint jobs:
 
 | Shard | Selection |
 | --- | --- |
-| `player` | `-only-testing:NativeFoundationUITests/PlayerUITests` |
+| `player` | `-only-testing:NativeFoundationUITests/PlayerUITests`, excluding the named options methods |
+| `player-options` | `-only-testing` for the thirteen methods in `CI_PLAYER_OPTIONS_TEST_METHODS` |
 | `product` | `-only-testing` for `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests` in `NativeFoundationUITests` |
 | `remaining` | `-skip-testing` for those four UI classes; every other test remains included |
 
 The `product` shard includes VoiceOver audits and label checks on every PR.
-Inclusion and exclusion flags derive from the same class identifiers in the workflow.
+Inclusion and exclusion flags derive from the same class and method identifiers in the workflow.
 The `remaining` shard includes all media integration tests and automatically receives
-new UI classes or test targets. New tests in an existing named class follow that class.
+new UI classes or test targets. New player methods automatically enter `player` unless
+explicitly moved to `player-options`; tests in other named classes follow that class.
 Each job uses its own standard hosted runner, builds its own test products and
 passes `-parallel-testing-enabled NO`, retaining one simulator and the existing
 Swift Testing suite isolation. This repeats setup to avoid simulator contention.
 There are no paid larger runners or external providers.
 
 `test-ci-test-shards.sh` executes the actual workflow test command against a
-controlled process boundary. It verifies disjoint class ownership, coverage of
-future classes/targets, serial execution, test failure propagation, unknown-shard
+controlled process boundary. It verifies disjoint class ownership, every current player
+method, valid options method names, coverage of future classes/targets, serial execution,
+test failure propagation, unknown-shard
 rejection and aggregate gate failures. It does not substitute for hosted XCTest.
 
 The matrix uses `fail-fast: false` so a failure in one shard does not suppress the
@@ -209,6 +212,21 @@ work from the overloaded runner while preserving the 40-minute job and 30-minute
 test-step limits. It adds one cold setup/build; the expected wall-clock improvement
 must be verified in a new hosted run. Assertions, test deadlines, retries, required
 checks and human release approval are unchanged.
+
+Run `37710216639` completed `product` in 29m 53s with all 24 cases passing and
+`remaining` in 31m 49s with 98 of 99 cases passing. The latter failed the normal-text
+Retry button hit-test assertion, not a timeout; that intermittent failure remains
+under investigation. The player job still exhausted its 40-minute budget after a
+cold build of over ten minutes: 30 cases passed, one was unfinished and the final
+case did not start. Its completed cases alone summed to 26m 32s.
+
+The follow-up partition moves thirteen player options cases to `player-options`,
+leaving nineteen player cases in `player`. The moved cases that completed in this run
+accounted for about twelve minutes; the additional unfinished options case took
+61 seconds in the preceding successful run. The method list drives both selections,
+so new player tests remain included by default. This adds another cold setup/build
+without increasing job/test limits or changing assertions. Hosted verification of
+this four-runner partition is pending; local command checks do not prove hosted timing.
 
 ### Historical two-shard baseline
 
