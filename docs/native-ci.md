@@ -5,6 +5,73 @@ into `dev`/`main`, pushes to those branches and manual dispatch. PR checkout use
 GitHub's merge candidate, not only the head. The owner approved replacing the
 Expo reference CI lane; the reference source remains available for migration.
 
+## Fast remote checks and local full regression
+
+Owner update, 2026-10-09: ordinary pull requests and `dev`/`main` pushes run
+the fast profile. Long full-regression runs move to the local `pre-push` hook,
+where a failure blocks the push. Manual `workflow_dispatch` defaults to `full`
+and also accepts `fast`; there is no automatic scheduled full run.
+
+Every remote run retains all six package suites (currently 375 cases), complete
+native integration coverage (currently 105 cases), and Debug/Release product
+inspection. The fast profile adds eight existing UI journeys, partitioned across
+two serial simulator jobs. It currently executes 113 native cases, not the full
+183-case suite. The full scheme still compiles every test.
+
+| Fast shard | UI journeys retained |
+| --- | --- |
+| `fast-player` | Real audio confirmation and paused menu; installed lesson process relaunch and restored checkpoint; failed-save retry without duplicate XP; source selection without credit |
+| `fast-native` | Largest-text load recovery; single-sentence analysis and Back; VoiceOver labels/values/order; largest-text hidden-hint controls with actual description/trait audits |
+
+`fast-native` also runs the complete `NativeMediaIntegrationTests` target.
+Detailed video, reward, settings, service, graph and full-screen accessibility
+matrices remain in full regression; they are not declared redundant or deleted.
+The fast accessibility checks do not replace the full light/dark/large-text audit
+matrix. Reduced remote checks can miss a regression in a full-only UI journey.
+
+This follows Apple's recommendation to use a reduced PR test set alongside
+separate full regression, with the owner choosing a local pre-push boundary for
+the latter. See [the primary-source research](research/2026-10-08-native-ci-test-strategy.md)
+and [Apple's testing guidance](https://developer.apple.com/videos/play/wwdc2022/110361/).
+The policy reduces hosted UI execution; it does not remove test work or promise
+a particular duration. Full regression now adds local push latency.
+
+### Install the local hook
+
+Each clone must opt in once. Create a dedicated iOS 27 simulator named
+`MetaShadowing Native Pre-push iOS 27`, then pass its ID to:
+
+```sh
+bash native-ios/scripts/install-native-git-hooks.sh --simulator-id <SIMULATOR_ID>
+```
+
+The installer configures only repository-local `core.hooksPath` and
+`native.prePushSimulator`. It refuses a conflicting hook path or an existing
+active default hook instead of overwriting it. The runner accepts only the
+explicitly configured, dedicated Pre-push simulator on iOS 27. It may boot that
+device; it never creates, deletes, erases or selects a physical/reference device.
+The interactive W2 preview is not a pre-push destination.
+
+The hook reads Git's actual pushed object IDs, not just `HEAD`. It archives each
+unique pushed commit into an isolated snapshot and runs the complete native
+scheme from that snapshot. Dirty/untracked working files and private
+`Local.xcconfig` are not test inputs. Ref deletions do not need a test run. A
+missing tool, simulator, test runner, result or successful test blocks the push.
+Concurrent local full runs are rejected, not run against the same simulator.
+
+Successful results may be reused only for the exact commit, Xcode/XcodeGen
+versions and configured simulator/runtime. Failed or incomplete results are never
+cached; another commit requires another full run. Evidence stays under the local
+Git directory, outside tracked source. A same-commit retry after a network failure
+does not repeat a completed test run.
+
+Git hooks are developer-side checks, not a trusted remote enforcement boundary:
+they are not automatically installed by cloning and Git can bypass them. A local
+commit pass is also not proof of GitHub's merge-candidate revision. Fast remote
+checks and the existing human release approval therefore remain mandatory.
+Before a release, the reviewer must explicitly inspect full-regression evidence
+for the intended revision or request manual full CI. No remote ruleset is changed.
+
 ## Required checks
 
 | Required check | Evidence |
@@ -38,7 +105,7 @@ identity, compiler, deployment and signing settings for both configurations.
 It also verifies that both complete non-commerce test targets occur exactly once, with no
 selected or skipped tests in the scheme and serial execution for every target.
 
-CI partitions the complete scheme into four disjoint jobs:
+Manual full CI partitions the complete scheme into four disjoint jobs:
 
 | Shard | Selection |
 | --- | --- |
@@ -47,7 +114,7 @@ CI partitions the complete scheme into four disjoint jobs:
 | `product` | `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests`, excluding those three settings methods |
 | `remaining` | `-skip-testing` for those five UI classes; every other test remains included |
 
-The `product` shard includes VoiceOver audits and label checks on every PR.
+The full `product` shard includes all VoiceOver audits and label checks.
 Inclusion and exclusion flags derive from the same class and method identifiers in the workflow.
 The `remaining` shard includes all media integration tests and automatically receives
 new UI classes or test targets. New player methods automatically enter `player` unless
@@ -71,16 +138,24 @@ after one day; an expired artifact requires a complete workflow rerun. The outpu
 ID permits failed-job reruns to use their successful producer, even across attempt
 numbers. Only fictional-CI products are uploaded, never local profiles or raw logs.
 
+Fast runs use two runners instead of the four full-regression runners.
+`ci-test-profile.mjs` emits the validated profile and matrix; unknown events,
+branches or manual scopes fail without emitting an empty passing matrix.
+
 `test-ci-test-shards.sh` executes the actual workflow test command against a
 controlled process boundary. It verifies disjoint class ownership, every current player
 method, every current UI method, valid moved method names, coverage of future classes/targets, serial execution,
-test failure propagation, unknown-shard
-rejection and aggregate gate failures. It does not substitute for hosted XCTest.
+test failure propagation, exact fast selections, complete enumeration,
+unknown-shard rejection and aggregate gate failures. It does not substitute for hosted XCTest.
 
 The matrix uses `fail-fast: false` so a failure in one shard does not suppress the
 other shard's results. Each result summary must be nonempty, fully passing and
-contain zero failed or skipped tests. The required `ci-native-tests` job runs
-with `always()` and requires both shared-build and aggregate-shard `success`; failures,
+contain zero failed or skipped tests. The shared result validator compares actual
+executed identifiers with the complete compiled inventory filtered by the saved
+selection. Unknown selectors, missing/extra/duplicate cases, invalid enumeration,
+and inconsistent result counts fail. Empty selection means the entire inventory
+for the local full runner, never zero tests. The required `ci-native-tests` job runs
+with `always()` and requires profile, shared-build and aggregate-shard `success`; failures,
 cancellations and skipped shards cannot make the required check green. Release
 approval still depends on this exact required check name.
 
@@ -89,7 +164,7 @@ CODE_SIGN_IDENTITY=-`. This is an ad-hoc simulator signature, not account-based 
 The free product has no purchase fixture, StoreKit setup scheme or sandbox login.
 The normal scheme includes `NativeFoundationUITests` and `NativeMediaIntegrationTests`;
 the obsolete purchase-only integration target is removed. All non-commerce tests,
-including installation/publication failures, remain covered. Unsigned product
+including installation/publication failures, remain in full regression. Unsigned product
 inspection stays unchanged. Main test-product compilation has a fifteen-minute
 budget. Its build step streams only
 allowlisted phase names and verdicts, never compiler arguments, paths or raw

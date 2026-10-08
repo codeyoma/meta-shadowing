@@ -6,6 +6,12 @@ on:
   push:
     branches: [dev, main]
   workflow_dispatch:
+    inputs:
+      test_scope:
+        description: Native test scope
+        type: choice
+        options: [full, fast]
+        default: full
 
 permissions:
   contents: read
@@ -22,6 +28,9 @@ jobs:
     name: ci-branch-policy
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      test-scope: ${{ steps.profile.outputs.test-scope }}
+      matrix: ${{ steps.profile.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,6 +41,10 @@ jobs:
           package-manager-cache: false
       - run: node --test scripts/check-branch-policy.test.mjs
       - run: node scripts/check-branch-policy.mjs < "$GITHUB_EVENT_PATH"
+      - run: node --test native-ios/scripts/test-ci-test-profile.mjs
+      - name: Select validated native test scope
+        id: profile
+        run: node native-ios/scripts/ci-test-profile.mjs < "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
 
   ci-quality:
     name: ci-quality
@@ -67,6 +80,11 @@ jobs:
         run: bash native-ios/scripts/test-offline-acceptance-runner.sh
       - name: Native test shard coverage and failure contract
         run: bash native-ios/scripts/test-ci-test-shards.sh
+      - name: Exact native test results and local full-suite gate contracts
+        run: |
+          ruby native-ios/scripts/test-native-test-results.rb
+          ruby native-ios/scripts/test-native-full-runner.rb
+          ruby native-ios/scripts/test-native-pre-push.rb
       - name: Portable native test products contract
         run: bash native-ios/scripts/test-ci-test-products.sh
       - name: Simulator preflight diagnostics contract
@@ -122,13 +140,12 @@ jobs:
 
   ci-native-test-shards:
     name: Native tests (${{ matrix.shard }})
-    needs: [ci-native-build]
+    needs: [ci-branch-policy, ci-native-build]
     runs-on: xcode-27
     timeout-minutes: 40
     strategy:
       fail-fast: false
-      matrix:
-        shard: [player, player-options, product, remaining]
+      matrix: ${{ fromJSON(needs.ci-branch-policy.outputs.matrix) }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-27-0
@@ -205,6 +222,21 @@ jobs:
           test "${#ci_options_extra[@]}" -gt 0
           ci_selection=()
           case "$CI_TEST_SHARD" in
+            fast-player)
+              ci_selection=(
+                "-only-testing:$CI_PLAYER_TEST_CLASS/testRealAudioConfirmationAndPausedMenu"
+                "-only-testing:$CI_PLAYER_TEST_CLASS/testInstalledLessonReopensWithoutServiceAccessOrExtraCredit"
+                "-only-testing:$CI_PLAYER_TEST_CLASS/testSaveFailureRetryDoesNotDuplicateCreditOrAutoplay"
+                "-only-testing:$CI_PLAYER_TEST_CLASS/testAllSentencesSelectsPausedWithoutCredit"
+              ) ;;
+            fast-native)
+              ci_selection=(
+                '-only-testing:NativeMediaIntegrationTests'
+                '-only-testing:NativeFoundationUITests/NativeFoundationUITests/testRetryRemainsReachableAtLargestText'
+                '-only-testing:NativeFoundationUITests/ReferenceToolsUITests/testSingleSentenceOpensDetailAndBackDismissesToPausedLearning'
+                '-only-testing:NativeFoundationUITests/VoiceOverSemanticsUITests/testVoiceOverLabelsValuesAndOrder'
+                '-only-testing:NativeFoundationUITests/ProductAccessibilityUITests/testLongHintTextDoesNotLeakAndControlsStayReachable'
+              ) ;;
             player)
               ci_selection=("-only-testing:$CI_PLAYER_TEST_CLASS" "-only-testing:$CI_OFFLINE_TEST_CLASS")
               for ci_test_method in "${ci_player_option_methods[@]}"; do
@@ -231,6 +263,16 @@ jobs:
               done ;;
             *) echo 'Unknown native test shard.' >&2; exit 1 ;;
           esac
+          printf '%s\n' "${ci_selection[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))' \
+            > "$RUNNER_TEMP/native-selection.json"
+          # Enumerate the complete products; Xcode enumeration is not selection evidence.
+          xcodebuild test-without-building \
+            -testProductsPath "$RUNNER_TEMP/native-tests/NativeTests.xctestproducts" \
+            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
+            -parallel-testing-enabled NO -enumerate-tests \
+            -test-enumeration-style flat -test-enumeration-format json \
+            -test-enumeration-output-path "$RUNNER_TEMP/native-inventory.json" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "$RUNNER_TEMP/native-enumeration.log" 2>&1
           xcodebuild test-without-building \
             -testProductsPath "$RUNNER_TEMP/native-tests/NativeTests.xctestproducts" \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
@@ -256,17 +298,19 @@ jobs:
             cat "$RUNNER_TEMP/native-ui-summary.json"
             # The summary includes only the first assertion per failed test.
             # Export all assertion messages, never device metadata or source locations.
-            xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/native-ui.xcresult" |
-              jq '[.testNodes[] | .. | objects | select(.nodeType? == "Test Case")] as $tests |
+            xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/native-ui.xcresult" \
+              > "$RUNNER_TEMP/native-test-results.json"
+            jq '[.testNodes[] | .. | objects | select(.nodeType? == "Test Case")] as $tests |
                 [$tests[] | select(.result == "Failed") |
                   {test: .nodeIdentifier, durationInSeconds,
                    failures: [.. | objects | select(.nodeType? == "Failure Message") | .name]}],
                 ($tests | map({test: .nodeIdentifier, result, durationInSeconds}) |
                   sort_by(.durationInSeconds // 0) | reverse | .[:10]),
-                {executedTests: ($tests | map(.nodeIdentifier) | sort)}'
-            jq -e '.result == "Passed" and .totalTestCount > 0 and
-              .passedTests == .totalTestCount and .failedTests == 0 and .skippedTests == 0' \
-              "$RUNNER_TEMP/native-ui-summary.json" > /dev/null
+                {executedTests: ($tests | map(.nodeIdentifier) | sort)}' \
+              "$RUNNER_TEMP/native-test-results.json"
+            ruby native-ios/scripts/validate-native-test-results.rb \
+              "$RUNNER_TEMP/native-inventory.json" "$RUNNER_TEMP/native-selection.json" \
+              "$RUNNER_TEMP/native-ui-summary.json" "$RUNNER_TEMP/native-test-results.json"
           else
             echo 'No finalized XCTest result bundle; the test command did not finish.'
             exit 1
@@ -275,17 +319,18 @@ jobs:
   ci-native-tests:
     name: ci-native-tests
     if: always()
-    needs: [ci-native-build, ci-native-test-shards]
+    needs: [ci-branch-policy, ci-native-build, ci-native-test-shards]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require every native test shard to pass
         env:
+          PROFILE_RESULT: ${{ needs.ci-branch-policy.result }}
           BUILD_RESULT: ${{ needs.ci-native-build.result }}
           SHARD_RESULT: ${{ needs.ci-native-test-shards.result }}
         run: |
-          if [ "$BUILD_RESULT" != success ] || [ "$SHARD_RESULT" != success ]; then
-            echo 'Native tests require the shared build and every shard to succeed.' >&2
+          if [ "$PROFILE_RESULT" != success ] || [ "$BUILD_RESULT" != success ] || [ "$SHARD_RESULT" != success ]; then
+            echo 'Native tests require validated scope, the shared build and every selected shard to succeed.' >&2
             exit 1
           fi
           echo 'All native test shards passed.'

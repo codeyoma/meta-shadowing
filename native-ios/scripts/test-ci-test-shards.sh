@@ -7,6 +7,10 @@ repository_root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$repository_root"
 
 xcodebuild() {
+    if [[ " $* " == *" -enumerate-tests "* ]]; then
+        printf '%s\n' "$@" > "$CI_INVENTORY_ARGUMENTS"
+        return "${CI_INVENTORY_EXIT:-0}"
+    fi
     printf '%s\n' "$@" > "$CI_TEST_ARGUMENTS"
     if [ "$CI_TEST_EXIT" = 0 ]; then
         printf '%s\n' '** TEST EXECUTE SUCCEEDED **'
@@ -17,22 +21,41 @@ xcodebuild() {
 }
 export -f xcodebuild
 
-ruby -ryaml -ropen3 -rtmpdir -e '
+ruby -ryaml -rjson -ropen3 -rtmpdir -e '
   jobs = YAML.load_file(ARGV.fetch(0)).fetch("jobs")
   job = jobs.fetch("ci-native-test-shards")
-  shards = job.fetch("strategy").fetch("matrix").fetch("shard")
+  shards = %w[player player-options product remaining fast-player fast-native]
   commands = job.fetch("steps").map { |step| step["run"] }.compact
     .select { |run| run.include?("xcodebuild test-without-building") }
   abort "FAIL: expected one XCTest execution command" unless commands.length == 1
   selections = []
+  expected_fast = {
+    "fast-player" => %w[
+      -only-testing:NativeFoundationUITests/PlayerUITests/testRealAudioConfirmationAndPausedMenu
+      -only-testing:NativeFoundationUITests/PlayerUITests/testInstalledLessonReopensWithoutServiceAccessOrExtraCredit
+      -only-testing:NativeFoundationUITests/PlayerUITests/testSaveFailureRetryDoesNotDuplicateCreditOrAutoplay
+      -only-testing:NativeFoundationUITests/PlayerUITests/testAllSentencesSelectsPausedWithoutCredit
+    ],
+    "fast-native" => %w[
+      -only-testing:NativeMediaIntegrationTests
+      -only-testing:NativeFoundationUITests/NativeFoundationUITests/testRetryRemainsReachableAtLargestText
+      -only-testing:NativeFoundationUITests/ReferenceToolsUITests/testSingleSentenceOpensDetailAndBackDismissesToPausedLearning
+      -only-testing:NativeFoundationUITests/VoiceOverSemanticsUITests/testVoiceOverLabelsValuesAndOrder
+      -only-testing:NativeFoundationUITests/ProductAccessibilityUITests/testLongHintTextDoesNotLeakAndControlsStayReachable
+    ]
+  }
   Dir.mktmpdir("native-ci-shards") do |directory|
     arguments_path = File.join(directory, "arguments")
+    inventory_path = File.join(directory, "inventory-arguments")
     base_env = job.fetch("env").merge(
       "CI_SIMULATOR" => "synthetic-simulator", "RUNNER_TEMP" => directory,
-      "CI_TEST_ARGUMENTS" => arguments_path)
+      "CI_TEST_ARGUMENTS" => arguments_path, "CI_INVENTORY_ARGUMENTS" => inventory_path)
     shards.each do |shard|
       [0, 42].each do |exit_code|
         File.delete(arguments_path) if File.exist?(arguments_path)
+        File.delete(inventory_path) if File.exist?(inventory_path)
+        selection_path = File.join(directory, "native-selection.json")
+        File.delete(selection_path) if File.exist?(selection_path)
         output, status = Open3.capture2e(base_env.merge(
           "CI_TEST_SHARD" => shard, "CI_TEST_EXIT" => exit_code.to_s),
           "bash", "-e", "-c", commands.first)
@@ -44,6 +67,18 @@ ruby -ryaml -ropen3 -rtmpdir -e '
         abort "FAIL: #{shard} must not use source builds" if arguments.include?("-project") || arguments.include?("-derivedDataPath")
         parallel = arguments.index("-parallel-testing-enabled")
         abort "FAIL: #{shard} must use one serial simulator" unless parallel && arguments[parallel + 1] == "NO"
+        abort "FAIL: #{shard} must enumerate complete compiled products before testing" unless File.exist?(inventory_path)
+        inventory = File.readlines(inventory_path, chomp: true)
+        abort "FAIL: #{shard} enumeration must not select or skip tests" unless inventory.grep(/\A-(only|skip)-testing/).empty?
+        %w[-testProductsPath -destination].each do |flag|
+          at = inventory.index(flag)
+          abort "FAIL: #{shard} enumeration must use the execution #{flag}" unless at && inventory[at + 1] == arguments[arguments.index(flag) + 1]
+        end
+        output = inventory.index("-test-enumeration-output-path")
+        abort "FAIL: #{shard} inventory must be retained for result validation" unless output && inventory[output + 1] == File.join(directory, "native-inventory.json")
+        selection = arguments.grep(/\A-(only|skip)-testing:/)
+        abort "FAIL: #{shard} must retain the exact selection for result validation" unless File.exist?(selection_path) && JSON.parse(File.read(selection_path)) == selection
+        abort "FAIL: #{shard} changed its agreed fast coverage" if expected_fast.key?(shard) && selection != expected_fast.fetch(shard)
         selections << [shard, arguments] if exit_code == 0
       end
     end
@@ -51,6 +86,9 @@ ruby -ryaml -ropen3 -rtmpdir -e '
     _, status = Open3.capture2e(base_env.merge("CI_TEST_SHARD" => "unknown", "CI_TEST_EXIT" => "0"),
       "bash", "-e", "-c", commands.first)
     abort "FAIL: an unknown shard must fail before XCTest" if status.success? || File.exist?(arguments_path)
+    _, status = Open3.capture2e(base_env.merge("CI_TEST_SHARD" => "fast-native", "CI_TEST_EXIT" => "0", "CI_INVENTORY_EXIT" => "41"),
+      "bash", "-e", "-c", commands.first)
+    abort "FAIL: inventory failure must fail before XCTest" unless status.exitstatus == 41 && !File.exist?(arguments_path)
   end
 
   # Literal routes cover moved classes plus future tests, classes and targets.
@@ -93,6 +131,9 @@ ruby -ryaml -ropen3 -rtmpdir -e '
     source.scan(/func (test\w+)\(/).flatten.map { |method| "NativeFoundationUITests/#{name}/#{method}" }
   end
   abort "FAIL: invalid extra options selections" unless extra.uniq == extra && (extra - actual).empty?
+  fast_ui = expected_fast.values.flatten.reject { |flag| flag == "-only-testing:NativeMediaIntegrationTests" }
+    .map { |flag| flag.delete_prefix("-only-testing:") }
+  abort "FAIL: fast UI selections must name current tests" unless (fast_ui - actual).empty?
   abort "FAIL: extra options tests must leave the product shard" unless extra.all? { |test| job.fetch("env").fetch("CI_PRODUCT_TEST_CLASSES").split.any? { |prefix| test.start_with?(prefix + "/") } }
   actual.each do |test|
     next if routes.key?(test)
@@ -103,7 +144,7 @@ ruby -ryaml -ropen3 -rtmpdir -e '
     routes[test] = owner
   end
   routes.each do |test, expected|
-    owners = selections.map do |shard, arguments|
+    owners = selections.reject { |shard, _| shard.start_with?("fast-") }.map do |shard, arguments|
       only = arguments.grep(/\A-only-testing:/).map { |arg| arg.delete_prefix("-only-testing:") }
       skip = arguments.grep(/\A-skip-testing:/).map { |arg| arg.delete_prefix("-skip-testing:") }
       matches = ->(prefix) { test == prefix || test.start_with?(prefix + "/") }
@@ -113,9 +154,9 @@ ruby -ryaml -ropen3 -rtmpdir -e '
   end
 
   gate = jobs.fetch("ci-native-tests").fetch("steps").find { |step| step["run"] }.fetch("run")
-  ["success", "failure", "cancelled", "skipped", ""].repeated_permutation(2) do |build, result|
-    _, status = Open3.capture2e({"BUILD_RESULT" => build, "SHARD_RESULT" => result}, "bash", "-e", "-c", gate)
-    abort "FAIL: aggregate gate accepted #{[build, result].inspect} incorrectly" unless status.success? == (build == "success" && result == "success")
+  ["success", "failure", "cancelled", "skipped", ""].repeated_permutation(3) do |profile, build, result|
+    _, status = Open3.capture2e({"PROFILE_RESULT" => profile, "BUILD_RESULT" => build, "SHARD_RESULT" => result}, "bash", "-e", "-c", gate)
+    abort "FAIL: aggregate gate accepted #{[profile, build, result].inspect} incorrectly" unless status.success? == (profile == "success" && build == "success" && result == "success")
   end
-  puts "PASS: native shards partition coverage once, preserve serial execution and failures, and fail closed."
+  puts "PASS: full shards partition coverage once; fast shards retain selected journeys and complete integration; inventory, serial execution and failures are enforced."
 ' .github/workflows/ci.yml

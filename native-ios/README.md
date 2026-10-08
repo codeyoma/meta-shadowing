@@ -242,7 +242,7 @@ target. That includes microphone policy/recovery tests and the actual AVAudioEng
 gain graph rendered from generated signals, not recorded microphone audio.
 Success requires a nonempty finalized result, no failure or skip, and actual cases
 from each selected group. The runner's failure/isolation regression also runs in
-`ci-quality`; the new UI tests automatically enter the existing `remaining` shard.
+`ci-quality`; the UI journeys remain in the local/manual full-regression suite.
 Required check names and release approval are unchanged.
 
 `--ui-test-services-offline` is Debug-only and works only with `--ui-test-services`
@@ -284,15 +284,37 @@ Generating the CI project replaces only the ignored generated Xcode project;
 run `xcodegen generate --spec native-ios/project.yml` to return to local settings.
 Package tests, Debug/Release builds and product checks use the same commands above.
 For CI-style testing, generate `project-ci.yml` and retain
-`-parallel-testing-enabled NO`. CI builds the complete test products once without
-booting a simulator, then transfers a revision/toolchain/checksum-validated portable
-package to four independent runners. Each runner boots only after validation and
-executes `test-without-building -testProductsPath`; it never recompiles or silently
-falls back to another artifact. CI runs four disjoint selections on separate
-hosted runners: `player`, `player-options`, `product` (settings, service UI and VoiceOver), and
-`remaining` (their exact complement). See [the shard selections](../docs/native-ci.md#toolchain-and-isolation).
-Run all four selections to cover
-the full suite, or omit selection filters to run everything on one simulator locally.
+`-parallel-testing-enabled NO`. Ordinary PRs and protected-branch pushes run all
+package tests, all native integration tests and eight essential UI journeys on two
+serial simulator runners. They also retain complete Debug/Release inspection.
+The full 183-case native suite runs locally before push and remains available via
+manual CI (`test_scope: full`). Fast CI currently executes 113 native cases; it
+does not claim complete UI regression coverage.
+
+CI builds complete test products once without booting a simulator, then transfers
+a revision/toolchain/checksum-validated portable package to the selected runners.
+Each runner boots only after validation and executes `test-without-building
+-testProductsPath`; it never recompiles or falls back to another artifact.
+Manual full CI retains four disjoint selections: `player`, `player-options`,
+`product`, and `remaining`. Both modes validate exact executed identifiers against
+the compiled inventory. See [the CI profiles](../docs/native-ci.md#fast-remote-checks-and-local-full-regression).
+
+For each clone, install the local hook with a dedicated iOS 27 simulator named
+`MetaShadowing Native Pre-push iOS 27`:
+
+```sh
+bash native-ios/scripts/install-native-git-hooks.sh --simulator-id <SIMULATOR_ID>
+```
+
+The hook tests archived pushed commits, not dirty working files, and blocks pushes
+on failure. It preserves existing custom hooks and the W2 preview simulator.
+Exact-commit successful results may be reused for the same toolchain and configured
+simulator; new commits require full testing. Hooks are locally bypassable, so
+remote checks and human release approval remain required. Full pre-push testing
+moves the long wait locally; it does not make that work disappear.
+
+Run all four full selections, or omit selection filters, to cover the full native
+suite manually on an isolated simulator.
 CI supplies disposable build/result paths. See
 [the CI guide](../docs/native-ci.md) for the required jobs and coverage limits.
 
