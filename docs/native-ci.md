@@ -147,18 +147,19 @@ The build job also validates the service configuration mapper and builds a ficti
 unsigned ExtensionKit downloader without launching it or contacting Apple services.
 
 UI tests run in Debug because the retry test uses a Debug-only failure injection.
-Before starting XCUITest, the five-minute platform-preparation step waits for
-`simctl bootstatus -b` and installs the validated app. A separate three-minute
-step launches it once in a UUID-scoped product profile before
-`test-without-building`. This retains the previous total preparation budget of
-five plus three minutes; no test timeout or retry policy changes. A readiness,
+Before starting XCUITest, one eight-minute readiness step waits for
+`simctl bootstatus -b`, installs the validated app and launches it once in a
+UUID-scoped product profile before `test-without-building`. This retains the
+previous total preparation budget of five plus three minutes; the stages share
+that deadline rather than enforcing an arbitrary installation/launch split.
+No test timeout or retry policy changes. A readiness,
 installation or launch failure fails the job. This checks
 the app-launch service as well as simulator boot, and fails if launch cannot succeed.
-Preparation emits allowlisted numeric CPU, memory, load, swap and process counters
-before/after boot, after preparation and after testing, including failure. These read-only diagnostics
-distinguish whole-runner pressure from an installer-specific stall; raw process
-commands, paths, device identities and command errors are never exported. Missing
-diagnostics do not mask or replace the preparation result.
+`ci-simulator-resources.sh` is an optional diagnostic utility, not a regular CI
+step. It emits allowlisted numeric CPU, memory, load, swap and process counters
+without raw process commands, paths, device identities or command errors. Full
+process enumeration itself took about 100 seconds on one congested hosted runner,
+so those temporary probes were removed after collecting evidence.
 Each XCTest still starts a clean app process: [XCUIApplication.launch](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/launch())
 terminates any running preflight instance. No test results are manufactured by the preflight.
 The synthetic confirmation test waits for the button to become enabled and
@@ -242,10 +243,14 @@ The first hosted shared-product trials exposed a cold-installation budget issue:
 run `37762629769` spent 151 seconds installing the app in the product runner,
 leaving approximately twenty seconds of the combined three-minute preflight for
 launch. The former per-runner compilation had delayed installation after boot.
-Installation now belongs to the existing five-minute platform-preparation step;
-the existing three-minute preflight is reserved for launch. Diagnostics distinguish
-the two boundaries without exposing raw logs. This redistributes the existing
-preparation allowance, not an increase or an automatic retry. A fresh cold local
+The first adjustment assigned installation to the five-minute preparation phase,
+but another runner still exhausted that phase while most launch time went unused.
+Run `37767394596` then showed one-minute system load above 500 on a three-core
+runner before the app launched; swap counters remained zero. This demonstrates
+whole-runner congestion, not a proven memory-exhaustion or installer root cause.
+Boot, installation and launch now share the unchanged eight-minute readiness
+budget. Safe phase markers remain; heavyweight resource probes do not. This
+redistributes the existing preparation allowance, not an increase or an automatic retry. A fresh cold local
 simulator accepted the exact hosted artifact; that does not establish hosted
 reliability or explain every runner's installation latency.
 

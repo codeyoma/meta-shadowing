@@ -169,39 +169,26 @@ jobs:
         run: |
           bash native-ios/scripts/ci-test-products.sh unpack \
             "$RUNNER_TEMP/native-test-artifact/native-tests.tar" "$RUNNER_TEMP/native-tests"
-      - name: Prepare iOS 27 Simulator and install the test app
+      - name: Prepare iOS 27 Simulator and verify isolated app launch
         id: simulator
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: |
-          echo 'Native resources: before simulator preparation'
-          bash native-ios/scripts/ci-simulator-resources.sh
           ci_simulator=$(xcrun simctl list devices available --json | jq -r --arg runtime "$IOS_TEST_RUNTIME" '[.devices[$runtime][]? | select(.isAvailable and (.name | startswith("iPhone")))][0].udid // empty')
           test -n "$ci_simulator" || { echo 'Required iOS 27.0 iPhone Simulator is unavailable.' >&2; exit 1; }
           echo "::add-mask::$ci_simulator"
           xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
-          echo 'Native resources: after simulator boot'
-          bash native-ios/scripts/ci-simulator-resources.sh
           ci_app="$RUNNER_TEMP/native-tests/NativeTests.xctestproducts/Binaries/0/Debug-iphonesimulator/MetaShadowingNative.app"
           ci_started=$SECONDS
           echo 'Native preflight: install begin'
           xcrun simctl install "$ci_simulator" "$ci_app" > "$RUNNER_TEMP/native-ui-install.log" 2>&1
           echo "Native preflight: install complete after $((SECONDS - ci_started)) seconds"
-          echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
-          echo 'Required iOS 27.0 Simulator and test app are ready.'
-      - name: Report simulator preparation resource counters
-        if: always()
-        run: bash native-ios/scripts/ci-simulator-resources.sh
-      - name: Verify isolated app launch before XCTest
-        timeout-minutes: 3
-        env:
-          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
-        run: |
           ci_profile=$(uuidgen)
           ci_started=$SECONDS
           echo 'Native preflight: launch begin'
-          xcrun simctl launch --terminate-running-process "$CI_SIMULATOR" com.example.metashadowing.ci \
+          xcrun simctl launch --terminate-running-process "$ci_simulator" com.example.metashadowing.ci \
             --ui-test-product --ui-test-probe-id "$ci_profile" > "$RUNNER_TEMP/native-ui-preflight.log" 2>&1
           echo "Native preflight: launch complete after $((SECONDS - ci_started)) seconds"
+          echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
           echo 'Isolated CI app launched before XCTest.'
       - name: Test native UI and actual media adapters on iOS 27
         timeout-minutes: 30
@@ -263,7 +250,6 @@ jobs:
         if: always()
         run: |
           set -o pipefail
-          bash native-ios/scripts/ci-simulator-resources.sh
           if [ -f "$RUNNER_TEMP/native-ui.xcresult/Info.plist" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/native-ui.xcresult" |
               jq '{result, totalTestCount, passedTests, failedTests, skippedTests, testFailures}' > "$RUNNER_TEMP/native-ui-summary.json"

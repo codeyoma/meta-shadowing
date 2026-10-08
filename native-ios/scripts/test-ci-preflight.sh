@@ -15,21 +15,19 @@ ruby -ryaml -rtmpdir -ropen3 -e '
   steps = YAML.load_file(".github/workflows/ci.yml")["jobs"]["ci-native-test-shards"]["steps"]
   prepare = steps.find { |step| step["id"] == "simulator" }
   launch = steps.find { |step| step["name"] == "Verify isolated app launch before XCTest" }
-  abort "FAIL: preparation budgets changed" unless prepare["timeout-minutes"] == 5 && launch["timeout-minutes"] == 3
+  abort "FAIL: readiness must share the existing eight-minute total budget" unless prepare["timeout-minutes"] == 8 && launch.nil?
+  abort "FAIL: expensive resource snapshots must not run in regular CI" if steps.any? { |step| step.fetch("run", "").include?("bash native-ios/scripts/ci-simulator-resources.sh") }
   Dir.mktmpdir("native-preflight") do |root|
     ["none", "bootstatus", "install", "launch"].each do |failure|
-      env = {"RUNNER_TEMP" => root, "CI_SIMULATOR" => "synthetic-device", "IOS_TEST_RUNTIME" => "com.apple.CoreSimulator.SimRuntime.iOS-27-0", "GITHUB_OUTPUT" => File.join(root, "outputs"), "CI_PREFLIGHT_FAIL" => failure}
+      outputs = File.join(root, "outputs-#{failure}")
+      env = {"RUNNER_TEMP" => root, "IOS_TEST_RUNTIME" => "com.apple.CoreSimulator.SimRuntime.iOS-27-0", "GITHUB_OUTPUT" => outputs, "CI_PREFLIGHT_FAIL" => failure}
       output, status = Open3.capture2e(env, "bash", "-e", "-c", prepare.fetch("run"))
-      if status.success?
-        abort "FAIL: installation must finish during platform preparation" unless output.include?("Native preflight: install complete")
-        launch_output, status = Open3.capture2e(env, "bash", "-e", "-c", launch.fetch("run"))
-        output += launch_output
-      end
       abort "FAIL: preflight lost failure status" unless status.exitstatus == (failure == "none" ? 0 : 42)
       abort "FAIL: private preflight output leaked" if output.include?("PRIVATE_PREFLIGHT_PAYLOAD") || output.include?("/private/profile") || output.include?("device-identifier")
       abort "FAIL: install progress order" unless output.include?("Native preflight: install begin") == (failure != "bootstatus")
       abort "FAIL: launch progress order" unless output.include?("Native preflight: launch begin") == ["none", "launch"].include?(failure)
       abort "FAIL: completion must follow successful launch" unless output.include?("Native preflight: launch complete") == (failure == "none")
+      abort "FAIL: simulator must be published only after readiness succeeds" unless File.exist?(outputs) == (failure == "none")
     end
   end
   puts "PASS: preflight reports install/launch boundaries without private output or masked failures."
