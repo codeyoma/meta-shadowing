@@ -43,8 +43,8 @@ CI partitions the complete scheme into four disjoint jobs:
 | Shard | Selection |
 | --- | --- |
 | `player` | `-only-testing:NativeFoundationUITests/PlayerUITests`, excluding the named options methods |
-| `player-options` | `-only-testing` for the thirteen methods in `CI_PLAYER_OPTIONS_TEST_METHODS` |
-| `product` | `-only-testing` for `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests` in `NativeFoundationUITests` |
+| `player-options` | Thirteen methods in `CI_PLAYER_OPTIONS_TEST_METHODS` plus three settings methods in `CI_OPTIONS_EXTRA_TESTS` |
+| `product` | `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests`, excluding those three settings methods |
 | `remaining` | `-skip-testing` for those four UI classes; every other test remains included |
 
 The `product` shard includes VoiceOver audits and label checks on every PR.
@@ -52,21 +52,35 @@ Inclusion and exclusion flags derive from the same class and method identifiers 
 The `remaining` shard includes all media integration tests and automatically receives
 new UI classes or test targets. New player methods automatically enter `player` unless
 explicitly moved to `player-options`; tests in other named classes follow that class.
-Each job uses its own standard hosted runner, builds its own test products and
-passes `-parallel-testing-enabled NO`, retaining one simulator and the existing
-Swift Testing suite isolation. This repeats setup to avoid simulator contention.
+Each test job uses its own standard hosted runner and passes
+`-parallel-testing-enabled NO`, retaining one simulator and existing Swift Testing
+suite isolation. A separate `ci-native-build` job builds the complete graph once,
+using a generic arm64 simulator destination without booting a simulator. It exports
+Xcode's portable `.xctestproducts` package. Four test runners download that exact
+artifact by its producer output ID, validate it, then boot their iOS 27 simulator.
+They do not generate a project or compile again. This also avoids scheduling six
+macOS jobs at once: quality, product inspection and the shared build run first;
+the four test jobs follow the build.
 There are no paid larger runners or external providers.
+
+The run-scoped archive preserves executable permissions and portable internal
+links. Metadata pins the checkout revision, exact Xcode version and payload
+SHA-256. Missing, damaged or incompatible artifacts fail before installation,
+without a cache fallback. Artifact actions are SHA-pinned and artifacts expire
+after one day; an expired artifact requires a complete workflow rerun. The output
+ID permits failed-job reruns to use their successful producer, even across attempt
+numbers. Only fictional-CI products are uploaded, never local profiles or raw logs.
 
 `test-ci-test-shards.sh` executes the actual workflow test command against a
 controlled process boundary. It verifies disjoint class ownership, every current player
-method, valid options method names, coverage of future classes/targets, serial execution,
+method, every current UI method, valid moved method names, coverage of future classes/targets, serial execution,
 test failure propagation, unknown-shard
 rejection and aggregate gate failures. It does not substitute for hosted XCTest.
 
 The matrix uses `fail-fast: false` so a failure in one shard does not suppress the
 other shard's results. Each result summary must be nonempty, fully passing and
 contain zero failed or skipped tests. The required `ci-native-tests` job runs
-with `always()` and accepts only an aggregate shard result of `success`; failures,
+with `always()` and requires both shared-build and aggregate-shard `success`; failures,
 cancellations and skipped shards cannot make the required check green. Release
 approval still depends on this exact required check name.
 
@@ -81,7 +95,9 @@ budget. Its build step streams only
 allowlisted phase names and verdicts, never compiler arguments, paths or raw
 diagnostic payloads. Pipeline failure propagation remains enabled, and a regression
 executes the workflow command to verify progress privacy and compiler exit codes.
-The complete main scheme owns the final products used by `test-without-building`.
+The complete main scheme owns the final products used by `test-without-building
+-testProductsPath`. Preparation and SDK-module phases are also allowlisted, and
+the build reports elapsed seconds so time before ordinary Swift compilation is visible.
 
 ## Historical purchase-fixture investigations
 
@@ -134,7 +150,7 @@ UI tests run in Debug because the retry test uses a Debug-only failure injection
 Before starting XCUITest, a separate five-minute preparation step waits for
 `simctl bootstatus -b` to report that the required iOS 27 Simulator has finished
 booting. A readiness failure fails the job; it does not skip or retry failed tests.
-The job then builds test products and performs a single app install/launch preflight
+After validating the shared test products, the job performs a single app install/launch preflight
 in a separate UUID-scoped product profile before `test-without-building`. This checks
 the app-launch service as well as simulator boot, and fails if launch cannot succeed.
 Each XCTest still starts a clean app process: [XCUIApplication.launch](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/launch())
@@ -159,8 +175,9 @@ no attached drawer, and no premature cancellation completion. Timeout failures n
 dictionary cleanup, include captured assertion values, and stop the test. Media deadlines are unchanged.
 CI reports every assertion message for failed test cases, not only the first message
 from Xcode's summary. Device metadata and source locations remain excluded.
-Each native shard has a 40-minute budget, including cold simulator setup and test-product
-compilation; the test step itself remains bounded at 30 minutes. A previous 30-minute
+Each native shard retains a 40-minute budget, including download and simulator setup;
+the test step remains bounded at 30 minutes. The shared build has a 20-minute job
+budget and retains the 15-minute compilation limit. A previous 30-minute
 job limit cancelled the expanded suite before Xcode could finalize its result bundle.
 Only test-case lifecycle lines and the final test verdict are streamed from Xcode's
 verbose output; shell `pipefail` preserves test failures through that filter. The result
@@ -198,6 +215,24 @@ summaries expose test failures without exporting complete simulator logs or
 result bundles. Local reproduction commands are in [the native guide](../native-ios/README.md).
 
 ## CI timing baseline
+
+### October 8 shared-product follow-up
+
+PR #127 run `37754940528` passed all 180 native cases with zero failures/skips,
+but took 41m 52s overall. Each shard compiled the same full graph: options 4m 40s,
+player 11m 17s, remaining 13m 27s and product 12m 33s. The previous successful
+run `37714033941` took 33m 38s; build phases ranged from 5m 47s to 8m 36s.
+Shared products remove three complete compilations. Booting only after receiving
+the products also removes simulator contention from the build job; contention's
+share of the old variability is not established by these timings alone.
+
+The settings-summary relaunch, font-persistence and rate-preference tests move
+from product to options. They accounted for approximately 194 seconds in the
+previous successful run. Assertions and fixture launches remain unchanged.
+Hosted timing and complete case inventory must be reverified after this change;
+the structural regressions and local portable-product run are not hosted results.
+
+### Earlier four-shard partition
 
 On October 7, PR #126 run `37655283521` exhausted the 40-minute `remaining`
 job budget. Compilation took 8m 07s, and the test step was cancelled after 30m 13s

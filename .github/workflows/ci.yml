@@ -67,9 +67,58 @@ jobs:
         run: bash native-ios/scripts/test-offline-acceptance-runner.sh
       - name: Native test shard coverage and failure contract
         run: bash native-ios/scripts/test-ci-test-shards.sh
+      - name: Portable native test products contract
+        run: bash native-ios/scripts/test-ci-test-products.sh
+
+  ci-native-build:
+    name: Build shared native tests
+    runs-on: xcode-27
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    outputs:
+      artifact-id: ${{ steps.products.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Generate standalone Swift app
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodebuild -version
+          xcodegen --version
+          echo "CPU cores: $(sysctl -n hw.ncpu)"
+          echo "Memory bytes: $(sysctl -n hw.memsize)"
+          xcodegen generate --spec native-ios/project-ci.yml
+      - name: Build native test products without booting a simulator
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          ci_started=$SECONDS
+          echo 'Native build: begin'
+          xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme MetaShadowingNative -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' ARCHS=arm64 \
+            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
+            -testProductsPath "$RUNNER_TEMP/NativeTests.xctestproducts" \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 |
+            awk -f native-ios/scripts/ci-build-progress.awk
+          echo "Native build: elapsed $((SECONDS - ci_started)) seconds"
+      - name: Package portable native test products
+        run: bash native-ios/scripts/ci-test-products.sh pack "$RUNNER_TEMP" "$RUNNER_TEMP/native-tests.tar"
+      - name: Share this run's compiled tests
+        id: products
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-test-products-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-tests.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   ci-native-test-shards:
     name: Native tests (${{ matrix.shard }})
+    needs: [ci-native-build]
     runs-on: xcode-27
     timeout-minutes: 40
     strategy:
@@ -99,18 +148,23 @@ jobs:
         NativeFoundationUITests/ProductUITests
         NativeFoundationUITests/AppleServicesUITests
         NativeFoundationUITests/VoiceOverSemanticsUITests
+      CI_OPTIONS_EXTRA_TESTS: >-
+        NativeFoundationUITests/ProductUITests/testLearningSettingsSummariesFollowSavedOptionsAcrossRelaunch
+        NativeFoundationUITests/ProductUITests/testFontSettingsPersistAcrossRelaunch
+        NativeFoundationUITests/ProductUITests/testRateEditorShowsOnlyLiveValueAndPersistsPreference
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Generate standalone Swift app
+      - name: Download this run's compiled tests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.ci-native-build.outputs.artifact-id }}
+          path: ${{ runner.temp }}/native-test-artifact
+      - name: Validate and restore portable native test products
         run: |
-          command -v xcodegen || brew install xcodegen
-          xcodebuild -version
-          xcodegen --version
-          echo "CPU cores: $(sysctl -n hw.ncpu)"
-          echo "Memory bytes: $(sysctl -n hw.memsize)"
-          xcodegen generate --spec native-ios/project-ci.yml
+          bash native-ios/scripts/ci-test-products.sh unpack \
+            "$RUNNER_TEMP/native-test-artifact/native-tests.tar" "$RUNNER_TEMP/native-tests"
       - name: Wait for iOS 27 Simulator readiness
         id: simulator
         timeout-minutes: 5
@@ -121,25 +175,12 @@ jobs:
           xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
           echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
           echo 'Required iOS 27.0 Simulator finished booting.'
-      - name: Build native test products
-        timeout-minutes: 15
-        env:
-          CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
-        run: |
-          set -o pipefail
-          # Build the complete free-product test graph; no purchase setup process.
-          xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
-            -scheme MetaShadowingNative -configuration Debug \
-            -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
-            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
-            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 |
-            awk -f native-ios/scripts/ci-build-progress.awk
       - name: Verify isolated app launch before XCTest
         timeout-minutes: 3
         env:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
-          ci_app="$RUNNER_TEMP/native-ui-build/Build/Products/Debug-iphonesimulator/MetaShadowingNative.app"
+          ci_app="$RUNNER_TEMP/native-tests/NativeTests.xctestproducts/Binaries/0/Debug-iphonesimulator/MetaShadowingNative.app"
           ci_profile=$(uuidgen)
           xcrun simctl install "$CI_SIMULATOR" "$ci_app" > "$RUNNER_TEMP/native-ui-install.log" 2>&1
           xcrun simctl launch --terminate-running-process "$CI_SIMULATOR" com.example.metashadowing.ci \
@@ -156,6 +197,8 @@ jobs:
           test "${#ci_player_option_methods[@]}" -gt 0
           read -r -a ci_product_classes <<< "$CI_PRODUCT_TEST_CLASSES"
           test "${#ci_product_classes[@]}" -gt 0
+          read -r -a ci_options_extra <<< "$CI_OPTIONS_EXTRA_TESTS"
+          test "${#ci_options_extra[@]}" -gt 0
           ci_selection=()
           case "$CI_TEST_SHARD" in
             player)
@@ -166,10 +209,16 @@ jobs:
             player-options)
               for ci_test_method in "${ci_player_option_methods[@]}"; do
                 ci_selection+=("-only-testing:$CI_PLAYER_TEST_CLASS/$ci_test_method")
+              done
+              for ci_test in "${ci_options_extra[@]}"; do
+                ci_selection+=("-only-testing:$ci_test")
               done ;;
             product)
               for ci_test_class in "${ci_product_classes[@]}"; do
                 ci_selection+=("-only-testing:$ci_test_class")
+              done
+              for ci_test in "${ci_options_extra[@]}"; do
+                ci_selection+=("-skip-testing:$ci_test")
               done ;;
             remaining)
               ci_selection=("-skip-testing:$CI_PLAYER_TEST_CLASS")
@@ -178,10 +227,9 @@ jobs:
               done ;;
             *) echo 'Unknown native test shard.' >&2; exit 1 ;;
           esac
-          xcodebuild test-without-building -project native-ios/MetaShadowingNative.xcodeproj \
-            -scheme MetaShadowingNative -configuration Debug \
+          xcodebuild test-without-building \
+            -testProductsPath "$RUNNER_TEMP/native-tests/NativeTests.xctestproducts" \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
-            -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
             -parallel-testing-enabled NO "${ci_selection[@]}" \
             -collect-test-diagnostics never \
             -resultBundlePath "$RUNNER_TEMP/native-ui.xcresult" \
@@ -210,7 +258,8 @@ jobs:
                   {test: .nodeIdentifier, durationInSeconds,
                    failures: [.. | objects | select(.nodeType? == "Failure Message") | .name]}],
                 ($tests | map({test: .nodeIdentifier, result, durationInSeconds}) |
-                  sort_by(.durationInSeconds // 0) | reverse | .[:10])'
+                  sort_by(.durationInSeconds // 0) | reverse | .[:10]),
+                {executedTests: ($tests | map(.nodeIdentifier) | sort)}'
             jq -e '.result == "Passed" and .totalTestCount > 0 and
               .passedTests == .totalTestCount and .failedTests == 0 and .skippedTests == 0' \
               "$RUNNER_TEMP/native-ui-summary.json" > /dev/null
@@ -222,16 +271,17 @@ jobs:
   ci-native-tests:
     name: ci-native-tests
     if: always()
-    needs: [ci-native-test-shards]
+    needs: [ci-native-build, ci-native-test-shards]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require every native test shard to pass
         env:
+          BUILD_RESULT: ${{ needs.ci-native-build.result }}
           SHARD_RESULT: ${{ needs.ci-native-test-shards.result }}
         run: |
-          if [ "$SHARD_RESULT" != success ]; then
-            echo 'Native tests require every shard to succeed.' >&2
+          if [ "$BUILD_RESULT" != success ] || [ "$SHARD_RESULT" != success ]; then
+            echo 'Native tests require the shared build and every shard to succeed.' >&2
             exit 1
           fi
           echo 'All native test shards passed.'
