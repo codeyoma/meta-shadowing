@@ -4,7 +4,10 @@ import SwiftUI
 
 struct LearningControlsView: View {
     let runtime: NativeLearningRuntime
+    let onActionFrameChange: (CGRect) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // Different SF Symbols must not move the footer when playback changes state.
+    @ScaledMetric(relativeTo: .body) private var actionSymbolHeight = 20.0
     var body: some View {
         let controls = runtime.controls, session = controls.session
         VStack(spacing: 12) {
@@ -25,6 +28,7 @@ struct LearningControlsView: View {
                     // The learning contract keeps Repeat as a named icon control beside the wider main action.
                     Button { Task { _ = await runtime.coordinator.perform(.repeat) } } label: {
                         Image(systemName: "repeat").frame(maxWidth: .infinity)
+                            .frame(height: actionSymbolHeight)
                     }.buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
                         .accessibilityLabel("두 번 더 연습하기").accessibilityIdentifier("player-repeat")
                         .disabled(!controls.repeatable).frame(maxWidth: 80)
@@ -33,15 +37,26 @@ struct LearningControlsView: View {
                 Button {
                     if let action = runtime.controls.mainAction { Task { _ = await runtime.coordinator.perform(action) } }
                 } label: {
-                    Label(label(controls.mainAction), systemImage: symbol(controls.mainAction))
+                    Image(systemName: symbol(controls.mainAction))
                         .frame(maxWidth: .infinity)
-                }.accessibilityIdentifier("player-main")
+                        .frame(height: actionSymbolHeight)
+                }.accessibilityLabel(label(controls.mainAction))
+                    .accessibilityIdentifier("player-main")
                     .disabled(controls.mainAction == nil)
                     .buttonStyle(.floatingPrimaryAction)
                     .accessibilityShowsLargeContentViewer()
+                    .onGeometryChange(for: CGRect.self) { geometry in
+                        geometry.frame(in: .named("player-reward"))
+                    } action: { frame in
+                        onActionFrameChange(frame)
+                    }
             }
-        }.padding()
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: session.showsThirdCycleChoices)
+        }
+        // The existing timeline occupies 36 pt above the action; silent stages have no timeline.
+        // Reserve the remaining receipt/travel area permanently so text never moves on awards.
+        .padding(.top, LearningRewardView.clearanceHeight - 16 - (session.isSilent ? 0 : 36))
+        .padding()
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: session.showsThirdCycleChoices)
     }
     private func symbol(_ action: LearningEvent?) -> String {
         switch action { case .resume: "play.fill"; case .next: "forward.fill"; case .confirm: "checkmark"; default: "waveform" }
@@ -62,6 +77,8 @@ private struct CycleTimelineView: View {
                         ForEach(0..<session.current.planned, id: \.self) { ordinal in
                             HStack(spacing: 4) {
                                 node(.make(session: session, ordinal: ordinal, position: motion.position))
+                                    // Strokes extend beyond their path; retain clearance inside the clipped strip.
+                                    .padding(2)
                                     .frame(width: 24, height: 24)
                                 if ordinal + 1 < session.current.planned {
                                     Rectangle().fill(ordinal < session.current.confirmed ? BrandStyle.green : Color.secondary.opacity(0.2))

@@ -1,9 +1,11 @@
 import AppFoundation
+import LearningDomain
 import SwiftUI
 
 struct RevealSpeedEditorView: View {
     let values: [Int]
     let change: ([Int]) -> Void
+    @State private var resetGeneration = 0
     var body: some View {
         let displayed = LearningRevealSpeedDraft.normalized(values)
         Section("단어 공개 속도 (WPM)") {
@@ -16,10 +18,14 @@ struct RevealSpeedEditorView: View {
                     return updated[index]
                 }
             }
+        }.id(resetGeneration)
+        Section {
+            Button("초기화") {
+                change(LearningPreferences.fresh.revealWPM)
+                // Replace draft/focus state even when saved values already equal the defaults.
+                resetGeneration += 1
+            }.accessibilityIdentifier("reveal-presets-reset")
         }
-        Text("S1은 100–200 WPM에서 25씩, 이후 단계는 이전 단계보다 50·100·150 WPM 빠르게 설정해요. 이후 단계의 간격은 유지돼요.")
-            .font(.footnote)
-        Text("기본값을 바꾸어도 진행 중인 학습 속도는 변하지 않아요.").font(.footnote)
     }
 }
 private struct RevealPresetRow: View {

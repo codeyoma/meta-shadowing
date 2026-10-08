@@ -49,15 +49,22 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         XCTAssertTrue(app.sliders["재생 속도"].waitForExistence(timeout: 5))
         try audit(app, "\(label) rate editor")
         app.buttons["options-close"].tap()
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].waitForExistence(timeout: 10))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].waitForExistence(timeout: 10))
         app.tabBars.buttons["설정"].tap()
         XCTAssertTrue(app.buttons["학습 설정"].waitForExistence(timeout: 5))
         try audit(app, "\(label) settings")
         app.buttons["학습 설정"].tap()
-        app.buttons["폰트 설정"].tap()
-        XCTAssertTrue(app.textFields["original-size"].waitForExistence(timeout: 5))
-        try audit(app, "\(label) typography")
+        let typography = app.buttons["폰트 설정"]
+        XCTAssertTrue(typography.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        typography.tap()
+        XCTAssertTrue(app.navigationBars["폰트 설정"].waitForExistence(timeout: 5))
+        try audit(app, "\(label) typography preview")
+        // The long bilingual preview places lazily created controls below the fold at AX sizes.
+        let size = app.textFields["original-size"]
+        for _ in 0..<12 where !size.isHittable { app.swipeUp() }
+        XCTAssertTrue(size.isHittable)
+        try audit(app, "\(label) typography controls")
     }
 
     @MainActor private func audit(_ app: XCUIApplication, _ screen: String) throws {
@@ -119,7 +126,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
         XCTAssertEqual(main.label, "학습 확인")
         XCTAssertEqual(app.buttons["player-options"].label, "학습 옵션")
-        XCTAssertFalse(app.buttons["player-exit"].label.isEmpty, "Close must have a spoken name")
+        XCTAssertFalse(app.buttons["player-options"].label.isEmpty, "Options must have a spoken name")
         XCTAssertTrue(app.buttons["학습 속도"].exists)
         XCTAssertTrue(app.buttons["문장 분석"].exists)
         XCTAssertEqual(app.descendants(matching: .any)["cycle-timeline"].label, "확인한 반복 0/3")
@@ -128,7 +135,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         XCTAssertTrue(rate.waitForExistence(timeout: 5))
         XCTAssertEqual(rate.value as? String, "1배속")
         app.buttons["options-close"].tap()
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
 }

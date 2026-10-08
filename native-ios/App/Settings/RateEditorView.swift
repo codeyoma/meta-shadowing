@@ -10,7 +10,7 @@ struct RateEditorView: View {
         self.rate = rate; self.change = change; draft = rate
     }
     var body: some View {
-        Section("배속") {
+        Section {
             HStack {
                 // Stepped sliders draw a tick at every step; explicit ticks keep only the four marks.
                 Slider(value: Binding(get: { draft }, set: { draft = Self.quarterStep($0) }), in: 0.25...3,

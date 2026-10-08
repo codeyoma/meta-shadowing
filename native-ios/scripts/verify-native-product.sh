@@ -54,7 +54,7 @@ while IFS= read -r -d '' artifact; do
         # otool's unindented binary header is a path, not a linked dependency.
         dependencies=$(otool -L "$artifact" | sed -n '/^[[:space:]]/p')
         symbols=$(nm -u "$artifact")
-        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-|media-probe-video|SyntheticLearningProbe|ProductTestCatalog|ProductTestStore|ServiceTestAssets|ServiceTestCloud|DeveloperToolsView|DeveloperDownload|DeveloperAnalysis' >/dev/null; then
+        if [[ "$configuration" == Release ]] && strings "$artifact" | rg 'SyntheticMediaProbe|SyntheticMediaFixtures|ui-test-|media-probe-video|SyntheticLearningProbe|ProductTestCatalog|ProductTestStore|ServiceTestAssets|ServiceTestCloud|DeveloperToolsView|DeveloperDownload|DeveloperAnalysis|DevelopmentLibraryCatalog|DevelopmentDuoAssets|development-library' >/dev/null; then
             echo 'Debug probe code leaked into Release' >&2; exit 1
         fi
         if printf '%s\n%s\n' "$dependencies" "$symbols" |

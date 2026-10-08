@@ -6,6 +6,49 @@ import LearningPersistence
 @testable import MetaShadowingNative
 
 @MainActor @Suite(.serialized) struct LearningFlowTests {
+    @Test(arguments: [false, true])
+    func menuOpenedDuringLoadingKeepsTheLateLessonPausedEvenAfterDismissal(dismissBeforeReady: Bool) async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try MediaFixtureFactory.tone(in: root, name: "one", duration: 2)
+        let catalog = DeferredLessonCatalog(root: root)
+        let flow = LearningFlow(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root), catalog: catalog, profileID: "flow"))
+        let opening = Task { await flow.open(packageKey: "fixture-v1", stage: 1) }
+        while !(await catalog.entered) { await Task.yield() }
+        await flow.presentOptions(.menu)
+        #expect(flow.options == .menu)
+        if dismissBeforeReady { flow.dismissOptions() }
+        await catalog.release()
+        await opening.value
+        let runtime = try #require(flow.runtime)
+        #expect(runtime.state.controller.paused)
+        #expect(runtime.state.phase == .paused)
+        #expect(runtime.controls.xp == 0)
+        if !dismissBeforeReady {
+            #expect(flow.options == .menu)
+            #expect(!runtime.coordinator.remoteState.actionable)
+            flow.dismissOptions()
+            #expect(runtime.state.controller.paused)
+        }
+        _ = await runtime.coordinator.perform(.resume)
+        #expect(!runtime.state.controller.paused, "Explicit resume remains available after loading into a paused lesson")
+        #expect(runtime.controls.xp == 0)
+        await flow.close()
+    }
+
+    @Test func menuRemainsAvailableAfterLoadFailure() async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let flow = LearningFlow(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root),
+            catalog: DeferredLessonCatalog(root: root), profileID: "flow"))
+        await flow.open(packageKey: "missing", stage: 1)
+        #expect(flow.failed && flow.runtime == nil)
+        await flow.presentOptions(.menu)
+        #expect(flow.options == .menu)
+        await flow.close()
+        #expect(flow.options == nil)
+    }
+
     @Test func closingDoesNotWaitForAnUncooperativeCatalog() async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -13,6 +56,8 @@ import LearningPersistence
         let flow = LearningFlow(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root), catalog: catalog, profileID: "flow"))
         let opening = Task { await flow.open(packageKey: "fixture-v1", stage: 1) }
         while !(await catalog.entered) { await Task.yield() }
+        await flow.presentOptions(.menu)
+        #expect(flow.options == .menu)
         var closed = false
         let closing = Task { await flow.close(); closed = true }
         try await Task.sleep(for: .milliseconds(100))

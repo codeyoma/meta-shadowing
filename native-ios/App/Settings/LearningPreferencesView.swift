@@ -12,29 +12,63 @@ extension LearningOptionRoute {
         }
     }
     static let preferences: [Self] = [.display, .typography, .rate, .group, .revealPresets]
+    func summary(preferences value: LearningPreferences) -> String {
+        switch self {
+        case .display:
+            return value.speechView == "bubble" ? String(localized: "버블로 보기") : String(localized: "리스트로 보기")
+        case .typography:
+            let original = LearningFont.title(value.originalTextFont)
+            let translation = LearningFont.title(value.translationTextFont)
+            let originalSize = LearningFont.baseSize(original: true, preferences: value)
+            let translationSize = LearningFont.baseSize(original: false, preferences: value)
+            return String(localized: "원문 \(original) \(originalSize) · 번역 \(translation) \(translationSize)")
+        case .rate: return "\(value.rate.formatted())×"
+        case .group: return String(localized: "\(value.groupSize)구간")
+        case .revealPresets, .revealSpeed:
+            return value.revealWPM.enumerated().map { "S\($0.offset + 1) \($0.element)" }.joined(separator: " · ") + " WPM"
+        default: return ""
+        }
+    }
 }
 struct LearningPreferencesView: View {
     let model: ProductModel
     var body: some View {
+        let preferences = model.snapshot?.preferences.learning ?? .fresh
         List(LearningOptionRoute.preferences) { option in
-            NavigationLink(option.title) {
-                PreferenceEditorView(option: option, preferences: model.snapshot?.preferences.learning ?? .fresh) { value in
+            let summary = option.summary(preferences: preferences)
+            NavigationLink {
+                PreferenceEditorView(option: option, preferences: preferences) { value in
                     await model.saveLearningPreferences(value)
                 }
-            }
+            } label: {
+                LearningOptionLabel(title: option.title, summary: summary)
+            }.accessibilityLabel(option.title).accessibilityValue(summary)
         }.navigationTitle("학습 설정")
+    }
+}
+struct LearningOptionLabel: View {
+    let title: String
+    let summary: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+            Text(summary).font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 struct PreferenceEditorView: View {
     let option: LearningOptionRoute
     let preferences: LearningPreferences
+    let videoLayout: Bool
     let save: (LearningPreferences) async -> Bool
     @State private var value: LearningPreferences
     @State private var committed: LearningPreferences
     @State private var saving = false
     @State private var failed = false
-    init(option: LearningOptionRoute, preferences: LearningPreferences, save: @escaping (LearningPreferences) async -> Bool) {
+    init(option: LearningOptionRoute, preferences: LearningPreferences, videoLayout: Bool = false, save: @escaping (LearningPreferences) async -> Bool) {
         self.option = option; self.preferences = preferences; self.save = save
+        self.videoLayout = videoLayout
         value = preferences; committed = preferences
     }
     var body: some View {
@@ -42,7 +76,7 @@ struct PreferenceEditorView: View {
             if failed { Text("저장하지 못했어요. 다시 변경해 주세요.").foregroundStyle(.red) }
             switch option {
             case .typography:
-                TypographyEditorView(value: value, change: commit)
+                TypographyEditorView(value: value, videoLayout: videoLayout, change: commit)
             case .rate:
                 RateEditorView(rate: value.rate) { rate in var next = value; next.rate = rate; commit(next) }
             case .group:
@@ -55,13 +89,18 @@ struct PreferenceEditorView: View {
                     var next = value; next.revealWPM = speeds; commit(next)
                 }
             case .display:
-                Picker("학습 화면", selection: Binding(get: { value.speechView }, set: { style in
-                    var next = value; next.speechView = style; commit(next)
-                })) {
-                    Text("버블로 보기").tag("bubble")
-                    Text("리스트로 보기").tag("list")
-                }.pickerStyle(.segmented)
-                TypographyPreview(value: value)
+                if videoLayout {
+                    Text("동영상은 리스트로 표시돼요.").font(.footnote)
+                } else {
+                    Picker("학습 화면", selection: Binding(get: { value.speechView }, set: { style in
+                        var next = value; next.speechView = style; commit(next)
+                    })) {
+                        Text("버블로 보기").tag("bubble")
+                        Text("리스트로 보기").tag("list")
+                    }.pickerStyle(.segmented)
+                }
+                TypographyPreview(value: value, videoLayout: videoLayout)
+                    .listRowBackground(Color.clear).listRowSeparator(.hidden)
             default: EmptyView()
             }
         }.navigationTitle(option.title).disabled(saving)

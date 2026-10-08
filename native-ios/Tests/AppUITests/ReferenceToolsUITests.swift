@@ -53,8 +53,8 @@ final class ReferenceToolsUITests: XCTestCase {
         let close = app.buttons["dictionary-close"]
         XCTAssertTrue(close.waitForExistence(timeout: 5)); close.tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
     @MainActor func testLongGraphAtLargestTextSizeReachesLastToken() {
         continueAfterFailure = false
@@ -127,8 +127,8 @@ final class ReferenceToolsUITests: XCTestCase {
         XCTAssertTrue(token.isSelected)
         app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
     @MainActor func testAnalysisSelectionAndCopyDoNotEarnCredit() {
         continueAfterFailure = false
@@ -146,8 +146,8 @@ final class ReferenceToolsUITests: XCTestCase {
         XCTAssertTrue(token.isSelected)
         app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
-        app.buttons["player-exit"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
     @MainActor private func openFixture(mode: String = "analysis", extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()

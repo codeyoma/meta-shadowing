@@ -26,11 +26,14 @@ struct StagePathView: View {
                         .accessibilityLabel("완료한 스테이지")
                         .accessibilityValue("\(summary.completedStages)/16")
                     if !summary.available {
-                        Label("자료를 열 수 없어요. 도서 목록에서 다시 시도해 주세요. 학습 기록은 그대로 있어요.",
+                        Label("자료를 열 수 없어요. 책장에서 다시 시도해 주세요. 학습 기록은 그대로 있어요.",
                               systemImage: "exclamationmark.triangle")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
-                }.padding(.horizontal, 20)
+                }
+                .padding(16)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 26))
+                .padding(.horizontal, 16)
                 ForEach(1...8, id: \.self) { level in
                     StageSection(title: String(localized: "Lv \(level) · \(StageMethod.title(level * 2))")) {
                         ForEach([level * 2 - 1, level * 2], id: \.self) { stage in
@@ -70,10 +73,11 @@ struct StageRow: View {
     let checkpoint: StageStudySummary?
     let enabled: Bool
     let open: () -> Void
+    var tapFeedback: BrowsingTapFeedback = .light
     @ScaledMetric(relativeTo: .body) private var symbolSize = 44
     private var resuming: StageStudySummary? { checkpoint.flatMap { $0.complete ? nil : $0 } }
     var body: some View {
-        Button(action: open) {
+        Button(action: activate) {
             HStack(spacing: 16) {
                 Image(systemName: enabled ? (stage >= 11 ? "text.word.spacing" : "play.fill") : "lock.fill")
                     .font(.body.weight(.semibold))
@@ -102,6 +106,7 @@ struct StageRow: View {
         .accessibilityLabel("스테이지 \(stage), \(StageMethod.title(stage))")
         .accessibilityValue(accessibilityValue)
     }
+    func activate() { tapFeedback.perform(enabled: enabled, open) }
     private var accessibilityValue: String {
         var parts = [String(localized: "완료 \(min(completions, 3))/3")]
         if let resuming { parts.append(String(localized: "\(resuming.unit + 1)/\(resuming.unitCount) 이어하기")) }
@@ -114,12 +119,12 @@ struct StageRow: View {
 private struct StageCompletion: View {
     let completions: Int
     var body: some View {
-        let done = completions >= 3
         HStack(spacing: 4) {
-            Image(systemName: done ? "checkmark.circle.fill" : "checkmark.circle")
-                .foregroundStyle(done ? AnyShapeStyle(BrandStyle.green) : AnyShapeStyle(.tertiary))
-            Text("\(min(completions, 3))/3").monospacedDigit().foregroundStyle(.secondary)
-        }.font(.subheadline).accessibilityHidden(true)
+            ForEach(1...3, id: \.self) { run in
+                Image(systemName: completions >= run ? "checkmark.circle.fill" : "checkmark.circle")
+                    .foregroundStyle(completions >= run ? AnyShapeStyle(BrandStyle.green) : AnyShapeStyle(.tertiary))
+            }
+        }.font(.subheadline).fixedSize().accessibilityHidden(true)
     }
 }
 

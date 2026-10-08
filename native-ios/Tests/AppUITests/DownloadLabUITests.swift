@@ -16,8 +16,8 @@ final class DownloadLabUITests: XCTestCase {
         app.buttons["lab-seed"].tap()
         XCTAssertTrue(app.staticTexts["lab-xp"].wait(for: \.label, toEqual: "합성 테스트 XP: 3", timeout: 10))
         app.buttons["diagnostic-close"].tap()
-        app.tabBars.buttons["도서 목록"].tap()
-        XCTAssertTrue(app.staticTexts["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 10))
+        app.tabBars.buttons["책장"].tap()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 10))
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].exists)
         XCTAssertFalse(app.buttons["book-hosted-morning-notes-v1"].exists)
     }
