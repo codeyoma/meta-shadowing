@@ -70,7 +70,9 @@ jobs:
       - name: Portable native test products contract
         run: bash native-ios/scripts/test-ci-test-products.sh
       - name: Simulator preflight diagnostics contract
-        run: bash native-ios/scripts/test-ci-preflight.sh
+        run: |
+          bash native-ios/scripts/test-ci-preflight.sh
+          bash native-ios/scripts/test-ci-simulator-resources.sh
 
   ci-native-build:
     name: Build shared native tests
@@ -171,10 +173,14 @@ jobs:
         id: simulator
         timeout-minutes: 5
         run: |
+          echo 'Native resources: before simulator preparation'
+          bash native-ios/scripts/ci-simulator-resources.sh
           ci_simulator=$(xcrun simctl list devices available --json | jq -r --arg runtime "$IOS_TEST_RUNTIME" '[.devices[$runtime][]? | select(.isAvailable and (.name | startswith("iPhone")))][0].udid // empty')
           test -n "$ci_simulator" || { echo 'Required iOS 27.0 iPhone Simulator is unavailable.' >&2; exit 1; }
           echo "::add-mask::$ci_simulator"
           xcrun simctl bootstatus "$ci_simulator" -b > "$RUNNER_TEMP/native-simulator-boot.log" 2>&1
+          echo 'Native resources: after simulator boot'
+          bash native-ios/scripts/ci-simulator-resources.sh
           ci_app="$RUNNER_TEMP/native-tests/NativeTests.xctestproducts/Binaries/0/Debug-iphonesimulator/MetaShadowingNative.app"
           ci_started=$SECONDS
           echo 'Native preflight: install begin'
@@ -182,6 +188,9 @@ jobs:
           echo "Native preflight: install complete after $((SECONDS - ci_started)) seconds"
           echo "id=$ci_simulator" >> "$GITHUB_OUTPUT"
           echo 'Required iOS 27.0 Simulator and test app are ready.'
+      - name: Report simulator preparation resource counters
+        if: always()
+        run: bash native-ios/scripts/ci-simulator-resources.sh
       - name: Verify isolated app launch before XCTest
         timeout-minutes: 3
         env:
