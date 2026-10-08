@@ -69,6 +69,8 @@ jobs:
         run: bash native-ios/scripts/test-ci-test-shards.sh
       - name: Portable native test products contract
         run: bash native-ios/scripts/test-ci-test-products.sh
+      - name: Simulator preflight diagnostics contract
+        run: bash native-ios/scripts/test-ci-preflight.sh
 
   ci-native-build:
     name: Build shared native tests
@@ -182,9 +184,15 @@ jobs:
         run: |
           ci_app="$RUNNER_TEMP/native-tests/NativeTests.xctestproducts/Binaries/0/Debug-iphonesimulator/MetaShadowingNative.app"
           ci_profile=$(uuidgen)
+          ci_started=$SECONDS
+          echo 'Native preflight: install begin'
           xcrun simctl install "$CI_SIMULATOR" "$ci_app" > "$RUNNER_TEMP/native-ui-install.log" 2>&1
+          echo "Native preflight: install complete after $((SECONDS - ci_started)) seconds"
+          ci_started=$SECONDS
+          echo 'Native preflight: launch begin'
           xcrun simctl launch --terminate-running-process "$CI_SIMULATOR" com.example.metashadowing.ci \
             --ui-test-product --ui-test-probe-id "$ci_profile" > "$RUNNER_TEMP/native-ui-preflight.log" 2>&1
+          echo "Native preflight: launch complete after $((SECONDS - ci_started)) seconds"
           echo 'Isolated CI app launched before XCTest.'
       - name: Test native UI and actual media adapters on iOS 27
         timeout-minutes: 30
