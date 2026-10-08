@@ -45,6 +45,7 @@ struct LearningControlsView: View {
                     .disabled(controls.mainAction == nil)
                     .buttonStyle(.floatingPrimaryAction)
                     .accessibilityShowsLargeContentViewer()
+                    .playerLayoutFrame("player-main")
                     .onGeometryChange(for: CGRect.self) { geometry in
                         geometry.frame(in: .named("player-reward"))
                     } action: { frame in
@@ -65,7 +66,7 @@ struct LearningControlsView: View {
         switch action { case .resume: String(localized: "학습 이어하기"); case .next: String(localized: "다음 학습"); case .confirm: String(localized: "학습 확인"); default: String(localized: "재생 중") }
     }
 }
-private struct CycleTimelineView: View {
+struct CycleTimelineView: View {
     let session: LearningSession
     let motion: LearningMotionState
     var body: some View {
@@ -100,6 +101,7 @@ private struct CycleTimelineView: View {
             .accessibilityLabel("확인한 반복 \(session.current.confirmed)/\(session.current.planned)")
             .accessibilityValue(session.phase == .speaking ? "재생 완료, 확인 대기" : "")
             .accessibilityIdentifier("cycle-timeline")
+            .playerLayoutFrame("cycle-timeline")
     }
     @ViewBuilder private func node(_ state: LearningCyclePresentation) -> some View {
         switch state {

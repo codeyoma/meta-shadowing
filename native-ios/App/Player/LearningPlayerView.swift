@@ -54,6 +54,7 @@ struct LearningPlayerView: View {
                                     LessonVideoSurface(transport: video).aspectRatio(16 / 9, contentMode: .fit)
                                         .clipShape(.rect(cornerRadius: 16)).accessibilityLabel("학습 영상")
                                         .accessibilityIdentifier("lesson-video")
+                                        .playerLayoutFrame("lesson-video")
                                         .padding([.horizontal, .top])
                                 }
                             }
@@ -115,7 +116,7 @@ struct LearningPlayerView: View {
         await model.activate()
     }
 }
-private struct PlayerTitleView: View {
+struct PlayerTitleView: View {
     let title: String
     let session: LearningSession?
     let openOptions: () -> Void
@@ -125,6 +126,7 @@ private struct PlayerTitleView: View {
         VStack(spacing: 2) {
             Text(title).font(.headline).lineLimit(1)
                 .accessibilityIdentifier("player-book-title")
+                .playerLayoutFrame("player-book-title")
                 .accessibilityShowsLargeContentViewer()
                 .padding(.horizontal, optionsSize + optionsSpacing)
                 .frame(maxWidth: .infinity)
@@ -133,9 +135,11 @@ private struct PlayerTitleView: View {
                     ProgressView(value: Double(session.units.filter { $0.confirmed == $0.planned }.count), total: Double(session.unitCount))
                         .tint(BrandStyle.yellow)
                         .accessibilityIdentifier("player-progress")
+                        .playerLayoutFrame("player-progress")
                     ZStack(alignment: .trailing) {
                         Text("\(session.unitCount)/\(session.unitCount)").hidden().accessibilityHidden(true)
                         Text("\(session.unit + 1)/\(session.unitCount)")
+                            .playerLayoutFrame("player-counter")
                     }.monospacedDigit().font(.caption2.bold()).fixedSize()
                 }.padding(.leading, optionsSize + optionsSpacing)
             }
@@ -149,6 +153,7 @@ private struct PlayerTitleView: View {
                     .glassEffect(.regular.interactive(), in: .circle)
             }.buttonStyle(.plain).foregroundStyle(.primary)
                 .accessibilityLabel("학습 옵션").accessibilityIdentifier("player-options")
+                .playerLayoutFrame("player-options")
                 .accessibilityShowsLargeContentViewer { Text("학습 옵션") }
         }
         .padding(.horizontal).padding(.vertical, 6)
@@ -166,6 +171,7 @@ private struct PlayerHeaderView: View {
                         Text("Lv \((session.plan.scope.stage + 1) / 2)")
                             .lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
                     }.accessibilityShowsLargeContentViewer()
+                        .playerLayoutFrame("player-level")
                     Spacer()
                     Button {
                         Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate) }
@@ -173,11 +179,13 @@ private struct PlayerHeaderView: View {
                         Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
                             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
                     }.accessibilityLabel("학습 속도").accessibilityShowsLargeContentViewer()
+                        .playerLayoutFrame("player-speed")
                     Spacer()
                     Button { Task { await flow.presentOptions(.analysis) } } label: {
                         Image(systemName: "text.magnifyingglass").frame(minWidth: 32)
                     }
                         .accessibilityLabel("문장 분석").accessibilityShowsLargeContentViewer()
+                        .playerLayoutFrame("player-analysis")
                 }
                 .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
             }

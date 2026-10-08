@@ -43,7 +43,7 @@ CI partitions the complete scheme into four disjoint jobs:
 | Shard | Selection |
 | --- | --- |
 | `player` | `-only-testing:NativeFoundationUITests/PlayerUITests`, excluding the named options methods |
-| `player-options` | Thirteen methods in `CI_PLAYER_OPTIONS_TEST_METHODS` plus three settings methods in `CI_OPTIONS_EXTRA_TESTS` |
+| `player-options` | Twelve methods in `CI_PLAYER_OPTIONS_TEST_METHODS` plus three settings methods in `CI_OPTIONS_EXTRA_TESTS` |
 | `product` | `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests`, excluding those three settings methods |
 | `remaining` | `-skip-testing` for those four UI classes; every other test remains included |
 
@@ -227,6 +227,50 @@ summaries expose test failures without exporting complete simulator logs or
 result bundles. Local reproduction commands are in [the native guide](../native-ios/README.md).
 
 ## CI timing baseline
+
+### October 8 rendered-view test restructuring
+
+The preceding shared-product run `37777490151` passed in 33m 02s. Its player job
+spent 25m 08s executing nineteen UI test methods; their case durations summed to
+23m 57s. Five layout-focused methods accounted for 6m 43s of those case durations.
+Those five methods now run their geometry/pixel assertions in the existing native
+integration target, without repeatedly launching and navigating the app.
+
+| Former UI method | Rendering coverage and retained interaction coverage |
+| --- | --- |
+| `testPlayerHeaderGroupsTitleAndProgressBesideLeadingOptions` | Actual `LearningPlayerView`, short/long title and normal/maximum text matrices; title centering, progress ordering/bounds, counter trailing alignment and zero credit. The separate-exit absence check remains in the real-audio UI journey; options opening/exiting remains covered by the options UI tests. |
+| `testShortLearningContentCentersBetweenFixedControls` | Actual player with audio/video and both text sizes; original/translation union measured between the real safe-area bars. Actual main-action taps remain in normal/large audio and video reward UI journeys. |
+| `testHeaderActionsHaveIndependentMinimumTouchTargets` | All three actual header frames remain at least 44 points in the hosted title/text-size matrix. Their actual hitability checks move into the real-audio UI journey. |
+| `testSentenceProgressUsesThePrimaryActionColor` | The production `PlayerTitleView` renders a completed-unit session; the unchanged pixel threshold verifies yellow fill. Real three-cycle confirmation, Next, source advance and exact XP remain in `testNextIsIconOnlyAndStillConfirmsExactlyOneCycle`. |
+| `testActiveCycleRingStaysInsideTimelineAtEveryNode` | Production `CycleTimelineView`, all three active nodes, nonempty green pixels and unchanged clipping-edge checks at the device display scale. Real completion/confirmation and exact two-cycle credit remain in the repeated-rewards UI test. |
+
+The full player is hosted in a real `UIWindow` using the real flow, catalog and
+SQLite workspace. Debug-only `PlayerLayoutMeasurements` observes actual SwiftUI
+geometry through a nil-by-default environment value; the UI never reads the
+recorded values back. It adds no layout, gesture or state replacement. Release
+uses an identity modifier, and product inspection rejects measurement symbols.
+Every sample uses a fresh recorder/window and requires nonempty settled frames;
+full-player samples also use isolated profiles. A frame is not evidence of hitability, clipping or accessibility semantics:
+pixel assertions, real interaction tests and the existing VoiceOver gate remain.
+
+The real `9/12` to `10/12` source-selection UI test is retained, including its
+displayed-text, paused-state, width and position assertions. A fast component
+regression additionally checks the same width boundary. Reward animation,
+scrolling, real audio/video, lifecycle, retry, relaunch, durable credit and settings
+tests are not replaced with snapshots, seeded completion or synthetic end buttons.
+
+Each of the five new rendering tests was checked with an isolated production
+mutation: left-aligned title, top-aligned content, removed counter-width reservation,
+wrong progress tint and removed ring clearance. Every corresponding test failed;
+all mutations were restored. The final focused run passed five rendering tests and
+the retained real-audio/source-selection UI tests (7/7). Local rendering case time
+was about three seconds, excluding build/runner startup; it is not a hosted-speed claim.
+
+The paused-rate preference-isolation UI method moves from options to player to
+rebalance the remaining work. The process-boundary selector regression was red
+before this move and green afterward. Four runners, serial execution, required
+checks, no-retry policy and existing UI deadlines remain unchanged. Full hosted
+timings and the executed inventory must be reverified on the updated PR.
 
 ### October 8 shared-product follow-up
 

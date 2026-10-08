@@ -58,6 +58,7 @@ ruby -ryaml -ropen3 -rtmpdir -e '
   routes = {
     "NativeFoundationUITests/PlayerUITests/testPlayer" => "player",
     "NativeFoundationUITests/PlayerUITests/testFuturePlayer" => "player",
+    "NativeFoundationUITests/PlayerUITests/testPausedRateEditorKeepsGlobalPreferenceSeparate" => "player",
     "NativeFoundationUITests/PlayerUITests/testPlayerOptionsMatchSettingsOrderForAudioAndSilentStages" => "player-options",
     "NativeFoundationUITests/PlayerUITests/testSubtitleToggleAppearsOnlyForHintStages" => "player-options",
     "NativeFoundationUITests/ProductUITests/testSettings" => "product",

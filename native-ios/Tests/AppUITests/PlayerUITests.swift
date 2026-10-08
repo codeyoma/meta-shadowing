@@ -73,73 +73,6 @@ final class PlayerUITests: XCTestCase {
         }
     }
 
-    @MainActor func testSentenceProgressUsesThePrimaryActionColor() throws {
-        continueAfterFailure = false
-        let app = fixture(stage: 1, mode: "audio")
-        let main = app.buttons["player-main"]
-        for _ in 0..<3 {
-            XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 15))
-            main.tap()
-        }
-        XCTAssertTrue(app.staticTexts["2/2"].waitForExistence(timeout: 5))
-        let progress = app.progressIndicators["player-progress"]
-        let image = try XCTUnwrap(progress.screenshot().image.cgImage)
-        let width = image.width, height = image.height
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        try pixels.withUnsafeMutableBytes { bytes in
-            let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: width, height: height,
-                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue))
-            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        }
-        let primaryPixels = stride(from: 0, to: pixels.count, by: 4).filter {
-            pixels[$0] > 230 && pixels[$0 + 1] > 150 && pixels[$0 + 1] < 225 && pixels[$0 + 2] < 75
-        }.count
-        XCTAssertGreaterThan(primaryPixels, width, "Completed sentence progress must use the primary yellow, not the dark interactive tint")
-    }
-
-    @MainActor func testActiveCycleRingStaysInsideTimelineAtEveryNode() throws {
-        continueAfterFailure = false
-        let app = fixture(stage: 1, mode: "audio")
-        let main = app.buttons["player-main"]
-        let timeline = app.descendants(matching: .any)["cycle-timeline"]
-        for ordinal in 0..<3 {
-            XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 15))
-            XCTAssertEqual(timeline.label, "확인한 반복 \(ordinal)/3")
-            let image = try XCTUnwrap(timeline.screenshot().image.cgImage)
-            let width = image.width, height = image.height
-            var pixels = [UInt8](repeating: 0, count: width * height * 4)
-            try pixels.withUnsafeMutableBytes { bytes in
-                let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: width, height: height,
-                    bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
-                    bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue))
-                context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-            }
-            func green(_ x: Int, _ y: Int) -> Bool {
-                let index = (y * width + x) * 4
-                let red = Int(pixels[index]), green = Int(pixels[index + 1]), blue = Int(pixels[index + 2])
-                return green > 80 && green > red + 20 && green > blue + 20
-            }
-            // Three evenly spaced nodes: inspect only the active node's third of the strip.
-            let columns = (ordinal * width / 3)..<((ordinal + 1) * width / 3)
-            // Exclude the connector centerline: it must not stand in for a missing active ring.
-            XCTAssertTrue(columns.contains { x in
-                (0..<height).contains { y in abs(y - height / 2) > height / 4 && green(x, y) }
-            },
-                          "The active ring must actually be drawn")
-            XCTAssertFalse(columns.contains { green($0, 0) || green($0, height - 1) },
-                           "The active ring needs clearance from the top/bottom clipping edges; node=\(ordinal)")
-            if ordinal == 0 || ordinal == 2 {
-                let edge = ordinal == 0 ? 0 : width - 1
-                XCTAssertFalse((0..<height).contains { green(edge, $0) },
-                               "Edge nodes must not touch the horizontal clipping boundary")
-            }
-            if ordinal < 2 { main.tap() }
-        }
-        app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "2 / 100 XP", timeout: 5))
-    }
-
     @MainActor func testResumePlayingAndConfirmAreIconOnlyWithoutChangingCredit() {
         let app = fixture(stage: 1, mode: "audio")
         let main = app.buttons["player-main"]
@@ -189,29 +122,6 @@ final class PlayerUITests: XCTestCase {
         XCTAssertEqual(app.buttons["player-main"].label, "학습 이어하기")
     }
 
-    @MainActor func testShortLearningContentCentersBetweenFixedControls() {
-        continueAfterFailure = false
-        for mode in ["audio", "video"] {
-            for largeText in [false, true] {
-                let extra = largeText ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] : []
-                let app = fixture(stage: 1, mode: mode, extra: extra)
-                let original = app.staticTexts["learning-line-0-0-target"]
-                let translation = app.staticTexts["learning-line-0-0-translation"]
-                XCTAssertTrue(original.waitForExistence(timeout: 10))
-                XCTAssertTrue(translation.exists)
-                let upper = mode == "video" ? app.otherElements["lesson-video"] : app.buttons["Lv 1"]
-                let timeline = app.descendants(matching: .any)["cycle-timeline"]
-                let textFrame = original.frame.union(translation.frame)
-                XCTAssertGreaterThan(textFrame.minY, upper.frame.maxY)
-                XCTAssertLessThan(textFrame.maxY, timeline.frame.minY, "Content must fit above the footer; mode=\(mode), largeText=\(largeText)")
-                XCTAssertEqual(textFrame.midY, (upper.frame.maxY + timeline.frame.minY) / 2, accuracy: 24,
-                               "Short content should use the center of the available reading area; mode=\(mode), largeText=\(largeText)")
-                XCTAssertTrue(app.buttons["player-main"].isHittable)
-                app.terminate()
-            }
-        }
-    }
-
     @MainActor func testNextIsIconOnlyAndStillConfirmsExactlyOneCycle() {
         continueAfterFailure = false
         let app = fixture(stage: 1, mode: "audio")
@@ -231,35 +141,6 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2/2"].waitForExistence(timeout: 5))
         app.exitLearningThroughOptions()
         XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
-    }
-
-    @MainActor func testPlayerHeaderGroupsTitleAndProgressBesideLeadingOptions() {
-        continueAfterFailure = false
-        for (mode, largeText) in [("audio", false), ("audio", true), ("long", false), ("long", true)] {
-            let extra = largeText ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] : []
-            let app = fixture(stage: 1, mode: mode, extra: extra)
-            let options = app.buttons["player-options"]
-            XCTAssertTrue(options.waitForExistence(timeout: 10))
-            XCTAssertFalse(app.buttons["player-exit"].exists)
-            let title = app.staticTexts["player-book-title"]
-            let progress = app.descendants(matching: .any)["player-progress"]
-            XCTAssertTrue(title.exists && progress.exists)
-            XCTAssertLessThan(options.frame.midX, app.frame.midX)
-            XCTAssertGreaterThanOrEqual(progress.frame.minY, title.frame.maxY)
-            XCTAssertGreaterThan(progress.frame.minX, options.frame.maxX)
-            XCTAssertLessThanOrEqual(progress.frame.maxX, app.frame.maxX)
-            XCTAssertLessThan(progress.frame.maxY, app.buttons["Lv 1"].frame.minY)
-            XCTAssertEqual(title.frame.midX, app.frame.midX, accuracy: 2, "Keep the book title centered")
-            XCTAssertEqual(app.staticTexts["1/2"].frame.maxX, app.buttons["문장 분석"].frame.maxX, accuracy: 2,
-                           "The sentence count should use the right content margin, leaving a longer track")
-            options.tap()
-            let exit = app.buttons["options-exit"]
-            for _ in 0..<8 where !exit.isHittable { app.swipeUp() }
-            XCTAssertTrue(exit.isHittable)
-            exit.tap()
-            XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
-            app.terminate()
-        }
     }
 
     @MainActor func testPlayerOptionsMatchSettingsOrderForAudioAndSilentStages() {
@@ -709,17 +590,6 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
     }
 
-    @MainActor func testHeaderActionsHaveIndependentMinimumTouchTargets() {
-        let app = fixture(stage: 1, mode: "audio")
-        guard app.buttons["player-main"].waitForExistence(timeout: 10) else { XCTFail("Player unavailable"); return }
-        for label in ["Lv 1", "학습 속도", "문장 분석"] {
-            let button = app.buttons[label]
-            XCTAssertTrue(button.isHittable, label)
-            XCTAssertGreaterThanOrEqual(button.frame.width, 44, label)
-            XCTAssertGreaterThanOrEqual(button.frame.height, 44, label)
-        }
-    }
-
     @MainActor func testPausedRateEditorKeepsGlobalPreferenceSeparate() {
         let app = fixture(stage: 1, mode: "audio")
         let speed = app.buttons["학습 속도"]
@@ -890,6 +760,10 @@ final class PlayerUITests: XCTestCase {
         app.buttons["stage-1"].tap()
         let action = app.buttons["player-main"]
         XCTAssertTrue(action.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["player-exit"].exists, "Stage exit belongs in the options sheet")
+        for label in ["Lv 1", "학습 속도", "문장 분석"] {
+            XCTAssertTrue(app.buttons[label].isHittable, "Header controls remain actual independent touch targets: \(label)")
+        }
         guard action.exists else { return }
         XCTAssertTrue(action.wait(for: \.isEnabled, toEqual: true, timeout: 20))
         action.tap()

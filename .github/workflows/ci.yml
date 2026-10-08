@@ -141,7 +141,6 @@ jobs:
         testGuideExplainsActiveStageWithoutGrantingCredit
         testOptionsOpensAtFullHeightWithoutAnExpansionGesture
         testOptionsSheetHasOneCloseAndAListExit
-        testPausedRateEditorKeepsGlobalPreferenceSeparate
         testPlayerOptionsMatchSettingsOrderForAudioAndSilentStages
         testPlayerOptionsSummariesReflectActiveRunAndVideoLayout
         testRevealLevelWaitsForPendingPresetSave
