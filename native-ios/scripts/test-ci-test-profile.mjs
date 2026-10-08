@@ -9,7 +9,7 @@ const run = (eventName, event) => spawnSync(process.execPath,
     input: typeof event === 'string' ? event : JSON.stringify(event),
   });
 
-test('ordinary PRs and protected-branch pushes select the two fast shards', () => {
+test('ordinary PRs and protected-branch pushes select light scope without simulator shards', () => {
   for (const [name, event] of [
     ['pull_request', { pull_request: { base: { ref: 'dev' } } }],
     ['pull_request', { pull_request: { base: { ref: 'main' } } }],
@@ -18,19 +18,19 @@ test('ordinary PRs and protected-branch pushes select the two fast shards', () =
   ]) {
     const result = run(name, event);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'test-scope=fast\nmatrix={"shard":["fast-player","fast-native"]}\n');
+    assert.equal(result.stdout, 'test-scope=light\n');
   }
 });
 
-test('manual dispatch defaults to full and accepts an explicit fast scope', () => {
+test('manual dispatch defaults to full and accepts an explicit light scope', () => {
   for (const event of [{}, { inputs: { test_scope: 'full' } }]) {
     const result = run('workflow_dispatch', event);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'test-scope=full\nmatrix={"shard":["player","player-options","product","remaining"]}\n');
+    assert.equal(result.stdout, 'test-scope=full\n');
   }
-  const result = run('workflow_dispatch', { inputs: { test_scope: 'fast' } });
+  const result = run('workflow_dispatch', { inputs: { test_scope: 'light' } });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, 'test-scope=fast\nmatrix={"shard":["fast-player","fast-native"]}\n');
+  assert.equal(result.stdout, 'test-scope=light\n');
 });
 
 test('unknown events, branches, malformed JSON and arbitrary scope values fail without outputs', () => {
@@ -39,6 +39,7 @@ test('unknown events, branches, malformed JSON and arbitrary scope values fail w
     ['push', { ref: 'refs/heads/codex/feature' }],
     ['pull_request', { pull_request: { base: { ref: 'other' } } }],
     ['workflow_dispatch', { inputs: { test_scope: 'unknown' } }],
+    ['workflow_dispatch', { inputs: { test_scope: 'fast' } }],
     ['workflow_dispatch', { inputs: { test_scope: 'fast\nmatrix={"shard":[]}' } }],
     ['workflow_dispatch', { inputs: { test_scope: ['fast'] } }],
     ['workflow_dispatch', { inputs: { test_scope: null } }],

@@ -1,4 +1,5 @@
 #!/bin/bash
+# NATIVE_FULL_CONTRACT_VERSION=4
 set -euo pipefail
 umask 077
 
@@ -36,7 +37,7 @@ if [ -e native-ios/Config/Local.xcconfig ] || [ -L native-ios/Config/Local.xccon
   fail 'Private local configuration must not enter the snapshot'
 fi
 test -f native-ios/project-ci.yml || fail 'The fictional CI specification is required'
-for tool in xcodebuild xcodegen xcrun jq ruby; do
+for tool in xcodebuild xcodegen xcrun jq ruby bash swift rg file otool nm codesign plutil strings cmp ditto grep sed mkdir rm mktemp dirname; do
   command -v "$tool" >/dev/null || fail "Required tool unavailable: $tool"
 done
 run_dir=$(mktemp -d "$output_dir/native-full.XXXXXX" 2>/dev/null) || fail 'Cannot create private test outputs'
@@ -62,6 +63,26 @@ xcodebuild build-for-testing -project native-ios/MetaShadowingNative.xcodeproj \
   -destination 'generic/platform=iOS Simulator' ARCHS=arm64 \
   -derivedDataPath "$run_dir/build" -testProductsPath "$products" \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "$run_dir/build.log" 2>&1 || fail 'Native build-for-testing failed'
+echo 'Native full: inspecting Debug product.'
+debug_app="$products/Binaries/0/Debug-iphonesimulator/MetaShadowingNative.app"
+bash native-ios/scripts/verify-native-product.sh "$debug_app" Debug \
+  > "$run_dir/debug-product.log" 2>&1 || fail 'Native Debug product inspection failed'
+echo 'Native full: building Release product.'
+xcodebuild build -project native-ios/MetaShadowingNative.xcodeproj \
+  -scheme MetaShadowingNative -configuration Release \
+  -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS=arm64 \
+  -derivedDataPath "$run_dir/release-build" CODE_SIGNING_ALLOWED=NO -quiet \
+  > "$run_dir/release-build.log" 2>&1 || fail 'Native Release build failed'
+release_app="$run_dir/release-build/Build/Products/Release-iphonesimulator/MetaShadowingNative.app"
+echo 'Native full: inspecting Release product.'
+bash native-ios/scripts/verify-native-product.sh "$release_app" Release \
+  > "$run_dir/release-product.log" 2>&1 || fail 'Native Release product inspection failed'
+echo 'Native full: building fictional downloader.'
+bash native-ios/scripts/test-service-build.sh \
+  > "$run_dir/service-build.log" 2>&1 || fail 'Fictional downloader build verification failed'
+echo 'Native full: checking runtime inspection guard.'
+bash native-ios/scripts/test-native-runtime-inspection.sh "$release_app" \
+  > "$run_dir/runtime-inspection.log" 2>&1 || fail 'Native runtime inspection regression failed'
 echo 'Native full: preparing simulator.'
 if [ "$state" = Shutdown ]; then
   xcrun simctl boot "$requested_simulator" > "$run_dir/boot.log" 2>&1 || fail 'Dedicated simulator boot failed'

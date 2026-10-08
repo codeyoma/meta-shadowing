@@ -265,7 +265,9 @@ No live account, cloud database, real profile or installed phone app is used.
 
 GitHub Actions now validates only the standalone Swift app. It uses the
 GitHub-hosted `xcode-27` public-preview runner, explicitly selects Xcode 27.0,
-and runs UI tests on iOS 27.0. The deployment minimum remains iOS 26.0.
+and runs host Swift package tests without a simulator on ordinary PRs/pushes.
+Local or explicitly requested manual-full UI tests use iOS 27.0. The deployment
+minimum remains iOS 26.0.
 
 `project-ci.yml` includes the local app specification and replaces its configuration
 files with `Config/CI.xcconfig`. This uses a fictional,
@@ -282,22 +284,29 @@ and checks the resolved Debug/Release identity, signing and compiler settings.
 It also requires both full non-commerce test targets exactly once, with serial execution.
 Generating the CI project replaces only the ignored generated Xcode project;
 run `xcodegen generate --spec native-ios/project.yml` to return to local settings.
-Package tests, Debug/Release builds and product checks use the same commands above.
-For CI-style testing, generate `project-ci.yml` and retain
-`-parallel-testing-enabled NO`. Ordinary PRs and protected-branch pushes run all
-package tests, all native integration tests and eight essential UI journeys on two
-serial simulator runners. They also retain complete Debug/Release inspection.
-The full 183-case native suite runs locally before push and remains available via
-manual CI (`test_scope: full`). Fast CI currently executes 113 native cases; it
-does not claim complete UI regression coverage.
+Ordinary PRs and protected-branch pushes use `light` CI: all six unfiltered host
+package suites (currently 375 cases), tooling/configuration checks, and one generic
+unsigned Debug app build with product inspection. Run the same host logic gate with
+`bash native-ios/scripts/ci-swift-package-tests.sh`. It rejects missing, empty,
+skipped or failed Swift Testing results. Generic compilation does not boot a simulator.
+Automatic CI has no simulator execution or test-product build/upload/download.
 
-CI builds complete test products once without booting a simulator, then transfers
+The complete 183-case native simulator suite, including all 105 native integration
+cases and all UI journeys, runs locally before push. The local gate also inspects
+its Debug test app, builds and inspects Release, exercises the runtime product
+guard, and compiles the fictional downloader. These checks remain available in
+manual CI (`test_scope: full`); `test_scope: light` selects only ordinary checks.
+Host package success does not establish native media, lifecycle, rendering or UI
+behavior. No simulator test or assertion is deleted.
+
+Manual full CI builds complete test products once without booting a simulator, then transfers
 a revision/toolchain/checksum-validated portable package to the selected runners.
 Each runner boots only after validation and executes `test-without-building
 -testProductsPath`; it never recompiles or falls back to another artifact.
 Manual full CI retains four disjoint selections: `player`, `player-options`,
-`product`, and `remaining`. Both modes validate exact executed identifiers against
-the compiled inventory. See [the CI profiles](../docs/native-ci.md#fast-remote-checks-and-local-full-regression).
+`product`, and `remaining`. Local/full execution validates exact executed identifiers
+against the compiled inventory and retains `-parallel-testing-enabled NO`.
+See [the CI profiles](../docs/native-ci.md#fast-remote-checks-and-local-full-regression).
 
 For each clone, install the local hook with a dedicated iOS 27 simulator named
 `MetaShadowing Native Pre-push iOS 27`:
@@ -307,7 +316,9 @@ bash native-ios/scripts/install-native-git-hooks.sh --simulator-id <SIMULATOR_ID
 ```
 
 The hook tests archived pushed commits, not dirty working files, and blocks pushes
-on failure. It preserves existing custom hooks and the W2 preview simulator.
+on any native, Release or downloader failure. It preserves existing custom hooks
+and the W2 preview simulator. Older full-runner contracts or cached results cannot
+satisfy the expanded gate.
 Exact-commit successful results may be reused for the same toolchain and configured
 simulator; new commits require full testing. Hooks are locally bypassable, so
 remote checks and human release approval remain required. Full pre-push testing

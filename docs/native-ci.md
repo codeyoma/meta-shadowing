@@ -8,33 +8,36 @@ Expo reference CI lane; the reference source remains available for migration.
 ## Fast remote checks and local full regression
 
 Owner update, 2026-10-09: ordinary pull requests and `dev`/`main` pushes run
-the fast profile. Long full-regression runs move to the local `pre-push` hook,
-where a failure blocks the push. Manual `workflow_dispatch` defaults to `full`
-and also accepts `fast`; there is no automatic scheduled full run.
+the `light` profile, with no simulator execution. Long checks run in the local
+`pre-push` hook, where a failure blocks the push. Manual `workflow_dispatch`
+defaults to `full` and also accepts `light`; there is no automatic scheduled full run.
 
-Every remote run retains all six package suites (currently 375 cases), complete
-native integration coverage (currently 105 cases), and Debug/Release product
-inspection. The fast profile adds eight existing UI journeys, partitioned across
-two serial simulator jobs. It currently executes 113 native cases, not the full
-183-case suite. The full scheme still compiles every test.
+Every remote run retains all six unfiltered host Swift package suites (currently
+375 cases), workflow/tooling contracts, and an unsigned generic Debug app build
+with product inspection. The Debug build compiles the iOS app without booting a
+simulator; it is not a configuration-only or empty build check.
 
-| Fast shard | UI journeys retained |
+| Execution boundary | Checks |
 | --- | --- |
-| `fast-player` | Real audio confirmation and paused menu; installed lesson process relaunch and restored checkpoint; failed-save retry without duplicate XP; source selection without credit |
-| `fast-native` | Largest-text load recovery; single-sentence analysis and Back; VoiceOver labels/values/order; largest-text hidden-hint controls with actual description/trait audits |
+| Automatic GitHub CI | Six host Swift package suites, tooling/configuration contracts, one generic Debug build and Debug product inspection |
+| Local pre-push | Complete native simulator suite (currently 183 cases), Debug product inspection, Release build and product/runtime inspection, fictional downloader build |
+| Explicit manual full CI | All ordinary checks plus complete shared test-product build, four simulator shards, Release/product/runtime inspection and fictional downloader build |
 
-`fast-native` also runs the complete `NativeMediaIntegrationTests` target.
-Detailed video, reward, settings, service, graph and full-screen accessibility
-matrices remain in full regression; they are not declared redundant or deleted.
-The fast accessibility checks do not replace the full light/dark/large-text audit
-matrix. Reduced remote checks can miss a regression in a full-only UI journey.
+Automatic runs do not build or transfer test products, boot/install/launch a
+simulator, enumerate native tests, or execute UI/native-integration tests. The
+entire `NativeMediaIntegrationTests` target also moves to local/manual full
+regression: its iOS-only audio, lifecycle, haptics and rendering checks cannot be
+replaced by host package tests. No test or assertion is deleted. Ordinary remote
+success is not evidence that the 183 native simulator cases ran.
 
-This follows Apple's recommendation to use a reduced PR test set alongside
-separate full regression, with the owner choosing a local pre-push boundary for
-the latter. See [the primary-source research](research/2026-10-08-native-ci-test-strategy.md)
+The previous eight-UI-test remote profile still incurred long simulator startup
+and automation work. The owner explicitly chose a simulator-free automatic gate
+instead. This extends the reduced-PR/full-regression split discussed in
+[the primary-source research](research/2026-10-08-native-ci-test-strategy.md)
 and [Apple's testing guidance](https://developer.apple.com/videos/play/wwdc2022/110361/).
-The policy reduces hosted UI execution; it does not remove test work or promise
-a particular duration. Full regression now adds local push latency.
+The exact simulator-free boundary is this project's choice, not a claim that
+Apple requires it. Long work moves locally; it is not eliminated, and no particular
+hosted duration is guaranteed.
 
 ### Install the local hook
 
@@ -54,7 +57,8 @@ The interactive W2 preview is not a pre-push destination.
 
 The hook reads Git's actual pushed object IDs, not just `HEAD`. It archives each
 unique pushed commit into an isolated snapshot and runs the complete native
-scheme from that snapshot. Dirty/untracked working files and private
+scheme and the Release/downloader/product guards from that snapshot. The Debug
+inspection reuses the compiled test app instead of building it again. Dirty/untracked working files and private
 `Local.xcconfig` are not test inputs. Ref deletions do not need a test run. A
 missing tool, simulator, test runner, result or successful test blocks the push.
 Concurrent local full runs are rejected, not run against the same simulator.
@@ -63,11 +67,13 @@ Successful results may be reused only for the exact commit, Xcode/XcodeGen
 versions and configured simulator/runtime. Failed or incomplete results are never
 cached; another commit requires another full run. Evidence stays under the local
 Git directory, outside tracked source. A same-commit retry after a network failure
-does not repeat a completed test run.
+does not repeat a completed test run. The archived runner must declare the current
+full-gate contract; old runner versions and weaker cached passes cannot satisfy
+the expanded Release/downloader checks.
 
 Git hooks are developer-side checks, not a trusted remote enforcement boundary:
 they are not automatically installed by cloning and Git can bypass them. A local
-commit pass is also not proof of GitHub's merge-candidate revision. Fast remote
+commit pass is also not proof of GitHub's merge-candidate revision. Light remote
 checks and the existing human release approval therefore remain mandatory.
 Before a release, the reviewer must explicitly inspect full-regression evidence
 for the intended revision or request manual full CI. No remote ruleset is changed.
@@ -77,9 +83,16 @@ for the intended revision or request manual full CI. No remote ruleset is change
 | Required check | Evidence |
 | --- | --- |
 | `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
-| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation`, `LearningMedia`, `LearningReference` and `AppleServices` |
-| `ci-native-tests` | Debug XCUITest plus actual iOS media/lifecycle/feedback and free-package recovery adapters |
-| `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
+| `ci-quality` | Workflow isolation, runner, hook and result-validation contracts |
+| `ci-native-tests` | All six unfiltered host Swift package suites; in manual full mode, also the complete native simulator shards |
+| `ci-ios-build` | Clean-checkout configuration and one real unsigned generic Debug app build/product inspection; manual full also verifies Release and the downloader |
+
+Host package tests cover `LearningDomain`, `LearningPersistence`, `AppFoundation`,
+`LearningMedia`, `LearningReference` and `AppleServices` on macOS. Each package
+must exit successfully and report exactly one positive Swift Testing summary,
+without skipped tests or suites. XCTest's zero-test compatibility wrapper is not
+the Swift Testing result. Missing, zero, duplicate or failed summaries reject the
+run; the total is reported from actual results rather than freezing the current 375.
 
 The generic branch-policy script still uses Node 24 without npm installation.
 It is repository governance, not an Expo application check. Hosted checks no
@@ -90,7 +103,7 @@ export Expo bundles, run Expo prebuild/CocoaPods or test reference native module
 
 Swift jobs use the standard arm64 `xcode-27` GitHub-hosted runner (currently a
 public preview), with `/Applications/Xcode_27.0.app/Contents/Developer` selected
-explicitly. UI tests require the iOS 27.0 runtime and fail if it is unavailable;
+explicitly. Local/manual UI tests require the iOS 27.0 runtime and fail if it is unavailable;
 they never fall back to an older simulator. The app still targets iOS 26.0+.
 See the [official runner inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md).
 The narrow actionlint label extension recognizes this official preview label;
@@ -138,14 +151,16 @@ after one day; an expired artifact requires a complete workflow rerun. The outpu
 ID permits failed-job reruns to use their successful producer, even across attempt
 numbers. Only fictional-CI products are uploaded, never local profiles or raw logs.
 
-Fast runs use two runners instead of the four full-regression runners.
-`ci-test-profile.mjs` emits the validated profile and matrix; unknown events,
-branches or manual scopes fail without emitting an empty passing matrix.
+The shared-build, artifact-transfer and simulator jobs are explicit manual-full
+jobs only. `ci-test-profile.mjs` validates the selected profile; unknown events,
+branches or manual scopes fail. Ordinary PR/push and manual-light runs never
+activate these jobs. Behavioral workflow regressions exercise those event paths
+and reject accidental simulator commands, test-product builds or heavy artifacts.
 
 `test-ci-test-shards.sh` executes the actual workflow test command against a
 controlled process boundary. It verifies disjoint class ownership, every current player
 method, every current UI method, valid moved method names, coverage of future classes/targets, serial execution,
-test failure propagation, exact fast selections, complete enumeration,
+test failure propagation, complete enumeration,
 unknown-shard rejection and aggregate gate failures. It does not substitute for hosted XCTest.
 
 The matrix uses `fail-fast: false` so a failure in one shard does not suppress the
@@ -155,8 +170,10 @@ executed identifiers with the complete compiled inventory filtered by the saved
 selection. Unknown selectors, missing/extra/duplicate cases, invalid enumeration,
 and inconsistent result counts fail. Empty selection means the entire inventory
 for the local full runner, never zero tests. The required `ci-native-tests` job runs
-with `always()` and requires profile, shared-build and aggregate-shard `success`; failures,
-cancellations and skipped shards cannot make the required check green. Release
+with `always()` and always requires profile and host-package `success`. Light mode
+requires the manual-only producer and simulator jobs to be deliberately skipped;
+full mode requires both to succeed. Unknown scopes, missing results, cancellations,
+or failed applicable jobs cannot make the required check green. Release
 approval still depends on this exact required check name.
 
 Test-product build and execution override signing with `CODE_SIGNING_ALLOWED=YES

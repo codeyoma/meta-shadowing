@@ -4,17 +4,19 @@ Research date: 2026-10-08. Owner amendment: 2026-10-09. Scope: the standalone Sw
 
 ## Recommendation
 
-Retain every Swift package test, the complete `NativeMediaIntegrationTests` target, Debug/Release product inspection, and the eight audited end-to-end UI journeys below on ordinary remote runs. Execute the selected native tests across two balanced, separately hosted shards, with serial Xcode execution on each runner and each selected case owned once. The owner chose to move long full regression to a local blocking `pre-push` hook instead of automatically running it on protected-branch pushes or release PRs. Preserve a manual full-CI option and human release approval. Do not introduce path-based selection or a new scheduled workflow in this first change.
+Owner clarification, 2026-10-09: retain every host Swift package test, tooling contracts, and one generic unsigned Debug app build/product inspection on ordinary remote runs. Move every simulator-dependent check, including the complete `NativeMediaIntegrationTests` target, to the blocking local `pre-push` hook or explicit manual full CI. Move Release/product/runtime inspection and fictional downloader compilation to that full boundary as well. Automatic `light` CI must not boot, install or launch a simulator, build/transfer test products, or execute native UI/integration cases. Preserve required check names, a manual full-CI option and human release approval. No path-based selection or scheduled workflow is added.
+
+The earlier eight-UI-test proposal is superseded. In run [37809040927](https://github.com/codeyoma/meta-shadowing/actions/runs/37809040927), those simulator jobs still took about thirteen minutes each. All 375 host package cases took about 10.15 seconds of test execution, while the six build/test steps took about 188 seconds. Keeping that complete logic gate is simpler and preserves more product coverage than selecting an arbitrary subset of fast tests. A Debug compile keeps the existing required build check meaningful without simulator execution. New hosted timing still requires measurement.
 
 The local hook tests the actual pushed commit in an isolated archive, never dirty working files. Successful exact-commit/toolchain/simulator results can be reused, but incomplete or failed runs block the push. Hooks can be absent or bypassed and do not validate GitHub's merge candidate. Keep fast remote checks and inspect full-regression evidence explicitly before release. See [the implemented policy and installation contract](../native-ci.md#fast-remote-checks-and-local-full-regression) and [Git's pre-push hook contract](https://git-scm.com/docs/githooks#_pre_push). Moving tests locally shifts waiting time; it does not eliminate the full test workload.
 
 This is a change in test frequency, not evidence that excluded UI tests are redundant. Full regression must remain independently executable and report its actual executed inventory. Reduced PR results must identify themselves as reduced results.
 
-Apple explicitly recommends separate PR and full test plans: unit tests plus a key subset of UI tests on one platform for PRs, with the full set running separately in the background. Apple's current testing documentation also recommends a pyramid of many isolated unit tests, fewer integration tests, and UI tests for common use cases. These sources support the strategy; the exact selection and triggers below are project-specific judgments. [Apple WWDC22: Author fast and reliable tests for Xcode Cloud](https://developer.apple.com/videos/play/wwdc2022/110361/), [Apple: Testing](https://developer.apple.com/documentation/xcode/testing).
+Apple explicitly recommends separate PR and full test plans: unit tests plus a key subset of UI tests on one platform for PRs, with the full set running separately in the background. Apple's current testing documentation also recommends a pyramid of many isolated unit tests, fewer integration tests, and UI tests for common use cases. These sources support separating feedback tiers; moving all simulator work to the local/manual boundary is the owner's project-specific choice, not an Apple requirement. [Apple WWDC22: Author fast and reliable tests for Xcode Cloud](https://developer.apple.com/videos/play/wwdc2022/110361/), [Apple: Testing](https://developer.apple.com/documentation/xcode/testing).
 
 ## Current project evidence
 
-The checked-in workflow already builds test products once with `build-for-testing`, shares a portable `.xctestproducts` archive, and executes four serial runner shards with `test-without-building`. Recommending this same optimization again would not address the remaining UI execution cost. The current scheme builds `NativeFoundationUITests` and `NativeMediaIntegrationTests`; the latter contains both Swift Testing and XCTest tests, including actual UIKit/SwiftUI rendering, audio/video adapters, lifecycle ownership, local recovery, and dictionary presentation. [Workflow](../../.github/workflows/ci.yml), [Project specification](../../native-ios/project.yml).
+The existing full workflow builds test products once with `build-for-testing`, shares a portable `.xctestproducts` archive, and executes four serial runner shards with `test-without-building`. That optimization remains available for manual full runs; it does not address the ordinary-run UI execution cost. The current scheme builds `NativeFoundationUITests` and `NativeMediaIntegrationTests`; the latter contains both Swift Testing and XCTest tests, including actual UIKit/SwiftUI rendering, audio/video adapters, lifecycle ownership, local recovery, and dictionary presentation. Those checks remain full-regression responsibilities. [Workflow](../../.github/workflows/ci.yml), [Project specification](../../native-ios/project.yml).
 
 The latest documented complete run passed 183 native cases and 375 package cases. It took 34m 26s, compared with 33m 02s before rendered-view restructuring. The new rendering checks occupied about seven seconds of the hosted log timeline, but another shard still spent 19m 48s in its UI cases. These are recorded historical measurements, not a new hosted benchmark or a guarantee of future duration. UI method counts differ from executed case counts because parameterized tests can produce multiple cases. [Native CI evidence](../native-ci.md#ci-timing-baseline).
 
@@ -28,7 +30,7 @@ Apple describes unit tests as fast and focused, integration tests as checking co
 
 Apple's current guidance distinguishes three feedback stages: relevant unit tests while editing, tests for the affected target before review/integration, and complete suites with multiple configurations on a schedule. Scheduled coverage complements PR coverage; it does not make excluded cases verified for the PR revision. [Apple: Running tests and interpreting results](https://developer.apple.com/documentation/xcode/running-tests-and-interpreting-results).
 
-**Project inference:** all six existing package suites are valuable per-PR logic checks. Keep the complete native integration target initially: host-platform package tests alone cannot verify iOS-only AVFoundation, UIKit, lifecycle, or actual SwiftUI composition. Reduce the repeated UI process launches and navigation first. Do not start with automatic changed-file selection of domain or persistence tests.
+**Project inference:** all six existing package suites are valuable per-PR logic checks. Host-platform package tests cannot verify iOS-only AVFoundation, UIKit, lifecycle, or actual SwiftUI composition; the complete native integration target must therefore remain in local/manual full regression. The revised boundary removes all ordinary-run simulator startup and automation, without reducing domain or persistence test selection.
 
 ### Use each testing framework for its supported role
 
@@ -52,7 +54,7 @@ Xcode supports multiple test plans for a scheme, explicit target/suite/function 
 
 Apple documents `build-for-testing` and `test-without-building` as separate CI actions, with `-only-testing` and `-skip-testing` selectors. Portable `.xctestproducts` support exists specifically to ease transporting built tests between systems. [Apple TN2339](https://developer.apple.com/library/archive/technotes/tn2339/_index.html), [Apple: Xcode 13.3 Release Notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-13_3-release-notes).
 
-**Project inference:** preserve the current shared artifact and full test compilation. A checked-in selection manifest using the existing selectors can express PR/full modes without requiring a framework migration. Named Xcode test plans are also valid, but introducing them does not inherently reduce compilation or guarantee correct selection. Keep one full mode that automatically includes future classes and targets. Validate selected identifiers against actual source/discovery and verify actual executed cases.
+**Project inference:** preserve the shared artifact and full test compilation for explicit manual full runs only. Named Xcode test plans are valid, but introducing them does not inherently reduce compilation or guarantee correct selection. Keep full mode automatically inclusive of future classes and targets, and compare executed identifiers with compiled discovery. Ordinary light mode must not silently execute any of that simulator pipeline.
 
 ### Preserve required-check behavior across conditional execution
 
@@ -60,20 +62,23 @@ GitHub warns that skipping an entire required workflow through path filters leav
 
 **Project inference:** retain `ci-branch-policy`, `ci-quality`, `ci-native-tests`, and `ci-ios-build` without remote ruleset changes. Keep the always-running native aggregate gate. It should require exact success from every job selected by the run's explicit PR/full mode; cancellation, missing results, unexpected skipped jobs, or an unknown mode must fail. A deliberate full-only job omission on a fast PR is different from silently accepting a skipped required fast job. Avoid workflow-level path filters in this change.
 
-## Concrete conservative split
+## Approved simulator-free remote split
 
 | Evidence | Automatic remote PR/push | Local native full / manual full CI |
 | --- | --- | --- |
-| Branch policy and workflow contracts | Complete | Complete |
-| Six Swift package suites | Complete | Remote CI remains complete; local hook focuses on native tests |
-| `NativeMediaIntegrationTests` | Complete | Complete |
-| UI automation | Eight existing journey methods below | Complete `NativeFoundationUITests`, including all future methods |
-| Debug/Release builds and native-product inspection | Complete | Local hook builds full Debug tests; manual CI retains both inspections |
-| Platform/runtime | Existing iOS 27 Simulator, iOS 26.0 minimum | Same current scope |
+| Branch policy and workflow contracts | Complete | Remain remote; manual full includes them |
+| Six Swift package suites | Complete, unfiltered, nonempty successful summaries | Remain remote; manual full includes them |
+| `NativeMediaIntegrationTests` | Not executed | Complete |
+| UI automation | Not executed | Complete `NativeFoundationUITests`, including all future methods |
+| Debug app build/inspection | One generic unsigned build, no simulator boot | Inspect existing full-test app; manual full includes Debug inspection |
+| Release/product/runtime and downloader checks | Not executed | Complete |
+| Platform/runtime | macOS host package execution and generic iOS compilation | Dedicated iOS 27 simulator; iOS 26.0 deployment minimum unchanged |
 
-The following eight methods are the audited selection, chosen from existing code rather than new simplified tests. Their hosted durations and the two-shard balance still require measurement. The eight-method size is a project decision, not an Apple rule.
+## Earlier eight-journey proposal (superseded)
 
-| Existing UI method | Why retain it on every PR |
+The following methods were selected for the previous remote profile. They remain meaningful full-regression coverage, but none runs in automatic light CI after the owner's clarification. The list is retained as historical selection rationale, not current PR execution evidence.
+
+| Existing UI method | Full-regression evidence |
 | --- | --- |
 | `PlayerUITests/testRealAudioConfirmationAndPausedMenu` | Real bundled playback completion, one explicit confirmation, exact XP, real header interactions and paused options exit |
 | `PlayerUITests/testInstalledLessonReopensWithoutServiceAccessOrExtraCredit` | Production UI terminate/relaunch, exactly one restored XP and cycle, sync disabled in Settings, Books/Stages navigation, paused options exit and no stage completion from one cycle |
@@ -86,17 +91,17 @@ The following eight methods are the audited selection, chosen from existing code
 
 Source files: [Player UI](../../native-ios/Tests/AppUITests/PlayerUITests.swift), [Foundation UI](../../native-ios/Tests/AppUITests/NativeFoundationUITests.swift), [Reference UI](../../native-ios/Tests/AppUITests/ReferenceToolsUITests.swift), [VoiceOver UI](../../native-ios/Tests/AppUITests/VoiceOverSemanticsUITests.swift), [Product accessibility UI](../../native-ios/Tests/AppUITests/ProductAccessibilityUITests.swift).
 
-Full regression retains the controlled download/offline journeys, detailed video/reward/options interactions, developer-lab journeys, free-service controls, settings-editor persistence variants, graph scrolling, and complete Dynamic Type/theme accessibility audit matrices. The fast proposal retains both UI automation labels/order and actual element-description/trait audits in one largest-text player fixture. It does not retain the full principal-screen audit matrices or verify VoiceOver spoken output or focus behavior.
+Full regression retains these eight journeys, controlled download/offline journeys, detailed video/reward/options interactions, developer-lab journeys, free-service controls, settings-editor persistence variants, graph scrolling, and complete Dynamic Type/theme accessibility audit matrices. Automated audits still do not prove VoiceOver spoken output or focus behavior.
 
-Run full native regression before push through the installed local hook, or request full remote CI manually. For changes to app composition, service wiring, playback completion, persistence, accessibility, test selection, or CI infrastructure, inspect evidence for the intended integration/release revision. This recommendation adds no automatic path rules, new triggers, or remote ruleset. Every new behavior still needs meaningful logic or integration regression coverage and an explicit decision about whether its UI journey belongs in the fast set.
+Run full native regression before push through the installed local hook, or request full remote CI manually. For changes to app composition, service wiring, playback completion, persistence, accessibility, test selection, or CI infrastructure, inspect evidence for the intended integration/release revision. This recommendation adds no automatic path rules, new triggers, or remote ruleset. Every new behavior still needs meaningful logic or integration regression coverage; ordinary host tests are not UI acceptance.
 
 ## Risks and verification boundaries
 
 - The reduced remote gate can miss interactions covered only by full regression, including controlled external download failures, editor-persistence UI variations, and the full accessibility matrices. Local hooks are not trusted server enforcement and a local commit pass is not merge-candidate evidence. Manual full CI and human release review remain the backstop when such evidence is required.
-- Building all UI tests catches compilation errors, not runtime failures in excluded methods. Report the selected mode and actual inventory; never label a fast run as a complete 183-case pass.
-- The initial eight journeys still include actual media completion, process relaunch, failure recovery, reference navigation, and a real accessibility audit. Their hosted cost and two-shard balance must be measured. Source guidance supports a smaller UI set, but cannot establish a sub-ten-minute workflow or a specific speedup for this runner.
-- Reducing UI selection does not remove shared-build, artifact transfer, cold simulator, installation, launch, or queue latency. If these dominate the new critical path, reducing more logic tests will not address that cost.
+- The ordinary Debug build compiles the app, not the UI test suite. Report the selected mode and actual evidence; never label a host package run as a complete 183-case native pass.
+- The local hook now also owns Release and downloader build checks. These must fail the same push gate, and a result from the earlier native-only runner contract must not satisfy the stronger gate.
+- Ordinary light mode removes shared test builds, artifact transfer, cold simulator installation/launch, and UI execution entirely. Host package/app compilation and runner queue latency remain. No fixed duration or first-pass reliability improvement is established before a fresh hosted run.
 - Keep nonempty finalized results, zero failed/skipped executed cases, and exact selected-method coverage. Test-selector typos must not produce a green zero-test result. Full mode must still verify the complete inventory and disjoint shard ownership.
 - Controlled service and offline fixtures do not prove real CloudKit convergence, Apple-hosted interruption, or physical-device microphone behavior. Preserve those acceptance boundaries.
 
-Validate the eventual workflow in two modes: fast PR with all six package suites, all native integration cases and the selected UI methods; full regression with the complete compiled native inventory. Check failure, cancellation, missing artifact, unknown mode, unknown selector, and missing-result propagation through the stable required aggregate. Then compare fresh hosted end-to-end duration and executed-case evidence against the documented baseline. Local timing alone is insufficient.
+Validate both modes: ordinary light PR/push with all six host package suites and exactly one Debug app build, with no reachable simulator work; full regression with the complete compiled native inventory and Release/downloader/product checks. Check failure, cancellation, missing artifact, unknown mode, unknown selector, and missing-result propagation through the stable required aggregate. Then measure a fresh hosted light run. The earlier 113-case fast attempt took 14m43s but failed an existing retry hit-test case; the unchanged failed-job rerun recovered, with 29m02s end-to-end elapsed. Neither establishes a clean first-pass speedup or fixes that intermittency. Local timing alone is insufficient.

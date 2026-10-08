@@ -21,29 +21,14 @@ xcodebuild() {
 }
 export -f xcodebuild
 
-ruby -ryaml -rjson -ropen3 -rtmpdir -e '
+ruby -ryaml -rjson -ropen3 -rtmpdir - .github/workflows/ci.yml <<'RUBY'
   jobs = YAML.load_file(ARGV.fetch(0)).fetch("jobs")
   job = jobs.fetch("ci-native-test-shards")
-  shards = %w[player player-options product remaining fast-player fast-native]
+  shards = %w[player player-options product remaining]
   commands = job.fetch("steps").map { |step| step["run"] }.compact
     .select { |run| run.include?("xcodebuild test-without-building") }
   abort "FAIL: expected one XCTest execution command" unless commands.length == 1
   selections = []
-  expected_fast = {
-    "fast-player" => %w[
-      -only-testing:NativeFoundationUITests/PlayerUITests/testRealAudioConfirmationAndPausedMenu
-      -only-testing:NativeFoundationUITests/PlayerUITests/testInstalledLessonReopensWithoutServiceAccessOrExtraCredit
-      -only-testing:NativeFoundationUITests/PlayerUITests/testSaveFailureRetryDoesNotDuplicateCreditOrAutoplay
-      -only-testing:NativeFoundationUITests/PlayerUITests/testAllSentencesSelectsPausedWithoutCredit
-    ],
-    "fast-native" => %w[
-      -only-testing:NativeMediaIntegrationTests
-      -only-testing:NativeFoundationUITests/NativeFoundationUITests/testRetryRemainsReachableAtLargestText
-      -only-testing:NativeFoundationUITests/ReferenceToolsUITests/testSingleSentenceOpensDetailAndBackDismissesToPausedLearning
-      -only-testing:NativeFoundationUITests/VoiceOverSemanticsUITests/testVoiceOverLabelsValuesAndOrder
-      -only-testing:NativeFoundationUITests/ProductAccessibilityUITests/testLongHintTextDoesNotLeakAndControlsStayReachable
-    ]
-  }
   Dir.mktmpdir("native-ci-shards") do |directory|
     arguments_path = File.join(directory, "arguments")
     inventory_path = File.join(directory, "inventory-arguments")
@@ -78,15 +63,16 @@ ruby -ryaml -rjson -ropen3 -rtmpdir -e '
         abort "FAIL: #{shard} inventory must be retained for result validation" unless output && inventory[output + 1] == File.join(directory, "native-inventory.json")
         selection = arguments.grep(/\A-(only|skip)-testing:/)
         abort "FAIL: #{shard} must retain the exact selection for result validation" unless File.exist?(selection_path) && JSON.parse(File.read(selection_path)) == selection
-        abort "FAIL: #{shard} changed its agreed fast coverage" if expected_fast.key?(shard) && selection != expected_fast.fetch(shard)
         selections << [shard, arguments] if exit_code == 0
       end
     end
     File.delete(arguments_path)
-    _, status = Open3.capture2e(base_env.merge("CI_TEST_SHARD" => "unknown", "CI_TEST_EXIT" => "0"),
-      "bash", "-e", "-c", commands.first)
-    abort "FAIL: an unknown shard must fail before XCTest" if status.success? || File.exist?(arguments_path)
-    _, status = Open3.capture2e(base_env.merge("CI_TEST_SHARD" => "fast-native", "CI_TEST_EXIT" => "0", "CI_INVENTORY_EXIT" => "41"),
+    %w[unknown fast-player fast-native].each do |shard|
+      _, status = Open3.capture2e(base_env.merge("CI_TEST_SHARD" => shard, "CI_TEST_EXIT" => "0"),
+        "bash", "-e", "-c", commands.first)
+      abort "FAIL: removed/unknown shard #{shard} must fail before XCTest" if status.success? || File.exist?(arguments_path)
+    end
+    _, status = Open3.capture2e(base_env.merge("CI_TEST_SHARD" => "remaining", "CI_TEST_EXIT" => "0", "CI_INVENTORY_EXIT" => "41"),
       "bash", "-e", "-c", commands.first)
     abort "FAIL: inventory failure must fail before XCTest" unless status.exitstatus == 41 && !File.exist?(arguments_path)
   end
@@ -131,9 +117,6 @@ ruby -ryaml -rjson -ropen3 -rtmpdir -e '
     source.scan(/func (test\w+)\(/).flatten.map { |method| "NativeFoundationUITests/#{name}/#{method}" }
   end
   abort "FAIL: invalid extra options selections" unless extra.uniq == extra && (extra - actual).empty?
-  fast_ui = expected_fast.values.flatten.reject { |flag| flag == "-only-testing:NativeMediaIntegrationTests" }
-    .map { |flag| flag.delete_prefix("-only-testing:") }
-  abort "FAIL: fast UI selections must name current tests" unless (fast_ui - actual).empty?
   abort "FAIL: extra options tests must leave the product shard" unless extra.all? { |test| job.fetch("env").fetch("CI_PRODUCT_TEST_CLASSES").split.any? { |prefix| test.start_with?(prefix + "/") } }
   actual.each do |test|
     next if routes.key?(test)
@@ -144,7 +127,7 @@ ruby -ryaml -rjson -ropen3 -rtmpdir -e '
     routes[test] = owner
   end
   routes.each do |test, expected|
-    owners = selections.reject { |shard, _| shard.start_with?("fast-") }.map do |shard, arguments|
+    owners = selections.map do |shard, arguments|
       only = arguments.grep(/\A-only-testing:/).map { |arg| arg.delete_prefix("-only-testing:") }
       skip = arguments.grep(/\A-skip-testing:/).map { |arg| arg.delete_prefix("-skip-testing:") }
       matches = ->(prefix) { test == prefix || test.start_with?(prefix + "/") }
@@ -154,9 +137,23 @@ ruby -ryaml -rjson -ropen3 -rtmpdir -e '
   end
 
   gate = jobs.fetch("ci-native-tests").fetch("steps").find { |step| step["run"] }.fetch("run")
-  ["success", "failure", "cancelled", "skipped", ""].repeated_permutation(3) do |profile, build, result|
-    _, status = Open3.capture2e({"PROFILE_RESULT" => profile, "BUILD_RESULT" => build, "SHARD_RESULT" => result}, "bash", "-e", "-c", gate)
-    abort "FAIL: aggregate gate accepted #{[profile, build, result].inspect} incorrectly" unless status.success? == (profile == "success" && build == "success" && result == "success")
+  # Run the actual aggregate for every outcome combination. Batch only process
+  # startup: each scenario still evaluates the gate in an isolated shell.
+  scenarios = []
+  ["light", "full", "unknown", ""].each do |scope|
+    ["success", "failure", "cancelled", "skipped", "unknown", ""].repeated_permutation(4) do |profile, host, build, result|
+      expected = profile == "success" && host == "success" &&
+        ((scope == "light" && build == "skipped" && result == "skipped") ||
+         (scope == "full" && build == "success" && result == "success"))
+      values = [scope, profile, host, build, result]
+      env = %w[TEST_SCOPE PROFILE_RESULT HOST_RESULT BUILD_RESULT SHARD_RESULT].zip(values)
+        .map { |key, value| "#{key}=#{value.inspect}" }.join(" ")
+      scenarios << "if (export #{env}; #{gate}) >/dev/null 2>&1; then actual=0; else actual=1; fi\n" +
+        "test $actual -eq #{expected ? 0 : 1} || { echo #{("FAIL: aggregate #{values.inspect}").inspect}; exit 1; }"
+    end
   end
-  puts "PASS: full shards partition coverage once; fast shards retain selected journeys and complete integration; inventory, serial execution and failures are enforced."
-' .github/workflows/ci.yml
+  # bash -s consumes the generated scenarios without command-line size limits.
+  output, status = Open3.capture2e("bash", "-s", stdin_data: scenarios.join("\n"))
+  abort output unless status.success?
+  puts "PASS: four full shards partition coverage once; inventory, serial execution, failures and 5184 aggregate outcome combinations are enforced."
+RUBY

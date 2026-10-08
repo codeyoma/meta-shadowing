@@ -10,7 +10,7 @@ on:
       test_scope:
         description: Native test scope
         type: choice
-        options: [full, fast]
+        options: [full, light]
         default: full
 
 permissions:
@@ -30,7 +30,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       test-scope: ${{ steps.profile.outputs.test-scope }}
-      matrix: ${{ steps.profile.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,18 +61,6 @@ jobs:
           swift --version
           command -v rg || brew install ripgrep
           command -v jq || brew install jq
-      - name: Test learning domain
-        run: swift test --package-path native-ios/Packages/LearningDomain
-      - name: Test app foundation
-        run: swift test --package-path native-ios/Packages/AppFoundation
-      - name: Test transactional learning storage
-        run: swift test --package-path native-ios/Packages/LearningPersistence
-      - name: Test native media policies and feedback
-        run: swift test --package-path native-ios/Packages/LearningMedia
-      - name: Reference tools tests
-        run: swift test --package-path native-ios/Packages/LearningReference
-      - name: Apple service contracts and recovery tests
-        run: swift test --package-path native-ios/Packages/AppleServices
       - name: Internal video build boundary
         run: swift native-ios/scripts/copy-local-video.swift --self-test
       - name: Offline acceptance runner failure and isolation contract
@@ -82,6 +69,8 @@ jobs:
         run: bash native-ios/scripts/test-ci-test-shards.sh
       - name: Exact native test results and local full-suite gate contracts
         run: |
+          ruby native-ios/scripts/test-ci-light-workflow.rb
+          ruby native-ios/scripts/test-ci-swift-package-tests.rb
           ruby native-ios/scripts/test-native-test-results.rb
           ruby native-ios/scripts/test-native-full-runner.rb
           ruby native-ios/scripts/test-native-pre-push.rb
@@ -89,11 +78,28 @@ jobs:
         run: bash native-ios/scripts/test-ci-test-products.sh
       - name: Simulator preflight diagnostics contract
         run: |
+          bash native-ios/scripts/test-ci-build-progress.sh
           bash native-ios/scripts/test-ci-preflight.sh
           bash native-ios/scripts/test-ci-simulator-resources.sh
 
+  ci-swift-tests:
+    name: Swift package logic tests
+    needs: [ci-branch-policy]
+    runs-on: xcode-27
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run all six Swift package suites
+        run: bash native-ios/scripts/ci-swift-package-tests.sh
+
   ci-native-build:
     name: Build shared native tests
+    if: github.event_name == 'workflow_dispatch' && needs.ci-branch-policy.outputs.test-scope == 'full'
+    needs: [ci-branch-policy]
     runs-on: xcode-27
     timeout-minutes: 20
     env:
@@ -140,12 +146,14 @@ jobs:
 
   ci-native-test-shards:
     name: Native tests (${{ matrix.shard }})
+    if: github.event_name == 'workflow_dispatch' && needs.ci-branch-policy.outputs.test-scope == 'full'
     needs: [ci-branch-policy, ci-native-build]
     runs-on: xcode-27
     timeout-minutes: 40
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.ci-branch-policy.outputs.matrix) }}
+      matrix:
+        shard: [player, player-options, product, remaining]
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-27-0
@@ -222,21 +230,6 @@ jobs:
           test "${#ci_options_extra[@]}" -gt 0
           ci_selection=()
           case "$CI_TEST_SHARD" in
-            fast-player)
-              ci_selection=(
-                "-only-testing:$CI_PLAYER_TEST_CLASS/testRealAudioConfirmationAndPausedMenu"
-                "-only-testing:$CI_PLAYER_TEST_CLASS/testInstalledLessonReopensWithoutServiceAccessOrExtraCredit"
-                "-only-testing:$CI_PLAYER_TEST_CLASS/testSaveFailureRetryDoesNotDuplicateCreditOrAutoplay"
-                "-only-testing:$CI_PLAYER_TEST_CLASS/testAllSentencesSelectsPausedWithoutCredit"
-              ) ;;
-            fast-native)
-              ci_selection=(
-                '-only-testing:NativeMediaIntegrationTests'
-                '-only-testing:NativeFoundationUITests/NativeFoundationUITests/testRetryRemainsReachableAtLargestText'
-                '-only-testing:NativeFoundationUITests/ReferenceToolsUITests/testSingleSentenceOpensDetailAndBackDismissesToPausedLearning'
-                '-only-testing:NativeFoundationUITests/VoiceOverSemanticsUITests/testVoiceOverLabelsValuesAndOrder'
-                '-only-testing:NativeFoundationUITests/ProductAccessibilityUITests/testLongHintTextDoesNotLeakAndControlsStayReachable'
-              ) ;;
             player)
               ci_selection=("-only-testing:$CI_PLAYER_TEST_CLASS" "-only-testing:$CI_OFFLINE_TEST_CLASS")
               for ci_test_method in "${ci_player_option_methods[@]}"; do
@@ -319,24 +312,38 @@ jobs:
   ci-native-tests:
     name: ci-native-tests
     if: always()
-    needs: [ci-branch-policy, ci-native-build, ci-native-test-shards]
+    needs: [ci-branch-policy, ci-swift-tests, ci-native-build, ci-native-test-shards]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every native test shard to pass
+      - name: Require the selected native checks to pass
         env:
+          TEST_SCOPE: ${{ needs.ci-branch-policy.outputs.test-scope }}
           PROFILE_RESULT: ${{ needs.ci-branch-policy.result }}
+          HOST_RESULT: ${{ needs.ci-swift-tests.result }}
           BUILD_RESULT: ${{ needs.ci-native-build.result }}
           SHARD_RESULT: ${{ needs.ci-native-test-shards.result }}
         run: |
-          if [ "$PROFILE_RESULT" != success ] || [ "$BUILD_RESULT" != success ] || [ "$SHARD_RESULT" != success ]; then
-            echo 'Native tests require validated scope, the shared build and every selected shard to succeed.' >&2
+          if [ "$PROFILE_RESULT" != success ] || [ "$HOST_RESULT" != success ]; then
+            echo 'Native tests require validated scope and all six Swift package suites to succeed.' >&2
             exit 1
           fi
-          echo 'All native test shards passed.'
+          case "$TEST_SCOPE" in
+            light)
+              test "$BUILD_RESULT" = skipped && test "$SHARD_RESULT" = skipped || {
+                echo 'Light scope requires the manual simulator jobs to be skipped.' >&2; exit 1;
+              } ;;
+            full)
+              test "$BUILD_RESULT" = success && test "$SHARD_RESULT" = success || {
+                echo 'Full scope requires the shared build and every simulator shard to succeed.' >&2; exit 1;
+              } ;;
+            *) echo 'Unknown or missing native test scope.' >&2; exit 1 ;;
+          esac
+          echo 'All selected native checks passed.'
 
   ci-ios-build:
     name: ci-ios-build
+    needs: [ci-branch-policy]
     runs-on: xcode-27
     timeout-minutes: 30
     env:
@@ -353,24 +360,33 @@ jobs:
           xcodegen --version
       - name: Verify clean-checkout CI configuration
         run: |
-          bash native-ios/scripts/test-ci-build-progress.sh
           bash native-ios/scripts/test-ci-configuration.sh
       - name: Verify service configuration and exact entitlement policy
         run: swift native-ios/scripts/configure-apple-services.swift --self-test
       - name: Build fictional managed downloader without account access
+        if: github.event_name == 'workflow_dispatch' && needs.ci-branch-policy.outputs.test-scope == 'full'
         run: bash native-ios/scripts/test-service-build.sh
       - name: Generate standalone Swift app
         run: xcodegen generate --spec native-ios/project-ci.yml
-      - name: Build and inspect Debug and Release without signing credentials
+      - name: Build and inspect Debug without signing credentials
         run: |
-          for configuration in Debug Release; do
-            xcodebuild build -project native-ios/MetaShadowingNative.xcodeproj \
-              -scheme MetaShadowingNative -configuration "$configuration" \
-              -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-              -derivedDataPath "$RUNNER_TEMP/native-build" CODE_SIGNING_ALLOWED=NO -quiet
-            bash native-ios/scripts/verify-native-product.sh \
-              "$RUNNER_TEMP/native-build/Build/Products/$configuration-iphonesimulator/MetaShadowingNative.app" "$configuration"
-          done
+          xcodebuild build -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme MetaShadowingNative -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/native-build" CODE_SIGNING_ALLOWED=NO -quiet
+          bash native-ios/scripts/verify-native-product.sh \
+            "$RUNNER_TEMP/native-build/Build/Products/Debug-iphonesimulator/MetaShadowingNative.app" Debug
+      - name: Build and inspect Release without signing credentials
+        if: github.event_name == 'workflow_dispatch' && needs.ci-branch-policy.outputs.test-scope == 'full'
+        run: |
+          xcodebuild build -project native-ios/MetaShadowingNative.xcodeproj \
+            -scheme MetaShadowingNative -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/native-build" CODE_SIGNING_ALLOWED=NO -quiet
+          bash native-ios/scripts/verify-native-product.sh \
+            "$RUNNER_TEMP/native-build/Build/Products/Release-iphonesimulator/MetaShadowingNative.app" Release
+          bash native-ios/scripts/test-native-runtime-inspection.sh \
+            "$RUNNER_TEMP/native-build/Build/Products/Release-iphonesimulator/MetaShadowingNative.app"
 
   release-approval:
     name: release-approval

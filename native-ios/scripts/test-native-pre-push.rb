@@ -5,6 +5,7 @@ require 'fileutils'
 require 'open3'
 require 'json'
 require 'timeout'
+require 'digest'
 
 class NativePrePushTest < Minitest::Test
   SOURCE = File.expand_path('../..', __dir__)
@@ -161,6 +162,48 @@ class NativePrePushTest < Minitest::Test
     assert_equal %w[committed committed changed], records.map { |record| record.fetch('content') }
   end
 
+  # Older committed runners cannot earn the stronger gate's evidence, even if
+  # an existing cache record claims the current contract for that exact commit.
+  def test_old_or_ambiguous_committed_contract_is_rejected_before_cache_or_runner
+    [nil, '3', '4\n# NATIVE_FULL_CONTRACT_VERSION=4'].each_with_index do |marker, index|
+      add_runner
+      path = File.join(@repo, 'native-ios/scripts/test-native-full.sh')
+      source = File.read(path).sub("# NATIVE_FULL_CONTRACT_VERSION=4\n", '')
+      source = source.sub("#!/bin/bash\n", "#!/bin/bash\n# NATIVE_FULL_CONTRACT_VERSION=#{marker.gsub('\\n', "\n")}\n") if marker
+      File.write(path, source)
+      oid = commit
+      identity = { 'contract_version' => 4, 'commit' => oid,
+                   'toolchain' => ["Xcode 27.0\nBuild version 27A1", 'Version: 2.46.0'],
+                   'simulator' => '11111111-1111-4111-8111-111111111111',
+                   'runtime' => 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' }
+      evidence = File.join(@repo, '.git/native-pre-push')
+      FileUtils.mkdir_p(evidence)
+      File.write(File.join(evidence, "pass-#{Digest::SHA256.hexdigest(JSON.generate(identity))}.json"), JSON.generate(identity))
+      output, status = push(oid, "refs/heads/old-contract-#{index}")
+      refute status.success?, output
+      refute remote_ref("refs/heads/old-contract-#{index}")
+      assert_empty records
+      assert_match(/contract/, output)
+    end
+  end
+
+  def test_old_contract_cache_cannot_replace_a_new_contract_pass
+    add_runner
+    oid = commit
+    assert push(oid, 'refs/heads/first').last.success?
+    cache = Dir.glob(File.join(@repo, '.git/native-pre-push/pass-*.json')).fetch(0)
+    identity = JSON.parse(File.read(cache))
+    assert_equal 4, identity.fetch('contract_version')
+    identity['contract_version'] = 3
+    File.delete(cache)
+    old_key = Digest::SHA256.hexdigest(JSON.generate(identity))
+    File.write(File.join(File.dirname(cache), "pass-#{old_key}.json"), JSON.generate(identity))
+    assert push(oid, 'refs/heads/new-contract').last.success?
+    assert_equal 2, records.length
+    assert push(oid, 'refs/heads/reuse-new-contract').last.success?
+    assert_equal 2, records.length
+  end
+
   # A failed test must block the real remote update and cannot seed a PASS cache.
   def test_failed_validation_blocks_push_and_is_never_reused
     add_runner
@@ -278,6 +321,9 @@ class NativePrePushTest < Minitest::Test
     refute_includes output, 'private-remote.invalid'
     refute_includes output, @repo
     assert_includes output, 'Native full: running all native tests.'
+    ['Native full: inspecting Debug product.', 'Native full: building Release product.',
+     'Native full: inspecting Release product.', 'Native full: building fictional downloader.',
+     'Native full: checking runtime inspection guard.'].each { |phase| assert_includes output, phase }
     assert_includes output, 'PASS: 183 native test cases matched the selected inventory.'
     refute_includes output, 'Native full: private-account-and-signed-url'
     assert Dir.glob(File.join(@repo, '.git/native-pre-push/run-*/runner.log')).any? { |path| File.read(path).include?('private-account-and-signed-url') }
@@ -298,8 +344,20 @@ class NativePrePushTest < Minitest::Test
 
   # Releasing the lock while the heavy child survives allows concurrent native tests.
   def test_cancellation_reaps_heavy_process_before_releasing_lock
+    ['Native full: building Release product.', 'Native full: building fictional downloader.',
+     'Native full: checking runtime inspection guard.'].each do |phase|
+      assert_cancellation_drains_owned_build_processes(phase)
+    end
+  end
+
+  def assert_cancellation_drains_owned_build_processes(phase)
+    FileUtils.rm_f(@record)
+    @env['NATIVE_TEST_BLOCK_PHASE'] = phase
+    write('native-ios/public.txt', "#{phase}\n")
     write('native-ios/scripts/test-native-full.sh', <<~'SH')
       #!/bin/sh
+      # NATIVE_FULL_CONTRACT_VERSION=4
+      echo "$NATIVE_TEST_BLOCK_PHASE"
       exec ruby -rjson -e 'child = fork { sleep 60 }; trap("TERM") { Process.wait(child); exit 1 }; File.write(ENV.fetch("NATIVE_TEST_RECORD"), JSON.generate({pids: [Process.pid, child], snapshot: Dir.pwd})); sleep 60'
     SH
     oid = commit
@@ -396,6 +454,7 @@ class NativePrePushTest < Minitest::Test
   def add_runner
     write('native-ios/scripts/test-native-full.sh', <<~'SH')
       #!/bin/bash
+      # NATIVE_FULL_CONTRACT_VERSION=4
       set -eu
       test "$1" = --simulator-id
       test "$2" = 11111111-1111-4111-8111-111111111111
@@ -424,6 +483,11 @@ class NativePrePushTest < Minitest::Test
       end
       RUBY
       echo "${NATIVE_TEST_PRIVATE_OUTPUT:-}"
+      echo 'Native full: inspecting Debug product.'
+      echo 'Native full: building Release product.'
+      echo 'Native full: inspecting Release product.'
+      echo 'Native full: building fictional downloader.'
+      echo 'Native full: checking runtime inspection guard.'
       echo 'Native full: running all native tests.'
       echo 'PASS: 183 native test cases matched the selected inventory.'
       echo 'Native full: private-account-and-signed-url'

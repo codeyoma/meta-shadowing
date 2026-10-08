@@ -8,9 +8,15 @@ require 'digest'
 # Git replacements must not change object bytes associated with a pushed OID.
 ENV['GIT_NO_REPLACE_OBJECTS'] = '1'
 $stdout.sync = true
+NATIVE_FULL_CONTRACT_VERSION = 4
 PROGRESS_LINES = [
   'Native full: generating project.',
   'Native full: building test products.',
+  'Native full: inspecting Debug product.',
+  'Native full: building Release product.',
+  'Native full: inspecting Release product.',
+  'Native full: building fictional downloader.',
+  'Native full: checking runtime inspection guard.',
   'Native full: preparing simulator.',
   'Native full: enumerating tests.',
   'Native full: running all native tests.',
@@ -107,7 +113,12 @@ begin
     unless runner.match?(/\A100(?:644|755) blob [0-9a-f]+\tnative-ios\/scripts\/test-native-full\.sh\n\z/)
       fail_push('pushed commit lacks a regular committed full-test runner.')
     end
-    identity = { 'contract_version' => 3, 'commit' => oid, 'toolchain' => toolchain,
+    committed_runner = capture!('git', 'show', "#{oid}:native-ios/scripts/test-native-full.sh")
+    markers = committed_runner.lines.grep(/\A# NATIVE_FULL_CONTRACT_VERSION=/).map(&:chomp)
+    unless markers == ["# NATIVE_FULL_CONTRACT_VERSION=#{NATIVE_FULL_CONTRACT_VERSION}"]
+      fail_push('pushed commit lacks the required full-test contract; push blocked.')
+    end
+    identity = { 'contract_version' => NATIVE_FULL_CONTRACT_VERSION, 'commit' => oid, 'toolchain' => toolchain,
                  'simulator' => simulator, 'runtime' => runtime }
     key = Digest::SHA256.hexdigest(JSON.generate(identity))
     cache = File.join(evidence, "pass-#{key}.json")
