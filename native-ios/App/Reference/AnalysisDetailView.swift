@@ -6,6 +6,7 @@ struct AnalysisDetailView: View {
     let model: AnalysisModel
     let sentenceID: String
     let flow: LearningFlow
+    var showsCloseButton = true
     var body: some View {
         Group {
             if let sentence = model.selectedSentence, sentence.id == sentenceID {
@@ -22,10 +23,12 @@ struct AnalysisDetailView: View {
                 }.background(Color(uiColor: .systemGroupedBackground)).accessibilityIdentifier("analysis-detail-scroll")
             } else { ContentUnavailableView("문장 분석을 사용할 수 없어요", systemImage: "text.magnifyingglass") }
         }
-        .navigationTitle("문장 관계")
+        .navigationTitle("문장 분석")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(role: .close) { flow.dismissOptions() }.accessibilityIdentifier("options-close")
+            if showsCloseButton {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .close) { flow.dismissOptions() }.accessibilityIdentifier("options-close")
+                }
             }
         }
         .background { DictionaryHost(presenter: flow.analysisPresenter).frame(width: 0, height: 0) }

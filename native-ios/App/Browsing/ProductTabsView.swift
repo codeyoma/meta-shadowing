@@ -6,19 +6,23 @@ struct ProductTabsView: View {
     var profiles: ProductProfileOwner? = nil
     var services: ProductServicesModel? = nil
     @State private var tab = 0
-    @State private var learningRoute: LearningRoute?
+    @State private var learningEntry = LearningEntry()
+    @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         if let snapshot = model.snapshot {
             TabView(selection: BrowsingTapFeedback.light.selection($tab)) {
                 Tab("책장", systemImage: "books.vertical", value: 0) {
                     NavigationStack {
                         LibraryView(snapshot: snapshot, services: services) { book in
+                            guard !model.busy, profiles?.changing != true else { return }
                             Task {
                                 if await model.select(language: book.book.language, packageKey: book.id), tab == 0 {
                                     tab = 1
                                 }
                             }
-                        }.disabled(model.busy || profiles?.changing == true)
+                        }
+                            .disabled(profiles?.changing == true)
+                            .allowsHitTesting(!model.busy)
                             .toolbar { statusToolbar(snapshot) }
                             .browsingRecovery(model: model, services: services)
                     }
@@ -30,7 +34,9 @@ struct ProductTabsView: View {
                                 ContentUnavailableView("기록 처리를 완료해 주세요", systemImage: "arrow.triangle.2.circlepath",
                                     description: Text("설정의 데이터 관리에서 상태를 확인하고 다시 시도할 수 있어요."))
                             } else if let book = snapshot.selectedBook {
-                                StagePathView(summary: book) { learningRoute = LearningRoute(packageKey: book.id, stage: $0) }
+                                StagePathView(summary: book) {
+                                    learningEntry.prepare(packageKey: book.id, stage: $0, model: model, profiles: profiles)
+                                }.allowsHitTesting(!learningEntry.preparing)
                             } else { ContentUnavailableView("도서를 선택해 주세요", systemImage: "book") }
                         }
                         .toolbar { statusToolbar(snapshot) }
@@ -45,8 +51,22 @@ struct ProductTabsView: View {
                 }
             }
             .background { if let services { ServiceRetryConfirmationView(services: services) } }
-            .accessibilityHidden(learningRoute != nil)
-            .fullScreenCover(item: $learningRoute) { route in LearningPlayerView(route: route, model: model, profiles: profiles) }
+            .accessibilityHidden(learningEntry.route != nil)
+            .fullScreenCover(item: $learningEntry.route) { route in
+                LearningPlayerView(route: route, model: model, profiles: profiles)
+                    .onAppear { learningEntry.didPresent(route.id) }
+                    .onDisappear { learningEntry.didDismiss(route.id) }
+            }
+            .alert("학습을 열 수 없어요", isPresented: $learningEntry.failed) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text("자료를 열 수 없어요. 책장에서 다시 시도해 주세요. 학습 기록은 그대로 있어요.")
+            }
+            .onChange(of: tab) { if tab != 1 { learningEntry.cancelPreparation() } }
+            .onChange(of: snapshot.selectedBook?.id) { learningEntry.cancelPreparation() }
+            .onChange(of: profiles?.changing) { if profiles?.changing == true { learningEntry.cancelPreparation() } }
+            .onChange(of: scenePhase) { if scenePhase != .active { learningEntry.cancelPreparation() } }
+            .onDisappear { learningEntry.cancelPreparation() }
         }
     }
     private func statusToolbar(_ snapshot: ProductSnapshot) -> StudyStatusToolbar {

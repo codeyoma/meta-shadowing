@@ -3,24 +3,20 @@ import LearningDomain
 import LearningMedia
 import SwiftUI
 
-struct LearningRoute: Identifiable {
-    let id = UUID()
-    let packageKey: String
-    let stage: Int
-}
 struct LearningPlayerView: View {
-    let route: LearningRoute
+    let route: LearningEntry.Route
     let model: ProductModel
     let profiles: ProductProfileOwner?
     @State private var boundaryToken: UUID?
-    @State private var flow: LearningFlow
+    private let flow: LearningFlow
+    @State private var exiting = false
     // Retain the last action frame for the final receipt, after completion removes the footer.
     @State private var rewardActionFrame: CGRect = .zero
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    init(route: LearningRoute, model: ProductModel, profiles: ProductProfileOwner? = nil) {
+    init(route: LearningEntry.Route, model: ProductModel, profiles: ProductProfileOwner? = nil) {
         self.route = route; self.model = model; self.profiles = profiles
-        flow = LearningFlow(workspace: model.workspace)
+        flow = route.flow
     }
     var body: some View {
         NavigationStack {
@@ -97,21 +93,24 @@ struct LearningPlayerView: View {
         .onChange(of: flow.playerDictionary.busy) { _, _ in flow.dictionarySettled() }
         .sheet(item: Binding(get: { flow.options }, set: { if $0 == nil { flow.dismissOptions() } })) { option in
             LearningOptionsView(flow: flow, model: model, initial: option, exit: exit)
+                .allowsHitTesting(!exiting)
         }
         .task { [flow] in
             boundaryToken = profiles?.registerBoundary { [weak flow] in try await flow?.prepareServiceBoundary() }
-            await flow.open(packageKey: route.packageKey, stage: route.stage)
+            await flow.startPresentedLesson()
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { flow.suspend() } }
         .onChange(of: flow.runtime?.controls) { _, _ in flow.validateReference() }
-        .onChange(of: flow.closedByService) { if flow.closedByService { dismiss() } }
+        .onChange(of: flow.closedByService, initial: true) { if flow.closedByService { dismiss() } }
         .onDisappear {
             if let boundaryToken { profiles?.unregisterBoundary(boundaryToken) }
             Task { await flow.close() }
         }
     }
     private func exit() async {
-        await flow.close()
+        guard !exiting else { return }
+        exiting = true
+        await flow.close(retainingPresentation: true)
         dismiss()
         await model.activate()
     }

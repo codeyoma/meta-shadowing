@@ -14,8 +14,11 @@ and after reading. Active controller and persisted checkpoint checks do not
 create a new writer. A fresh paused lesson need not yet have a checkpoint.
 Weak controller references do not prolong closed lessons.
 
-Syntax descriptors come from the authorized catalog, not views. Reads require a
-regular, confined local file, declared byte count and SHA-256 hash. Bounds are
+Syntax descriptors come from the authorized catalog, not views. Download,
+re-download and update installation verify the complete package's bytes and SHA-256
+hashes before publication. Ordinary reads check publication evidence and current
+authority without rehashing the package or syntax. The requested syntax must remain
+a regular, confined local file with its declared byte count and valid UTF-8. Bounds are
 20,000,000 bytes, 100,000 entries, 1,000 sentences and 10,000 tokens per entry.
 Missing, malformed or incompatible content fails closed.
 File-system failures become `AnalysisError.invalid` without exposing paths;
@@ -29,14 +32,27 @@ newer request. Selection is transient, not a checkpoint.
 
 ## User interaction
 
-The options entry commits a pause before opening analysis. Native navigation
-presents the current unit's sentences, POS labels, dependent-to-head graph and
-textual relationship explanations. Position-based token identities distinguish
+The options entry commits a pause before opening analysis. Both list and detail
+use the title “문장 분석”. Exactly one grammatical sentence opens directly in detail;
+its explicit Back dismisses the sheet to the paused learning screen, not an options
+page or a one-row list. Multiple sentences retain the selection list and native
+detail-to-list Back navigation. Close always leaves learning paused.
+The detail presents POS labels, a dependent-to-head graph and textual relationship
+explanations. Position-based token identities distinguish
 repeated words. Unknown source tags remain identifiable without invented meanings.
 Selected tokens use the brand accent; direct neighbors use the theme's link color
 and expose their connected status to accessibility. Overflowing graphs retain a
 proportional position indicator while idle, and fitting graphs omit it. Scroll
-state stays in the scroll wrapper, and Canvas captures precomputed edges.
+state stays in the scroll wrapper, and Canvas captures curves computed from the
+current token measurements during the view update, including the first layout.
+Curves run from dependent to head, with filled triangular tips at the destination.
+Each arrow is one filled outline. Its shaft ends at the triangle's base, so selected
+line thickness cannot protrude past the taper; inactive arrows use a uniform secondary fill.
+Incoming arrowheads and outgoing starts share
+one allocation of distinct, evenly spaced ports per word, ordered by the opposite
+words' horizontal positions. Lowercase source labels render above the curves; measured text
+bounds guide placement so nested arcs do not share one label position. Selection
+changes emphasis, not routing or source data.
 
 Explicit copy writes only the full source sentence. Its 1.5-second success
 indication preserves selection. No dictionary definition is copied, logged,
@@ -71,6 +87,27 @@ Profiles are fixed for a workspace lifetime. A future profile switch must close
 the old learning flow before replacing its workspace.
 
 ## Verification
+
+### 2026-10-08 focused installation and navigation update
+
+The owner approved affected-only verification for this update, not a full native
+scheme rerun. AppleServices 114, AppFoundation 81 and LearningReference 19 package
+tests pass. On iOS 27, the ten graph/timing tests and five reference-lifecycle tests
+pass. All singleton/multiple-sentence navigation journeys pass, including unchanged
+cursor, cycles and XP after dismissal. The ten selected UI journeys initially had
+one largest-Dynamic-Type copy timeout; that test passed on a focused rerun with the
+same pasteboard-change assertion and five-second limit. The intermittent cause is
+not established; failure-only screenshot/hierarchy diagnostics were added.
+
+`AnalysisLoadingTimingTests` measures five repeated `ProductWorkspace.readAnalysis`
+calls on an installed, generated 560-source package with 32 KiB of synthetic media
+bytes per source. The iOS 27 simulator median fell from 1,125.290 ms to 44.771 ms.
+Installation, lesson opening and UI animation are outside the measurement. No timing
+threshold is asserted, no media fixture is played, and this is not an end-to-end
+latency measurement of private content. Manual development-preview checks confirm
+direct singleton detail and Back returning to the paused player.
+
+### Earlier #97 acceptance
 
 The five Swift package suites pass 204 tests: LearningDomain 53,
 LearningPersistence 27, AppFoundation 57, LearningMedia 49 and LearningReference

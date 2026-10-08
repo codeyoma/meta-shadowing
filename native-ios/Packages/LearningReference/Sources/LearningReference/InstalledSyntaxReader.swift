@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 /// Supplied by an authorized catalog from its immutable installation descriptor.
 public struct InstalledSyntaxFile: Sendable {
@@ -14,11 +13,11 @@ public struct InstalledSyntaxFile: Sendable {
 public actor InstalledSyntaxReader {
     public init() {}
     public func read(_ file: InstalledSyntaxFile) throws -> Data {
-        do { return try readVerified(file) }
+        do { return try readInstalled(file) }
         catch is CancellationError { throw CancellationError() }
         catch { throw AnalysisError.invalid }
     }
-    private func readVerified(_ file: InstalledSyntaxFile) throws -> Data {
+    private func readInstalled(_ file: InstalledSyntaxFile) throws -> Data {
         try Task.checkCancellation()
         guard file.root.isFileURL, (1...20_000_000).contains(file.byteCount),
               file.sha256.count == 64, file.sha256.allSatisfy({ $0.isASCII && $0.isHexDigit }),
@@ -34,8 +33,9 @@ public actor InstalledSyntaxReader {
         defer { try? handle.close() }
         let data = try handle.read(upToCount: file.byteCount + 1) ?? Data()
         try Task.checkCancellation()
+        // The authorized catalog's publication verified this immutable version's
+        // digest. Only the requested file is read here; schema parsing follows.
         guard data.count == file.byteCount,
-              SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == file.sha256.lowercased(),
               String(data: data, encoding: .utf8) != nil else { throw AnalysisError.invalid }
         return data
     }

@@ -25,17 +25,19 @@ import UIKit
 
     public init(controller: LearningController, initial: LearningControllerState, catalog: MediaAssetCatalog,
                 authorize: @escaping @Sendable (LearningScope) async -> Bool,
-                makeTransport: @escaping @MainActor ([MediaSource]) -> any MediaTransport) {
+                makeTransport: @escaping @MainActor ([MediaSource]) -> any MediaTransport,
+                initiallyPresented: Bool = true, monitorHardware: (any VoiceMonitorHardware)? = nil) {
         session = LessonAudioSession()
         graph = VoiceMonitorEngine(session: session)
-        monitoring = VoiceMonitoring(hardware: graph, defaults: .standard)
+        monitoring = VoiceMonitoring(hardware: monitorHardware ?? graph, defaults: .standard)
         remote = LessonRemoteControl(session: session)
         coordinator = LearningMediaCoordinator(controller: controller, initial: initial, catalog: catalog,
             authorize: authorize, makeTransport: makeTransport, audioSession: session)
         state = coordinator.state
         controls = LearningControlPresentation(state: coordinator.state, gate: coordinator.remoteState)
         motion.update(coordinator.state)
-        context = .init(foreground: UIApplication.shared.applicationState == .active, complete: initial.snapshot.session.phase == .complete)
+        context = .init(foreground: UIApplication.shared.applicationState == .active,
+                        menuOpen: !initiallyPresented, complete: initial.snapshot.session.phase == .complete)
         coordinator.onChange = { [weak self] in self?.updated($0) }
         coordinator.onFeedback = { [weak self] event in
             guard let self, !self.closed else { return }

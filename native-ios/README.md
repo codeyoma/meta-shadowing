@@ -6,8 +6,15 @@ Books, Stages and Settings, with the twelve original Morning Notes audio phrases
 bundled for offline learning. The player supports all sixteen domain stages,
 paused options, sentence navigation and shared typography/speed/grouping editors.
 Native analysis, relation graphs and Apple dictionary are implemented under #97.
+“문장 분석” opens a single sentence directly; Back returns to paused learning.
+Multiple sentences retain the list/detail flow. Installed packages receive full
+byte/hash verification during download, re-download and updates, while ordinary
+learning checks publication evidence and current authority and reads needed files.
 The “책장” (Bookshelf) card selects an installed book and opens the Stages tab. Stage screens
 are not pushed inside Books; returning to Books always shows the library.
+Stage selection prepares the lesson while keeping Stages visible, then presents
+the ready player. Playback begins only after appearance; failed or cancelled
+preparation never presents a loading screen or grants learning credit.
 The bundled sample has no syntax, so analysis remains unavailable for that book.
 Hosted delivery and optional private sync are connected under #98. Under #108,
 the active Swift app offers free downloads only: no purchase/restore UI, StoreKit
