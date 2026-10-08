@@ -405,6 +405,9 @@ remain in the native media contract linked above.
   or cancel a replacement lesson. Failure stays on Stages with an actionable error.
   Prepared runtimes start with media/monitoring interaction gated; appearance
   releases that gate once, without consuming automatic wired-monitoring intent.
+  Remote commands, Now Playing metadata and their audio-session lease also begin
+  only after appearance. Cancelling an unpresented lesson leaves other playback
+  ownership untouched.
 - Entering the player from a stage (new or restored) and each newly selected
   sentence wait one second before starting audio. Completed checks stay filled.
   Interrupted listening resumes at its saved audio position; an already-ended,

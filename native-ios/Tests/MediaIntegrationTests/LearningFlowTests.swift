@@ -3,6 +3,7 @@ import Testing
 import AppFoundation
 import LearningDomain
 import LearningPersistence
+import MediaPlayer
 @testable import MetaShadowingNative
 
 @MainActor @Suite(.serialized) struct LearningFlowTests {
@@ -35,6 +36,7 @@ import LearningPersistence
 
         await flow.startPresentedLesson()
         #expect(!runtime.state.controller.paused)
+        try await waitForMedia { MPNowPlayingInfoCenter.default().nowPlayingInfo != nil }
         await flow.presentOptions(.menu)
         // A second appearance must not restart a lesson the user has paused.
         await flow.startPresentedLesson()

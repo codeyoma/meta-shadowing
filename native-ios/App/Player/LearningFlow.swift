@@ -113,6 +113,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     func startPresentedLesson() async {
         guard awaitingPresentation, !closing, !accessInvalidated, let runtime else { return }
         awaitingPresentation = false
+        runtime.present()
         runtime.setMenuOpen(options != nil)
         _ = await runtime.coordinator.perform(openingPaused || options != nil ? .pause : .stageEntry)
     }
