@@ -169,6 +169,11 @@ does not consume its explicit retry action. Test assertions include failure mess
 so the result summary distinguishes loading, launch-gate and retry failures.
 The retry checks explicitly wait for the real launch overlay to disappear, cover
 the largest Dynamic Type setting, and include button/window geometry on a hit-test failure.
+The full-window launch canvas owns touch interception while artwork is visible;
+underlying SwiftUI content keeps stable hit testing, with accessibility hidden until
+launch finishes. A native-window test verifies interception and removal at normal
+and maximum text sizes. This protects the launch boundary but does not reproduce
+or establish the cause of the intermittent hosted retry-button failure.
 Verbose simulator diagnostic collection is disabled because it can stall for ten
 minutes after a failure. XCTest assertions, result bundles, failure summaries and
 nonzero test exit codes remain enabled; no failed test is skipped or retried by CI.

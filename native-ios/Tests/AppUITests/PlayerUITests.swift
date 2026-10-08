@@ -756,7 +756,8 @@ final class PlayerUITests: XCTestCase {
                                "--ui-test-product-fixture", mode] + extra
         app.launch()
         let book = app.buttons["book-ui-fixture-v1"]
-        XCTAssertTrue(book.waitForExistence(timeout: 15), "The isolated fixture book must finish loading")
+        XCTAssertTrue(book.waitForExistence(timeout: 15),
+                      "The isolated fixture book must finish loading: appState=\(app.state.rawValue), retryVisible=\(app.buttons["bootstrap-retry"].exists), launchVisible=\(app.descendants(matching: .any)["launch-screen"].exists)")
         if !book.exists { return app }
         for _ in 0..<5 where !book.isHittable { app.scrollViews.firstMatch.swipeUp() }
         XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10), "The fixture book must be tappable")
