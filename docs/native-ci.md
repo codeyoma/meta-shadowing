@@ -38,20 +38,27 @@ identity, compiler, deployment and signing settings for both configurations.
 It also verifies that both complete non-commerce test targets occur exactly once, with no
 selected or skipped tests in the scheme and serial execution for every target.
 
-CI partitions the complete scheme into two complementary jobs:
+CI partitions the complete scheme into three disjoint jobs:
 
 | Shard | Selection |
 | --- | --- |
 | `player` | `-only-testing:NativeFoundationUITests/PlayerUITests` |
-| `remaining` | `-skip-testing:NativeFoundationUITests/PlayerUITests` |
+| `product` | `-only-testing` for `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests` in `NativeFoundationUITests` |
+| `remaining` | `-skip-testing` for those four UI classes; every other test remains included |
 
-The `remaining` shard includes `VoiceOverSemanticsUITests`, so VoiceOver audits and label checks run on every PR. Both selections derive from the same class identifier in the workflow. The first
-runs the longest UI class; the second runs every other UI test and all media
-integration tests. New tests automatically enter one of these complementary sets.
+The `product` shard includes VoiceOver audits and label checks on every PR.
+Inclusion and exclusion flags derive from the same class identifiers in the workflow.
+The `remaining` shard includes all media integration tests and automatically receives
+new UI classes or test targets. New tests in an existing named class follow that class.
 Each job uses its own standard hosted runner, builds its own test products and
 passes `-parallel-testing-enabled NO`, retaining one simulator and the existing
 Swift Testing suite isolation. This repeats setup to avoid simulator contention.
 There are no paid larger runners or external providers.
+
+`test-ci-test-shards.sh` executes the actual workflow test command against a
+controlled process boundary. It verifies disjoint class ownership, coverage of
+future classes/targets, serial execution, test failure propagation, unknown-shard
+rejection and aggregate gate failures. It does not substitute for hosted XCTest.
 
 The matrix uses `fail-fast: false` so a failure in one shard does not suppress the
 other shard's results. Each result summary must be nonempty, fully passing and
@@ -188,6 +195,22 @@ summaries expose test failures without exporting complete simulator logs or
 result bundles. Local reproduction commands are in [the native guide](../native-ios/README.md).
 
 ## CI timing baseline
+
+On October 7, PR #126 run `37655283521` exhausted the 40-minute `remaining`
+job budget. Compilation took 8m 07s, and the test step was cancelled after 30m 13s
+while entering the first VoiceOver audit. All 45 completed UI cases passed; the
+unfinished audits and integration tests were not passing coverage. The `player`
+shard completed its 31 cases in a 25m 01s test step.
+
+The October 8 partition moves `AppleServicesUITests` (8m 11s of completed cases),
+`ProductUITests` (7m 07s), and all VoiceOver checks into the `product` job.
+The other completed UI cases accounted for about 14 minutes. This removes measured
+work from the overloaded runner while preserving the 40-minute job and 30-minute
+test-step limits. It adds one cold setup/build; the expected wall-clock improvement
+must be verified in a new hosted run. Assertions, test deadlines, retries, required
+checks and human release approval are unchanged.
+
+### Historical two-shard baseline
 
 The two successful hosted runs immediately before this change on 2026-09-29
 spent 27m 26s and 28m 55s in `ci-native-tests`. The latest run broke down as follows:

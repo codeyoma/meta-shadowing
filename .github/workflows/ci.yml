@@ -65,6 +65,8 @@ jobs:
         run: swift native-ios/scripts/copy-local-video.swift --self-test
       - name: Offline acceptance runner failure and isolation contract
         run: bash native-ios/scripts/test-offline-acceptance-runner.sh
+      - name: Native test shard coverage and failure contract
+        run: bash native-ios/scripts/test-ci-test-shards.sh
 
   ci-native-test-shards:
     name: Native tests (${{ matrix.shard }})
@@ -73,12 +75,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [player, remaining]
+        shard: [player, product, remaining]
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       IOS_TEST_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-27-0
       CI_TEST_SHARD: ${{ matrix.shard }}
       CI_PLAYER_TEST_CLASS: NativeFoundationUITests/PlayerUITests
+      CI_PRODUCT_TEST_CLASSES: >-
+        NativeFoundationUITests/ProductUITests
+        NativeFoundationUITests/AppleServicesUITests
+        NativeFoundationUITests/VoiceOverSemanticsUITests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -131,17 +137,28 @@ jobs:
           CI_SIMULATOR: ${{ steps.simulator.outputs.id }}
         run: |
           set -o pipefail
-          # One class and its exact complement cover the full scheme once.
+          # Named UI groups and their exact complement cover the full scheme once.
+          read -r -a ci_product_classes <<< "$CI_PRODUCT_TEST_CLASSES"
+          test "${#ci_product_classes[@]}" -gt 0
+          ci_selection=()
           case "$CI_TEST_SHARD" in
-            player) ci_selection="-only-testing:$CI_PLAYER_TEST_CLASS" ;;
-            remaining) ci_selection="-skip-testing:$CI_PLAYER_TEST_CLASS" ;;
+            player) ci_selection=("-only-testing:$CI_PLAYER_TEST_CLASS") ;;
+            product)
+              for ci_test_class in "${ci_product_classes[@]}"; do
+                ci_selection+=("-only-testing:$ci_test_class")
+              done ;;
+            remaining)
+              ci_selection=("-skip-testing:$CI_PLAYER_TEST_CLASS")
+              for ci_test_class in "${ci_product_classes[@]}"; do
+                ci_selection+=("-skip-testing:$ci_test_class")
+              done ;;
             *) echo 'Unknown native test shard.' >&2; exit 1 ;;
           esac
           xcodebuild test-without-building -project native-ios/MetaShadowingNative.xcodeproj \
             -scheme MetaShadowingNative -configuration Debug \
             -destination "platform=iOS Simulator,id=$CI_SIMULATOR,arch=arm64" \
             -derivedDataPath "$RUNNER_TEMP/native-ui-build" \
-            -parallel-testing-enabled NO "$ci_selection" \
+            -parallel-testing-enabled NO "${ci_selection[@]}" \
             -collect-test-diagnostics never \
             -resultBundlePath "$RUNNER_TEMP/native-ui.xcresult" \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- 2>&1 |
@@ -193,7 +210,7 @@ jobs:
             echo 'Native tests require every shard to succeed.' >&2
             exit 1
           fi
-          echo 'Both native test shards passed.'
+          echo 'All native test shards passed.'
 
   ci-ios-build:
     name: ci-ios-build
