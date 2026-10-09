@@ -37,7 +37,20 @@ final class NativeFoundationUITests: XCTestCase {
         sample.tap()
         XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 5))
         XCUIDevice.shared.press(.home)
+        // Home can return before XCTest observes the app in the background.
+        let background = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let state = app.state
+            return state == .runningBackground || state == .runningBackgroundSuspended
+        }, object: nil)
+        guard XCTWaiter.wait(for: [background], timeout: 5) == .completed else {
+            XCTFail("Home must finish backgrounding before activation; state=\(app.state.rawValue)")
+            return
+        }
         app.activate()
+        guard app.wait(for: .runningForeground, timeout: 5) else {
+            XCTFail("Activation must reach foreground before navigation; state=\(app.state.rawValue)")
+            return
+        }
         XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 5))
         let booksTab = app.tabBars.buttons["책장"]
         XCTAssertTrue(booksTab.hittableOrWait(timeout: 5),

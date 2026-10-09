@@ -215,3 +215,12 @@ This establishes local native acceptance for the tested snapshot, not hosted
 CI, physical-device behavior, live Apple services, or human VoiceOver behavior.
 The unchanged host package suites were not rerun for these UI-test-only edits.
 No commit, push, remote configuration change, or hook pass-cache entry was made.
+
+### Subsequent pre-push verification
+
+The later local pre-push run of `3ff1d10` reproduced the foreground/relaunch
+failure despite the tab-hittability assertion. Its push was blocked. The original
+successful snapshot result above remains historical evidence, not a pass for that
+later run. See [the lifecycle-boundary investigation and correction](2026-10-09-foreground-test-synchronization.md)
+for the retained failure, the red/green real-app characterization and the narrowly
+scoped synchronization change. The whole native gate remains mandatory.
