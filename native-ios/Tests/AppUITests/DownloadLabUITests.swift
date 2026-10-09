@@ -6,9 +6,9 @@ final class DownloadLabUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
         app.launch()
-        XCTAssertTrue(app.buttons["book-morning-notes-v1"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["book-morning-notes-v1"].existsOrWait(timeout: 20))
         let settings = app.tabBars.buttons["설정"]
-        XCTAssertTrue(settings.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        XCTAssertTrue(settings.hittableOrWait(timeout: 10))
         settings.tap()
         app.buttons["개발 도구"].tap()
         app.buttons["다운로드·복원 검증"].tap()
@@ -30,7 +30,7 @@ final class DownloadLabUITests: XCTestCase {
         XCTAssertTrue(start.wait(for: \.isHittable, toEqual: true, timeout: 20))
         start.tap()
         let cancel = app.buttons["lab-cancel"]
-        XCTAssertTrue(cancel.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        XCTAssertTrue(cancel.hittableOrWait(timeout: 5))
         cancel.tap()
         XCTAssertTrue(app.staticTexts["lab-result"].wait(for: \.label, toEqual: "취소 검증 통과", timeout: 10))
         XCTAssertEqual(app.staticTexts["lab-installed"].label, "설치: 없음")

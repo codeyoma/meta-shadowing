@@ -3,7 +3,7 @@ import XCTest
 extension XCUIElement {
     /// Numeric fields are right-aligned; a center double-tap can land before their text.
     @MainActor func replaceNumericText(with text: String, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(wait(for: \.isHittable, toEqual: true, timeout: 5), file: file, line: line)
+        XCTAssertTrue(hittableOrWait(timeout: 5), file: file, line: line)
         guard let current = value as? String else {
             XCTFail("Numeric field must expose its current value", file: file, line: line)
             return

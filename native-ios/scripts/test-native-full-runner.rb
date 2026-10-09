@@ -7,10 +7,12 @@ require 'minitest/autorun'
 require 'open3'
 require 'rbconfig'
 require 'tmpdir'
+require_relative 'native-test-shards'
 
 class NativeFullRunnerTest < Minitest::Test
   SCRIPT_ROOT = __dir__
   SIMULATOR = '00000000-0000-0000-0000-000000000027'
+  SECONDARY = '00000000-0000-0000-0000-000000000028'
 
   def setup
     @root = Dir.mktmpdir('native-full-runner-test-')
@@ -18,7 +20,7 @@ class NativeFullRunnerTest < Minitest::Test
     @output = File.join(@root, 'private-output')
     @bin = File.join(@root, 'bin')
     FileUtils.mkdir_p([File.join(@snapshot, 'native-ios/scripts'), File.join(@snapshot, 'native-ios/Config'), @output, @bin])
-    %w[test-native-full.sh validate-native-test-results.rb verify-native-product.sh configure-apple-services.swift
+    %w[test-native-full.sh native-full-body.sh native-simulator-lease.rb native-test-shards.rb validate-native-test-results.rb verify-native-product.sh configure-apple-services.swift
        test-service-build.sh test-native-runtime-inspection.sh].each do |name|
       source = File.join(SCRIPT_ROOT, name)
       FileUtils.cp(source, File.join(@snapshot, 'native-ios/scripts', name)) if File.file?(source)
@@ -28,7 +30,7 @@ class NativeFullRunnerTest < Minitest::Test
     File.write(File.join(@snapshot, 'native-ios/project-ci.yml'), "include: project.yml\n")
     @devices = { 'devices' => { 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' => [
       { 'udid' => SIMULATOR, 'name' => 'MetaShadowing Native Pre-push iOS 27',
-        'isAvailable' => true, 'state' => 'Shutdown' }
+        'isAvailable' => true, 'state' => 'Shutdown', 'deviceTypeIdentifier' => 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' }
     ] } }
     @inventory = { 'errors' => [], 'values' => [{ 'disabledTests' => [], 'enabledTests' => [
       { 'identifier' => 'NativeFoundationUITests/PlayerUITests/testAudio()' },
@@ -49,6 +51,24 @@ class NativeFullRunnerTest < Minitest::Test
       #!/usr/bin/env ruby
       require 'json'
       require 'fileutils'
+      def selected_result(bundle)
+        flags = JSON.parse(File.read(File.join(bundle, 'execution-args.json'))).grep(/\A-only-testing:/).map { |flag| flag.delete_prefix('-only-testing:') }
+        tree = JSON.parse(File.read(ENV.fetch('NATIVE_FIXTURE_TESTS')))
+        summary = JSON.parse(File.read(ENV.fetch('NATIVE_FIXTURE_SUMMARY')))
+        unless flags.empty? || ENV['NATIVE_FIXTURE_UNFILTERED_RESULT'] == '1'
+          bundles = tree.fetch('testNodes')[0].fetch('children')
+          bundles.each do |target|
+            target['children'].select! do |test|
+              id = "#{target.fetch('name')}/#{test.fetch('nodeIdentifier')}"
+              flags.any? { |flag| id == flag || id.start_with?(flag + '/') }
+            end
+          end
+          bundles.reject! { |target| target['children'].empty? }
+          count = bundles.sum { |target| target['children'].length }
+          summary.merge!('totalTestCount' => count, 'passedTests' => count)
+        end
+        [summary, tree]
+      end
       def app_fixture(path)
         FileUtils.mkdir_p(path)
         File.write(File.join(path, 'Info.plist'), <<~PLIST)
@@ -74,6 +94,7 @@ class NativeFullRunnerTest < Minitest::Test
         %w[NATIVE_LOCAL_VIDEO_SOURCE XCODE_XCCONFIG_FILE SDKROOT TOOLCHAINS].include?(name) || name.start_with?('GIT_')
       end
       File.open(ENV.fetch('NATIVE_FIXTURE_COMMANDS'), 'a') do |file|
+        file.flock(File::LOCK_EX)
         file.puts JSON.generate([tool, ARGV, private_inputs, ENV['DEVELOPER_DIR']])
       end
       stage = nil
@@ -122,6 +143,28 @@ class NativeFullRunnerTest < Minitest::Test
             result = ARGV.fetch(ARGV.index('-resultBundlePath') + 1)
             FileUtils.mkdir_p(result)
             File.write(File.join(result, 'Info.plist'), 'finalized fixture')
+            File.write(File.join(result, 'execution-args.json'), JSON.generate(ARGV))
+            name = File.basename(File.dirname(result))
+            if ENV['NATIVE_FIXTURE_CONCURRENCY'] == '1'
+              events = ENV.fetch('NATIVE_FIXTURE_EVENTS')
+              FileUtils.mkdir_p(events)
+              if name == 'integration'
+                File.write(File.join(events, 'integration-finished'), 'finished')
+              elsif %w[ui-a ui-b].include?(name)
+                abort 'UI started before integrations settled' unless File.exist?(File.join(events, 'integration-finished'))
+                File.write(File.join(events, name + '.started'), Process.pid.to_s)
+                deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 3
+                until %w[ui-a ui-b].all? { |worker| File.exist?(File.join(events, worker + '.started')) }
+                  abort 'UI workers did not overlap' if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+                  sleep 0.01
+                end
+                if ENV['NATIVE_FIXTURE_SHARD_FAIL'] == name
+                  warn 'PRIVATE native shard failure'
+                  exit 17
+                end
+                sleep 120 if ENV['NATIVE_FIXTURE_BLOCK_UI'] == name || ENV['NATIVE_FIXTURE_BLOCK_UI'] == 'both'
+              end
+            end
           end
         else
           abort 'Unexpected Xcode command'
@@ -132,14 +175,35 @@ class NativeFullRunnerTest < Minitest::Test
           puts File.read(ENV.fetch('NATIVE_FIXTURE_DEVICES'))
         elsif ARGV[0, 2] == %w[simctl boot]
           stage = 'boot'
+          File.open(ENV.fetch('NATIVE_FIXTURE_DEVICES'), 'r+') do |file|
+            file.flock(File::LOCK_EX)
+            devices = JSON.parse(file.read)
+            devices['devices'].values.flatten.find { |device| device['udid'] == ARGV[2] }['state'] = 'Booted'
+            file.rewind; file.write(JSON.generate(devices)); file.truncate(file.pos)
+          end
         elsif ARGV[0, 2] == %w[simctl bootstatus]
           stage = 'bootstatus'
+        elsif ARGV[0, 2] == %w[simctl shutdown]
+          stage = 'shutdown'
+          if ENV['NATIVE_FIXTURE_SHUTDOWN_BARRIER']
+            barrier = ENV.fetch('NATIVE_FIXTURE_SHUTDOWN_BARRIER')
+            File.write(barrier + '.started', 'shutdown reached')
+            sleep 0.01 until File.exist?(barrier + '.release')
+          end
+          unless ENV['NATIVE_FIXTURE_STUCK_GUEST'] == '1'
+            File.open(ENV.fetch('NATIVE_FIXTURE_DEVICES'), 'r+') do |file|
+              file.flock(File::LOCK_EX)
+              devices = JSON.parse(file.read)
+              devices['devices'].values.flatten.find { |device| device['udid'] == ARGV[2] }['state'] = 'Shutdown'
+              file.rewind; file.write(JSON.generate(devices)); file.truncate(file.pos)
+            end
+          end
         elsif ARGV[0, 4] == %w[xcresulttool get test-results summary]
           stage = 'summary'
-          puts File.read(ENV.fetch('NATIVE_FIXTURE_SUMMARY'))
+          puts JSON.generate(selected_result(ARGV.fetch(ARGV.index('--path') + 1)).first)
         elsif ARGV[0, 4] == %w[xcresulttool get test-results tests]
           stage = 'report'
-          puts File.read(ENV.fetch('NATIVE_FIXTURE_TESTS'))
+          puts JSON.generate(selected_result(ARGV.fetch(ARGV.index('--path') + 1)).last)
         elsif ARGV[0, 3] == %w[--sdk macosx clang]
           stage = ARGV.include?('-dynamiclib') ? 'runtime-dependency-build' : 'runtime-consumer-build'
           output = ARGV.fetch(ARGV.index('-o') + 1)
@@ -156,7 +220,7 @@ class NativeFullRunnerTest < Minitest::Test
         File.write(File.join(config, 'project.json'), '{}')
       when 'ditto'
         stage = 'runtime-copy'
-        FileUtils.cp_r(ARGV.fetch(0), ARGV.fetch(1))
+        FileUtils.cp_r(ARGV.fetch(0), ARGV.fetch(1), preserve: true)
       else
         abort 'Unexpected package or tool operation'
       end
@@ -202,21 +266,251 @@ class NativeFullRunnerTest < Minitest::Test
   end
 
   def teardown
+    [SIMULATOR, SECONDARY].each do |id|
+      lock = File.join(File.realpath('/tmp'), "metashadowing-native-simulators-#{Process.uid}", id)
+      owner = File.join(lock, 'owner.json')
+      if File.file?(owner) && JSON.parse(File.read(owner)).fetch('evidence').start_with?(@root + '/')
+        FileUtils.remove_entry(lock)
+      end
+    end
     FileUtils.remove_entry(@root)
   end
 
-  def run_full(arguments = ['--simulator-id', SIMULATOR, '--output-dir', @output])
+  def fixture_inputs
     { 'DEVICES' => @devices, 'INVENTORY' => @inventory, 'SUMMARY' => @summary, 'TESTS' => @tests }.each do |label, value|
       path = File.join(@root, "#{label.downcase}.json")
       File.write(path, JSON.generate(value))
       @environment["NATIVE_FIXTURE_#{label}"] = path
     end
+  end
+
+  def run_full(arguments = ['--simulator-id', SIMULATOR, '--output-dir', @output])
+    fixture_inputs
     Open3.capture3(@environment, '/bin/bash', 'native-ios/scripts/test-native-full.sh', *arguments, chdir: @snapshot)
+  end
+
+  def wait_until(message)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 15
+    until yield
+      flunk message if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+      sleep 0.02
+    end
+  end
+
+  # A cancelled run must never publish success, even after XCTest has passed.
+  def test_cancellation_during_guest_cleanup_withholds_pass
+    barrier = File.join(@root, 'shutdown')
+    @environment['NATIVE_FIXTURE_SHUTDOWN_BARRIER'] = barrier
+    fixture_inputs
+    log = File.join(@root, 'async.log')
+    pid = Process.spawn(@environment, '/bin/bash', 'native-ios/scripts/test-native-full.sh',
+                        '--simulator-id', SIMULATOR, '--output-dir', @output,
+                        chdir: @snapshot, out: log, err: [:child, :out], pgroup: true)
+    wait_until('Guest cleanup did not start') { File.exist?(barrier + '.started') }
+    Process.kill('TERM', pid)
+    File.write(barrier + '.release', 'continue cleanup')
+    result = nil
+    wait_until('Cancelled supervisor did not finish') { result = Process.waitpid2(pid, Process::WNOHANG) }
+    pid = nil
+    refute result.last.success?, 'Cancellation after tests passed must still fail the run.'
+    refute_includes File.read(log), 'PASS:'
+    assert_equal 'Shutdown', JSON.parse(File.read(@environment.fetch('NATIVE_FIXTURE_DEVICES')))['devices'].values.first.first['state']
+    refute File.exist?(File.join(File.realpath('/tmp'), "metashadowing-native-simulators-#{Process.uid}", SIMULATOR))
+  ensure
+    if pid
+      Process.kill('TERM', -pid) rescue nil
+      Process.waitpid(pid) rescue nil
+    end
   end
 
   def commands
     path = @environment.fetch('NATIVE_FIXTURE_COMMANDS')
     File.exist?(path) ? File.readlines(path).map { |line| JSON.parse(line) } : []
+  end
+
+  def parallel_fixture
+    @devices['devices'].values.first << @devices['devices'].values.first.first.merge('udid' => SECONDARY)
+    @inventory['values'][0]['enabledTests'] << { 'identifier' => 'NativeFoundationUITests/ProductUITests/testSettings()' }
+    @summary.merge!('totalTestCount' => 3, 'passedTests' => 3)
+    @tests['testNodes'][0]['children'][0]['children'] << {
+      'nodeType' => 'Test Case', 'nodeIdentifier' => 'ProductUITests/testSettings()', 'result' => 'Passed'
+    }
+    @environment['NATIVE_FIXTURE_CONCURRENCY'] = '1'
+    @environment['NATIVE_FIXTURE_EVENTS'] = File.join(@root, 'events')
+    ['--simulator-id', SIMULATOR, '--output-dir', @output, '--secondary-simulator-id', SECONDARY]
+  end
+
+  def assert_fixture_workers_gone
+    Dir.glob(File.join(@root, 'events', '*.started')).each do |file|
+      pid = Integer(File.read(file))
+      assert_raises(Errno::ESRCH) { Process.kill(0, pid) }
+    end
+    assert @devices['devices'].values.flatten.all? { |device| device['state'] == 'Shutdown' }
+    current = JSON.parse(File.read(@environment.fetch('NATIVE_FIXTURE_DEVICES')))
+    assert current['devices'].values.flatten.all? { |device| device['state'] == 'Shutdown' }
+  end
+
+  # A second destination must partition, not duplicate, the compiled inventory.
+  # Integrations precede both UI workers; each worker keeps serial XCTest.
+  def test_two_devices_execute_integrations_then_disjoint_ui_selections
+    output, error, status = run_full(parallel_fixture)
+    assert status.success?, error
+    assert_includes output, 'PASS: 3 native test cases matched the selected inventory.'
+    executions = commands.select { |tool, args| tool == 'xcodebuild' && args.first == 'test-without-building' && !args.include?('-enumerate-tests') }.map { |_, args| args }
+    assert_equal 3, executions.length
+    assert_equal ['-only-testing:NativeMediaIntegrationTests'], executions.first.grep(/\A-only-testing:/)
+    assert_equal [
+      ['-only-testing:NativeFoundationUITests/PlayerUITests'],
+      ['-only-testing:NativeFoundationUITests/ProductUITests']
+    ], executions.drop(1).map { |args| args.grep(/\A-only-testing:/) }.sort
+    assert_equal 3, executions.map { |args| args.fetch(args.index('-resultBundlePath') + 1) }.uniq.length
+    assert_equal 3, executions.map { |args| args.fetch(args.index('-testProductsPath') + 1) }.uniq.length
+    assert_equal [SIMULATOR, SECONDARY].sort, executions.drop(1).map { |args| args.fetch(args.index('-destination') + 1)[/id=([^,]+)/, 1] }.sort
+    executions.each { |args| assert_equal 'NO', args.fetch(args.index('-parallel-testing-enabled') + 1) }
+    assert_fixture_workers_gone
+  end
+
+  # A failing sibling must not wait for a long-running UI selection or hide it.
+  def test_failed_ui_worker_stops_sibling_and_drains_both_guests
+    arguments = parallel_fixture
+    @environment['NATIVE_FIXTURE_SHARD_FAIL'] = 'ui-b'
+    @environment['NATIVE_FIXTURE_BLOCK_UI'] = 'ui-a'
+    output, error, status = run_full(arguments)
+    refute status.success?
+    refute_includes output + error, 'PASS:'
+    refute_includes output + error, 'PRIVATE native shard failure'
+    assert_fixture_workers_gone
+  end
+
+  # Cancelling the supervisor, not only its immediate children, must drain all work.
+  def test_cancelling_active_ui_workers_releases_only_after_both_guests_stop
+    arguments = parallel_fixture
+    @environment['NATIVE_FIXTURE_BLOCK_UI'] = 'both'
+    fixture_inputs
+    log = File.join(@root, 'async.log')
+    pid = Process.spawn(@environment, '/bin/bash', 'native-ios/scripts/test-native-full.sh', *arguments,
+                        chdir: @snapshot, out: log, err: [:child, :out], pgroup: true)
+    wait_until('Both UI workers did not start') { %w[ui-a ui-b].all? { |name| File.exist?(File.join(@root, 'events', name + '.started')) } }
+    Process.kill('TERM', pid)
+    result = nil
+    wait_until('Cancelled workers did not drain') { result = Process.waitpid2(pid, Process::WNOHANG) }
+    pid = nil
+    refute result.last.success?
+    refute_includes File.read(log), 'PASS:'
+    assert_fixture_workers_gone
+  ensure
+    if pid
+      Process.kill('TERM', -pid) rescue nil
+      Process.waitpid(pid) rescue nil
+    end
+  end
+
+  # Unknown classes and targets need a reviewed owner, not implicit omission.
+  def test_partition_rejects_unknown_ambiguous_and_empty_owners
+    parallel_fixture
+    bins = NativeTestShards.partition(@inventory)
+    assert_equal ['NativeFoundationUITests/PlayerUITests/testAudio()'], bins.fetch('ui-a')
+    assert_equal ['NativeFoundationUITests/ProductUITests/testSettings()'], bins.fetch('ui-b')
+    assert_equal ['NativeMediaIntegrationTests/TransportTests/plays(video:)'], bins.fetch('integration')
+    original = Marshal.dump(@inventory)
+    [
+      ->(ids) { ids[0]['identifier'] = 'NativeFoundationUITests/FutureUITests/testNew()' },
+      ->(ids) { ids[1]['identifier'] = 'FutureTarget/TransportTests/plays(video:)' },
+      ->(ids) { ids.pop },
+      ->(ids) { ids << ids.first.dup }
+    ].each do |change|
+      inventory = Marshal.load(original)
+      change.call(inventory['values'][0]['enabledTests'])
+      assert_raises(RuntimeError) { NativeTestShards.partition(inventory) }
+    end
+  end
+
+  # Successful commands with incomplete/duplicated results cannot approve the union.
+  def test_unfiltered_shard_result_is_rejected
+    arguments = parallel_fixture
+    @environment['NATIVE_FIXTURE_UNFILTERED_RESULT'] = '1'
+    output, error, status = run_full(arguments)
+    refute status.success?
+    refute_includes output + error, 'PASS:'
+    refute commands.any? { |tool, args| tool == 'xcodebuild' && args.include?('-only-testing:NativeFoundationUITests/PlayerUITests') }
+  end
+
+  # A successful test result cannot release a device that still has live guests.
+  def test_unsettled_guest_retains_ownership_and_withholds_pass
+    @environment['NATIVE_FIXTURE_STUCK_GUEST'] = '1'
+    output, error, status = run_full
+    refute status.success?
+    refute_includes output, 'PASS:'
+    assert_includes error, 'locks retained'
+    assert File.file?(File.join(File.realpath('/tmp'), "metashadowing-native-simulators-#{Process.uid}", SIMULATOR, 'owner.json'))
+    assert_equal 1, Dir.glob(File.join(@output, 'native-lease-*/active')).length,
+                 'The hook must know that separately grouped work has not settled.'
+  end
+
+  # Inject the OS reporting a still-live control group after its leader exited.
+  # The real bounded drain and final verdict must reject this unresolved state.
+  def test_unsettled_control_group_cannot_release_simulator_leases
+    fixture_inputs
+    driver = File.join(@root, 'control-probe.rb')
+    File.write(driver, <<~RUBY)
+      require #{File.join(@snapshot, 'native-ios/scripts/native-simulator-lease.rb').inspect}
+      class NativeSimulatorLease
+        alias observed_group_alive? group_alive?
+        def group_alive?(pid)
+          return true if @cleanup_deadline && pid != @pid
+          observed_group_alive?(pid)
+        end
+      end
+      begin
+        exit NativeSimulatorLease.new(ARGV).run
+      rescue StandardError
+        exit 1
+      end
+    RUBY
+    output, error, status = Open3.capture3(@environment, RbConfig.ruby, driver,
+      '--simulator-id', SIMULATOR, '--output-dir', @output, chdir: @snapshot)
+    refute status.success?
+    refute_includes output, 'PASS:'
+    assert_includes error, 'locks retained'
+    assert File.file?(File.join(File.realpath('/tmp'), "metashadowing-native-simulators-#{Process.uid}", SIMULATOR, 'owner.json'))
+  end
+
+  # A separate clone's ownership must block execution without stealing its lock.
+  def test_existing_destination_owner_blocks_all_native_work
+    lock = File.join(File.realpath('/tmp'), "metashadowing-native-simulators-#{Process.uid}", SIMULATOR)
+    FileUtils.mkdir_p(File.dirname(lock), mode: 0o700)
+    Dir.mkdir(lock, 0o700)
+    created = true
+    marker = JSON.generate(pid: Process.pid, evidence: '/fixture/another-owner')
+    File.write(File.join(lock, 'owner.json'), marker)
+    output, error, status = run_full
+    refute status.success?
+    assert_includes error, 'ownership lock exists'
+    refute_includes output, 'PASS:'
+    refute commands.any? { |tool, args| tool == 'xcodebuild' || tool == 'xcodegen' || (tool == 'xcrun' && args[1] != 'list') }
+    assert_equal marker, File.read(File.join(lock, 'owner.json'))
+  ensure
+    FileUtils.remove_entry(lock) if created
+  end
+
+  # Explicit identities alone do not authorize mismatched or reference devices.
+  def test_secondary_identity_type_and_reference_guards_run_before_builds
+    arguments = parallel_fixture
+    original = Marshal.dump(@devices)
+    [
+      ->(device) { device['deviceTypeIdentifier'] = 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro' },
+      ->(device) { device['name'] = 'MetaShadowing Native W2 iOS 27' },
+      ->(device) { device['isAvailable'] = false }
+    ].each do |change|
+      @devices = Marshal.load(original)
+      change.call(@devices['devices'].values.first.last)
+      FileUtils.rm_f(@environment.fetch('NATIVE_FIXTURE_COMMANDS'))
+      _, _, status = run_full(arguments)
+      refute status.success?
+      refute commands.any? { |tool, _| %w[xcodebuild xcodegen].include?(tool) }
+    end
+    _, _, status = run_full(['--simulator-id', SIMULATOR, '--output-dir', @output, '--secondary-simulator-id', SIMULATOR])
+    refute status.success?
   end
 
   def assert_rejected_before_mutation
@@ -239,6 +533,7 @@ class NativeFullRunnerTest < Minitest::Test
     assert_equal 1, commands.count { |tool, args| tool == 'xcrun' && args[0, 2] == %w[simctl boot] }
     refute_includes output + error, SIMULATOR
     refute_includes output + error, @root
+    assert_empty Dir.glob(File.join(@output, 'native-lease-*/active'))
   end
 
   # Matching an ID alone could operate on W2, a user mirror, or an unavailable
@@ -359,7 +654,8 @@ class NativeFullRunnerTest < Minitest::Test
     assert_equal 'never', execution.fetch(execution.index('-collect-test-diagnostics') + 1)
     refute commands.any? { |tool, args| tool == 'swift' && args.first == 'test' },
            'Package suites remain mandatory remote checks.'
-    assert_equal %w[bootstatus list], commands.select { |tool, args| tool == 'xcrun' && args.first == 'simctl' }.map { |_, args| args[1] }.sort
+    assert_equal %w[bootstatus list list list list shutdown], commands.select { |tool, args| tool == 'xcrun' && args.first == 'simctl' }.map { |_, args| args[1] }.sort
+    assert_equal 'Shutdown', JSON.parse(File.read(@environment.fetch('NATIVE_FIXTURE_DEVICES')))['devices'].values.first.first['state']
     paths = Dir.glob(File.join(@output, 'native-full.*'))
     assert_equal 1, paths.length
     assert_equal 0o700, File.stat(paths[0]).mode & 0o777
@@ -424,7 +720,7 @@ class NativeFullRunnerTest < Minitest::Test
   def test_build_guard_arguments_and_order_preserve_generic_unsigned_product_builds
     _, error, status = run_full
     assert status.success?, error
-    assert_equal %w[xcodebuild xcrun xcodegen xcodebuild xcodebuild swift xcodegen xcodebuild ditto xcrun xcrun xcrun xcrun xcodebuild xcodebuild xcrun xcrun],
+    assert_equal %w[xcrun xcodebuild xcrun xcodegen xcodebuild xcodebuild swift xcodegen xcodebuild ditto xcrun xcrun xcrun xcrun xcodebuild xcodebuild xcrun xcrun xcrun xcrun xcrun],
                  commands.map(&:first)
     builds = commands.select { |tool, args| tool == 'xcodebuild' && %w[build-for-testing build].include?(args.first) }.map { |_, args| args }
     assert_equal ['Debug', 'Release', 'Debug'], builds.map { |args| args.fetch(args.index('-configuration') + 1) }

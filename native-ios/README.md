@@ -291,13 +291,21 @@ unsigned Debug app build with product inspection. Run the same host logic gate w
 skipped or failed Swift Testing results. Generic compilation does not boot a simulator.
 Automatic CI has no simulator execution or test-product build/upload/download.
 
-The complete 183-case native simulator suite, including all 105 native integration
+The complete 180-case native simulator suite, including all 105 native integration
 cases and all UI journeys, runs locally before push. The local gate also inspects
 its Debug test app, builds and inspects Release, exercises the runtime product
 guard, and compiles the fictional downloader. These checks remain available in
 manual CI (`test_scope: full`); `test_scope: light` selects only ordinary checks.
 Host package success does not establish native media, lifecycle, rendering or UI
-behavior. No simulator test or assertion is deleted.
+behavior. Three redundant UI launches were consolidated into existing same-fixture
+journeys, preserving their geometry, screenshot, and pre-download XP assertions;
+75 UI methods remain. Positive existence and selected navigation-hittability
+checks use an immediate query with the original timeout as fallback. Enabled,
+selected, label, disappearance, media, and persistence readiness waits remain
+unchanged. Bounded scroll searches stop once their target is hittable; repeated
+geometry reads share values only within an unchanged observation phase. See
+[the UI test audit](../docs/research/2026-10-09-ui-wait-expansion.md) and
+[the internal-query optimization](../docs/research/2026-10-09-test-internal-results.md).
 
 Manual full CI builds complete test products once without booting a simulator, then transfers
 a revision/toolchain/checksum-validated portable package to the selected runners.
@@ -315,12 +323,41 @@ For each clone, install the local hook with a dedicated iOS 27 simulator named
 bash native-ios/scripts/install-native-git-hooks.sh --simulator-id <SIMULATOR_ID>
 ```
 
+For two-worker UI execution, provision a second dedicated Pre-push simulator with
+the same iPhone device type and iOS 27 runtime, then configure both explicitly:
+
+```sh
+bash native-ios/scripts/install-native-git-hooks.sh \
+  --simulator-id <PRIMARY_SIMULATOR_ID> \
+  --secondary-simulator-id <SECONDARY_SIMULATOR_ID>
+```
+
+The full runner still builds once and executes every native test. It runs native
+integrations first, then two disjoint UI selections on separate devices. Each
+selection stays internally serial. Independent checksummed product copies and
+separate result bundles prevent worker-output collisions. Exact selected and
+combined identifiers must match the complete compiled inventory; new UI classes
+require an explicit owner in `native-test-shards.rb`.
+
+Both serial and two-device runs acquire shared per-user destination locks, in
+addition to the hook's repository lock. After testing or cancellation, the runner
+drains its process groups and shuts down only its explicitly selected Pre-push
+devices to verify that guest activity stopped. It does not shut down W2 or other
+simulators. Unresolved cleanup retains destination locks and cannot publish PASS.
+Cleanup has one 30-second budget; the hook allows 40 seconds before forced KILL.
+Do not remove retained locks until their recorded owner and simulator activity
+have been inspected. To return to serial execution, unset only the secondary
+setting with `git config --local --unset native.prePushSecondarySimulator`.
+See [the measured two-device result](../docs/research/2026-10-09-local-native-parallel-results.md)
+for timings, startup/resource limits and verification boundaries.
+
 The hook tests archived pushed commits, not dirty working files, and blocks pushes
 on any native, Release or downloader failure. It preserves existing custom hooks
 and the W2 preview simulator. Older full-runner contracts or cached results cannot
 satisfy the expanded gate.
-Exact-commit successful results may be reused for the same toolchain and configured
-simulator; new commits require full testing. Hooks are locally bypassable, so
+Exact-commit successful results may be reused for the same toolchain, execution
+mode and configured simulator identities; new commits require full testing.
+Contract version 5 invalidates older passes. Hooks are locally bypassable, so
 remote checks and human release approval remain required. Full pre-push testing
 moves the long wait locally; it does not make that work disappear.
 

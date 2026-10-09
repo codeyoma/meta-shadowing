@@ -5,7 +5,7 @@ final class NativeMediaUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-learning-media", "--ui-test-probe-id", UUID().uuidString, "--media-probe-mode", mode]
         app.launch()
-        XCTAssertTrue(app.staticTexts["media-xp"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["media-xp"].existsOrWait(timeout: 20))
         return app
     }
     @MainActor func testMediaEndDoesNotConfirm() {
@@ -22,7 +22,7 @@ final class NativeMediaUITests: XCTestCase {
         app.buttons["media-main"].tap()
         XCTAssertTrue(app.staticTexts["media-xp"].wait(for: \.label, toEqual: "XP: 2", timeout: 10))
         app.terminate(); app.launch()
-        XCTAssertTrue(app.staticTexts["media-xp"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["media-xp"].existsOrWait(timeout: 20))
         XCTAssertEqual(app.staticTexts["media-xp"].label, "XP: 2")
         XCTAssertEqual(app.staticTexts["media-status"].label, "Paused")
     }

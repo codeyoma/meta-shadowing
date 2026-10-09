@@ -23,7 +23,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
-        XCTAssertTrue(app.buttons["book-morning-notes-v1"].wait(for: \.isHittable, toEqual: true, timeout: 20))
+        XCTAssertTrue(app.buttons["book-morning-notes-v1"].hittableOrWait(timeout: 20))
         let kind = app.staticTexts["book-kind-morning-notes-v1"]
         XCTAssertTrue(kind.exists, "Book kind must remain in the UI accessibility snapshot")
         XCTAssertEqual(kind.label, "샘플")
@@ -37,32 +37,35 @@ final class VoiceOverSemanticsUITests: XCTestCase {
     @MainActor private func auditPrincipalScreens(_ app: XCUIApplication, _ label: String) throws {
         try audit(app, "\(label) library")
         app.buttons["book-morning-notes-v1"].tap()
-        XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 10))
         try audit(app, "\(label) stages")
         app.buttons["stage-1"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 20))
         try audit(app, "\(label) player")
         app.buttons["player-options"].tap()
-        XCTAssertTrue(app.buttons["options-close"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["options-close"].existsOrWait(timeout: 5))
         try audit(app, "\(label) options")
         app.buttons["배속"].tap()
-        XCTAssertTrue(app.sliders["재생 속도"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.sliders["재생 속도"].existsOrWait(timeout: 5))
         try audit(app, "\(label) rate editor")
         app.buttons["options-close"].tap()
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["header-xp"].existsOrWait(timeout: 10))
         app.tabBars.buttons["설정"].tap()
-        XCTAssertTrue(app.buttons["학습 설정"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["학습 설정"].existsOrWait(timeout: 5))
         try audit(app, "\(label) settings")
         app.buttons["학습 설정"].tap()
         let typography = app.buttons["폰트 설정"]
-        XCTAssertTrue(typography.wait(for: \.isHittable, toEqual: true, timeout: 5))
+        XCTAssertTrue(typography.hittableOrWait(timeout: 5))
         typography.tap()
-        XCTAssertTrue(app.navigationBars["폰트 설정"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["폰트 설정"].existsOrWait(timeout: 5))
         try audit(app, "\(label) typography preview")
         // The long bilingual preview places lazily created controls below the fold at AX sizes.
         let size = app.textFields["original-size"]
-        for _ in 0..<12 where !size.isHittable { app.swipeUp() }
+        for _ in 0..<12 {
+            guard !size.isHittable else { break }
+            app.swipeUp()
+        }
         XCTAssertTrue(size.isHittable)
         try audit(app, "\(label) typography controls")
     }
@@ -113,7 +116,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         XCTAssertEqual(book.value as? String, "완료한 스테이지 0/16")
 
         book.tap()
-        XCTAssertTrue(app.buttons["stage-1"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 10))
         let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'stage-'"))
         XCTAssertEqual((0..<rows.count).map { rows.element(boundBy: $0).identifier },
                        (1...16).map { "stage-\($0)" }, "Stages must be read in order")
@@ -132,7 +135,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         XCTAssertEqual(app.descendants(matching: .any)["cycle-timeline"].label, "확인한 반복 0/3")
         app.buttons["학습 속도"].tap()
         let rate = app.sliders["재생 속도"]
-        XCTAssertTrue(rate.waitForExistence(timeout: 5))
+        XCTAssertTrue(rate.existsOrWait(timeout: 5))
         XCTAssertEqual(rate.value as? String, "1배속")
         app.buttons["options-close"].tap()
         app.exitLearningThroughOptions()

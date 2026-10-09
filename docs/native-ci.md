@@ -20,15 +20,20 @@ simulator; it is not a configuration-only or empty build check.
 | Execution boundary | Checks |
 | --- | --- |
 | Automatic GitHub CI | Six host Swift package suites, tooling/configuration contracts, one generic Debug build and Debug product inspection |
-| Local pre-push | Complete native simulator suite (currently 183 cases), Debug product inspection, Release build and product/runtime inspection, fictional downloader build |
+| Local pre-push | Complete native simulator suite (currently 180 cases), Debug product inspection, Release build and product/runtime inspection, fictional downloader build |
 | Explicit manual full CI | All ordinary checks plus complete shared test-product build, four simulator shards, Release/product/runtime inspection and fictional downloader build |
 
 Automatic runs do not build or transfer test products, boot/install/launch a
 simulator, enumerate native tests, or execute UI/native-integration tests. The
 entire `NativeMediaIntegrationTests` target also moves to local/manual full
 regression: its iOS-only audio, lifecycle, haptics and rendering checks cannot be
-replaced by host package tests. No test or assertion is deleted. Ordinary remote
-success is not evidence that the 183 native simulator cases ran.
+replaced by host package tests. The full suite now contains 75 UI methods after
+three same-fixture standalone tests were consolidated into existing journeys;
+their original assertions remain. See [the UI test audit](research/2026-10-09-ui-wait-expansion.md).
+Test-internal readiness fast paths, bounded scroll-search exits, and static
+geometry reuse retain that same inventory and the original failure/time limits;
+see [the internal-query verification](research/2026-10-09-test-internal-results.md).
+Ordinary remote success is not evidence that the 180 native simulator cases ran.
 
 The previous eight-UI-test remote profile still incurred long simulator startup
 and automation work. The owner explicitly chose a simulator-free automatic gate
@@ -48,12 +53,44 @@ Each clone must opt in once. Create a dedicated iOS 27 simulator named
 bash native-ios/scripts/install-native-git-hooks.sh --simulator-id <SIMULATOR_ID>
 ```
 
+An optional second dedicated Pre-push simulator enables two UI workers locally:
+
+```sh
+bash native-ios/scripts/install-native-git-hooks.sh \
+  --simulator-id <PRIMARY_SIMULATOR_ID> \
+  --secondary-simulator-id <SECONDARY_SIMULATOR_ID>
+```
+
+Both IDs must be distinct, available iOS 27 destinations with the same device
+type. Native integrations execute first on the primary device; only after they
+pass do the two disjoint UI selections execute concurrently. Each XCTest command
+keeps `-parallel-testing-enabled NO`. The inspected build is copied with matching
+content, modes and symlink targets into separate worker directories. Each result
+must match its selection; the combined result must match the entire compiled
+inventory without missing, extra, failed, skipped or expected-failure cases.
+Unrecognized targets or new UI classes fail until their ownership is reviewed.
+This changes no automatic or manual GitHub Actions scheduling.
+
 The installer configures only repository-local `core.hooksPath` and
-`native.prePushSimulator`. It refuses a conflicting hook path or an existing
+`native.prePushSimulator`, plus optional `native.prePushSecondarySimulator`.
+Omitting a simulator option preserves its existing setting. It refuses a conflicting hook path or an existing
 active default hook instead of overwriting it. The runner accepts only the
-explicitly configured, dedicated Pre-push simulator on iOS 27. It may boot that
-device; it never creates, deletes, erases or selects a physical/reference device.
+explicitly configured, dedicated Pre-push simulators on iOS 27. It may boot those
+devices; it never creates, deletes, erases or selects a physical/reference device.
 The interactive W2 preview is not a pre-push destination.
+
+The runner acquires per-user, per-destination locks shared across clones in
+addition to the repository lock. Following test execution, failure or cancellation,
+it drains owned host process groups and shuts down only those selected devices,
+then verifies their Shutdown state before unlocking. Cleanup shares a bounded
+30-second budget; the hook gives its supervisor 40 seconds before forced KILL.
+Unsettled cleanup retains destination locks and withholds PASS. Cancellation
+during cleanup also fails, even if all test cases had already passed. Inspect
+the retained private owner/evidence before removing a lock; never erase a simulator
+or delete an ownership lock merely because its PID looks stale.
+For serial fallback, run `git config --local --unset native.prePushSecondarySimulator`.
+The [local two-device experiment](research/2026-10-09-local-native-parallel-results.md)
+records the measured result and its startup/resource limitations.
 
 The hook reads Git's actual pushed object IDs, not just `HEAD`. It archives each
 unique pushed commit into an isolated snapshot and runs the complete native
@@ -64,7 +101,8 @@ missing tool, simulator, test runner, result or successful test blocks the push.
 Concurrent local full runs are rejected, not run against the same simulator.
 
 Successful results may be reused only for the exact commit, Xcode/XcodeGen
-versions and configured simulator/runtime. Failed or incomplete results are never
+versions, execution mode and both configured simulator identities/runtime.
+Contract version 5 invalidates older passes. Failed or incomplete results are never
 cached; another commit requires another full run. Evidence stays under the local
 Git directory, outside tracked source. A same-commit retry after a network failure
 does not repeat a completed test run. The archived runner must declare the current

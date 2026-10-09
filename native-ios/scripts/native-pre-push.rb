@@ -8,7 +8,7 @@ require 'digest'
 # Git replacements must not change object bytes associated with a pushed OID.
 ENV['GIT_NO_REPLACE_OBJECTS'] = '1'
 $stdout.sync = true
-NATIVE_FULL_CONTRACT_VERSION = 4
+NATIVE_FULL_CONTRACT_VERSION = 5
 PROGRESS_LINES = [
   'Native full: generating project.',
   'Native full: building test products.',
@@ -20,6 +20,9 @@ PROGRESS_LINES = [
   'Native full: preparing simulator.',
   'Native full: enumerating tests.',
   'Native full: running all native tests.',
+  'Native full: running native integrations.',
+  'Native full: running two UI selections.',
+  'Native full: validating combined results.',
   'Native full: validating results.'
 ].freeze
 
@@ -34,15 +37,47 @@ def capture!(*arguments)
   output
 end
 
+def configured_simulator(name, optional: false)
+  output, status = Open3.capture2e('git', 'config', '--local', '--null', '--get-all', name)
+  return nil if optional && status.exitstatus == 1
+  unless status.success?
+    fail_push("configure repository-local #{name} before pushing.")
+  end
+  values = output.split("\0", -1)
+  terminator = values.pop
+  unless terminator == '' && values.length == 1 &&
+         values.first.match?(/\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z/)
+    fail_push("configure exactly one UUID for repository-local #{name}.")
+  end
+  values.first.upcase
+end
+
+def active_lease?(results)
+  return false unless results
+  Dir.children(results).any? do |entry|
+    next false unless entry.start_with?('native-lease-')
+    begin
+      File.lstat(File.join(results, entry, 'active'))
+      true
+    rescue Errno::ENOENT
+      false
+    end
+  end
+rescue StandardError
+  # Unreadable ownership evidence cannot prove separately owned groups settled.
+  true
+end
+
 # Cancellation must drain the owned process group before another test run starts.
 def stop_runner(pid)
-  %w[TERM KILL].each do |signal|
+  # The full-runner supervisor may need 30 seconds to drain its simulator leases.
+  [['TERM', 40], ['KILL', 2]].each do |signal, grace|
     begin
       Process.kill(signal, -pid)
     rescue Errno::ESRCH
       nil
     end
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 2
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + grace
     loop do
       begin
         Process.waitpid(pid, Process::WNOHANG)
@@ -64,6 +99,7 @@ end
 owned_lock = nil
 runner_pid = nil
 snapshot = nil
+results = nil
 begin
   root = capture!('git', 'rev-parse', '--show-toplevel').strip
   Dir.chdir(root)
@@ -80,20 +116,31 @@ begin
     capture!('git', 'rev-parse', '--verify', "#{oid}^{commit}").strip
   end.compact.uniq
   exit 0 if commits.empty?
-  simulator, configured = Open3.capture2e('git', 'config', '--local', '--get', 'native.prePushSimulator')
-  simulator = simulator.strip
-  fail_push('configure repository-local native.prePushSimulator before pushing.') unless configured.success? && !simulator.empty?
+  simulator = configured_simulator('native.prePushSimulator')
+  secondary_simulator = configured_simulator('native.prePushSecondarySimulator', optional: true)
+  if simulator == secondary_simulator
+    fail_push('primary and secondary simulator IDs must be distinct.')
+  end
   toolchain = [capture!('xcodebuild', '-version').strip, capture!('xcodegen', '--version').strip]
   fail_push('the required toolchain returned no version.') if toolchain.any?(&:empty?)
   devices = JSON.parse(capture!('xcrun', 'simctl', 'list', 'devices', 'available', '--json')).fetch('devices')
-  runtime = devices.find do |identifier, entries|
-    identifier == 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' &&
-      entries.any? do |device|
-        device['udid'] == simulator && device['isAvailable'] == true &&
-          device['name'].to_s.start_with?('MetaShadowing Native Pre-push')
-      end
-  end&.first
-  fail_push('configure a dedicated MetaShadowing Native Pre-push iOS 27.0 simulator.') unless runtime
+  runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-27-0'
+  available = devices.flat_map { |identifier, entries| entries.map { |device| [identifier, device] } }
+  selected_devices = [simulator, secondary_simulator].compact.map do |id|
+    matches = available.select { |_identifier, device| device['udid'].to_s.upcase == id }
+    identifier, device = matches.first
+    unless matches.length == 1 && identifier == runtime && device['isAvailable'] == true &&
+           device['name'].to_s.start_with?('MetaShadowing Native Pre-push') && !device['name'].to_s.match?(/\bW2\b/i)
+      fail_push('configure a dedicated MetaShadowing Native Pre-push iOS 27.0 simulator for each selected device.')
+    end
+    device
+  end
+  if secondary_simulator
+    device_types = selected_devices.map { |device| device['deviceTypeIdentifier'] }
+    unless device_types.all? { |type| type.is_a?(String) && !type.empty? } && device_types.uniq.length == 1
+      fail_push('primary and secondary simulators must have the same device type.')
+    end
+  end
   common = capture!('git', 'rev-parse', '--path-format=absolute', '--git-common-dir').strip
   evidence = File.join(common, 'native-pre-push')
   FileUtils.mkdir_p(evidence, mode: 0o700)
@@ -119,7 +166,8 @@ begin
       fail_push('pushed commit lacks the required full-test contract; push blocked.')
     end
     identity = { 'contract_version' => NATIVE_FULL_CONTRACT_VERSION, 'commit' => oid, 'toolchain' => toolchain,
-                 'simulator' => simulator, 'runtime' => runtime }
+                 'simulator' => simulator, 'secondary_simulator' => secondary_simulator,
+                 'mode' => secondary_simulator ? 'two-simulator' : 'serial', 'runtime' => runtime }
     key = Digest::SHA256.hexdigest(JSON.generate(identity))
     cache = File.join(evidence, "pass-#{key}.json")
     if File.file?(cache) && JSON.parse(File.read(cache)) == identity
@@ -130,24 +178,29 @@ begin
     snapshot = File.realpath(Dir.mktmpdir('native-pre-push-snapshot-', '/tmp'))
     results = File.join(run, 'results')
     FileUtils.mkdir_p(results)
+    File.write(File.join(lock, 'owner'), "pid=#{Process.pid}\nsnapshot=#{snapshot}\nevidence=#{run}\n", mode: 'w', perm: 0o600)
     archive = File.join(run, 'snapshot.tar')
     capture!('git', 'archive', '--format=tar', "--output=#{archive}", oid, 'native-ios', 'assets')
     capture!('tar', '-xf', archive, '-C', snapshot)
     puts 'Native pre-push: running full tests for a pushed commit.'
+    verdict = nil
     success = File.open(File.join(run, 'runner.log'), 'w', 0o600) do |log|
       reader, writer = IO.pipe
       begin
         child_environment = ENV.keys.grep(/\AGIT_/).to_h { |name| [name, nil] }
         child_environment['TMPDIR'] = File.join(snapshot, '.tmp')
         FileUtils.mkdir_p(child_environment.fetch('TMPDIR'), mode: 0o700)
-        runner_pid = Process.spawn(child_environment, 'bash', 'native-ios/scripts/test-native-full.sh', '--simulator-id', simulator,
-                                   '--output-dir', results, chdir: snapshot, out: writer, err: writer, pgroup: true)
+        arguments = ['bash', 'native-ios/scripts/test-native-full.sh', '--simulator-id', simulator, '--output-dir', results]
+        arguments.concat(['--secondary-simulator-id', secondary_simulator]) if secondary_simulator
+        runner_pid = Process.spawn(child_environment, *arguments, chdir: snapshot, out: writer, err: writer, pgroup: true)
         writer.close
         reader.each_line do |line|
           log.write(line)
           public_line = line.chomp
-          if PROGRESS_LINES.include?(public_line) || public_line.match?(/\APASS: \d+ native test cases matched the selected inventory\.\z/)
+          if PROGRESS_LINES.include?(public_line)
             puts public_line
+          elsif public_line.match?(/\APASS: \d+ native test cases matched the selected inventory\.\z/)
+            verdict = public_line
           end
         end
         _pid, status = Process.wait2(runner_pid)
@@ -158,6 +211,7 @@ begin
         writer.close unless writer.closed?
       end
     end
+    fail_push('native lease remains active; push blocked.') if active_lease?(results)
     FileUtils.remove_entry(snapshot)
     snapshot = nil
     File.delete(archive)
@@ -165,6 +219,7 @@ begin
     temporary_pass = File.join(run, 'pass.json')
     File.write(temporary_pass, JSON.generate(identity), mode: 'w', perm: 0o600)
     File.rename(temporary_pass, cache)
+    puts verdict if verdict
     puts 'Native pre-push: full tests passed; evidence retained under Git common directory/native-pre-push.'
   end
 rescue StandardError
@@ -178,6 +233,11 @@ ensure
       cleanup_snapshot = false
       warn 'Native pre-push: cancellation could not drain native processes; repository lock retained for inspection.'
     end
+  end
+  if active_lease?(results)
+    owned_lock = nil
+    cleanup_snapshot = false
+    warn 'Native pre-push: active native lease; snapshot and repository lock retained for inspection.'
   end
   if snapshot && cleanup_snapshot && File.directory?(snapshot)
     begin
