@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+repo_root=$(git rev-parse --show-toplevel)
+exec ruby "$repo_root/native-ios/scripts/native-pre-push.rb"

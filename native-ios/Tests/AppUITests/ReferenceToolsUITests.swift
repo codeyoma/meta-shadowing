@@ -2,12 +2,58 @@ import UIKit
 import XCTest
 
 final class ReferenceToolsUITests: XCTestCase {
+    @MainActor func testSingleSentenceOpensDetailAndBackDismissesToPausedLearning() {
+        continueAfterFailure = false
+        let app = openFixture()
+        openSingleSentenceAnalysis(app)
+        app.buttons["analysis-token-0"].tap()
+        XCTAssertTrue(app.buttons["analysis-token-0"].isSelected)
+        app.navigationBars["문장 분석"].buttons["BackButton"].tap()
+        assertPausedWithoutCredit(app, unitCount: 2)
+    }
+    @MainActor func testSingleSentenceCloseDismissesToPausedLearning() {
+        continueAfterFailure = false
+        let app = openFixture()
+        openSingleSentenceAnalysis(app)
+        app.buttons["options-close"].tap()
+        assertPausedWithoutCredit(app, unitCount: 2)
+    }
+    @MainActor func testMultipleSentencesKeepListAndBackNavigationBeforeClose() {
+        continueAfterFailure = false
+        let app = openFixture(stage: 7)
+        app.buttons["문장 분석"].tap()
+        let first = app.buttons["analysis-sentence-1:0"]
+        let second = app.buttons["analysis-sentence-2:0"]
+        XCTAssertTrue(first.waitForExistence(timeout: 8))
+        XCTAssertTrue(second.exists)
+        XCTAssertFalse(app.scrollViews["analysis-detail-scroll"].exists)
+        first.tap()
+        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["문장 분석"].exists)
+        app.buttons["analysis-token-0"].tap()
+        XCTAssertTrue(app.buttons["analysis-token-0"].isSelected)
+        app.navigationBars["문장 분석"].buttons["BackButton"].tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertTrue(second.exists)
+        XCTAssertFalse(app.scrollViews["analysis-detail-scroll"].exists)
+        second.tap()
+        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Secret two"].exists)
+        XCTAssertFalse(app.buttons["analysis-token-0"].isSelected)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.45))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.45)))
+        XCTAssertTrue(first.waitForExistence(timeout: 5), "Native edge-back returns to the sentence list")
+        first.tap()
+        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["analysis-token-0"].isSelected)
+        XCTAssertEqual(app.buttons.matching(identifier: "options-close").count, 1)
+        app.buttons["options-close"].tap()
+        assertPausedWithoutCredit(app, unitCount: 1)
+    }
     @MainActor func testConnectedTokensAndDictionaryReadingOrder() {
         continueAfterFailure = false
         let app = openFixture()
-        app.buttons["문장 분석"].tap()
-        XCTAssertTrue(app.buttons["analysis-sentence-1:0"].waitForExistence(timeout: 8))
-        app.buttons["analysis-sentence-1:0"].tap()
+        openSingleSentenceAnalysis(app)
         let selected = app.buttons["analysis-token-0"], connected = app.buttons["analysis-token-1"]
         XCTAssertTrue(selected.waitForExistence(timeout: 5)); selected.tap()
         XCTAssertEqual(connected.value as? String, "선택한 단어와 직접 연결됨")
@@ -28,9 +74,7 @@ final class ReferenceToolsUITests: XCTestCase {
     @MainActor func testOverflowIndicatorPersistsAfterScrolling() {
         continueAfterFailure = false
         let app = openFixture(mode: "analysis-long")
-        app.buttons["문장 분석"].tap()
-        XCTAssertTrue(app.buttons["analysis-sentence-1:0"].waitForExistence(timeout: 8))
-        app.buttons["analysis-sentence-1:0"].tap()
+        openSingleSentenceAnalysis(app)
         let indicator = app.otherElements["analysis-scroll-position"]
         XCTAssertTrue(indicator.waitForExistence(timeout: 5))
         let before = indicator.value as? String
@@ -59,9 +103,7 @@ final class ReferenceToolsUITests: XCTestCase {
     @MainActor func testLongGraphAtLargestTextSizeReachesLastToken() {
         continueAfterFailure = false
         let app = openFixture(mode: "analysis-long", extra: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
-        app.buttons["문장 분석"].tap()
-        XCTAssertTrue(app.buttons["analysis-sentence-1:0"].waitForExistence(timeout: 8))
-        app.buttons["analysis-sentence-1:0"].tap()
+        openSingleSentenceAnalysis(app)
         let scroll = app.scrollViews["analysis-detail-scroll"]
         let graph = app.scrollViews["analysis-graph"]
         for _ in 0..<12 where !app.buttons["analysis-token-0"].isHittable {
@@ -91,7 +133,18 @@ final class ReferenceToolsUITests: XCTestCase {
         copy.tap()
         let copied = expectation(for: NSPredicate { _, _ in UIPasteboard.general.changeCount > changeCount },
                                  evaluatedWith: nil)
-        wait(for: [copied], timeout: 5)
+        let copyResult = XCTWaiter.wait(for: [copied], timeout: 5)
+        if copyResult != .completed {
+            let failureScreen = XCTAttachment(screenshot: app.screenshot())
+            failureScreen.name = "Largest-text copy failure"
+            failureScreen.lifetime = .keepAlways
+            add(failureScreen)
+            let hierarchy = XCTAttachment(string: "Pasteboard change count: \(changeCount) before, \(UIPasteboard.general.changeCount) after\n\(app.debugDescription)")
+            hierarchy.name = "Largest-text copy failure hierarchy"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
+        XCTAssertEqual(copyResult, .completed)
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "Reference graph at largest Dynamic Type"
         evidence.lifetime = .keepAlways
@@ -102,9 +155,7 @@ final class ReferenceToolsUITests: XCTestCase {
     @MainActor func testDictionaryClosesWithoutClosingAnalysisOrClearingSelection() {
         continueAfterFailure = false
         let app = openFixture()
-        app.buttons["문장 분석"].tap()
-        XCTAssertTrue(app.buttons["analysis-sentence-1:0"].waitForExistence(timeout: 8))
-        app.buttons["analysis-sentence-1:0"].tap()
+        openSingleSentenceAnalysis(app)
         let token = app.buttons["analysis-token-0"]
         XCTAssertTrue(token.waitForExistence(timeout: 5)); token.tap()
         let lookup = app.buttons["analysis-dictionary"]
@@ -133,10 +184,7 @@ final class ReferenceToolsUITests: XCTestCase {
     @MainActor func testAnalysisSelectionAndCopyDoNotEarnCredit() {
         continueAfterFailure = false
         let app = openFixture()
-        app.buttons["문장 분석"].tap()
-        let sentence = app.buttons["analysis-sentence-1:0"]
-        XCTAssertTrue(sentence.waitForExistence(timeout: 8))
-        sentence.tap()
+        openSingleSentenceAnalysis(app)
         let token = app.buttons["analysis-token-0"]
         XCTAssertTrue(token.waitForExistence(timeout: 5))
         token.tap()
@@ -149,7 +197,30 @@ final class ReferenceToolsUITests: XCTestCase {
         app.exitLearningThroughOptions()
         XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
-    @MainActor private func openFixture(mode: String = "analysis", extra: [String] = []) -> XCUIApplication {
+    @MainActor private func openSingleSentenceAnalysis(_ app: XCUIApplication) {
+        app.buttons["문장 분석"].tap()
+        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["analysis-sentence-1:0"].exists,
+                       "A single sentence opens directly without a redundant selection row")
+        XCTAssertTrue(app.navigationBars["문장 분석"].exists)
+        XCTAssertEqual(app.buttons.matching(identifier: "options-close").count, 1)
+    }
+    @MainActor private func assertPausedWithoutCredit(_ app: XCUIApplication, unitCount: Int) {
+        let main = app.buttons["player-main"]
+        XCTAssertTrue(app.buttons["options-close"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["options-exit"].exists, "Returning from analysis must dismiss the options sheet")
+        XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
+        let deadline = Date().addingTimeInterval(2)
+        let stillPaused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            Date() >= deadline && main.label == "학습 이어하기"
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [stillPaused], timeout: 3), .completed)
+        XCTAssertTrue(app.staticTexts["1/\(unitCount)"].exists, "Analysis must preserve the learning cursor")
+        XCTAssertEqual(app.descendants(matching: .any)["cycle-timeline"].label, "확인한 반복 0/3")
+        app.exitLearningThroughOptions()
+        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+    }
+    @MainActor private func openFixture(mode: String = "analysis", stage: Int = 1, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString, "--ui-test-product-fixture", mode] + extra
         app.launch()
@@ -158,8 +229,8 @@ final class ReferenceToolsUITests: XCTestCase {
         for _ in 0..<8 where !book.isHittable { app.swipeUp() }
         XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10))
         book.tap()
-        for _ in 0..<8 where !app.buttons["stage-1"].isHittable { app.swipeUp() }
-        app.buttons["stage-1"].tap()
+        for _ in 0..<16 where !app.buttons["stage-\(stage)"].isHittable { app.swipeUp() }
+        app.buttons["stage-\(stage)"].tap()
         XCTAssertTrue(app.buttons["문장 분석"].waitForExistence(timeout: 10))
         return app
     }

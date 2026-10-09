@@ -22,6 +22,9 @@ busy, then returns to stage progress after successful installation without
 automatically starting learning. A separate top-right ellipsis menu cancels active
 transfers or requests confirmed download-only removal. Bundled/uninstalled cards
 cannot be deleted. Download removal retains the card, checkpoints, XP and settings.
+Selecting an installed book keeps the bookshelf's normal appearance while the
+selection is saved; it does not briefly dim the entire library. Repeated taps are
+blocked while saving, and the Stages tab opens only after a successful commit.
 
 ## Current stage expansion — 2026-09-20
 
@@ -184,17 +187,24 @@ current profile, run, unit, stage access and installed package authorization.
 
 ## Sentence analysis — #84
 
-The analysis icon pauses/checkpoints and opens a sentence menu for the current
-learning unit. Each grammatical sentence opens a target-text/POS detail; Back
-returns to the menu and Close leaves learning paused. This reference interaction
+The analysis icon pauses/checkpoints and opens “문장 분석” for the current learning
+unit. Exactly one grammatical sentence opens its target-text/POS detail directly;
+Back dismisses the sheet to the paused learning screen. Multiple sentences retain
+the selection menu, and detail Back returns to that menu. List and detail use the
+same “문장 분석” title. Close leaves learning paused. This reference interaction
 never confirms practice, awards XP or changes the learning cursor.
 List-to-detail navigation uses the same native push/pop transition as learning
 options. The parent sheet retains one header, synchronized after button or native
 edge-swipe back navigation. Reduced Motion uses a fade instead of sliding.
 
-Read installed syntax offline through the native delivery boundary. Pinned bytes,
-schema/language, source identities, normalized source alignment, UTF16 offsets,
-token coverage and sentence-local dependency indices are verified before display.
+Read installed syntax offline through the native delivery boundary. Download,
+re-download and update installation verify all pinned bytes and hashes before
+publication. Learning checks publication evidence, access, profile and current
+session without repeating whole-package integrity checks. Requested files must
+still pass safe bounded reads and parsing; deletion or invalid publication evidence
+cannot grant access. Syntax schema/language, source identities, normalized source
+alignment, UTF16 offsets, token coverage and sentence-local dependency indices
+are verified before display.
 Use the analysis text for offsets rather than the manifest's whitespace layout.
 Absent, corrupt, incompatible or unauthorized analysis has a dismissible unavailable
 state. No network analysis service or inferred phrase spans are introduced.
@@ -203,7 +213,13 @@ Newly prepared internal free test packages may include pinned syntax metadata;
 existing immutable installations are not silently rewritten or re-fingerprinted.
 The synthetic development lab exercises the shared list/detail UI without granting
 access to any real package. The #85 detail shows a horizontally scrollable token
-graph. All non-root relationships appear as quadratic curves before selection.
+graph. All non-root relationships appear as curves on the first measured layout,
+without requiring a token selection. All incoming and outgoing connections share
+one set of distinct, evenly spaced points across each word; a departure never
+reuses an arrival's position. Points follow the opposite words' horizontal order
+and remain stable when selection changes. Lowercase source relation
+labels sit above their curves; measured labels use separate positions when nested
+curves would otherwise place them on top of each other.
 Transparent word-length controls show no visible ordinal or card border.
 The direction explanation stays above the graph; redundant scrolling and self-arrow
 instructions are omitted. Each word's POS appears in Korean with a lowercase English
@@ -211,8 +227,12 @@ name beneath it. A non-interactive horizontal position indicator remains visible
 while the graph overflows, including when idle, and hides when all content fits.
 Selecting a token uses the primary accent for that word, link color for its direct
 head/dependents, and dims other curves to gray; selecting
-it again restores the overview. Display arrows run from dependent to head, with
-source relation labels and Korean explanations below the selected word. The source
+it again restores the overview. Display arrows run from the dependent (from) to
+the head (to), with a small filled triangular arrowhead only at the destination and
+source relation labels and Korean explanations below the selected word. Each
+arrow is rendered as one filled outline: its shaft meets the triangle at the base,
+without a full-width stroke continuing underneath the taper, including when selected.
+Inactive arrows use one consistent secondary color across the complete outline. The source
 head/dependent data stays unchanged. Labels describe the starting word's role;
 subject, object and auxiliary relations are not described as modifiers. Token
 indices preserve repeated-word identity. ROOT has no self-arrow; unknown labels
@@ -377,6 +397,17 @@ remain in the native media contract linked above.
   marks at the 0.25×/1×/2×/3× positions instead of scale labels. The settings heading sits
   outside the card. The settings preference and paused-session rate keep their separate
   persistence scopes; sharing the layout must not overwrite either implicitly.
+- Selecting a stage keeps the current Stages screen visible while its lesson is
+  prepared. Only a ready, authorized lesson presents the player; no intermediate
+  preparing screen is shown. Repeated taps share one preparation. Tab/book changes,
+  backgrounding and profile changes cancel unpresented work, including a ready
+  route awaiting appearance. Late results or old dismissal callbacks cannot open
+  or cancel a replacement lesson. Failure stays on Stages with an actionable error.
+  Prepared runtimes start with media/monitoring interaction gated; appearance
+  releases that gate once, without consuming automatic wired-monitoring intent.
+  Remote commands, Now Playing metadata and their audio-session lease also begin
+  only after appearance. Cancelling an unpresented lesson leaves other playback
+  ownership untouched.
 - Entering the player from a stage (new or restored) and each newly selected
   sentence wait one second before starting audio. Completed checks stay filled.
   Interrupted listening resumes at its saved audio position; an already-ended,
@@ -428,8 +459,12 @@ remain in the native media contract linked above.
   save keeps an actionable retry visible on every page. Back returns to the menu.
   A directly opened speed editor returns to the menu without dismissing the sheet.
   The player options button sits at the upper left, replacing the separate player
-  close button. The options list retains the stage exit during loading or errors;
-  opening it while loading leaves the eventual lesson paused, even if dismissed
+  close button. The options list retains the stage exit during loading or errors.
+  Stage exit stops and retires learning before returning, while retaining the
+  outgoing player and options presentation until dismissal. It must not replace
+  that content with the initial preparing screen. Dismissal then releases the
+  retained display; repeated exit taps cannot start another exit operation.
+  Opening it while loading leaves the eventual lesson paused, even if dismissed
   before loading finishes. Failed saves still block lesson edits until retried.
   Option subtitles reflect active rate/group size, the current silent-speed level,
   saved presets/fonts, and the effective video-forced list layout.

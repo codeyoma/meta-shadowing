@@ -35,7 +35,7 @@ actor PackageDownload {
   func status(_ package: DeliveryPackage) throws -> DeliveryStatus {
     if removing { return DeliveryStatus(phase: "idle", progress: 0) }
     if running != nil { return state }
-    if try installation.isInstalled(package) { return DeliveryStatus(phase: "ready", progress: 1) }
+    if try installation.isPublished(package) { return DeliveryStatus(phase: "ready", progress: 1) }
     if transport == nil { return DeliveryStatus(phase: "unavailable", progress: 0) }
     if ["failed", "cancelled"].contains(state.phase) { return state }
     return DeliveryStatus(phase: "idle", progress: 0)
@@ -101,7 +101,7 @@ actor PackageDownload {
   func storage(_ package: DeliveryPackage) throws -> MaterialStorage {
     try installation.validateMaterialKey(package.key)
     return try MaterialStorage(bytes: installation.materialBytes(package.key),
-      installed: !removing && installation.isInstalled(package), busy: running != nil || removing)
+      installed: !removing && installation.isPublished(package), busy: running != nil || removing)
   }
 
   func remove(_ package: DeliveryPackage) async throws -> Bool {

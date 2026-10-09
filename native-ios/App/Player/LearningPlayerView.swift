@@ -3,24 +3,20 @@ import LearningDomain
 import LearningMedia
 import SwiftUI
 
-struct LearningRoute: Identifiable {
-    let id = UUID()
-    let packageKey: String
-    let stage: Int
-}
 struct LearningPlayerView: View {
-    let route: LearningRoute
+    let route: LearningEntry.Route
     let model: ProductModel
     let profiles: ProductProfileOwner?
     @State private var boundaryToken: UUID?
-    @State private var flow: LearningFlow
+    private let flow: LearningFlow
+    @State private var exiting = false
     // Retain the last action frame for the final receipt, after completion removes the footer.
     @State private var rewardActionFrame: CGRect = .zero
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    init(route: LearningRoute, model: ProductModel, profiles: ProductProfileOwner? = nil) {
+    init(route: LearningEntry.Route, model: ProductModel, profiles: ProductProfileOwner? = nil) {
         self.route = route; self.model = model; self.profiles = profiles
-        flow = LearningFlow(workspace: model.workspace)
+        flow = route.flow
     }
     var body: some View {
         NavigationStack {
@@ -58,6 +54,7 @@ struct LearningPlayerView: View {
                                     LessonVideoSurface(transport: video).aspectRatio(16 / 9, contentMode: .fit)
                                         .clipShape(.rect(cornerRadius: 16)).accessibilityLabel("학습 영상")
                                         .accessibilityIdentifier("lesson-video")
+                                        .playerLayoutFrame("lesson-video")
                                         .padding([.horizontal, .top])
                                 }
                             }
@@ -97,26 +94,29 @@ struct LearningPlayerView: View {
         .onChange(of: flow.playerDictionary.busy) { _, _ in flow.dictionarySettled() }
         .sheet(item: Binding(get: { flow.options }, set: { if $0 == nil { flow.dismissOptions() } })) { option in
             LearningOptionsView(flow: flow, model: model, initial: option, exit: exit)
+                .allowsHitTesting(!exiting)
         }
         .task { [flow] in
             boundaryToken = profiles?.registerBoundary { [weak flow] in try await flow?.prepareServiceBoundary() }
-            await flow.open(packageKey: route.packageKey, stage: route.stage)
+            await flow.startPresentedLesson()
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { flow.suspend() } }
         .onChange(of: flow.runtime?.controls) { _, _ in flow.validateReference() }
-        .onChange(of: flow.closedByService) { if flow.closedByService { dismiss() } }
+        .onChange(of: flow.closedByService, initial: true) { if flow.closedByService { dismiss() } }
         .onDisappear {
             if let boundaryToken { profiles?.unregisterBoundary(boundaryToken) }
             Task { await flow.close() }
         }
     }
     private func exit() async {
-        await flow.close()
+        guard !exiting else { return }
+        exiting = true
+        await flow.close(retainingPresentation: true)
         dismiss()
         await model.activate()
     }
 }
-private struct PlayerTitleView: View {
+struct PlayerTitleView: View {
     let title: String
     let session: LearningSession?
     let openOptions: () -> Void
@@ -126,6 +126,7 @@ private struct PlayerTitleView: View {
         VStack(spacing: 2) {
             Text(title).font(.headline).lineLimit(1)
                 .accessibilityIdentifier("player-book-title")
+                .playerLayoutFrame("player-book-title")
                 .accessibilityShowsLargeContentViewer()
                 .padding(.horizontal, optionsSize + optionsSpacing)
                 .frame(maxWidth: .infinity)
@@ -134,9 +135,11 @@ private struct PlayerTitleView: View {
                     ProgressView(value: Double(session.units.filter { $0.confirmed == $0.planned }.count), total: Double(session.unitCount))
                         .tint(BrandStyle.yellow)
                         .accessibilityIdentifier("player-progress")
+                        .playerLayoutFrame("player-progress")
                     ZStack(alignment: .trailing) {
                         Text("\(session.unitCount)/\(session.unitCount)").hidden().accessibilityHidden(true)
                         Text("\(session.unit + 1)/\(session.unitCount)")
+                            .playerLayoutFrame("player-counter")
                     }.monospacedDigit().font(.caption2.bold()).fixedSize()
                 }.padding(.leading, optionsSize + optionsSpacing)
             }
@@ -150,6 +153,7 @@ private struct PlayerTitleView: View {
                     .glassEffect(.regular.interactive(), in: .circle)
             }.buttonStyle(.plain).foregroundStyle(.primary)
                 .accessibilityLabel("학습 옵션").accessibilityIdentifier("player-options")
+                .playerLayoutFrame("player-options")
                 .accessibilityShowsLargeContentViewer { Text("학습 옵션") }
         }
         .padding(.horizontal).padding(.vertical, 6)
@@ -167,6 +171,7 @@ private struct PlayerHeaderView: View {
                         Text("Lv \((session.plan.scope.stage + 1) / 2)")
                             .lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
                     }.accessibilityShowsLargeContentViewer()
+                        .playerLayoutFrame("player-level")
                     Spacer()
                     Button {
                         Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate) }
@@ -174,11 +179,13 @@ private struct PlayerHeaderView: View {
                         Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
                             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
                     }.accessibilityLabel("학습 속도").accessibilityShowsLargeContentViewer()
+                        .playerLayoutFrame("player-speed")
                     Spacer()
                     Button { Task { await flow.presentOptions(.analysis) } } label: {
                         Image(systemName: "text.magnifyingglass").frame(minWidth: 32)
                     }
                         .accessibilityLabel("문장 분석").accessibilityShowsLargeContentViewer()
+                        .playerLayoutFrame("player-analysis")
                 }
                 .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
             }

@@ -26,13 +26,22 @@ struct PackageInstallation: Sendable {
   var ownedKeys: Set<String>? = nil
   var validateContent: @Sendable (URL, DeliveryPackage) throws -> Void = { _, _ in }
 
+  /// Publication already verified every byte. Ordinary reads check only its durable
+  /// evidence; explicit download/re-download keeps the full verification path below.
+  func isPublished(_ package: DeliveryPackage) throws -> Bool {
+    try validate(package)
+    guard try hasPublishedDirectory(package.key), try hasPublicationMarker(package.key) else { return false }
+    do { return try hasPinnedIdentity(package) }
+    catch DeliveryError.incompatibleVersion { return false }
+  }
+
   func isInstalled(_ package: DeliveryPackage) throws -> Bool {
     try validate(package)
     try validateOwnedTree(package.key)
     do { try checkIdentity(package) }
     catch DeliveryError.incompatibleVersion { return false }
     let directory = root.appendingPathComponent(package.key)
-    guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("ready").path) else { return false }
+    guard try hasPublicationMarker(package.key) else { return false }
     let verified = package.files.allSatisfy { entry in
       guard let data = try? readPinnedFile(directory.appendingPathComponent(entry.file), entry) else { return false }
       return matches(data, entry)

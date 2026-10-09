@@ -14,13 +14,24 @@ struct LaunchGateView: View {
     @State private var wordmark: CGImage?
     @State private var still: CGImage?
 
+    init(model: ProductModel, profiles: ProductProfileOwner? = nil,
+         services: ProductServicesModel? = nil, playback: LaunchPlayback = LaunchPlayback()) {
+        self.model = model
+        self.profiles = profiles
+        self.services = services
+        // The gate owns this presentation lifetime; injection controls its clock in tests.
+        _playback = State(initialValue: playback)
+    }
+
     private var isShowing: Bool {
         if playback.phase != .finished { return true }
         return !model.launchReady
     }
     var body: some View {
         ZStack {
-            RootView(model: model, profiles: profiles, services: services).allowsHitTesting(!isShowing).accessibilityHidden(isShowing)
+            // The opaque canvas owns the touch shield. Keep content hit testing stable
+            // so removing the artwork does not require a second interaction-state handoff.
+            RootView(model: model, profiles: profiles, services: services).accessibilityHidden(isShowing)
             if isShowing {
                 LaunchArtworkView(artwork: artwork, wordmark: wordmark, still: still, playback: playback)
                     .ignoresSafeArea()

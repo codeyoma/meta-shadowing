@@ -92,6 +92,7 @@ private struct LearningLineView: View {
         }
         .accessibilityHidden(line.accessibleText.isEmpty)
         .accessibilityIdentifier("learning-line-\(line.id)")
+        .playerLayoutFrame("learning-line-\(line.id)")
         .onAppear { active = true }
         .onDisappear { active = false }
         .onChange(of: lookupText) { _, _ in flow?.playerDictionary.cancel() }

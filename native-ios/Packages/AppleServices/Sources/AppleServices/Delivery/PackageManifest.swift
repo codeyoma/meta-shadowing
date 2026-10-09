@@ -77,9 +77,13 @@ public struct PackageManifest: Sendable {
 
     static func read(root: URL, descriptor: DeliveryPackage) throws -> Self {
         let file = root.appendingPathComponent("manifest.json")
-        guard let size = try file.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]).fileSize,
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = (attributes[.size] as? NSNumber)?.intValue,
               (1...20_000_000).contains(size) else { throw DeliveryError.invalidPackage }
-        return try decode(Data(contentsOf: file), descriptor: descriptor)
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        return try decode(handle.read(upToCount: 20_000_001) ?? Data(), descriptor: descriptor)
     }
 }
 

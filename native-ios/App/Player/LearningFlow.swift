@@ -30,6 +30,8 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     @ObservationIgnored private var pending: Task<OpenedLesson, any Error>?
     @ObservationIgnored private var teardown: Task<Void, Never>?
     @ObservationIgnored private var openingPaused = false
+    @ObservationIgnored private var closing = false
+    @ObservationIgnored private var awaitingPresentation = false
     init(workspace: ProductWorkspace) {
         self.workspace = workspace
         let analysis = DictionaryPresenter(), player = DictionaryPresenter()
@@ -38,11 +40,13 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         playerDictionary = DictionaryRequestOwner(presenter: player)
     }
 
-    func open(packageKey: String, stage: Int) async {
+    func open(packageKey: String, stage: Int, startWhenPresented: Bool = false) async {
         generation += 1
         let request = generation
         await releaseResources()
         guard request == generation, !Task.isCancelled else { return }
+        closing = false
+        awaitingPresentation = false
         loading = true; failed = false; accessInvalidated = false; closedByService = false
         let task = Task { [workspace] in
             try await workspace.openLesson(packageKey: packageKey, stage: stage,
@@ -75,7 +79,8 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
             let workspace = workspace
             let runtime = NativeLearningRuntime(controller: opened.controller, initial: opened.initial, catalog: catalog,
                 authorize: { await workspace.permitsPractice($0) },
-                makeTransport: { _ in if let video { video } else { AudioQueueTransport() } })
+                makeTransport: { _ in if let video { video } else { AudioQueueTransport() } },
+                initiallyPresented: !startWhenPresented)
             self.runtime = runtime
             accessChanges = Task { [weak self, workspace] in
                 let changes = await workspace.referenceChanges(packageKey: packageKey)
@@ -90,7 +95,11 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
             }
             title = opened.materials.book.title
             pending = nil; loading = false
-            if openingPaused || options != nil {
+            if startWhenPresented {
+                awaitingPresentation = true
+                runtime.setMenuOpen(true)
+                _ = await runtime.coordinator.perform(.pause)
+            } else if openingPaused || options != nil {
                 runtime.setMenuOpen(options != nil)
                 _ = await runtime.coordinator.perform(.pause)
             } else {
@@ -101,6 +110,14 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
             pending = nil; loading = false; failed = true
         }
     }
+    func startPresentedLesson() async {
+        guard awaitingPresentation, !closing, !accessInvalidated, let runtime else { return }
+        awaitingPresentation = false
+        runtime.present()
+        runtime.setMenuOpen(options != nil)
+        _ = await runtime.coordinator.perform(openingPaused || options != nil ? .pause : .stageEntry)
+    }
+
     func presentOptions(_ route: LearningOptionRoute) async {
         guard options == nil else { return }
         guard let runtime else {
@@ -128,17 +145,23 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         runtime?.setMenuOpen(false)
     }
     func suspend() {
+        if awaitingPresentation { openingPaused = true }
         playerDictionary.cancel()
         invalidateAnalysis()
         runtime?.suspend()
         if loading { generation += 1; pending?.cancel(); loading = false; failed = true }
     }
-    func close() async {
-        generation += 1; loading = false; options = nil; openingPaused = false
-        await releaseResources()
+    func close(retainingPresentation: Bool = false) async {
+        closing = true
+        awaitingPresentation = false
+        generation += 1; loading = false; openingPaused = false
+        if !retainingPresentation { options = nil }
+        await releaseResources(retainingPresentation: retainingPresentation)
     }
     func prepareServiceBoundary() async throws {
-        if let runtime {
+        // Retained outgoing content is not an active learning owner. close()
+        // below waits for its existing teardown before the profile can change.
+        if let runtime, !closing {
             let paused = await runtime.coordinator.perform(.pause)
             guard paused.controller.active, !paused.controller.saveFailed, paused.controller.paused else {
                 throw ProductError.busy
@@ -147,13 +170,16 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         await close()
         closedByService = true
     }
-    private func releaseResources() async {
+    private func releaseResources(retainingPresentation: Bool = false) async {
         playerDictionary.cancel()
         accessChanges?.cancel(); accessChanges = nil
         invalidateAnalysis()
         let previous = teardown, opening = pending, active = runtime
         opening?.cancel(); active?.suspend()
-        pending = nil; runtime = nil; video = nil
+        pending = nil
+        // Closing the resources must not replace an outgoing player with the
+        // initial loading view. onDisappear releases this presentation afterward.
+        if !retainingPresentation { runtime = nil; video = nil }
         let task = Task {
             await previous?.value
             // The workspace revokes a writer if its open is cancelled. A catalog may

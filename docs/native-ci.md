@@ -5,14 +5,94 @@ into `dev`/`main`, pushes to those branches and manual dispatch. PR checkout use
 GitHub's merge candidate, not only the head. The owner approved replacing the
 Expo reference CI lane; the reference source remains available for migration.
 
+## Fast remote checks and local full regression
+
+Owner update, 2026-10-09: ordinary pull requests and `dev`/`main` pushes run
+the `light` profile, with no simulator execution. Long checks run in the local
+`pre-push` hook, where a failure blocks the push. Manual `workflow_dispatch`
+defaults to `full` and also accepts `light`; there is no automatic scheduled full run.
+
+Every remote run retains all six unfiltered host Swift package suites (currently
+375 cases), workflow/tooling contracts, and an unsigned generic Debug app build
+with product inspection. The Debug build compiles the iOS app without booting a
+simulator; it is not a configuration-only or empty build check.
+
+| Execution boundary | Checks |
+| --- | --- |
+| Automatic GitHub CI | Six host Swift package suites, tooling/configuration contracts, one generic Debug build and Debug product inspection |
+| Local pre-push | Complete native simulator suite (currently 183 cases), Debug product inspection, Release build and product/runtime inspection, fictional downloader build |
+| Explicit manual full CI | All ordinary checks plus complete shared test-product build, four simulator shards, Release/product/runtime inspection and fictional downloader build |
+
+Automatic runs do not build or transfer test products, boot/install/launch a
+simulator, enumerate native tests, or execute UI/native-integration tests. The
+entire `NativeMediaIntegrationTests` target also moves to local/manual full
+regression: its iOS-only audio, lifecycle, haptics and rendering checks cannot be
+replaced by host package tests. No test or assertion is deleted. Ordinary remote
+success is not evidence that the 183 native simulator cases ran.
+
+The previous eight-UI-test remote profile still incurred long simulator startup
+and automation work. The owner explicitly chose a simulator-free automatic gate
+instead. This extends the reduced-PR/full-regression split discussed in
+[the primary-source research](research/2026-10-08-native-ci-test-strategy.md)
+and [Apple's testing guidance](https://developer.apple.com/videos/play/wwdc2022/110361/).
+The exact simulator-free boundary is this project's choice, not a claim that
+Apple requires it. Long work moves locally; it is not eliminated, and no particular
+hosted duration is guaranteed.
+
+### Install the local hook
+
+Each clone must opt in once. Create a dedicated iOS 27 simulator named
+`MetaShadowing Native Pre-push iOS 27`, then pass its ID to:
+
+```sh
+bash native-ios/scripts/install-native-git-hooks.sh --simulator-id <SIMULATOR_ID>
+```
+
+The installer configures only repository-local `core.hooksPath` and
+`native.prePushSimulator`. It refuses a conflicting hook path or an existing
+active default hook instead of overwriting it. The runner accepts only the
+explicitly configured, dedicated Pre-push simulator on iOS 27. It may boot that
+device; it never creates, deletes, erases or selects a physical/reference device.
+The interactive W2 preview is not a pre-push destination.
+
+The hook reads Git's actual pushed object IDs, not just `HEAD`. It archives each
+unique pushed commit into an isolated snapshot and runs the complete native
+scheme and the Release/downloader/product guards from that snapshot. The Debug
+inspection reuses the compiled test app instead of building it again. Dirty/untracked working files and private
+`Local.xcconfig` are not test inputs. Ref deletions do not need a test run. A
+missing tool, simulator, test runner, result or successful test blocks the push.
+Concurrent local full runs are rejected, not run against the same simulator.
+
+Successful results may be reused only for the exact commit, Xcode/XcodeGen
+versions and configured simulator/runtime. Failed or incomplete results are never
+cached; another commit requires another full run. Evidence stays under the local
+Git directory, outside tracked source. A same-commit retry after a network failure
+does not repeat a completed test run. The archived runner must declare the current
+full-gate contract; old runner versions and weaker cached passes cannot satisfy
+the expanded Release/downloader checks.
+
+Git hooks are developer-side checks, not a trusted remote enforcement boundary:
+they are not automatically installed by cloning and Git can bypass them. A local
+commit pass is also not proof of GitHub's merge-candidate revision. Light remote
+checks and the existing human release approval therefore remain mandatory.
+Before a release, the reviewer must explicitly inspect full-regression evidence
+for the intended revision or request manual full CI. No remote ruleset is changed.
+
 ## Required checks
 
 | Required check | Evidence |
 | --- | --- |
 | `ci-branch-policy` | Allowed internal feature/release routes and policy regression tests |
-| `ci-quality` | Swift Testing suites in `LearningDomain`, `LearningPersistence`, `AppFoundation`, `LearningMedia`, `LearningReference` and `AppleServices` |
-| `ci-native-tests` | Debug XCUITest plus actual iOS media/lifecycle/feedback and free-package recovery adapters |
-| `ci-ios-build` | Clean-checkout configuration test, standalone Debug/Release builds and native-product inspection |
+| `ci-quality` | Workflow isolation, runner, hook and result-validation contracts |
+| `ci-native-tests` | All six unfiltered host Swift package suites; in manual full mode, also the complete native simulator shards |
+| `ci-ios-build` | Clean-checkout configuration and one real unsigned generic Debug app build/product inspection; manual full also verifies Release and the downloader |
+
+Host package tests cover `LearningDomain`, `LearningPersistence`, `AppFoundation`,
+`LearningMedia`, `LearningReference` and `AppleServices` on macOS. Each package
+must exit successfully and report exactly one positive Swift Testing summary,
+without skipped tests or suites. XCTest's zero-test compatibility wrapper is not
+the Swift Testing result. Missing, zero, duplicate or failed summaries reject the
+run; the total is reported from actual results rather than freezing the current 375.
 
 The generic branch-policy script still uses Node 24 without npm installation.
 It is repository governance, not an Expo application check. Hosted checks no
@@ -23,7 +103,7 @@ export Expo bundles, run Expo prebuild/CocoaPods or test reference native module
 
 Swift jobs use the standard arm64 `xcode-27` GitHub-hosted runner (currently a
 public preview), with `/Applications/Xcode_27.0.app/Contents/Developer` selected
-explicitly. UI tests require the iOS 27.0 runtime and fail if it is unavailable;
+explicitly. Local/manual UI tests require the iOS 27.0 runtime and fail if it is unavailable;
 they never fall back to an older simulator. The app still targets iOS 26.0+.
 See the [official runner inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md).
 The narrow actionlint label extension recognizes this official preview label;
@@ -38,36 +118,62 @@ identity, compiler, deployment and signing settings for both configurations.
 It also verifies that both complete non-commerce test targets occur exactly once, with no
 selected or skipped tests in the scheme and serial execution for every target.
 
-CI partitions the complete scheme into four disjoint jobs:
+Manual full CI partitions the complete scheme into four disjoint jobs:
 
 | Shard | Selection |
 | --- | --- |
-| `player` | `-only-testing:NativeFoundationUITests/PlayerUITests`, excluding the named options methods |
-| `player-options` | `-only-testing` for the thirteen methods in `CI_PLAYER_OPTIONS_TEST_METHODS` |
-| `product` | `-only-testing` for `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests` in `NativeFoundationUITests` |
-| `remaining` | `-skip-testing` for those four UI classes; every other test remains included |
+| `player` | `PlayerUITests`, excluding the named options methods, plus `OfflineAcceptanceUITests` |
+| `player-options` | Twelve methods in `CI_PLAYER_OPTIONS_TEST_METHODS` plus three settings methods in `CI_OPTIONS_EXTRA_TESTS` |
+| `product` | `ProductUITests`, `AppleServicesUITests` and `VoiceOverSemanticsUITests`, excluding those three settings methods |
+| `remaining` | `-skip-testing` for those five UI classes; every other test remains included |
 
-The `product` shard includes VoiceOver audits and label checks on every PR.
+The full `product` shard includes all VoiceOver audits and label checks.
 Inclusion and exclusion flags derive from the same class and method identifiers in the workflow.
 The `remaining` shard includes all media integration tests and automatically receives
 new UI classes or test targets. New player methods automatically enter `player` unless
 explicitly moved to `player-options`; tests in other named classes follow that class.
-Each job uses its own standard hosted runner, builds its own test products and
-passes `-parallel-testing-enabled NO`, retaining one simulator and the existing
-Swift Testing suite isolation. This repeats setup to avoid simulator contention.
+Each test job uses its own standard hosted runner and passes
+`-parallel-testing-enabled NO`, retaining one simulator and existing Swift Testing
+suite isolation. A separate `ci-native-build` job builds the complete graph once,
+using a generic arm64 simulator destination without booting a simulator. It exports
+Xcode's portable `.xctestproducts` package. Four test runners download that exact
+artifact by its producer output ID, validate it, then boot their iOS 27 simulator.
+They do not generate a project or compile again. Test runners start only after the
+shared build; quality and product inspection may still overlap with them if those
+jobs have not finished. This removes duplicated compilation, not a concurrency cap.
 There are no paid larger runners or external providers.
+
+The run-scoped archive preserves executable permissions and portable internal
+links. Metadata pins the checkout revision, exact Xcode version and payload
+SHA-256. Missing, damaged or incompatible artifacts fail before installation,
+without a cache fallback. Artifact actions are SHA-pinned and artifacts expire
+after one day; an expired artifact requires a complete workflow rerun. The output
+ID permits failed-job reruns to use their successful producer, even across attempt
+numbers. Only fictional-CI products are uploaded, never local profiles or raw logs.
+
+The shared-build, artifact-transfer and simulator jobs are explicit manual-full
+jobs only. `ci-test-profile.mjs` validates the selected profile; unknown events,
+branches or manual scopes fail. Ordinary PR/push and manual-light runs never
+activate these jobs. Behavioral workflow regressions exercise those event paths
+and reject accidental simulator commands, test-product builds or heavy artifacts.
 
 `test-ci-test-shards.sh` executes the actual workflow test command against a
 controlled process boundary. It verifies disjoint class ownership, every current player
-method, valid options method names, coverage of future classes/targets, serial execution,
-test failure propagation, unknown-shard
-rejection and aggregate gate failures. It does not substitute for hosted XCTest.
+method, every current UI method, valid moved method names, coverage of future classes/targets, serial execution,
+test failure propagation, complete enumeration,
+unknown-shard rejection and aggregate gate failures. It does not substitute for hosted XCTest.
 
 The matrix uses `fail-fast: false` so a failure in one shard does not suppress the
 other shard's results. Each result summary must be nonempty, fully passing and
-contain zero failed or skipped tests. The required `ci-native-tests` job runs
-with `always()` and accepts only an aggregate shard result of `success`; failures,
-cancellations and skipped shards cannot make the required check green. Release
+contain zero failed or skipped tests. The shared result validator compares actual
+executed identifiers with the complete compiled inventory filtered by the saved
+selection. Unknown selectors, missing/extra/duplicate cases, invalid enumeration,
+and inconsistent result counts fail. Empty selection means the entire inventory
+for the local full runner, never zero tests. The required `ci-native-tests` job runs
+with `always()` and always requires profile and host-package `success`. Light mode
+requires the manual-only producer and simulator jobs to be deliberately skipped;
+full mode requires both to succeed. Unknown scopes, missing results, cancellations,
+or failed applicable jobs cannot make the required check green. Release
 approval still depends on this exact required check name.
 
 Test-product build and execution override signing with `CODE_SIGNING_ALLOWED=YES
@@ -75,13 +181,15 @@ CODE_SIGN_IDENTITY=-`. This is an ad-hoc simulator signature, not account-based 
 The free product has no purchase fixture, StoreKit setup scheme or sandbox login.
 The normal scheme includes `NativeFoundationUITests` and `NativeMediaIntegrationTests`;
 the obsolete purchase-only integration target is removed. All non-commerce tests,
-including installation/publication failures, remain covered. Unsigned product
+including installation/publication failures, remain in full regression. Unsigned product
 inspection stays unchanged. Main test-product compilation has a fifteen-minute
 budget. Its build step streams only
 allowlisted phase names and verdicts, never compiler arguments, paths or raw
 diagnostic payloads. Pipeline failure propagation remains enabled, and a regression
 executes the workflow command to verify progress privacy and compiler exit codes.
-The complete main scheme owns the final products used by `test-without-building`.
+The complete main scheme owns the final products used by `test-without-building
+-testProductsPath`. Preparation and SDK-module phases are also allowlisted, and
+the build reports elapsed seconds so time before ordinary Swift compilation is visible.
 
 ## Historical purchase-fixture investigations
 
@@ -131,12 +239,19 @@ The build job also validates the service configuration mapper and builds a ficti
 unsigned ExtensionKit downloader without launching it or contacting Apple services.
 
 UI tests run in Debug because the retry test uses a Debug-only failure injection.
-Before starting XCUITest, a separate five-minute preparation step waits for
-`simctl bootstatus -b` to report that the required iOS 27 Simulator has finished
-booting. A readiness failure fails the job; it does not skip or retry failed tests.
-The job then builds test products and performs a single app install/launch preflight
-in a separate UUID-scoped product profile before `test-without-building`. This checks
+Before starting XCUITest, one eight-minute readiness step waits for
+`simctl bootstatus -b`, installs the validated app and launches it once in a
+UUID-scoped product profile before `test-without-building`. This retains the
+previous total preparation budget of five plus three minutes; the stages share
+that deadline rather than enforcing an arbitrary installation/launch split.
+No test timeout or retry policy changes. A readiness,
+installation or launch failure fails the job. This checks
 the app-launch service as well as simulator boot, and fails if launch cannot succeed.
+`ci-simulator-resources.sh` is an optional diagnostic utility, not a regular CI
+step. It emits allowlisted numeric CPU, memory, load, swap and process counters
+without raw process commands, paths, device identities or command errors. Full
+process enumeration itself took about 100 seconds on one congested hosted runner,
+so those temporary probes were removed after collecting evidence.
 Each XCTest still starts a clean app process: [XCUIApplication.launch](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/launch())
 terminates any running preflight instance. No test results are manufactured by the preflight.
 The synthetic confirmation test waits for the button to become enabled and
@@ -146,6 +261,11 @@ does not consume its explicit retry action. Test assertions include failure mess
 so the result summary distinguishes loading, launch-gate and retry failures.
 The retry checks explicitly wait for the real launch overlay to disappear, cover
 the largest Dynamic Type setting, and include button/window geometry on a hit-test failure.
+The full-window launch canvas owns touch interception while artwork is visible;
+underlying SwiftUI content keeps stable hit testing, with accessibility hidden until
+launch finishes. A native-window test verifies interception and removal at normal
+and maximum text sizes. This protects the launch boundary but does not reproduce
+or establish the cause of the intermittent hosted retry-button failure.
 Verbose simulator diagnostic collection is disabled because it can stall for ten
 minutes after a failure. XCTest assertions, result bundles, failure summaries and
 nonzero test exit codes remain enabled; no failed test is skipped or retried by CI.
@@ -159,8 +279,9 @@ no attached drawer, and no premature cancellation completion. Timeout failures n
 dictionary cleanup, include captured assertion values, and stop the test. Media deadlines are unchanged.
 CI reports every assertion message for failed test cases, not only the first message
 from Xcode's summary. Device metadata and source locations remain excluded.
-Each native shard has a 40-minute budget, including cold simulator setup and test-product
-compilation; the test step itself remains bounded at 30 minutes. A previous 30-minute
+Each native shard retains a 40-minute budget, including download and simulator setup;
+the test step remains bounded at 30 minutes. The shared build has a 20-minute job
+budget and retains the 15-minute compilation limit. A previous 30-minute
 job limit cancelled the expanded suite before Xcode could finalize its result bundle.
 Only test-case lifecycle lines and the final test verdict are streamed from Xcode's
 verbose output; shell `pipefail` preserves test failures through that filter. The result
@@ -198,6 +319,92 @@ summaries expose test failures without exporting complete simulator logs or
 result bundles. Local reproduction commands are in [the native guide](../native-ios/README.md).
 
 ## CI timing baseline
+
+### October 8 rendered-view test restructuring
+
+The preceding shared-product run `37777490151` passed in 33m 02s. Its player job
+spent 25m 08s executing nineteen UI test methods; their case durations summed to
+23m 57s. Five layout-focused methods accounted for 6m 43s of those case durations.
+Those five methods now run their geometry/pixel assertions in the existing native
+integration target, without repeatedly launching and navigating the app.
+
+| Former UI method | Rendering coverage and retained interaction coverage |
+| --- | --- |
+| `testPlayerHeaderGroupsTitleAndProgressBesideLeadingOptions` | Actual `LearningPlayerView`, short/long title and normal/maximum text matrices; title centering, progress ordering/bounds, counter trailing alignment and zero credit. The separate-exit absence check remains in the real-audio UI journey; options opening/exiting remains covered by the options UI tests. |
+| `testShortLearningContentCentersBetweenFixedControls` | Actual player with audio/video and both text sizes; original/translation union measured between the real safe-area bars. Actual main-action taps remain in normal/large audio and video reward UI journeys. |
+| `testHeaderActionsHaveIndependentMinimumTouchTargets` | All three actual header frames remain at least 44 points in the hosted title/text-size matrix. Their actual hitability checks move into the real-audio UI journey. |
+| `testSentenceProgressUsesThePrimaryActionColor` | The production `PlayerTitleView` renders a completed-unit session; the unchanged pixel threshold verifies yellow fill. Real three-cycle confirmation, Next, source advance and exact XP remain in `testNextIsIconOnlyAndStillConfirmsExactlyOneCycle`. |
+| `testActiveCycleRingStaysInsideTimelineAtEveryNode` | Production `CycleTimelineView`, all three active nodes, nonempty green pixels and unchanged clipping-edge checks at the device display scale. Real completion/confirmation and exact two-cycle credit remain in the repeated-rewards UI test. |
+
+The full player is hosted in a real `UIWindow` using the real flow, catalog and
+SQLite workspace. Debug-only `PlayerLayoutMeasurements` observes actual SwiftUI
+geometry through a nil-by-default environment value; the UI never reads the
+recorded values back. It adds no layout, gesture or state replacement. Release
+uses an identity modifier, and product inspection rejects measurement symbols.
+Every sample uses a fresh recorder/window and requires nonempty settled frames;
+full-player samples also use isolated profiles. A frame is not evidence of hitability, clipping or accessibility semantics:
+pixel assertions, real interaction tests and the existing VoiceOver gate remain.
+
+The real `9/12` to `10/12` source-selection UI test is retained, including its
+displayed-text, paused-state, width and position assertions. A fast component
+regression additionally checks the same width boundary. Reward animation,
+scrolling, real audio/video, lifecycle, retry, relaunch, durable credit and settings
+tests are not replaced with snapshots, seeded completion or synthetic end buttons.
+
+Each of the five new rendering tests was checked with an isolated production
+mutation: left-aligned title, top-aligned content, removed counter-width reservation,
+wrong progress tint and removed ring clearance. Every corresponding test failed;
+all mutations were restored. The final focused run passed five rendering tests and
+the retained real-audio/source-selection UI tests (7/7). Local rendering case time
+was about three seconds, excluding build/runner startup; it is not a hosted-speed claim.
+
+The paused-rate preference-isolation UI method moves from options to player to
+rebalance the remaining work. Run `37788656914` passed all 183 native tests and
+375 package tests. Player execution dropped from 25m 08s to 16m 14s, and the new
+rendering suite occupied approximately seven seconds of the hosted log timeline.
+However, the complete workflow took 34m 26s versus 33m 02s: the remaining shard
+spent 5m 19s before its first test and 19m 48s in its existing UI cases. This is not
+evidence of an overall CI speedup or a diagnosis of the underlying hosted delay.
+
+The two controlled-offline UI journeys therefore move from remaining to player,
+using complementary class selectors. Both routing changes have process-boundary
+red/green regressions; all current and future methods retain exactly one owner.
+Four runners, serial execution, required checks, no-retry policy and existing UI
+deadlines remain unchanged. Reverify hosted timing and the complete executed
+inventory after this rebalance; do not extrapolate a guarantee from one run.
+
+### October 8 shared-product follow-up
+
+PR #127 run `37754940528` passed all 180 native cases with zero failures/skips,
+but took 41m 52s overall. Each shard compiled the same full graph: options 4m 40s,
+player 11m 17s, remaining 13m 27s and product 12m 33s. The previous successful
+run `37714033941` took 33m 38s; build phases ranged from 5m 47s to 8m 36s.
+Shared products remove three complete compilations. Booting only after receiving
+the products also removes simulator contention from the build job; contention's
+share of the old variability is not established by these timings alone.
+
+The settings-summary relaunch, font-persistence and rate-preference tests move
+from product to options. They accounted for approximately 194 seconds in the
+previous successful run. Assertions and fixture launches remain unchanged.
+Hosted timing and complete case inventory must be reverified after this change;
+the structural regressions and local portable-product run are not hosted results.
+
+The first hosted shared-product trials exposed a cold-installation budget issue:
+run `37762629769` spent 151 seconds installing the app in the product runner,
+leaving approximately twenty seconds of the combined three-minute preflight for
+launch. The former per-runner compilation had delayed installation after boot.
+The first adjustment assigned installation to the five-minute preparation phase,
+but another runner still exhausted that phase while most launch time went unused.
+Run `37767394596` then showed one-minute system load above 500 on a three-core
+runner before the app launched; swap counters remained zero. This demonstrates
+whole-runner congestion, not a proven memory-exhaustion or installer root cause.
+Boot, installation and launch now share the unchanged eight-minute readiness
+budget. Safe phase markers remain; heavyweight resource probes do not. This
+redistributes the existing preparation allowance, not an increase or an automatic retry. A fresh cold local
+simulator accepted the exact hosted artifact; that does not establish hosted
+reliability or explain every runner's installation latency.
+
+### Earlier four-shard partition
 
 On October 7, PR #126 run `37655283521` exhausted the 40-minute `remaining`
 job budget. Compilation took 8m 07s, and the test step was cancelled after 30m 13s
@@ -290,7 +497,7 @@ TestFlight or submit an App Store release. Feature PRs target `dev`.
 
 ## Coverage limits
 
-The #108 controlled-offline acceptance journeys run in the existing `remaining`
+The #108 controlled-offline acceptance journeys run in the existing `player`
 shard. A Debug-only transport failure is enabled only in UUID-isolated product
 profiles. Tests retain real validation, installation, SQLite and native playback;
 they verify offline relaunch, saved cycles/preferences, local source navigation,

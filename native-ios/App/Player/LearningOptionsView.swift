@@ -88,13 +88,26 @@ struct LearningOptionsView: View {
             switch route {
             case .sentences: AllSentencesView(flow: flow, session: runtime.controls.session)
             case .guide: LearningGuideView(stage: runtime.controls.session.plan.scope.stage)
-            case .analysis: AnalysisBrowserView(flow: flow)
+            case .analysis:
+                AnalysisBrowserView(flow: flow)
+                    .navigationBarBackButtonHidden(hasSingleAnalysisSentence)
+                    .toolbar {
+                        if hasSingleAnalysisSentence {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("뒤로", systemImage: "chevron.backward") { flow.dismissOptions() }
+                                    .labelStyle(.iconOnly).accessibilityIdentifier("BackButton")
+                            }
+                        }
+                    }
             case .revealSpeed:
                 preferenceEditor(.revealSpeed, runtime: runtime)
                     .safeAreaInset(edge: .top) { revealSelection(runtime) }
             default: preferenceEditor(route, runtime: runtime)
             }
         }
+    }
+    private var hasSingleAnalysisSentence: Bool {
+        flow.analysis?.state == .ready && flow.analysis?.sentences.count == 1
     }
     private func preferenceEditor(_ route: LearningOptionRoute, runtime: NativeLearningRuntime) -> some View {
         PreferenceEditorView(option: route, preferences: activePreferences(runtime), videoLayout: flow.video != nil) { value in

@@ -10,26 +10,42 @@ struct SentenceRelationGraphView: View {
     var body: some View {
         let projection = SentenceRelations.project(sentence, selected: selected)
         let allEdges = SentenceRelations.project(sentence, selected: nil).edges
+        // Read measurements in body so the first layout invalidates the Canvas.
+        let curves = SentenceRelationGeometry.curves(edges: allEdges, boxes: boxes, height: arcHeight)
         VStack(alignment: .leading, spacing: 12) {
             Text("화살표는 역할을 하는 단어에서 연결된 중심어를 향해요.").font(.caption).foregroundStyle(.secondary)
             RelationGraphScroll {
                 VStack(spacing: 8) {
-                    Canvas { context, size in
-                        for edge in allEdges {
-                            guard let from = boxes[edge.dependent], let to = boxes[edge.head] else { continue }
-                            let start = CGPoint(x: from.midX, y: size.height)
-                            let end = CGPoint(x: to.midX, y: size.height)
-                            let rise = min(size.height - 8, 20 + abs(end.x - start.x) * 0.2)
-                            var path = Path()
-                            path.move(to: start)
-                            path.addCurve(to: end, control1: CGPoint(x: start.x, y: size.height - rise),
-                                          control2: CGPoint(x: end.x, y: size.height - rise))
+                    Canvas { context, _ in
+                        let labels = Dictionary(uniqueKeysWithValues: curves.map { curve in
+                            let active = selected == curve.edge.dependent || selected == curve.edge.head
+                            return (curve.id, context.resolve(Text(curve.edge.label.lowercased())
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(active ? Color.accentColor : Color.primary)))
+                        })
+                        let sizes = labels.mapValues { $0.measure(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)) }
+                        let labelPositions = SentenceRelationGeometry.labelPositions(curves: curves, sizes: sizes)
+                        for curve in curves {
+                            let edge = curve.edge
                             let active = selected == edge.dependent || selected == edge.head
-                            context.stroke(path, with: .color(active ? .accentColor : .secondary.opacity(0.5)), lineWidth: active ? 2.5 : 1)
+                            let end = curve.end
+                            let neck = CGPoint(x: end.x, y: end.y - 7)
+                            var path = Path()
+                            path.move(to: curve.start)
+                            path.addCurve(to: neck, control1: curve.control1, control2: curve.control2)
                             var arrow = Path()
-                            arrow.move(to: CGPoint(x: end.x - 4, y: end.y - 7)); arrow.addLine(to: end)
-                            arrow.addLine(to: CGPoint(x: end.x + 4, y: end.y - 7))
-                            context.stroke(arrow, with: .color(active ? .accentColor : .secondary), lineWidth: 2)
+                            arrow.move(to: CGPoint(x: end.x - 4, y: neck.y)); arrow.addLine(to: end)
+                            arrow.addLine(to: CGPoint(x: end.x + 4, y: neck.y))
+                            arrow.closeSubpath()
+                            // End the shaft at the head's base, then fill one unified outline.
+                            // No full-width stroke continues beneath the narrowing tip.
+                            let outline = path.strokedPath(StrokeStyle(lineWidth: active ? 2.5 : 1)).union(arrow)
+                            context.fill(outline, with: .color(active ? .accentColor : .secondary))
+                        }
+                        for curve in curves {
+                            if let label = labels[curve.id], let position = labelPositions[curve.id] {
+                                context.draw(label, at: position)
+                            }
                         }
                     }.frame(height: arcHeight).accessibilityHidden(true)
                     HStack(alignment: .top, spacing: 12) {

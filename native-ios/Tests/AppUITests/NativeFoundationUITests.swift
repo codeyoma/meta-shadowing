@@ -82,7 +82,7 @@ final class NativeFoundationUITests: XCTestCase {
         let launchScreen = app.descendants(matching: .any)["launch-screen"]
         XCTAssertTrue(launchScreen.waitForNonExistence(timeout: 15), "Launch artwork must finish before retry is tappable")
         XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10),
-                      "Retry is not tappable: enabled=\(retry.isEnabled), frame=\(retry.frame), window=\(app.windows.firstMatch.frame)")
+                      "Retry is not tappable: enabled=\(retry.isEnabled), frame=\(retry.frame), window=\(app.windows.firstMatch.frame), appState=\(app.state.rawValue), windows=\(app.windows.count), alerts=\(app.alerts.count), sheets=\(app.sheets.count), launchVisible=\(launchScreen.exists)")
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(retry.wait(for: \.isHittable, toEqual: true, timeout: 10), "Foregrounding must preserve the explicit retry action")

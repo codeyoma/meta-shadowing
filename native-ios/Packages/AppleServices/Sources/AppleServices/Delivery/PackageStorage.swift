@@ -23,6 +23,22 @@ struct MaterialStorage: Sendable {
 }
 
 extension PackageInstallation {
+  /// Only inspect the owned directory boundary, never enumerate lesson assets during practice.
+  func hasPublishedDirectory(_ key: String) throws -> Bool {
+    guard let rootType = try itemType(root),
+      let packageType = try itemType(root.appendingPathComponent(key)) else { return false }
+    guard rootType == .typeDirectory, packageType == .typeDirectory else { throw DeliveryError.invalidPackage }
+    return true
+  }
+
+  func hasPublicationMarker(_ key: String) throws -> Bool {
+    let marker = root.appendingPathComponent(key).appendingPathComponent("ready")
+    guard try itemType(marker) == .typeRegular else { return false }
+    let handle = try FileHandle(forReadingFrom: marker)
+    defer { try? handle.close() }
+    return try handle.read(upToCount: 2) == Data("1".utf8)
+  }
+
   func validateMaterialKey(_ key: String) throws {
     if let ownedKeys {
       guard ownedKeys.contains(key) else { throw DeliveryError.invalidPackage }

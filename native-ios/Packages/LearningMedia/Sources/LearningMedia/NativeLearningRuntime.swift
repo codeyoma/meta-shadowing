@@ -22,20 +22,25 @@ import UIKit
     @ObservationIgnored private var lifecycle: LessonLifecycleObserver?
     @ObservationIgnored private var context: LessonInteractionContext
     @ObservationIgnored private var closed = false
+    @ObservationIgnored private var presented = false
+    @ObservationIgnored private var remoteActivation: Task<Void, Never>?
 
     public init(controller: LearningController, initial: LearningControllerState, catalog: MediaAssetCatalog,
                 authorize: @escaping @Sendable (LearningScope) async -> Bool,
-                makeTransport: @escaping @MainActor ([MediaSource]) -> any MediaTransport) {
-        session = LessonAudioSession()
+                makeTransport: @escaping @MainActor ([MediaSource]) -> any MediaTransport,
+                initiallyPresented: Bool = true, monitorHardware: (any VoiceMonitorHardware)? = nil,
+                audioHardware: (any AudioSessionHardware)? = nil) {
+        session = audioHardware.map { LessonAudioSession(hardware: $0) } ?? LessonAudioSession()
         graph = VoiceMonitorEngine(session: session)
-        monitoring = VoiceMonitoring(hardware: graph, defaults: .standard)
+        monitoring = VoiceMonitoring(hardware: monitorHardware ?? graph, defaults: .standard)
         remote = LessonRemoteControl(session: session)
         coordinator = LearningMediaCoordinator(controller: controller, initial: initial, catalog: catalog,
             authorize: authorize, makeTransport: makeTransport, audioSession: session)
         state = coordinator.state
         controls = LearningControlPresentation(state: coordinator.state, gate: coordinator.remoteState)
         motion.update(coordinator.state)
-        context = .init(foreground: UIApplication.shared.applicationState == .active, complete: initial.snapshot.session.phase == .complete)
+        context = .init(foreground: UIApplication.shared.applicationState == .active,
+                        menuOpen: !initiallyPresented, complete: initial.snapshot.session.phase == .complete)
         coordinator.onChange = { [weak self] in self?.updated($0) }
         coordinator.onFeedback = { [weak self] event in
             guard let self, !self.closed else { return }
@@ -56,12 +61,18 @@ import UIKit
             guard let self, !self.closed else { return }; _ = await self.coordinator.receiveRemote(event)
         } }
         lifecycle = LessonLifecycleObserver { [weak self] in self?.handle($0) }
-        Task { @MainActor [weak self] in
-            guard let self, !self.closed, !self.context.complete else { return }
+        if initiallyPresented { present() } else { applyContext() }
+    }
+    /// A prepared lesson cannot claim OS controls until its screen actually appears.
+    public func present() {
+        guard !closed, !presented else { return }
+        presented = true
+        if !context.menuOpen { applyContext() }
+        remoteActivation = Task { @MainActor [weak self] in
+            guard let self, !Task.isCancelled, !self.closed, !self.context.complete, self.context.access else { return }
             try? await self.remote.begin(self.coordinator.remoteState.owner)
-            if !self.closed { self.refreshRemote() }
+            if !Task.isCancelled, !self.closed { self.refreshRemote() }
         }
-        applyContext()
     }
     public func setMenuOpen(_ open: Bool) { if open { feedback = nil }; context.menuOpen = open; applyContext() }
     public func setAccess(_ access: Bool) { if !access { feedback = nil }; context.access = access; applyContext() }
@@ -69,6 +80,7 @@ import UIKit
     public func close() async {
         guard !closed else { return }
         closed = true; feedback = nil; lifecycle?.close(); lifecycle = nil
+        remoteActivation?.cancel(); remoteActivation = nil
         monitoring.close(); graph.close(); remote.close(); haptics.stop()
         await coordinator.close()
     }
@@ -82,7 +94,9 @@ import UIKit
     }
     private func applyContext() {
         guard !closed else { return }
-        coordinator.setContext(context); monitoring.update(context); refreshRemote()
+        var effective = context
+        effective.menuOpen = context.menuOpen || !presented
+        coordinator.setContext(effective); monitoring.update(effective); refreshRemote()
         if context.complete { remote.close() }
         if !context.actionable { haptics.stop() }
     }

@@ -51,6 +51,12 @@ struct DeliveryTests {
     try installer.install(package) { _ in data }
     #expect(try await download.status(package).phase == "ready")
     try FileManager.default.removeItem(at: root.appendingPathComponent("hosted-sample-v1/manifest.json"))
+    // Ordinary status trusts publication; the requested manifest read and an
+    // explicit re-download still detect missing content.
+    #expect(try await download.status(package).phase == "ready")
+    #expect(try installer.isInstalled(package) == false)
+    await #expect(throws: DeliveryError.unavailable) { try await download.start(package) }
+    try FileManager.default.removeItem(at: root.appendingPathComponent("hosted-sample-v1/ready"))
     #expect(try await download.status(package).phase == "unavailable")
   }
 

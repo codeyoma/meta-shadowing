@@ -2,16 +2,22 @@ import CryptoKit
 import Foundation
 
 extension PackageInstallation {
+  func hasPinnedIdentity(_ package: DeliveryPackage) throws -> Bool {
+    try checkIdentity(package)
+  }
+
   /// This small fingerprint outlives material removal: checkpoints still refer
   /// to this immutable identity even when the downloaded files are absent.
-  func checkIdentity(_ package: DeliveryPackage) throws {
+  @discardableResult
+  func checkIdentity(_ package: DeliveryPackage) throws -> Bool {
     let url = identityURL(package)
     let attributes: [FileAttributeKey: Any]
     do { attributes = try FileManager.default.attributesOfItem(atPath: url.path) }
-    catch let error as CocoaError where error.code == .fileReadNoSuchFile { return }
+    catch let error as CocoaError where error.code == .fileReadNoSuchFile { return false }
     guard attributes[.type] as? FileAttributeType == .typeRegular,
       (attributes[.size] as? NSNumber)?.intValue == 64 else { throw DeliveryError.incompatibleVersion }
     guard try Data(contentsOf: url) == identityData(package) else { throw DeliveryError.incompatibleVersion }
+    return true
   }
 
   func pinIdentity(_ package: DeliveryPackage) throws {

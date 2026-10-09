@@ -16,6 +16,14 @@ The reference runtime remains untouched. The shipped target links Swift packages
   validates bytes, hashes and semantic manifests before atomic publication. Cancellation checks
   remain owned by the download/installation operation, not a paid authorization lease.
   Large media reads are memory-mapped after checking file size.
+- After publication, ordinary learning and reference access check the owned directory,
+  exact ready marker and pinned descriptor identity without enumerating or rehashing
+  lesson assets. Full validation remains part of download, re-download and new-version
+  installation. Requested files still require safe bounded reads and valid formats;
+  unrelated asset damage is handled when that asset is used, not on every status read.
+  Missing publication evidence prevents access. A legacy installation without its
+  descriptor fingerprint requires explicit download verification before adoption.
+  Profile, current-session, access and download-removal checks remain live.
 - The hosted Morning Notes sample retains its separate `hosted-morning-notes` learning identity;
   its pinned wire manifest and audio remain the original sample. Other book identities are unchanged.
 - Download progress is streamed without polling. Cancellation remains owned by the service,
