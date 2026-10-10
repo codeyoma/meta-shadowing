@@ -6,49 +6,91 @@ struct TypographyEditorView: View {
     let value: LearningPreferences
     var videoLayout = false
     var fullscreenSizes = false
+    var compact = false
     let change: (LearningPreferences) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var body: some View {
-        if !fullscreenSizes { preview }
-        Section("원문") {
-            if !fullscreenSizes {
-                Picker("원문 폰트", selection: Binding(get: { value.originalTextFont ?? "system" }, set: { font in
-                    var next = value; next.originalTextFont = font; change(next)
-                })) { ForEach(LearningFont.choices, id: \.0) { Text($0.1).tag($0.0) } }
-                    .accessibilityIdentifier("original-font")
+        if compact {
+            VStack(alignment: .leading, spacing: 12) {
+                originalControls
+                Divider()
+                translationControls
+                Divider()
+                resetControls
             }
+        } else {
+            if !fullscreenSizes { preview }
+            Section("원문") { originalControls }
+            Section("번역") { translationControls }
+            Section { resetControls }
+            // Landscape is short: put the editable settings before the long preview.
+            if fullscreenSizes { preview }
+        }
+    }
+    private var originalControls: some View {
+        Group {
+            fontPicker(original: true)
             TextSizeControl(title: String(localized: "원문 크기"), identifier: fullscreenSizes ? "fullscreen-original-size" : "original-size",
-                            value: fullscreenSizes ? value.fullscreenOriginalTextSize : value.originalTextSize ?? 20) { size in
+                            value: fullscreenSizes ? value.fullscreenOriginalTextSize : value.originalTextSize ?? 20,
+                            compact: compact) { size in
                 var next = value
                 if fullscreenSizes { next.fullscreenOriginalTextSize = size } else { next.originalTextSize = size }
                 change(next)
             }
         }
-        Section("번역") {
-            if !fullscreenSizes {
-                Picker("번역 폰트", selection: Binding(get: { value.translationTextFont ?? "system" }, set: { font in
-                    var next = value; next.translationTextFont = font; change(next)
-                })) { ForEach(LearningFont.choices, id: \.0) { Text($0.1).tag($0.0) } }
-                    .accessibilityIdentifier("translation-font")
-            }
+    }
+    private var translationControls: some View {
+        Group {
+            fontPicker(original: false)
             TextSizeControl(title: String(localized: "번역 크기"), identifier: fullscreenSizes ? "fullscreen-translation-size" : "translation-size",
-                            value: fullscreenSizes ? value.fullscreenTranslationTextSize : value.translationTextSize ?? 18) { size in
+                            value: fullscreenSizes ? value.fullscreenTranslationTextSize : value.translationTextSize ?? 18,
+                            compact: compact) { size in
                 var next = value
                 if fullscreenSizes { next.fullscreenTranslationTextSize = size } else { next.translationTextSize = size }
                 change(next)
             }
         }
-        Section {
+    }
+    private var resetControls: some View {
+        Group {
             Button("크기 초기화 (20 / 18)") {
                 var next = value
                 if fullscreenSizes { next.resetFullscreenTextSizes() } else { next.resetTextSizes() }
                 change(next)
-            }
-            if !fullscreenSizes {
-                Button("폰트 초기화 (System)") { var next = value; next.resetFonts(); change(next) }
-            }
+            }.frame(minHeight: compact ? 44 : nil)
+            Button("폰트 초기화 (System)") { var next = value; next.resetFonts(); change(next) }
+                .frame(minHeight: compact ? 44 : nil)
         }
-        // Landscape is short: put the editable sizes before the long preview.
-        if fullscreenSizes { preview }
+    }
+    @ViewBuilder private func fontPicker(original: Bool) -> some View {
+        let title = original ? String(localized: "원문 폰트") : String(localized: "번역 폰트")
+        let selected = original ? value.originalTextFont : value.translationTextFont
+        let picker = Picker(selection: Binding(get: { selected ?? "system" }, set: { font in
+            var next = value
+            if original { next.originalTextFont = font } else { next.translationTextFont = font }
+            change(next)
+        })) {
+            ForEach(LearningFont.choices, id: \.0) { Text($0.1).tag($0.0) }
+        } label: { Text(compact ? "" : title) }
+        .pickerStyle(.menu)
+        .accessibilityValue(LearningFont.title(selected))
+        .accessibilityIdentifier((fullscreenSizes ? "fullscreen-" : "") + (original ? "original-font" : "translation-font"))
+        .frame(minHeight: compact ? 44 : nil)
+        if compact {
+            // The visible title and the picker's accessible name must not be announced twice.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).accessibilityHidden(true)
+                    picker.labelsHidden().accessibilityLabel(title)
+                }
+            } else {
+                HStack {
+                    Text(title).accessibilityHidden(true)
+                    Spacer(minLength: 8)
+                    picker.labelsHidden().accessibilityLabel(title)
+                }
+            }
+        } else { picker }
     }
     private var preview: some View {
         Section("미리보기") {

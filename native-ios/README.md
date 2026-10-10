@@ -13,14 +13,25 @@ audio/silent practice remain portrait. No public video delivery is added.
 Fullscreen captions and compact learning controls overlay the video. Dragging the
 action/cycle group docks it at either bottom edge without confirming practice;
 accessible positioning actions are also available. There is no separate pause button.
-Fullscreen exposes options, method guide, speed, its own text sizes, sentence
+Fullscreen exposes options, method guide, speed, typography, sentence
 analysis and exit as direct top controls. The main action stays fixed at the safe-area
 edge while Repeat and cycle dots expand inward. Fullscreen original/translation
 sizes persist independently of normal-screen sizes; font families remain shared.
-Normal and fullscreen media speed use compact popovers, as do fullscreen text
-sizes. Grouped stages 7–10 add a 2/3/4-segment popover in either layout that changes
-only the active run. The normal header order is `Lv N`, speed, optional group size,
-then analysis; fullscreen also labels the method guide `Lv N` without an icon.
+Normal and fullscreen media speed use compact popovers. Typography popovers in
+both layouts edit shared original/translation font families and separate text
+sizes, with font and current-layout size resets. The same editor controls and save
+boundary serve the settings page and both popovers, including normal silent practice.
+Grouped stages 7–10 add a 2/3/4-segment popover in either layout that changes
+only the active run. The normal header's first row contains main options, `Lv N`,
+speed, typography, optional group size, then analysis. Its second row contains full-width
+progress and the current/total counter, without a book title. Audio, video and
+silent practice share this layout; the fullscreen toolbar also labels the method
+guide `Lv N` without an icon.
+Normal header buttons are 44-point circles with evenly distributed gaps, without
+stretching into capsules or merging neighboring glass surfaces.
+Media speed and group size use the fullscreen toolbar's speedometer and stack
+icons; their current values remain in popovers, VoiceOver and the large-content viewer.
+Silent practice retains its `S1`–`S4` reveal-speed label.
 Outside taps dismiss without resuming. Full options/reference pages and silent
 reveal-speed editors retain their sheets. Pending popovers are cancelled when
 their normal or fullscreen header disappears.

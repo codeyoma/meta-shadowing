@@ -7,6 +7,75 @@ import MediaPlayer
 @testable import MetaShadowingNative
 
 @MainActor @Suite(.serialized) struct LearningFlowTests {
+    @Test(arguments: [("audio", 1), ("audio", 11), ("video", 7)])
+    func typographyPopoverPausesEveryLearningMode(mode: String, stage: Int) async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let flow = LearningFlow(workspace: ProductWorkspace(store: SQLiteLearningStore(root: root.appending(path: "store")),
+            catalog: ProductTestCatalog(root: root.appending(path: "assets"), mode: mode), profileID: "typography-popup"))
+        await flow.open(packageKey: "ui-fixture-v1", stage: stage)
+        await flow.presentOptions(.typography, asPopover: true)
+        #expect(flow.options == .typography && flow.optionsUsePopover)
+        #expect(flow.runtime?.state.controller.paused == true)
+        flow.dismissOptions()
+        #expect(flow.runtime?.state.controller.paused == true, "Closing typography must not resume or confirm learning")
+        #expect(flow.runtime?.controls.xp == 0)
+        await flow.close()
+    }
+
+    @Test func typographySavesSharedFontsButOnlyTheSelectedScreensSizes() async throws {
+        let root = try MediaFixtureFactory.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SQLiteLearningStore(root: root.appending(path: "store"))
+        let workspace = ProductWorkspace(store: store,
+            catalog: ProductTestCatalog(root: root.appending(path: "assets"), mode: "video"), profileID: "typography-save")
+        let model = ProductModel(workspace: workspace)
+        await model.activate()
+        var baseline = LearningPreferences.fresh
+        baseline.originalTextSize = 23; baseline.translationTextSize = 21
+        baseline.fullscreenOriginalTextSize = 32; baseline.fullscreenTranslationTextSize = 28
+        baseline.rate = 1.5; baseline.groupSize = 3
+        #expect(await model.saveLearningPreferences(baseline))
+        let flow = LearningFlow(workspace: workspace)
+        await flow.open(packageKey: "ui-fixture-v1", stage: 1)
+        await flow.presentOptions(.fullscreenTypography, asPopover: true)
+        let runtime = try #require(flow.runtime)
+        let editor = LearningPreferenceSession(runtime: runtime, model: model)
+        var draft = editor.value
+        draft.originalTextFont = "serif"; draft.translationTextFont = "rounded"
+        draft.fullscreenOriginalTextSize = 36; draft.fullscreenTranslationTextSize = 30
+        draft.originalTextSize = 48; draft.translationTextSize = 48
+        draft.speechView = "list"; draft.rate = 3; draft.groupSize = 4
+        #expect(await editor.save(draft, for: .fullscreenTypography))
+        var saved = try await store.preferences(profileID: "typography-save").learning
+        #expect(saved.originalTextFont == "serif" && saved.translationTextFont == "rounded")
+        #expect(saved.originalTextSize == 23 && saved.translationTextSize == 21)
+        #expect(saved.fullscreenOriginalTextSize == 36 && saved.fullscreenTranslationTextSize == 30)
+        #expect(saved.rate == 1.5 && saved.groupSize == 3 && saved.speechView == baseline.speechView)
+
+        draft = editor.value
+        draft.resetFonts(); draft.resetTextSizes()
+        draft.fullscreenOriginalTextSize = 48; draft.fullscreenTranslationTextSize = 48
+        draft.speechView = "list"
+        #expect(await editor.save(draft, for: .typography))
+        saved = try await store.preferences(profileID: "typography-save").learning
+        #expect(saved.originalTextFont == "system" && saved.translationTextFont == "system")
+        #expect(saved.originalTextSize == 20 && saved.translationTextSize == 18)
+        #expect(saved.fullscreenOriginalTextSize == 36 && saved.fullscreenTranslationTextSize == 30)
+        #expect(saved.speechView == baseline.speechView)
+
+        draft = editor.value
+        draft.resetFullscreenTextSizes()
+        #expect(await editor.save(draft, for: .fullscreenTypography))
+        await flow.close(); model.deactivate()
+        let reopened = SQLiteLearningStore(root: root.appending(path: "store"))
+        let durable = try await reopened.preferences(profileID: "typography-save").learning
+        #expect(durable.originalTextSize == 20 && durable.translationTextSize == 18)
+        #expect(durable.fullscreenOriginalTextSize == 20 && durable.fullscreenTranslationTextSize == 18)
+        #expect(durable.originalTextFont == "system" && durable.translationTextFont == "system")
+        #expect(runtime.controls.xp == 0)
+    }
+
     @Test func dismissedPendingPopoverCannotReturnAfterItsPauseFinishes() async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }

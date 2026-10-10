@@ -10,10 +10,21 @@ final class PlayerUITests: XCTestCase {
         let group = app.buttons["player-group"]
         XCTAssertTrue(group.hittableOrWait(timeout: 5))
         XCTAssertEqual(group.value as? String, "2구간")
+        let speed = app.buttons["학습 속도"]
+        XCTAssertEqual(speed.value as? String, "1×", "Icon-only speed must still announce the current value")
         let level = app.buttons["Lv 4"]
         XCTAssertTrue(level.exists)
+        XCTAssertFalse(app.staticTexts["player-book-title"].exists)
+        let options = app.buttons["player-options"]
+        XCTAssertTrue(options.isHittable)
+        XCTAssertLessThan(options.frame.maxX, level.frame.minX)
+        XCTAssertEqual(options.frame.midY, level.frame.midY, accuracy: 1)
+        XCTAssertGreaterThan(app.descendants(matching: .any)["player-progress"].frame.minY, group.frame.maxY)
         XCTAssertLessThan(level.frame.maxX, app.buttons["학습 속도"].frame.minX)
-        XCTAssertLessThan(app.buttons["학습 속도"].frame.maxX, group.frame.minX)
+        let font = app.buttons["player-font"]
+        XCTAssertTrue(font.isHittable)
+        XCTAssertLessThan(app.buttons["학습 속도"].frame.maxX, font.frame.minX)
+        XCTAssertLessThan(font.frame.maxX, group.frame.minX)
         XCTAssertLessThan(group.frame.maxX, app.buttons["문장 분석"].frame.minX)
         group.tap()
         let popup = app.otherElements["learning-setting-popup"]
@@ -25,9 +36,17 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(popup.waitForNonExistence(timeout: 5))
         XCTAssertEqual(group.value as? String, "3구간")
         XCTAssertEqual(main.label, "학습 이어하기")
+        speed.tap()
+        let slider = app.sliders["재생 속도"]
+        XCTAssertTrue(slider.existsOrWait(timeout: 5))
+        slider.adjust(toNormalizedSliderPosition: 1)
+        XCTAssertTrue(slider.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+        app.buttons["options-close"].tap()
+        XCTAssertEqual(speed.value as? String, "3×")
         app.buttons["video-enter-fullscreen"].tap()
         let guide = app.buttons["video-guide"]
-        XCTAssertTrue(guide.existsOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: guide, timeout: 5))
+        XCTAssertTrue(guide.isHittable)
         XCTAssertEqual(guide.label, "Lv 4")
         guide.tap()
         XCTAssertTrue(app.buttons["options-close"].existsOrWait(timeout: 5))
@@ -39,7 +58,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.segmentedControls.buttons["2구간"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
         app.buttons["options-close"].tap()
         app.buttons["video-exit-fullscreen"].tap()
-        XCTAssertTrue(group.existsOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: group, timeout: 5))
         XCTAssertEqual(group.value as? String, "4구간")
         app.exitLearningThroughOptions()
         XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
@@ -66,20 +85,34 @@ final class PlayerUITests: XCTestCase {
         let popup = app.otherElements["learning-setting-popup"]
         XCTAssertTrue(popup.existsOrWait(timeout: 5))
         XCTAssertTrue(app.frame.contains(popup.frame), "Large text must keep the popup within the display")
+        let initialTypography = XCTAttachment(screenshot: app.screenshot())
+        initialTypography.name = "Typography popup at largest text"
+        initialTypography.lifetime = .keepAlways
+        add(initialTypography)
         let scroll = popup.scrollViews.firstMatch
         for (identifier, field, expected) in [
             ("fullscreen-original-size-stepper", "fullscreen-original-size", "21"),
             ("fullscreen-translation-size-stepper", "fullscreen-translation-size", "19")
         ] {
             let stepper = app.steppers[identifier]
-            for _ in 0..<5 where !stepper.isHittable {
+            for _ in 0..<8 where !stepper.isHittable {
                 // XCTest reports an empty visible frame for this nested popover ScrollView.
                 // Use its observed on-screen area; real scroll and editable-value checks still follow.
                 let visible = scroll.frame.intersection(popup.frame)
                 XCTAssertFalse(visible.isEmpty)
                 let origin = app.coordinate(withNormalizedOffset: .zero)
-                origin.withOffset(CGVector(dx: visible.midX, dy: visible.maxY - 12))
-                    .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: visible.midX, dy: visible.minY + 12)))
+                // Short, direction-aware strokes must not skip a control between large-text rows.
+                let target = stepper.frame
+                let delta = visible.height * 0.35
+                let direction: CGFloat = target.midY < visible.midY ? 1 : -1
+                origin.withOffset(CGVector(dx: visible.midX, dy: visible.midY - direction * delta / 2))
+                    .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: visible.midX, dy: visible.midY + direction * delta / 2)))
+            }
+            if !stepper.isHittable {
+                let attachment = XCTAttachment(screenshot: app.screenshot())
+                attachment.name = "Unreachable \(identifier)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
             }
             XCTAssertTrue(stepper.isHittable)
             stepper.buttons.element(boundBy: 1).tap()
@@ -98,19 +131,41 @@ final class PlayerUITests: XCTestCase {
         XCTAssertEqual(app.descendants(matching: .any)["cycle-timeline"].label, "확인한 반복 0/3")
     }
 
-    @MainActor func testFullscreenFontSizeEditorDoesNotChangePortraitSizes() {
+    @MainActor func testFontPopoversShareFamiliesButKeepScreenSizesIndependent() {
         continueAfterFailure = false
         let app = fixture(stage: 1, mode: "video")
         let main = app.buttons["player-main"]
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 15))
         app.buttons["video-enter-fullscreen"].tap()
         let editor = app.buttons["video-font-size"]
-        XCTAssertTrue(editor.hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: editor, timeout: 5))
+        XCTAssertTrue(editor.isHittable)
         XCTAssertFalse(app.buttons["video-group"].exists, "Single-unit stages must not offer grouping in the fullscreen toolbar")
         editor.tap()
         let popup = app.otherElements["learning-setting-popup"]
         XCTAssertTrue(popup.existsOrWait(timeout: 5))
         XCTAssertLessThan(popup.frame.width, app.frame.width * 0.6, "A quick setting must not cover the video with a drawer")
+        let typographyImage = XCTAttachment(screenshot: app.screenshot())
+        typographyImage.name = "Typography popup with labeled font pickers"
+        typographyImage.lifetime = .keepAlways
+        add(typographyImage)
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<6 where !element.isHittable {
+                let visible = popup.scrollViews.firstMatch.frame.intersection(popup.frame)
+                XCTAssertFalse(visible.isEmpty)
+                let origin = app.coordinate(withNormalizedOffset: .zero)
+                origin.withOffset(CGVector(dx: visible.midX, dy: visible.maxY - 12))
+                    .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: visible.midX, dy: visible.minY + 12)))
+            }
+            XCTAssertTrue(element.isHittable)
+        }
+        let fullFont = app.buttons["fullscreen-original-font"]
+        XCTAssertTrue(fullFont.hittableOrWait(timeout: 5))
+        XCTAssertEqual(fullFont.label, "원문 폰트", "The native labeled picker must announce its label once")
+        fullFont.tap()
+        app.buttons["Serif"].tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Serif"),
+                                                                    object: fullFont)], timeout: 5), .completed)
         let original = app.textFields["fullscreen-original-size"]
         let translation = app.textFields["fullscreen-translation-size"]
         XCTAssertTrue(original.existsOrWait(timeout: 5))
@@ -119,33 +174,49 @@ final class PlayerUITests: XCTestCase {
         stepper.buttons.element(boundBy: 1).tap()
         XCTAssertTrue(stepper.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertEqual(original.value as? String, "21")
+        let fullTranslationFont = app.buttons["fullscreen-translation-font"]
+        reveal(fullTranslationFont)
+        XCTAssertEqual(fullTranslationFont.label, "번역 폰트")
+        fullTranslationFont.tap()
+        app.buttons["Rounded"].tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Rounded"),
+                                                                    object: fullTranslationFont)], timeout: 5), .completed)
         let translated = app.steppers["fullscreen-translation-size-stepper"]
-        for _ in 0..<3 where !translated.isHittable { app.swipeUp() }
-        XCTAssertTrue(translated.isHittable)
+        reveal(translated)
         translated.buttons.element(boundBy: 1).tap()
         XCTAssertTrue(translated.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertEqual(translation.value as? String, "19")
         app.buttons["options-close"].tap()
         app.buttons["video-exit-fullscreen"].tap()
-        app.buttons["player-options"].tap()
-        app.buttons["폰트 설정"].tap()
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: app.buttons["player-font"], timeout: 5))
+        app.buttons["player-font"].tap()
+        XCTAssertTrue(popup.existsOrWait(timeout: 5))
+        XCTAssertLessThan(popup.frame.height, app.frame.height * 0.6)
+        XCTAssertEqual(app.buttons["original-font"].label, "원문 폰트")
+        XCTAssertEqual(app.buttons["original-font"].value as? String, "Serif")
         XCTAssertTrue(app.textFields["original-size"].existsOrWait(timeout: 5))
         XCTAssertEqual(app.textFields["original-size"].value as? String, "20")
         app.steppers["original-size-stepper"].buttons.element(boundBy: 1).tap()
         XCTAssertTrue(app.steppers["original-size-stepper"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
         XCTAssertEqual(app.textFields["original-size"].value as? String, "21")
         let normalTranslation = app.textFields["translation-size"]
-        for _ in 0..<3 where !normalTranslation.isHittable { app.swipeUp() }
-        XCTAssertTrue(normalTranslation.isHittable)
+        reveal(normalTranslation)
         XCTAssertEqual(normalTranslation.value as? String, "18")
+        XCTAssertEqual(app.buttons["translation-font"].value as? String, "Rounded")
+        let resetFonts = app.buttons["폰트 초기화 (System)"]
+        reveal(resetFonts)
+        resetFonts.tap()
+        XCTAssertTrue(resetFonts.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         app.buttons["options-close"].tap()
         app.buttons["video-enter-fullscreen"].tap()
-        XCTAssertTrue(editor.hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: editor, timeout: 5))
+        XCTAssertTrue(editor.isHittable)
         editor.tap()
         XCTAssertTrue(original.existsOrWait(timeout: 5))
+        XCTAssertEqual(fullFont.value as? String, "System")
         XCTAssertEqual(original.value as? String, "21")
-        for _ in 0..<3 where !translation.isHittable { app.swipeUp() }
-        XCTAssertTrue(translation.isHittable)
+        reveal(translation)
+        XCTAssertEqual(fullTranslationFont.value as? String, "System")
         XCTAssertEqual(translation.value as? String, "19")
         app.buttons["options-close"].tap()
         XCTAssertEqual(app.descendants(matching: .any)["cycle-timeline"].label, "확인한 반복 0/3")
@@ -467,7 +538,7 @@ final class PlayerUITests: XCTestCase {
             XCTAssertTrue(close.hittableOrWait(timeout: 5))
             XCTAssertLessThan(close.frame.maxY, app.frame.height * 0.25,
                               "The options sheet must open expanded, not halfway down the screen")
-            XCTAssertTrue(app.buttons["폰트 설정"].isHittable,
+            XCTAssertTrue(app.collectionViews.buttons["폰트 설정"].isHittable,
                           "All preference rows should be reachable immediately at normal text size")
             close.tap()
         }
@@ -500,12 +571,28 @@ final class PlayerUITests: XCTestCase {
         for stage in [1, 11] {
             let app = fixture(stage: stage, mode: "audio")
             XCTAssertTrue(app.buttons["player-options"].existsOrWait(timeout: 10))
+            XCTAssertFalse(app.staticTexts["player-book-title"].exists)
+            let options = app.buttons["player-options"].frame
+            let speed = app.buttons["학습 속도"].frame
+            let analysis = app.buttons["문장 분석"].frame
+            let progress = app.descendants(matching: .any)["player-progress"].frame
+            XCTAssertEqual(options.midY, speed.midY, accuracy: 1)
+            XCTAssertEqual(options.midY, analysis.midY, accuracy: 1)
+            XCTAssertLessThan(analysis.maxY, progress.minY)
+            app.buttons["player-font"].tap()
+            XCTAssertTrue(app.otherElements["learning-setting-popup"].existsOrWait(timeout: 5))
+            XCTAssertTrue(app.buttons["original-font"].isHittable)
+            let fontSize = app.steppers["original-size-stepper"]
+            fontSize.buttons.element(boundBy: 1).tap()
+            XCTAssertTrue(fontSize.wait(for: \.isEnabled, toEqual: true, timeout: 5))
+            XCTAssertEqual(app.textFields["original-size"].value as? String, "21")
+            app.buttons["options-close"].tap()
             app.buttons["player-options"].tap()
             let speedTitle = stage == 11 ? "단어 공개 속도" : "배속"
             let titles = ["전체 문장", "학습 화면", "폰트 설정", speedTitle, "다구간 학습 사이즈", "크레이지 스피킹"]
             var previousBottom: CGFloat = 0
             for title in titles {
-                let row = app.buttons[title]
+                let row = app.collectionViews.buttons[title]
                 XCTAssertTrue(row.existsOrWait(timeout: 5))
                 let rowFrame = row.frame
                 XCTAssertGreaterThanOrEqual(rowFrame.minY, previousBottom,
@@ -529,15 +616,15 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["배속"].existsOrWait(timeout: 5))
         // Keep lower rows reachable if text sizing makes the menu taller than the sheet.
         for _ in 0..<6 {
-            guard !app.buttons["폰트 설정"].isHittable else { break }
+            guard !app.collectionViews.buttons["폰트 설정"].isHittable else { break }
             app.swipeUp()
         }
-        XCTAssertTrue(app.buttons["폰트 설정"].isHittable)
+        XCTAssertTrue(app.collectionViews.buttons["폰트 설정"].isHittable)
         XCTAssertEqual(app.buttons["전체 문장"].value as? String, "총 2문장")
         XCTAssertEqual(app.buttons["배속"].value as? String, "1×")
         XCTAssertEqual(app.buttons["다구간 학습 사이즈"].value as? String, "2구간")
         XCTAssertEqual(app.buttons["학습 화면"].value as? String, "리스트로 보기")
-        XCTAssertEqual(app.buttons["폰트 설정"].value as? String, "원문 System 20 · 번역 System 18")
+        XCTAssertEqual(app.collectionViews.buttons["폰트 설정"].value as? String, "원문 System 20 · 번역 System 18")
         XCTAssertEqual(app.buttons["크레이지 스피킹"].value as? String, "S1 150 · S2 200 · S3 250 · S4 300 WPM")
         app.buttons["배속"].tap()
         app.sliders["재생 속도"].adjust(toNormalizedSliderPosition: 1)
@@ -1217,7 +1304,7 @@ final class PlayerUITests: XCTestCase {
         let action = app.buttons["player-main"]
         XCTAssertTrue(action.existsOrWait(timeout: 10))
         XCTAssertFalse(app.buttons["player-exit"].exists, "Stage exit belongs in the options sheet")
-        for label in ["Lv 1", "학습 속도", "문장 분석"] {
+        for label in ["학습 옵션", "Lv 1", "학습 속도", "문장 분석"] {
             XCTAssertTrue(app.buttons[label].isHittable, "Header controls remain actual independent touch targets: \(label)")
         }
         guard action.exists else { return }

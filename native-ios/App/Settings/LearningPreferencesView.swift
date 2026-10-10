@@ -5,7 +5,7 @@ import SwiftUI
 extension LearningOptionRoute {
     var title: String {
         switch self {
-        case .fullscreenTypography: String(localized: "전체화면 폰트 크기")
+        case .fullscreenTypography: String(localized: "전체화면 폰트 설정")
         case .menu: String(localized: "학습 옵션"); case .rate: String(localized: "배속"); case .group: String(localized: "다구간 학습 사이즈")
         case .revealSpeed: String(localized: "단어 공개 속도"); case .revealPresets: String(localized: "크레이지 스피킹")
         case .display: String(localized: "학습 화면"); case .typography: String(localized: "폰트 설정")
@@ -98,17 +98,9 @@ struct PreferenceEditorView: View {
             Picker("학습 묶음", selection: Binding(get: { value.groupSize }, set: { size in
                 var next = value; next.groupSize = size; commit(next)
             })) { ForEach(2...4, id: \.self) { Text("\($0)구간").tag($0) } }.pickerStyle(.segmented)
-        case .fullscreenTypography:
-            TextSizeControl(title: String(localized: "원문 크기"), identifier: "fullscreen-original-size",
-                            value: value.fullscreenOriginalTextSize, compact: true) { size in
-                var next = value; next.fullscreenOriginalTextSize = size; commit(next)
-            }
-            TextSizeControl(title: String(localized: "번역 크기"), identifier: "fullscreen-translation-size",
-                            value: value.fullscreenTranslationTextSize, compact: true) { size in
-                var next = value; next.fullscreenTranslationTextSize = size; commit(next)
-            }
-            Button("크기 초기화 (20 / 18)") { var next = value; next.resetFullscreenTextSizes(); commit(next) }
-                .frame(minHeight: 44)
+        case .typography, .fullscreenTypography:
+            TypographyEditorView(value: value, videoLayout: videoLayout,
+                                 fullscreenSizes: option == .fullscreenTypography, compact: true, change: commit)
         default: EmptyView()
         }
     }

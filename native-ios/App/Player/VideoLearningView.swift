@@ -77,9 +77,6 @@ struct VideoLearningView: View {
                 }
             }
         }
-        .safeAreaBar(edge: .top) {
-            if !orientation.isFullscreen { PlayerHeaderView(runtime: runtime, flow: flow, model: model) }
-        }
         .safeAreaBar(edge: .bottom) {
             if !orientation.isFullscreen {
                 LearningControlsView(runtime: runtime, onActionFrameChange: onActionFrameChange)
@@ -109,7 +106,7 @@ private struct FullscreenLearningToolbar: View {
             .accessibilityShowsLargeContentViewer { Text("학습방법") }
             .disabled(runtime.controls.saveFailed || !runtime.controls.active || flow.accessInvalidated)
             quickTool("배속", symbol: "speedometer", id: "video-rate", route: .rate)
-            quickTool("전체화면 폰트 크기", symbol: "textformat.size", id: "video-font-size", route: .fullscreenTypography)
+            quickTool("전체화면 폰트 설정", symbol: "textformat.size", id: "video-font-size", route: .fullscreenTypography)
             if (7...10).contains(runtime.controls.session.plan.scope.stage) {
                 quickTool("다구간 학습 사이즈", symbol: "rectangle.stack", id: "video-group", route: .group)
             }
@@ -176,7 +173,8 @@ private struct LearningQuickSettingPopover: View {
 
     var body: some View {
         let settings = LearningPreferenceSession(runtime: runtime, model: model)
-        let desiredHeight = rowHeight * (route == .fullscreenTypography ? 3 : route == .rate ? 1.25 : 1) + 68
+        let typography = route == .typography || route == .fullscreenTypography
+        let desiredHeight = rowHeight * (typography ? 6 : route == .rate ? 1.25 : 1) + 68
         VStack(spacing: 0) {
             HStack {
                 Text(route.title).font(.headline)
@@ -186,7 +184,7 @@ private struct LearningQuickSettingPopover: View {
                 }.accessibilityLabel("닫기").accessibilityIdentifier("options-close")
             }.padding(.leading, 16).padding(.trailing, 4)
             Divider()
-            PreferenceEditorView(option: route, preferences: settings.value, videoLayout: true, compact: true) { value in
+            PreferenceEditorView(option: route, preferences: settings.value, videoLayout: flow.video != nil, compact: true) { value in
                 await settings.save(value, for: route)
             }.disabled(runtime.controls.saveFailed || !runtime.controls.active || flow.accessInvalidated)
             if runtime.controls.saveFailed {
