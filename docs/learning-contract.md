@@ -50,12 +50,23 @@ returns to paused landscape learning. Audio and silent stages remain portrait. S
 [approved fullscreen specification](superpowers/specs/2026-10-10-native-video-fullscreen-design.md)
 for scope; simulator results do not establish physical rotation-lock acceptance.
 
-The normal learning header shows `Lv N`, speed, group size when applicable, then
-sentence analysis. Both normal and fullscreen method-guide buttons use `Lv N`
-without an icon. Normal media speed and fullscreen speed/text-size controls open
+The normal learning header shows main options, `Lv N`, speed, typography, group size when
+applicable, then sentence analysis in one row. A full-width progress row with the
+current/total counter sits underneath, without a book title. This shared header
+applies to audio, video and silent learning.
+Normal header controls keep 44-point circular frames; remaining width becomes equal
+spacing between controls, and neighboring glass surfaces stay visually separate.
+Normal media-speed and group-size controls use the same speedometer and stack
+icons as fullscreen. Current values remain available in their popovers and
+accessibility descriptions; silent practice keeps the `S1`–`S4` label.
+Both normal and fullscreen method-guide buttons use `Lv N`
+without an icon. Normal media speed and normal/fullscreen typography controls open
 compact, button-anchored native popovers instead of full sheets. Group-size
-popovers appear only in grouped stages 7–10: between speed and analysis in normal
-audio/video learning, and between text size and analysis in fullscreen video.
+popovers appear only in grouped stages 7–10: between typography and analysis in normal
+audio/video learning and fullscreen video. Both typography popovers edit the shared
+original/translation font families and the current presentation's separate sizes.
+Font reset applies to both presentations; size reset affects only the selected one.
+The same controls and save boundary serve the full settings page and both popovers.
 The 2/3/4 choices edit the active run, not future-run defaults. Outside taps or the
 close button dismiss the popover without resuming. General options, the method
 guide, sentence analysis and silent-stage reveal speed retain their sheets. All
@@ -532,17 +543,17 @@ remain in the native media contract linked above.
   before loading finishes. Failed saves still block lesson edits until retried.
   Option subtitles reflect active rate/group size, the current silent-speed level,
   saved presets/fonts, and the effective video-forced list layout.
-  The book title and sentence progress form one compact header block, with the
-  track and position directly beneath the title. The counter is aligned to the
-  screen's right content margin, beyond the centered title's narrower text area;
-  its completed fill uses the primary-action color, without changing its meaning
-  from completed learning units to XP.
-  native text measurement reserves both digit slots
+  Owner update 2026-10-10: the upper row contains only main options, method level,
+  speed, typography, grouped-stage size when applicable, and sentence analysis. The book title
+  is not displayed. A separate row directly beneath spans the content width with
+  progress and a counter aligned to the right content margin. Its completed fill
+  uses the primary-action color, without changing its meaning from completed
+  learning units to XP. Native text measurement reserves both digit slots
   from the total phrase count with tabular numerals, so the track stays the same
-  width when the current phrase crosses a digit boundary. The row below shows
-  method level, speed, and a sentence-analysis placeholder action. Both rows,
-  including the three controls' full touch areas, belong to the fixed navigation
-  header. Level/speed labels remain single-line at large text sizes, and main
+  width when the current phrase crosses a digit boundary. One shared top bar owns
+  both rows; every option retains a distinct touch area of at least 44 points,
+  including grouped stages on narrow screens. Level/speed labels remain single-line
+  at large text sizes and support the large-content viewer, and main
   action symbols reserve the same text-scaled height across playback states.
   These controls never move with the scrolling phrase content. As requested
   in the #57 UI refinement, the level and analysis actions pause/checkpoint and

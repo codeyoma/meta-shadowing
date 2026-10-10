@@ -90,19 +90,33 @@ import XCTest
         }
     }
 
-    func testGroupedHeaderKeepsFourControlsVisibleWithoutOverlap() async throws {
-        for largeText in [false, true] {
-            try await withPlayer(mode: "video", largeText: largeText, stage: 7) { player in
-                let ids = ["player-level", "player-speed", "player-group", "player-analysis"]
-                let frames = try ids.map { try player.frame($0) }
-                for frame in frames {
-                    XCTAssertGreaterThanOrEqual(frame.width, 44)
-                    XCTAssertGreaterThanOrEqual(frame.height, 44)
-                    XCTAssertTrue(player.window.bounds.contains(frame))
-                    XCTAssertEqual(frame.midY, frames[0].midY, accuracy: 1)
-                }
-                for index in 1..<frames.count {
-                    XCTAssertLessThan(frames[index - 1].maxX, frames[index].minX)
+    func testGroupedHeaderKeepsSixCircularControlsSeparatedAboveProgress() async throws {
+        continueAfterFailure = false
+        for width in [320.0, 402.0] {
+            for largeText in [false, true] {
+                try await withPlayer(mode: "video", largeText: largeText, stage: 7, width: width, rate: 2.75) { player in
+                    XCTAssertEqual(player.flow.runtime?.controls.session.rate, 2.75)
+                    let ids = ["player-options", "player-level", "player-speed", "player-font", "player-group", "player-analysis"]
+                    let frames = try ids.map { try player.frame($0) }
+                    for frame in frames {
+                        XCTAssertEqual(frame.width, 44, accuracy: 0.5)
+                        XCTAssertEqual(frame.height, 44, accuracy: 0.5)
+                        XCTAssertTrue(player.window.bounds.contains(frame))
+                        XCTAssertEqual(frame.midY, frames[0].midY, accuracy: 1)
+                        XCTAssertLessThan(frame.maxY, try player.frame("player-progress").minY)
+                    }
+                    for index in 1..<frames.count {
+                        XCTAssertGreaterThanOrEqual(frames[index].minX - frames[index - 1].maxX, 4)
+                        XCTAssertEqual(frames[index].minX - frames[index - 1].maxX,
+                                       frames[1].minX - frames[0].maxX, accuracy: 0.5)
+                    }
+                    let image = UIGraphicsImageRenderer(bounds: player.window.bounds).image { _ in
+                        player.window.drawHierarchy(in: player.window.bounds, afterScreenUpdates: true)
+                    }
+                    let attachment = XCTAttachment(image: image)
+                    attachment.name = "Grouped header - width \(Int(width)), largest text \(largeText), rate 2.75"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
                 }
             }
         }
@@ -136,31 +150,35 @@ import XCTest
         }
     }
 
-    func testHeaderGeometryAcrossTitleLengthsAndTextSizes() async throws {
-        for mode in ["audio", "long"] {
+    func testHeaderShowsOptionsAboveFullWidthProgressWithoutBookTitle() async throws {
+        continueAfterFailure = false
+        for mode in ["audio", "long", "video"] {
             for largeText in [false, true] {
                 try await withPlayer(mode: mode, largeText: largeText) { player in
-                    let title = try player.frame("player-book-title")
                     let options = try player.frame("player-options")
                     let progress = try player.frame("player-progress")
                     let level = try player.frame("player-level")
                     let analysis = try player.frame("player-analysis")
                     let counter = try player.frame("player-counter")
                     XCTAssertLessThan(options.midX, player.window.bounds.midX)
-                    XCTAssertGreaterThanOrEqual(progress.minY, title.maxY)
-                    XCTAssertGreaterThan(progress.minX, options.maxX)
+                    XCTAssertEqual(options.midY, level.midY, accuracy: 1)
+                    XCTAssertNil(player.measurements.frames["player-book-title"], "The reading area must not reserve a book-title row")
+                    XCTAssertEqual(progress.minX, options.minX, accuracy: 2)
                     XCTAssertLessThanOrEqual(progress.maxX, player.window.bounds.maxX)
-                    XCTAssertLessThan(progress.maxY, level.minY)
-                    XCTAssertEqual(title.midX, player.window.bounds.midX, accuracy: 2)
+                    XCTAssertGreaterThan(progress.width, player.window.bounds.width * 0.6)
+                    XCTAssertGreaterThan(progress.minY, level.maxY)
+                    XCTAssertLessThan(progress.maxX, counter.minX)
                     XCTAssertEqual(counter.maxX, analysis.maxX, accuracy: 2)
-                    for identifier in ["player-level", "player-speed", "player-analysis"] {
+                    for identifier in ["player-options", "player-level", "player-speed", "player-font", "player-analysis"] {
                         let frame = try player.frame(identifier)
-                        XCTAssertGreaterThanOrEqual(frame.width, 44, identifier)
-                        XCTAssertGreaterThanOrEqual(frame.height, 44, identifier)
+                        XCTAssertEqual(frame.width, 44, accuracy: 0.5, identifier)
+                        XCTAssertEqual(frame.height, 44, accuracy: 0.5, identifier)
+                        XCTAssertEqual(frame.midY, options.midY, accuracy: 1)
+                        XCTAssertLessThan(frame.maxY, progress.minY)
                     }
                     XCTAssertEqual(player.flow.runtime?.controls.xp, 0)
                     let saved = try await player.model.workspace.load()
-                    XCTAssertEqual(saved.progress.xp, 0, "Rendering any title/text-size variant must not earn credit")
+                    XCTAssertEqual(saved.progress.xp, 0, "Rendering the new header must not earn credit")
                 }
             }
         }
@@ -173,7 +191,7 @@ import XCTest
                     let original = try player.frame("learning-line-0-0-target")
                     let translation = try player.frame("learning-line-0-0-translation")
                     let text = original.union(translation)
-                    let upper = try player.frame(mode == "video" ? "lesson-video" : "player-level")
+                    let upper = try player.frame(mode == "video" ? "lesson-video" : "player-progress-row")
                     let timeline = try player.frame("cycle-timeline")
                     XCTAssertGreaterThan(text.minY, upper.maxY)
                     XCTAssertLessThan(text.maxY, timeline.minY)
@@ -190,7 +208,7 @@ import XCTest
         for source in [8, 9] {
             let selected = try LearningReducer.reduce(session, event: .selectSource(source)).session
             let measurements = PlayerLayoutMeasurements()
-            try await withView(PlayerTitleView(title: "Morning Notes", session: selected, openOptions: {}),
+            try await withView(PlayerProgressView(session: selected),
                                measurements: measurements, required: ["player-progress", "player-counter"]) { _ in
                 frames.append(try frame("player-progress", in: measurements))
             }
@@ -210,7 +228,7 @@ import XCTest
         XCTAssertEqual(session.unit, 1)
         XCTAssertEqual(session.units[0].confirmed, 3)
         let measurements = PlayerLayoutMeasurements()
-        try await withView(PlayerTitleView(title: "Progress", session: session, openOptions: {}),
+        try await withView(PlayerProgressView(session: session),
                            measurements: measurements, required: ["player-progress"]) { host in
             let pixels = try pixels(host.view, crop: frame("player-progress", in: measurements))
             let primary = stride(from: 0, to: pixels.bytes.count, by: 4).filter {
@@ -263,7 +281,7 @@ import XCTest
         }
     }
 
-    private func withPlayer(mode: String, largeText: Bool, stage: Int = 1,
+    private func withPlayer(mode: String, largeText: Bool, stage: Int = 1, width: CGFloat = 402, rate: Double = 1,
                             body: (Player) async throws -> Void) async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -271,17 +289,23 @@ import XCTest
             catalog: ProductTestCatalog(root: root.appending(path: "assets"), mode: mode), profileID: "layout")
         let model = ProductModel(workspace: workspace)
         await model.activate()
+        if rate != 1 {
+            var preferences = LearningPreferences.fresh
+            preferences.rate = rate
+            let saved = await model.saveLearningPreferences(preferences)
+            XCTAssertTrue(saved)
+        }
         let flow = LearningFlow(workspace: workspace)
         await flow.open(packageKey: "ui-fixture-v1", stage: stage, startWhenPresented: true)
         flow.suspend()
         let measurements = PlayerLayoutMeasurements()
         let view = LearningPlayerView(route: .init(packageKey: "ui-fixture-v1", stage: stage, flow: flow), model: model)
             .environment(\.dynamicTypeSize, largeText ? .accessibility5 : .large)
-        let required = ["player-book-title", "player-options", "player-progress", "player-counter", "player-level",
+        let required = ["player-options", "player-progress", "player-counter", "player-level",
                         "player-speed", "player-analysis", "cycle-timeline", "player-main",
                         "learning-line-0-0-target", "learning-line-0-0-translation"] + (mode == "video" ? ["lesson-video"] : [])
         do {
-            try await withView(view, measurements: measurements, required: required) { host in
+            try await withView(view, measurements: measurements, required: required, width: width) { host in
                 let window = try XCTUnwrap(host.view.window)
                 try await body(Player(flow: flow, model: model, window: window, measurements: measurements))
             }
@@ -293,10 +317,11 @@ import XCTest
     }
 
     private func withView<Content: View>(_ view: Content, measurements: PlayerLayoutMeasurements,
-                                        required: [String], body: (UIViewController) async throws -> Void) async throws {
+                                        required: [String], width: CGFloat = 402,
+                                        body: (UIViewController) async throws -> Void) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.frame = CGRect(x: 0, y: 0, width: width, height: 874)
         window.windowLevel = .alert
         window.overrideUserInterfaceStyle = .light
         let host = UIHostingController(rootView: view.environment(\.playerLayoutMeasurements, measurements))

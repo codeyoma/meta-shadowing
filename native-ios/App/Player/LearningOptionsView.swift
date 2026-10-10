@@ -150,7 +150,7 @@ struct LearningOptionsView: View {
     }
 }
 
-/// Shared save boundary for the full options sheet and the fullscreen quick popovers.
+/// Shared save boundary for the full options sheet and both player layouts' quick popovers.
 struct LearningPreferenceSession {
     let runtime: NativeLearningRuntime
     let model: ProductModel
@@ -174,8 +174,12 @@ struct LearningPreferenceSession {
             var global = model.snapshot?.preferences.learning ?? .fresh
             switch route {
             case .fullscreenTypography:
+                global.originalTextFont = value.originalTextFont; global.translationTextFont = value.translationTextFont
                 global.fullscreenOriginalTextSize = value.fullscreenOriginalTextSize
                 global.fullscreenTranslationTextSize = value.fullscreenTranslationTextSize
+            case .typography:
+                global.originalTextFont = value.originalTextFont; global.translationTextFont = value.translationTextFont
+                global.originalTextSize = value.originalTextSize; global.translationTextSize = value.translationTextSize
             case .group: global.groupSize = value.groupSize
             case .revealSpeed, .revealPresets: global.revealWPM = value.revealWPM
             default:

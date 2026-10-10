@@ -33,33 +33,45 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         return app
     }
 
-    /// Visits each principal screen and audits it.
-    @MainActor private func auditPrincipalScreens(_ app: XCUIApplication, _ label: String) throws {
-        try audit(app, "\(label) library")
+    @MainActor private func auditScreens(_ label: String, largestText: Bool = false) throws {
+        // Visual audits resize the UI and produced order-dependent later findings.
+        // Audit the complete navigation flow for VoiceOver before running the same
+        // flow's visual diagnostics in a fresh process/profile. Keep every category.
+        for types in [Self.voiceOverAudits, Self.visualAudits] {
+            let app = launch(largestText: largestText)
+            defer { app.terminate() }
+            try auditPrincipalScreens(app, label, types: types)
+        }
+    }
+
+    /// Visits each principal screen in the same process and audits it.
+    @MainActor private func auditPrincipalScreens(_ app: XCUIApplication, _ label: String,
+                                                types: XCUIAccessibilityAuditType) throws {
+        try audit(app, "\(label) library", types: types)
         app.buttons["book-morning-notes-v1"].tap()
         XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 10))
-        try audit(app, "\(label) stages")
+        try audit(app, "\(label) stages", types: types)
         app.buttons["stage-1"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 20))
-        try audit(app, "\(label) player")
+        try audit(app, "\(label) player", types: types)
         app.buttons["player-options"].tap()
         XCTAssertTrue(app.buttons["options-close"].existsOrWait(timeout: 5))
-        try audit(app, "\(label) options")
+        try audit(app, "\(label) options", types: types)
         app.buttons["배속"].tap()
         XCTAssertTrue(app.sliders["재생 속도"].existsOrWait(timeout: 5))
-        try audit(app, "\(label) rate editor")
+        try audit(app, "\(label) rate editor", types: types)
         app.buttons["options-close"].tap()
         app.exitLearningThroughOptions()
         XCTAssertTrue(app.buttons["header-xp"].existsOrWait(timeout: 10))
         app.tabBars.buttons["설정"].tap()
         XCTAssertTrue(app.buttons["학습 설정"].existsOrWait(timeout: 5))
-        try audit(app, "\(label) settings")
+        try audit(app, "\(label) settings", types: types)
         app.buttons["학습 설정"].tap()
         let typography = app.buttons["폰트 설정"]
         XCTAssertTrue(typography.hittableOrWait(timeout: 5))
         typography.tap()
         XCTAssertTrue(app.navigationBars["폰트 설정"].existsOrWait(timeout: 5))
-        try audit(app, "\(label) typography preview")
+        try audit(app, "\(label) typography preview", types: types)
         // The long bilingual preview places lazily created controls below the fold at AX sizes.
         let size = app.textFields["original-size"]
         for _ in 0..<12 {
@@ -67,14 +79,25 @@ final class VoiceOverSemanticsUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(size.isHittable)
-        try audit(app, "\(label) typography controls")
+        try audit(app, "\(label) typography controls", types: types)
     }
 
-    @MainActor private func audit(_ app: XCUIApplication, _ screen: String) throws {
-        try app.performAccessibilityAudit(for: Self.voiceOverAudits.union(Self.visualAudits)) { [self] issue in
+    @MainActor private func audit(_ app: XCUIApplication, _ screen: String,
+                                 types: XCUIAccessibilityAuditType) throws {
+        try app.performAccessibilityAudit(for: types) { [self] issue in
             let element = issue.element.map { "\($0.elementType.rawValue) '\($0.identifier)' '\($0.label)'" } ?? "no element"
             let finding = "\(screen): \(issue.auditType.rawValue) – \(issue.compactDescription) – \(element)"
-            if Self.voiceOverAudits.contains(issue.auditType) { voiceOverFindings.append(finding) }
+            if Self.voiceOverAudits.contains(issue.auditType) {
+                voiceOverFindings.append(finding)
+                let screenshot = XCTAttachment(screenshot: app.screenshot())
+                screenshot.name = "VoiceOver audit failure: \(screen)"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+                let hierarchy = XCTAttachment(string: finding + "\n" + issue.detailedDescription + "\n" + app.debugDescription)
+                hierarchy.name = "VoiceOver audit failure hierarchy: \(screen)"
+                hierarchy.lifetime = .keepAlways
+                add(hierarchy)
+            }
             else { visualFindings.append(finding) }
             return true
         }
@@ -92,16 +115,13 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         defer { XCUIDevice.shared.appearance = .light }
         for appearance in [XCUIDevice.Appearance.light, .dark] {
             XCUIDevice.shared.appearance = appearance
-            let app = launch()
-            try auditPrincipalScreens(app, appearance == .dark ? "dark" : "light")
-            app.terminate()
+            try auditScreens(appearance == .dark ? "dark" : "light")
         }
         report()
     }
 
     @MainActor func testPrincipalScreensPassVoiceOverAuditsAtLargestText() throws {
-        let app = launch(largestText: true)
-        try auditPrincipalScreens(app, "largest text")
+        try auditScreens("largest text", largestText: true)
         report()
     }
 

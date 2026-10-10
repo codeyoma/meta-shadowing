@@ -124,9 +124,10 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     func presentOptions(_ route: LearningOptionRoute, asPopover: Bool = false) async {
         guard options == nil, !openingOptions, !closing else { return }
         if asPopover {
-            guard let runtime, !runtime.controls.session.isSilent,
-                  route == .rate || (route == .fullscreenTypography && video != nil) ||
-                    (route == .group && (7...10).contains(runtime.controls.session.plan.scope.stage)) else { return }
+            guard let runtime,
+                  route == .typography || (!runtime.controls.session.isSilent &&
+                    (route == .rate || (route == .fullscreenTypography && video != nil) ||
+                    (route == .group && (7...10).contains(runtime.controls.session.plan.scope.stage)))) else { return }
         }
         guard let runtime else {
             if route == .menu {

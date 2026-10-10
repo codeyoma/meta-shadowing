@@ -54,11 +54,6 @@ struct LearningPlayerView: View {
                         // Center content that fits; longer lessons retain normal top-first scrolling.
                         .defaultScrollAnchor(.center, for: .alignment)
                         .background(Color(uiColor: .systemGroupedBackground))
-                        .safeAreaBar(edge: .top) {
-                            VStack(spacing: 0) {
-                                PlayerHeaderView(runtime: runtime, flow: flow, model: model)
-                            }
-                        }
                         .safeAreaBar(edge: .bottom) {
                             LearningControlsView(runtime: runtime) { frame in
                                 if !frame.isEmpty { rewardActionFrame = frame }
@@ -85,10 +80,20 @@ struct LearningPlayerView: View {
             .toolbarVisibility(.hidden, for: .navigationBar)
             .safeAreaBar(edge: .top) {
                 if !orientation.isFullscreen {
-                    PlayerTitleView(title: flow.title.isEmpty ? String(localized: "학습") : flow.title,
-                                    session: flow.runtime?.controls.session) {
-                        Task { await flow.presentOptions(.menu) }
-                    }
+                    VStack(spacing: 8) {
+                        if let runtime = flow.runtime, runtime.controls.session.phase != .complete, !flow.accessInvalidated {
+                            PlayerHeaderView(runtime: runtime, flow: flow, model: model)
+                        } else {
+                            HStack {
+                                PlayerOptionsButton { Task { await flow.presentOptions(.menu) } }
+                                    .frame(width: 44)
+                                Spacer(minLength: 0)
+                            }.buttonStyle(PlayerHeaderButtonStyle())
+                        }
+                        if let session = flow.runtime?.controls.session {
+                            PlayerProgressView(session: session)
+                        }
+                    }.padding(.horizontal).padding(.vertical, 6)
                 }
             }
         }
@@ -130,47 +135,46 @@ struct LearningPlayerView: View {
         await model.activate()
     }
 }
-struct PlayerTitleView: View {
-    let title: String
-    let session: LearningSession?
-    let openOptions: () -> Void
-    private let optionsSize: CGFloat = 44
-    private let optionsSpacing: CGFloat = 12
+struct PlayerProgressView: View {
+    let session: LearningSession
     var body: some View {
-        VStack(spacing: 2) {
-            Text(title).font(.headline).lineLimit(1)
-                .accessibilityIdentifier("player-book-title")
-                .playerLayoutFrame("player-book-title")
-                .accessibilityShowsLargeContentViewer()
-                .padding(.horizontal, optionsSize + optionsSpacing)
-                .frame(maxWidth: .infinity)
-            if let session {
-                HStack(spacing: 8) {
-                    ProgressView(value: Double(session.units.filter { $0.confirmed == $0.planned }.count), total: Double(session.unitCount))
-                        .tint(BrandStyle.yellow)
-                        .accessibilityIdentifier("player-progress")
-                        .playerLayoutFrame("player-progress")
-                    ZStack(alignment: .trailing) {
-                        Text("\(session.unitCount)/\(session.unitCount)").hidden().accessibilityHidden(true)
-                        Text("\(session.unit + 1)/\(session.unitCount)")
-                            .playerLayoutFrame("player-counter")
-                    }.monospacedDigit().font(.caption2.bold()).fixedSize()
-                }.padding(.leading, optionsSize + optionsSpacing)
-            }
+        HStack(spacing: 8) {
+            ProgressView(value: Double(session.units.filter { $0.confirmed == $0.planned }.count), total: Double(session.unitCount))
+                .tint(BrandStyle.yellow)
+                .accessibilityIdentifier("player-progress")
+                .playerLayoutFrame("player-progress")
+            ZStack(alignment: .trailing) {
+                Text("\(session.unitCount)/\(session.unitCount)").hidden().accessibilityHidden(true)
+                Text("\(session.unit + 1)/\(session.unitCount)")
+                    .playerLayoutFrame("player-counter")
+            }.monospacedDigit().font(.caption2.bold()).fixedSize()
+        }.playerLayoutFrame("player-progress-row")
+    }
+}
+
+private struct PlayerOptionsButton: View {
+    let openOptions: () -> Void
+    var body: some View {
+        Button(action: openOptions) {
+            Image(systemName: "slider.horizontal.3").font(.system(size: 20))
         }
-        .frame(maxWidth: .infinity, minHeight: optionsSize)
-        .overlay(alignment: .leading) {
-            Button(action: openOptions) {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 20))
-                    .frame(width: optionsSize, height: optionsSize)
-                    .contentShape(.circle)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }.buttonStyle(.plain).foregroundStyle(.primary)
-                .accessibilityLabel("학습 옵션").accessibilityIdentifier("player-options")
-                .playerLayoutFrame("player-options")
-                .accessibilityShowsLargeContentViewer { Text("학습 옵션") }
-        }
-        .padding(.horizontal).padding(.vertical, 6)
+        .foregroundStyle(.primary)
+        .accessibilityLabel("학습 옵션").accessibilityIdentifier("player-options")
+        .playerLayoutFrame("player-options")
+        .accessibilityShowsLargeContentViewer { Text("학습 옵션") }
+    }
+}
+
+private struct PlayerHeaderButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            // Keep full values in a narrow six-control row; the large-content viewer remains available.
+            .font(.callout).lineLimit(1).minimumScaleFactor(0.25)
+            .padding(.horizontal, 3)
+            .frame(width: 44, height: 44)
+            .contentShape(.circle)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .opacity(configuration.isPressed ? 0.65 : 1)
     }
 }
 struct PlayerHeaderView: View {
@@ -179,48 +183,61 @@ struct PlayerHeaderView: View {
     let model: ProductModel
     var body: some View {
         let session = runtime.controls.session
-        VStack(spacing: 8) {
-            GlassEffectContainer {
-                HStack {
-                    Button { Task { await flow.presentOptions(.guide) } } label: {
-                        Text("Lv \((session.plan.scope.stage + 1) / 2)")
-                            .lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
-                    }.accessibilityShowsLargeContentViewer()
-                        .playerLayoutFrame("player-level")
-                    Spacer(minLength: 8)
-                    Button {
-                        Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate,
-                                                         asPopover: !session.isSilent) }
-                    } label: {
-                        Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
-                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
-                    }.accessibilityLabel("학습 속도").accessibilityShowsLargeContentViewer()
-                        .playerLayoutFrame("player-speed")
-                        .modifier(LearningQuickSettingAnchor(route: .rate, runtime: runtime, flow: flow, model: model))
-                    if (7...10).contains(session.plan.scope.stage) {
-                        Spacer(minLength: 8)
-                        Button { Task { await flow.presentOptions(.group, asPopover: true) } } label: {
-                            Text("\(session.plan.groupSize)구간")
-                                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
-                        }
-                        .accessibilityLabel("학습 구간 크기").accessibilityValue(Text("\(session.plan.groupSize)구간"))
-                        .accessibilityIdentifier("player-group").accessibilityShowsLargeContentViewer()
-                        .playerLayoutFrame("player-group")
-                        .modifier(LearningQuickSettingAnchor(route: .group, runtime: runtime, flow: flow, model: model))
+        let speedValue = session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×"
+        // Keep neighboring circles distinct, including the six-control row on small screens.
+        GlassEffectContainer(spacing: 0) {
+            HStack(spacing: 0) {
+                PlayerOptionsButton { Task { await flow.presentOptions(.menu) } }
+                Spacer(minLength: 4)
+                Button { Task { await flow.presentOptions(.guide) } } label: {
+                    Text("Lv \((session.plan.scope.stage + 1) / 2)")
+                }.accessibilityShowsLargeContentViewer()
+                    .playerLayoutFrame("player-level")
+                Spacer(minLength: 4)
+                Button {
+                    Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate,
+                                                     asPopover: !session.isSilent) }
+                } label: {
+                    if session.isSilent {
+                        Text(speedValue).monospacedDigit()
+                    } else {
+                        Image(systemName: "speedometer").font(.system(size: 20))
                     }
-                    Spacer(minLength: 8)
-                    Button { Task { await flow.presentOptions(.analysis) } } label: {
-                        Image(systemName: "text.magnifyingglass").frame(minWidth: 32)
-                    }
-                        .accessibilityLabel("문장 분석").accessibilityShowsLargeContentViewer()
-                        .playerLayoutFrame("player-analysis")
+                }.accessibilityLabel("학습 속도").accessibilityValue(Text(speedValue))
+                    .accessibilityShowsLargeContentViewer { Text("학습 속도 \(speedValue)") }
+                    .playerLayoutFrame("player-speed")
+                    .modifier(LearningQuickSettingAnchor(route: .rate, runtime: runtime, flow: flow, model: model))
+                Spacer(minLength: 4)
+                Button { Task { await flow.presentOptions(.typography, asPopover: true) } } label: {
+                    Image(systemName: "textformat.size").font(.system(size: 20))
                 }
-                .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
+                .accessibilityLabel("폰트 설정").accessibilityIdentifier("player-font")
+                .accessibilityShowsLargeContentViewer { Text("폰트 설정") }
+                .playerLayoutFrame("player-font")
+                .modifier(LearningQuickSettingAnchor(route: .typography, runtime: runtime, flow: flow, model: model))
+                if (7...10).contains(session.plan.scope.stage) {
+                    Spacer(minLength: 4)
+                    Button { Task { await flow.presentOptions(.group, asPopover: true) } } label: {
+                        Image(systemName: "rectangle.stack").font(.system(size: 20))
+                    }
+                    .accessibilityLabel("학습 구간 크기").accessibilityValue(Text("\(session.plan.groupSize)구간"))
+                    .accessibilityIdentifier("player-group")
+                    .accessibilityShowsLargeContentViewer { Text("학습 구간 크기 \(session.plan.groupSize)구간") }
+                    .playerLayoutFrame("player-group")
+                    .modifier(LearningQuickSettingAnchor(route: .group, runtime: runtime, flow: flow, model: model))
+                }
+                Spacer(minLength: 4)
+                Button { Task { await flow.presentOptions(.analysis) } } label: {
+                    Image(systemName: "text.magnifyingglass").font(.system(size: 20))
+                }
+                    .accessibilityLabel("문장 분석").accessibilityShowsLargeContentViewer()
+                    .playerLayoutFrame("player-analysis")
             }
-        }.padding(.horizontal).padding(.top, 8)
-            .onDisappear {
-                // Portrait/fullscreen transitions remove this popover's anchor, even during its pause/save.
-                if flow.optionsUsePopover { flow.dismissOptions() }
-            }
+            .buttonStyle(PlayerHeaderButtonStyle())
+        }
+        .onDisappear {
+            // Portrait/fullscreen transitions remove this popover's anchor, even during its pause/save.
+            if flow.optionsUsePopover { flow.dismissOptions() }
+        }
     }
 }
