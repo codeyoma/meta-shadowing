@@ -52,6 +52,9 @@ begin
     require_type(summary.fetch(key), Integer)
   end
   raise ArgumentError, 'Native summary contains failures or skips.' unless summary['failedTests'].zero? && summary['skippedTests'].zero?
+  if summary.key?('expectedFailures')
+    raise ArgumentError, 'Native summary contains expected failures.' unless require_type(summary['expectedFailures'], Integer).zero?
+  end
   raise ArgumentError, 'Native summary counts are incomplete.' unless summary['totalTestCount'].positive? && summary['passedTests'] == summary['totalTestCount']
   if summary.key?('testFailures')
     raise ArgumentError, 'Native summary contains failure records.' unless require_type(summary['testFailures'], Array).empty?

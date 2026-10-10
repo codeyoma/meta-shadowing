@@ -159,6 +159,13 @@ class NativeTestResultsTest < Minitest::Test
     end
   end
 
+  # Marking a known failure as expected must not approve full acceptance.
+  def test_expected_failures_cannot_approve_native_acceptance
+    @summary['expectedFailures'] = 1
+    _, _, status = validate
+    refute status.success?, 'Expected failures still represent failed acceptance obligations.'
+  end
+
   # A malformed tree must not be interpreted as an empty or successful report.
   def test_json_types_are_checked_at_every_input_boundary
     [

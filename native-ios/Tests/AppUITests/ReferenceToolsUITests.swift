@@ -24,27 +24,27 @@ final class ReferenceToolsUITests: XCTestCase {
         app.buttons["문장 분석"].tap()
         let first = app.buttons["analysis-sentence-1:0"]
         let second = app.buttons["analysis-sentence-2:0"]
-        XCTAssertTrue(first.waitForExistence(timeout: 8))
+        XCTAssertTrue(first.existsOrWait(timeout: 8))
         XCTAssertTrue(second.exists)
         XCTAssertFalse(app.scrollViews["analysis-detail-scroll"].exists)
         first.tap()
-        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].existsOrWait(timeout: 5))
         XCTAssertTrue(app.navigationBars["문장 분석"].exists)
         app.buttons["analysis-token-0"].tap()
         XCTAssertTrue(app.buttons["analysis-token-0"].isSelected)
         app.navigationBars["문장 분석"].buttons["BackButton"].tap()
-        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertTrue(first.existsOrWait(timeout: 5))
         XCTAssertTrue(second.exists)
         XCTAssertFalse(app.scrollViews["analysis-detail-scroll"].exists)
         second.tap()
-        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].existsOrWait(timeout: 5))
         XCTAssertTrue(app.staticTexts["Secret two"].exists)
         XCTAssertFalse(app.buttons["analysis-token-0"].isSelected)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.45))
             .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.45)))
-        XCTAssertTrue(first.waitForExistence(timeout: 5), "Native edge-back returns to the sentence list")
+        XCTAssertTrue(first.existsOrWait(timeout: 5), "Native edge-back returns to the sentence list")
         first.tap()
-        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].existsOrWait(timeout: 5))
         XCTAssertFalse(app.buttons["analysis-token-0"].isSelected)
         XCTAssertEqual(app.buttons.matching(identifier: "options-close").count, 1)
         app.buttons["options-close"].tap()
@@ -55,7 +55,7 @@ final class ReferenceToolsUITests: XCTestCase {
         let app = openFixture()
         openSingleSentenceAnalysis(app)
         let selected = app.buttons["analysis-token-0"], connected = app.buttons["analysis-token-1"]
-        XCTAssertTrue(selected.waitForExistence(timeout: 5)); selected.tap()
+        XCTAssertTrue(selected.existsOrWait(timeout: 5)); selected.tap()
         XCTAssertEqual(connected.value as? String, "선택한 단어와 직접 연결됨")
         XCTAssertFalse(connected.isSelected)
         XCTAssertTrue(selected.isSelected)
@@ -76,7 +76,7 @@ final class ReferenceToolsUITests: XCTestCase {
         let app = openFixture(mode: "analysis-long")
         openSingleSentenceAnalysis(app)
         let indicator = app.otherElements["analysis-scroll-position"]
-        XCTAssertTrue(indicator.waitForExistence(timeout: 5))
+        XCTAssertTrue(indicator.existsOrWait(timeout: 5))
         let before = indicator.value as? String
         app.scrollViews["analysis-graph"].swipeLeft()
         XCTAssertNotEqual(indicator.value as? String, before)
@@ -92,10 +92,10 @@ final class ReferenceToolsUITests: XCTestCase {
         continueAfterFailure = false
         let app = openFixture()
         let line = app.staticTexts["learning-line-0-0-target"]
-        XCTAssertTrue(line.waitForExistence(timeout: 5))
+        XCTAssertTrue(line.existsOrWait(timeout: 5))
         line.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
         let close = app.buttons["dictionary-close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 5)); close.tap()
+        XCTAssertTrue(close.existsOrWait(timeout: 5)); close.tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
         XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
@@ -106,22 +106,28 @@ final class ReferenceToolsUITests: XCTestCase {
         openSingleSentenceAnalysis(app)
         let scroll = app.scrollViews["analysis-detail-scroll"]
         let graph = app.scrollViews["analysis-graph"]
-        for _ in 0..<12 where !app.buttons["analysis-token-0"].isHittable {
+        for _ in 0..<12 {
+            guard !app.buttons["analysis-token-0"].isHittable else { break }
             scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.7))
                 .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25)))
         }
         let last = app.buttons["analysis-token-12"]
-        for _ in 0..<25 where !last.isHittable { graph.swipeLeft() }
+        for _ in 0..<25 {
+            guard !last.isHittable else { break }
+            graph.swipeLeft()
+        }
         XCTAssertTrue(last.isHittable); last.tap()
         XCTAssertTrue(last.isSelected)
         let relation = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "finish → Words")).firstMatch
-        for _ in 0..<12 where !relation.isHittable {
+        for _ in 0..<12 {
+            guard !relation.isHittable else { break }
             scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.7))
                 .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25)))
         }
         XCTAssertTrue(relation.isHittable)
         let copy = app.buttons["analysis-copy"]
-        for _ in 0..<16 where !copy.isHittable {
+        for _ in 0..<16 {
+            guard !copy.isHittable else { break }
             scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25))
                 .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.75)))
         }
@@ -157,20 +163,21 @@ final class ReferenceToolsUITests: XCTestCase {
         let app = openFixture()
         openSingleSentenceAnalysis(app)
         let token = app.buttons["analysis-token-0"]
-        XCTAssertTrue(token.waitForExistence(timeout: 5)); token.tap()
+        XCTAssertTrue(token.existsOrWait(timeout: 5)); token.tap()
         let lookup = app.buttons["analysis-dictionary"]
         let scroll = app.scrollViews["analysis-detail-scroll"]
-        for _ in 0..<5 where !lookup.isHittable {
+        for _ in 0..<5 {
+            guard !lookup.isHittable else { break }
             scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
                 .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)))
         }
         XCTAssertTrue(lookup.isHittable, app.debugDescription); lookup.tap()
         let close = app.buttons["dictionary-close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 8)); close.tap()
-        XCTAssertTrue(lookup.waitForExistence(timeout: 5))
+        XCTAssertTrue(close.existsOrWait(timeout: 8)); close.tap()
+        XCTAssertTrue(lookup.existsOrWait(timeout: 5))
         XCTAssertTrue(token.isSelected)
         lookup.tap()
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        XCTAssertTrue(close.existsOrWait(timeout: 5))
         let dictionary = app.otherElements["dictionary.sheet"]
         XCTAssertTrue(dictionary.exists)
         dictionary.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.05)).tap()
@@ -186,7 +193,7 @@ final class ReferenceToolsUITests: XCTestCase {
         let app = openFixture()
         openSingleSentenceAnalysis(app)
         let token = app.buttons["analysis-token-0"]
-        XCTAssertTrue(token.waitForExistence(timeout: 5))
+        XCTAssertTrue(token.existsOrWait(timeout: 5))
         token.tap()
         XCTAssertTrue(token.isSelected)
         app.buttons["analysis-copy"].tap()
@@ -199,7 +206,7 @@ final class ReferenceToolsUITests: XCTestCase {
     }
     @MainActor private func openSingleSentenceAnalysis(_ app: XCUIApplication) {
         app.buttons["문장 분석"].tap()
-        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.scrollViews["analysis-detail-scroll"].existsOrWait(timeout: 8))
         XCTAssertFalse(app.buttons["analysis-sentence-1:0"].exists,
                        "A single sentence opens directly without a redundant selection row")
         XCTAssertTrue(app.navigationBars["문장 분석"].exists)
@@ -225,13 +232,19 @@ final class ReferenceToolsUITests: XCTestCase {
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString, "--ui-test-product-fixture", mode] + extra
         app.launch()
         let book = app.buttons["book-ui-fixture-v1"]
-        XCTAssertTrue(book.waitForExistence(timeout: 15))
-        for _ in 0..<8 where !book.isHittable { app.swipeUp() }
-        XCTAssertTrue(book.wait(for: \.isHittable, toEqual: true, timeout: 10))
+        XCTAssertTrue(book.existsOrWait(timeout: 15))
+        for _ in 0..<8 {
+            guard !book.isHittable else { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(book.hittableOrWait(timeout: 10))
         book.tap()
-        for _ in 0..<16 where !app.buttons["stage-\(stage)"].isHittable { app.swipeUp() }
+        for _ in 0..<16 {
+            guard !app.buttons["stage-\(stage)"].isHittable else { break }
+            app.swipeUp()
+        }
         app.buttons["stage-\(stage)"].tap()
-        XCTAssertTrue(app.buttons["문장 분석"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["문장 분석"].existsOrWait(timeout: 10))
         return app
     }
 }

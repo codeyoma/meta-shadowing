@@ -10,6 +10,10 @@ require 'digest'
 class NativePrePushTest < Minitest::Test
   SOURCE = File.expand_path('../..', __dir__)
   ZERO = '0' * 40
+  PRIMARY = '11111111-1111-4111-8111-111111111111'
+  SECONDARY = '22222222-2222-4222-8222-222222222222'
+  THIRD = '33333333-3333-4333-8333-333333333333'
+  RUNTIME = 'com.apple.CoreSimulator.SimRuntime.iOS-27-0'
 
   def setup
     @temporary = Dir.mktmpdir('native-hook-test-')
@@ -17,6 +21,7 @@ class NativePrePushTest < Minitest::Test
     @remote = File.join(@temporary, 'remote.git')
     @bin = File.join(@temporary, 'bin')
     @record = File.join(@temporary, 'executed.jsonl')
+    @retained_snapshots = []
     FileUtils.mkdir_p([@repo, @bin])
     @env = { 'PATH' => "#{@bin}:#{ENV.fetch('PATH')}", 'NATIVE_TEST_RECORD' => @record,
              'GIT_CONFIG_GLOBAL' => File.join(@temporary, 'absent-global'), 'GIT_CONFIG_NOSYSTEM' => '1' }
@@ -39,13 +44,14 @@ class NativePrePushTest < Minitest::Test
     write('assets/sample/manifest.json', "committed asset\n")
     stub_tool('xcodebuild', '#!/bin/sh\nprintf "Xcode 27.0\\nBuild version 27A1\\n"\n'.gsub('\\n', "\n"))
     stub_tool('xcodegen', "#!/bin/sh\nprintf 'Version: 2.46.0\\n'\n")
-    stub_tool('xcrun', <<~SH)
-      #!/bin/sh
-      printf '%s\n' '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"udid":"11111111-1111-4111-8111-111111111111","name":"MetaShadowing Native Pre-push Tests","isAvailable":true}]}}'
-    SH
+    stub_devices
   end
 
   def teardown
+    @retained_snapshots.each do |path|
+      next unless File.dirname(path) == File.realpath('/tmp') && File.basename(path).start_with?('native-pre-push-snapshot-')
+      FileUtils.remove_entry(path) if File.directory?(path)
+    end
     FileUtils.remove_entry(@temporary)
   end
 
@@ -162,19 +168,116 @@ class NativePrePushTest < Minitest::Test
     assert_equal %w[committed committed changed], records.map { |record| record.fetch('content') }
   end
 
+  # An absent secondary setting must retain the existing serial runner interface.
+  def test_serial_configuration_forwards_only_primary_and_output
+    add_runner
+    oid = commit
+    output, status = push(oid, 'refs/heads/serial')
+    assert status.success?, output
+    assert_equal [PRIMARY, nil, 4], records.first.values_at('primary', 'secondary', 'argument_count')
+  end
+
+  # Reusing a pass for another pair or execution mode would validate the wrong destination.
+  def test_secondary_configuration_forwards_distinct_pair_and_binds_cache_to_both_ids_and_mode
+    add_runner
+    oid = commit
+    assert push(oid, 'refs/heads/serial').last.success?
+    git('config', 'native.prePushSecondarySimulator', SECONDARY)
+    assert push(oid, 'refs/heads/parallel').last.success?
+    assert push(oid, 'refs/heads/parallel-cached').last.success?
+    assert_equal 2, records.length
+    assert_equal [PRIMARY, SECONDARY, 6], records.last.values_at('primary', 'secondary', 'argument_count')
+    git('config', 'native.prePushSimulator', THIRD)
+    assert push(oid, 'refs/heads/other-primary').last.success?
+    git('config', 'native.prePushSecondarySimulator', PRIMARY)
+    assert push(oid, 'refs/heads/other-secondary').last.success?
+    assert_equal [[PRIMARY, nil], [PRIMARY, SECONDARY], [THIRD, SECONDARY], [THIRD, PRIMARY]],
+                 records.map { |record| record.values_at('primary', 'secondary') }
+    git('config', 'native.prePushSimulator', PRIMARY)
+    git('config', '--unset', 'native.prePushSecondarySimulator')
+    assert push(oid, 'refs/heads/serial-cached').last.success?
+    assert_equal 4, records.length
+  end
+
+  # Invalid or ambiguous repository values must not silently choose a destination.
+  def test_malformed_duplicate_or_multivalued_simulator_configuration_blocks_push
+    add_runner
+    oid = commit
+    alpha = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    cases = [
+      [[PRIMARY], ['invalid']], [[PRIMARY], ['']], [[PRIMARY], [" #{SECONDARY}"]],
+      [['invalid'], nil], [["#{PRIMARY}\n#{SECONDARY}"], nil],
+      [[PRIMARY], [PRIMARY]], [[alpha.upcase], [alpha]],
+      [[PRIMARY, PRIMARY], nil], [[PRIMARY], [SECONDARY, SECONDARY]]
+    ]
+    cases.each_with_index do |(primary, secondary), index|
+      execute('git', 'config', '--unset-all', 'native.prePushSimulator')
+      execute('git', 'config', '--unset-all', 'native.prePushSecondarySimulator')
+      primary.each { |value| git('config', '--add', 'native.prePushSimulator', value) }
+      secondary&.each { |value| git('config', '--add', 'native.prePushSecondarySimulator', value) }
+      output, status = push(oid, "refs/heads/invalid-configuration-#{index}")
+      refute status.success?, output
+      refute remote_ref("refs/heads/invalid-configuration-#{index}")
+      assert_empty records
+    end
+  end
+
+  # A missing UUID must report a destination problem, not a tool failure or crash.
+  def test_missing_primary_or_secondary_reports_destination_error_before_validation
+    add_runner
+    oid = commit
+    [PRIMARY, SECONDARY].each do |missing|
+      git('config', 'native.prePushSecondarySimulator', SECONDARY)
+      stub_devices(RUNTIME => [PRIMARY, SECONDARY].reject { |id| id == missing }.map { |id| simulator_device(id) })
+      ref = "refs/heads/missing-#{missing}"
+      output, status = push(oid, ref)
+      refute status.success?, output
+      assert_includes output, 'configure a dedicated MetaShadowing Native Pre-push iOS 27.0 simulator'
+      refute_includes output, 'required tools or local evidence are unavailable'
+      refute_includes output, 'NoMethodError'
+      refute remote_ref(ref)
+      assert_empty records
+      assert_empty Dir.glob(File.join(@repo, '.git/native-pre-push/pass-*.json'))
+    end
+  end
+
+  # The secondary must satisfy the same isolation contract and device model as the primary.
+  def test_secondary_requires_one_available_matching_pre_push_device
+    add_runner
+    oid = commit
+    git('config', 'native.prePushSecondarySimulator', SECONDARY)
+    device = simulator_device(SECONDARY)
+    cases = [
+      { RUNTIME => [simulator_device(PRIMARY)] },
+      { RUNTIME => [simulator_device(PRIMARY), device.merge('isAvailable' => false)] },
+      { RUNTIME => [simulator_device(PRIMARY), device.merge('name' => 'MetaShadowing Native W2 iOS 27')] },
+      { RUNTIME => [simulator_device(PRIMARY), device.merge('deviceTypeIdentifier' => 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro')] },
+      { RUNTIME => [simulator_device(PRIMARY), device.reject { |key, _| key == 'deviceTypeIdentifier' }] },
+      { RUNTIME => [simulator_device(PRIMARY), device, device] },
+      { RUNTIME => [simulator_device(PRIMARY)], 'com.apple.CoreSimulator.SimRuntime.iOS-27-1' => [device] }
+    ]
+    cases.each_with_index do |devices, index|
+      stub_devices(devices)
+      output, status = push(oid, "refs/heads/invalid-device-#{index}")
+      refute status.success?, output
+      refute remote_ref("refs/heads/invalid-device-#{index}")
+      assert_empty records
+    end
+  end
+
   # Older committed runners cannot earn the stronger gate's evidence, even if
   # an existing cache record claims the current contract for that exact commit.
   def test_old_or_ambiguous_committed_contract_is_rejected_before_cache_or_runner
-    [nil, '3', '4\n# NATIVE_FULL_CONTRACT_VERSION=4'].each_with_index do |marker, index|
+    [nil, '4', '5\n# NATIVE_FULL_CONTRACT_VERSION=5'].each_with_index do |marker, index|
       add_runner
       path = File.join(@repo, 'native-ios/scripts/test-native-full.sh')
-      source = File.read(path).sub("# NATIVE_FULL_CONTRACT_VERSION=4\n", '')
+      source = File.read(path).sub("# NATIVE_FULL_CONTRACT_VERSION=5\n", '')
       source = source.sub("#!/bin/bash\n", "#!/bin/bash\n# NATIVE_FULL_CONTRACT_VERSION=#{marker.gsub('\\n', "\n")}\n") if marker
       File.write(path, source)
       oid = commit
-      identity = { 'contract_version' => 4, 'commit' => oid,
+      identity = { 'contract_version' => 5, 'commit' => oid,
                    'toolchain' => ["Xcode 27.0\nBuild version 27A1", 'Version: 2.46.0'],
-                   'simulator' => '11111111-1111-4111-8111-111111111111',
+                   'simulator' => PRIMARY, 'secondary_simulator' => nil, 'mode' => 'serial',
                    'runtime' => 'com.apple.CoreSimulator.SimRuntime.iOS-27-0' }
       evidence = File.join(@repo, '.git/native-pre-push')
       FileUtils.mkdir_p(evidence)
@@ -193,8 +296,8 @@ class NativePrePushTest < Minitest::Test
     assert push(oid, 'refs/heads/first').last.success?
     cache = Dir.glob(File.join(@repo, '.git/native-pre-push/pass-*.json')).fetch(0)
     identity = JSON.parse(File.read(cache))
-    assert_equal 4, identity.fetch('contract_version')
-    identity['contract_version'] = 3
+    assert_equal 5, identity.fetch('contract_version')
+    identity['contract_version'] = 4
     File.delete(cache)
     old_key = Digest::SHA256.hexdigest(JSON.generate(identity))
     File.write(File.join(File.dirname(cache), "pass-#{old_key}.json"), JSON.generate(identity))
@@ -285,6 +388,82 @@ class NativePrePushTest < Minitest::Test
     refute remote_ref('refs/heads/dev')
   end
 
+  # Both explicit IDs must persist locally and remain configured across idempotent installs.
+  def test_installer_configures_secondary_and_preserves_it_when_omitted
+    add_runner
+    oid = commit
+    output, status = execute('bash', 'native-ios/scripts/install-native-git-hooks.sh',
+                             '--secondary-simulator-id', SECONDARY, '--simulator-id', PRIMARY)
+    assert status.success?, output
+    [[], ['--simulator-id', PRIMARY]].each do |arguments|
+      output, status = execute('bash', 'native-ios/scripts/install-native-git-hooks.sh', *arguments)
+      assert status.success?, output
+    end
+    assert_equal PRIMARY, git('config', '--local', '--get', 'native.prePushSimulator').strip
+    assert_equal SECONDARY, git('config', '--local', '--get', 'native.prePushSecondarySimulator').strip
+    refute File.exist?(@env.fetch('GIT_CONFIG_GLOBAL'))
+    output, status = push(oid, 'refs/heads/installed-pair')
+    assert status.success?, output
+    assert_equal [PRIMARY, SECONDARY], records.first.values_at('primary', 'secondary')
+  end
+
+  # Rejected CLI input must not partly install hooks or alter stored destinations.
+  def test_installer_rejects_malformed_or_duplicate_ids_and_options_before_writes
+    alpha = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    git('config', '--unset', 'core.hooksPath')
+    cases = [
+      ['--secondary-simulator-id', SECONDARY], ['--simulator-id'],
+      ['--simulator-id', PRIMARY, '--secondary-simulator-id'],
+      ['--simulator-id', PRIMARY, '--secondary-simulator-id', 'invalid'],
+      ['--simulator-id', PRIMARY, '--secondary-simulator-id', PRIMARY],
+      ['--simulator-id', alpha, '--secondary-simulator-id', alpha.upcase],
+      ['--simulator-id', PRIMARY, '--simulator-id', SECONDARY],
+      ['--simulator-id', PRIMARY, '--secondary-simulator-id', SECONDARY, '--secondary-simulator-id', THIRD]
+    ]
+    cases.each do |arguments|
+      output, status = execute('bash', 'native-ios/scripts/install-native-git-hooks.sh', *arguments)
+      refute status.success?, output
+      refute execute('git', 'config', '--local', '--get', 'core.hooksPath').last.success?
+      assert_equal PRIMARY, git('config', '--local', '--get', 'native.prePushSimulator').strip
+      refute execute('git', 'config', '--local', '--get', 'native.prePushSecondarySimulator').last.success?
+    end
+  end
+
+  # Changing the primary alone must not make a retained pair target the same device.
+  def test_installer_rejects_primary_that_duplicates_retained_secondary_before_writes
+    git('config', '--unset', 'core.hooksPath')
+    git('config', 'native.prePushSecondarySimulator', SECONDARY)
+    output, status = execute('bash', 'native-ios/scripts/install-native-git-hooks.sh', '--simulator-id', SECONDARY)
+    refute status.success?, output
+    refute execute('git', 'config', '--local', '--get', 'core.hooksPath').last.success?
+    assert_equal PRIMARY, git('config', '--local', '--get', 'native.prePushSimulator').strip
+    assert_equal SECONDARY, git('config', '--local', '--get', 'native.prePushSecondarySimulator').strip
+  end
+
+  # Empty and repeated persisted values must remain invalid when the CLI preserves them.
+  def test_installer_rejects_malformed_retained_configuration_before_writes
+    git('config', '--unset', 'core.hooksPath')
+    [[''], [SECONDARY, ''], [SECONDARY, SECONDARY], ["#{SECONDARY}\n"]].each do |values|
+      execute('git', 'config', '--unset-all', 'native.prePushSecondarySimulator')
+      values.each { |value| git('config', '--add', 'native.prePushSecondarySimulator', value) }
+      output, status = execute('bash', 'native-ios/scripts/install-native-git-hooks.sh', '--simulator-id', PRIMARY)
+      refute status.success?, output
+      refute execute('git', 'config', '--local', '--get', 'core.hooksPath').last.success?
+      assert_equal PRIMARY, git('config', '--local', '--get', 'native.prePushSimulator').strip
+    end
+  end
+
+  # Existing duplicate config must fail before core.hooksPath changes, even with valid CLI IDs.
+  def test_installer_rejects_ambiguous_config_before_explicit_reconfiguration
+    git('config', '--unset', 'core.hooksPath')
+    git('config', '--add', 'native.prePushSimulator', PRIMARY)
+    original = File.binread(File.join(@repo, '.git/config'))
+    output, status = execute('bash', 'native-ios/scripts/install-native-git-hooks.sh',
+                             '--simulator-id', PRIMARY, '--secondary-simulator-id', SECONDARY)
+    refute status.success?, output
+    assert_equal original, File.binread(File.join(@repo, '.git/config'))
+  end
+
   # A malformed tracked runner or tracked private configuration cannot be safe evidence.
   def test_tracked_private_configuration_is_rejected_before_runner
     add_runner
@@ -323,8 +502,9 @@ class NativePrePushTest < Minitest::Test
     assert_includes output, 'Native full: running all native tests.'
     ['Native full: inspecting Debug product.', 'Native full: building Release product.',
      'Native full: inspecting Release product.', 'Native full: building fictional downloader.',
-     'Native full: checking runtime inspection guard.'].each { |phase| assert_includes output, phase }
-    assert_includes output, 'PASS: 183 native test cases matched the selected inventory.'
+     'Native full: checking runtime inspection guard.', 'Native full: running native integrations.',
+     'Native full: running two UI selections.', 'Native full: validating combined results.'].each { |phase| assert_includes output, phase }
+    refute_includes output, 'PASS: 183 native test cases matched the selected inventory.'
     refute_includes output, 'Native full: private-account-and-signed-url'
     assert Dir.glob(File.join(@repo, '.git/native-pre-push/run-*/runner.log')).any? { |path| File.read(path).include?('private-account-and-signed-url') }
   end
@@ -350,15 +530,86 @@ class NativePrePushTest < Minitest::Test
     end
   end
 
+  # A lease supervisor needs time to finish owned simulator cleanup after its workers exit.
+  def test_cancellation_allows_supervisor_cleanup_before_releasing_lock
+    @env['NATIVE_TEST_CLEANUP_DELAY'] = '3'
+    @env['NATIVE_TEST_CLEANUP_RECORD'] = File.join(@temporary, 'supervisor-cleaned')
+    assert_cancellation_drains_owned_build_processes('Native full: running two UI selections.')
+    assert File.file?(@env.fetch('NATIVE_TEST_CLEANUP_RECORD')), 'TERM grace must allow owned cleanup to finish'
+  end
+
+  # Supervisor exit is not proof that its separately owned groups and guests settled.
+  def test_active_lease_after_failed_exit_retains_snapshot_archive_and_repository_lock
+    @env['NATIVE_TEST_FAILURE'] = '1'
+    assert_active_lease_retains_owned_evidence
+  end
+
+  # A zero exit and premature verdict cannot certify a lease that is still active.
+  def test_active_lease_after_zero_exit_blocks_pass_and_retains_owned_evidence
+    @env['NATIVE_TEST_FAILURE'] = '0'
+    assert_active_lease_retains_owned_evidence
+  end
+
+  # Once the supervisor clears its marker, ordinary successful cleanup still applies.
+  def test_cleared_lease_allows_pass_and_normal_snapshot_cleanup
+    add_lease_marker_runner
+    @env['NATIVE_TEST_CLEAR_LEASE'] = '1'
+    oid = commit
+    output, status = push(oid, 'refs/heads/settled-lease')
+    assert status.success?, output
+    state = records.first
+    @retained_snapshots << state.fetch('snapshot')
+    refute File.exist?(state.fetch('snapshot'))
+    refute File.exist?(File.join(File.dirname(state.fetch('results')), 'snapshot.tar'))
+    refute File.exist?(File.join(@repo, '.git/native-pre-push/lock'))
+    assert_includes output, 'PASS: 183 native test cases matched the selected inventory.'
+    assert_equal 1, Dir.glob(File.join(@repo, '.git/native-pre-push/pass-*.json')).length
+  end
+
+  # A cancelled supervisor can exit promptly while its separate ownership remains unsettled.
+  def test_active_lease_after_cancellation_retains_owned_evidence
+    add_lease_marker_runner
+    @env['NATIVE_TEST_BLOCK_LEASE'] = '1'
+    oid = commit
+    input_read, input_write = IO.pipe
+    output_path = File.join(@temporary, 'lease-cancel-output')
+    output = File.open(output_path, 'w')
+    hook_pid = Process.spawn(@env, 'sh', '.githooks/pre-push', 'origin', 'private-remote.invalid',
+                             chdir: @repo, in: input_read, out: output, err: output)
+    input_read.close
+    input_write.write("refs/heads/dev #{oid} refs/heads/dev #{ZERO}\n")
+    input_write.close
+    Timeout.timeout(5) { sleep 0.02 until File.exist?(@record) }
+    state = records.first
+    @retained_snapshots << state.fetch('snapshot')
+    Process.kill('TERM', hook_pid)
+    _pid, status = Timeout.timeout(5) { Process.wait2(hook_pid) }
+    refute status.success?
+    refute process_alive?(state.fetch('pid')), 'The fake supervisor exits promptly after TERM'
+    assert_retained_lease_evidence(state, File.read(output_path))
+  ensure
+    [state && state['pid'], hook_pid].compact.each do |pid|
+      Process.kill('KILL', pid) if process_alive?(pid)
+    rescue Errno::ESRCH
+      nil
+    end
+    begin
+      Process.wait(hook_pid) if hook_pid
+    rescue Errno::ECHILD
+      nil
+    end
+    [input_read, input_write, output].compact.each { |io| io.close unless io.closed? }
+  end
+
   def assert_cancellation_drains_owned_build_processes(phase)
     FileUtils.rm_f(@record)
     @env['NATIVE_TEST_BLOCK_PHASE'] = phase
     write('native-ios/public.txt', "#{phase}\n")
     write('native-ios/scripts/test-native-full.sh', <<~'SH')
       #!/bin/sh
-      # NATIVE_FULL_CONTRACT_VERSION=4
+      # NATIVE_FULL_CONTRACT_VERSION=5
       echo "$NATIVE_TEST_BLOCK_PHASE"
-      exec ruby -rjson -e 'child = fork { sleep 60 }; trap("TERM") { Process.wait(child); exit 1 }; File.write(ENV.fetch("NATIVE_TEST_RECORD"), JSON.generate({pids: [Process.pid, child], snapshot: Dir.pwd})); sleep 60'
+      exec ruby -rjson -e 'child = fork { sleep 60 }; trap("TERM") { Process.wait(child); sleep ENV.fetch("NATIVE_TEST_CLEANUP_DELAY", "0").to_f; File.write(ENV.fetch("NATIVE_TEST_CLEANUP_RECORD"), "cleaned") if ENV["NATIVE_TEST_CLEANUP_RECORD"]; exit 1 }; File.write(ENV.fetch("NATIVE_TEST_RECORD"), JSON.generate({pids: [Process.pid, child], snapshot: Dir.pwd})); sleep 60'
     SH
     oid = commit
     input_read, input_write = IO.pipe
@@ -451,17 +702,70 @@ class NativePrePushTest < Minitest::Test
     false
   end
 
+  def assert_active_lease_retains_owned_evidence
+    add_lease_marker_runner
+    oid = commit
+    output, status = push(oid, 'refs/heads/active-lease')
+    state = records.first
+    @retained_snapshots << state.fetch('snapshot')
+    refute status.success?, output
+    refute remote_ref('refs/heads/active-lease')
+    assert_retained_lease_evidence(state, output)
+  end
+
+  def assert_retained_lease_evidence(state, output)
+    assert File.file?(state.fetch('marker'))
+    assert File.directory?(state.fetch('snapshot')), 'Active lease must retain its source snapshot'
+    assert File.file?(File.join(File.dirname(state.fetch('results')), 'snapshot.tar'))
+    lock = File.join(@repo, '.git/native-pre-push/lock')
+    assert File.directory?(lock), 'Active lease must retain repository ownership'
+    owner = File.read(File.join(lock, 'owner'))
+    assert_includes owner, state.fetch('snapshot'), 'Private owner metadata must locate the retained snapshot'
+    assert_equal 0o600, File.stat(File.join(lock, 'owner')).mode & 0o777
+    assert_empty Dir.glob(File.join(@repo, '.git/native-pre-push/pass-*.json'))
+    refute_includes output, 'PASS:'
+    refute_includes output, 'full tests passed'
+    refute_includes output, state.fetch('snapshot')
+    refute_includes output, state.fetch('results')
+  end
+
+  def add_lease_marker_runner
+    write('native-ios/scripts/test-native-full.sh', <<~'SH')
+      #!/bin/bash
+      # NATIVE_FULL_CONTRACT_VERSION=5
+      exec ruby -rjson - "$4" <<'RUBY'
+      $stdout.sync = true
+      lease = File.join(ARGV.fetch(0), 'native-lease-fixture')
+      Dir.mkdir(lease)
+      marker = File.join(lease, 'active')
+      File.write(marker, '')
+      trap('TERM') { exit 1 }
+      File.write(ENV.fetch('NATIVE_TEST_RECORD'), JSON.generate({
+        snapshot: Dir.pwd, results: ARGV.fetch(0), marker: marker, pid: Process.pid
+      }))
+      puts 'PASS: 183 native test cases matched the selected inventory.'
+      sleep 60 if ENV['NATIVE_TEST_BLOCK_LEASE']
+      File.delete(marker) if ENV['NATIVE_TEST_CLEAR_LEASE']
+      exit ENV.fetch('NATIVE_TEST_FAILURE', '0').to_i
+      RUBY
+    SH
+  end
+
   def add_runner
     write('native-ios/scripts/test-native-full.sh', <<~'SH')
       #!/bin/bash
-      # NATIVE_FULL_CONTRACT_VERSION=4
+      # NATIVE_FULL_CONTRACT_VERSION=5
       set -eu
       test "$1" = --simulator-id
-      test "$2" = 11111111-1111-4111-8111-111111111111
       test "$3" = --output-dir
       test -d "$4"
       case "$4" in /*) ;; *) exit 91 ;; esac
-      ruby -rjson -ropen3 - "$4" <<'RUBY'
+      if test "$#" = 6; then
+        test "$5" = --secondary-simulator-id
+      else
+        test "$#" = 4
+      fi
+      ruby -rjson -ropen3 - "$@" <<'RUBY'
       _output, status = Open3.capture2e('git', 'rev-parse', '--absolute-git-dir')
       _output, work_tree_status = Open3.capture2e('git', 'rev-parse', '--show-toplevel')
       temporary_directory = ENV.fetch('TMPDIR', '/tmp')
@@ -471,7 +775,10 @@ class NativePrePushTest < Minitest::Test
           content: File.read('native-ios/public.txt').strip,
           asset: File.exist?('assets/sample/manifest.json') ? File.read('assets/sample/manifest.json').strip : nil,
           private: File.exist?('native-ios/Config/Local.xcconfig'),
-          output_exists: File.directory?(ARGV[0]),
+          output_exists: File.directory?(ARGV[3]),
+          primary: ARGV[1],
+          secondary: ARGV[5],
+          argument_count: ARGV.length,
           git_discovered: status.success?,
           git_work_tree: work_tree_status.success?,
           snapshot: Dir.pwd,
@@ -489,6 +796,9 @@ class NativePrePushTest < Minitest::Test
       echo 'Native full: building fictional downloader.'
       echo 'Native full: checking runtime inspection guard.'
       echo 'Native full: running all native tests.'
+      echo 'Native full: running native integrations.'
+      echo 'Native full: running two UI selections.'
+      echo 'Native full: validating combined results.'
       echo 'PASS: 183 native test cases matched the selected inventory.'
       echo 'Native full: private-account-and-signed-url'
       exit "${NATIVE_TEST_FAILURE:-0}"
@@ -497,6 +807,15 @@ class NativePrePushTest < Minitest::Test
 
   def records
     File.exist?(@record) ? File.readlines(@record).map { |line| JSON.parse(line) } : []
+  end
+
+  def simulator_device(id)
+    { 'udid' => id, 'name' => 'MetaShadowing Native Pre-push Tests', 'isAvailable' => true,
+      'deviceTypeIdentifier' => 'com.apple.CoreSimulator.SimDeviceType.iPhone-17', 'state' => 'Shutdown' }
+  end
+
+  def stub_devices(devices = { RUNTIME => [PRIMARY, SECONDARY, THIRD].map { |id| simulator_device(id) } })
+    stub_tool('xcrun', "#!/bin/sh\nprintf '%s\\n' '#{JSON.generate('devices' => devices)}'\n")
   end
 
   def write(relative, content)
