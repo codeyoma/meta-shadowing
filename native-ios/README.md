@@ -183,6 +183,11 @@ clipping audits are attached to the result for review but do not fail the gate. 
 gate verifies Apple's audits and UI automation snapshots, not VoiceOver's spoken
 output or focus behavior. The snapshots also require the book-kind and XP-estimate
 labels to remain present; snapshot presence alone does not prove VoiceOver eligibility.
+VoiceOver and visual audits traverse the same complete navigation flow in separate
+fresh app/profile passes. This keeps the gating flow independent of earlier visual
+audit operations without dropping screens, audit categories, or text-size settings.
+Gating findings retain the screen, detailed description, and accessibility hierarchy
+at the time of failure for diagnosis.
 
 The product check inspects resources, all embedded Mach-O dependencies/symbols,
 the iPhone-only device family, downloader display name, deployment minimum and

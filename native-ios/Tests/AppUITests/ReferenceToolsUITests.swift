@@ -180,6 +180,9 @@ final class ReferenceToolsUITests: XCTestCase {
         XCTAssertTrue(close.existsOrWait(timeout: 5))
         let dictionary = app.otherElements["dictionary.sheet"]
         XCTAssertTrue(dictionary.exists)
+        // Our footer appears before the asynchronously loaded system dictionary.
+        // Its top close control must exist before tapping that part of the sheet.
+        XCTAssertTrue(dictionary.buttons["DDUIDone"].existsOrWait(timeout: 5))
         dictionary.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.05)).tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         XCTAssertTrue(token.isSelected)
