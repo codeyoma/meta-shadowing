@@ -222,6 +222,25 @@ class NativePrePushTest < Minitest::Test
     end
   end
 
+  # A missing UUID must report a destination problem, not a tool failure or crash.
+  def test_missing_primary_or_secondary_reports_destination_error_before_validation
+    add_runner
+    oid = commit
+    [PRIMARY, SECONDARY].each do |missing|
+      git('config', 'native.prePushSecondarySimulator', SECONDARY)
+      stub_devices(RUNTIME => [PRIMARY, SECONDARY].reject { |id| id == missing }.map { |id| simulator_device(id) })
+      ref = "refs/heads/missing-#{missing}"
+      output, status = push(oid, ref)
+      refute status.success?, output
+      assert_includes output, 'configure a dedicated MetaShadowing Native Pre-push iOS 27.0 simulator'
+      refute_includes output, 'required tools or local evidence are unavailable'
+      refute_includes output, 'NoMethodError'
+      refute remote_ref(ref)
+      assert_empty records
+      assert_empty Dir.glob(File.join(@repo, '.git/native-pre-push/pass-*.json'))
+    end
+  end
+
   # The secondary must satisfy the same isolation contract and device model as the primary.
   def test_secondary_requires_one_available_matching_pre_push_device
     add_runner

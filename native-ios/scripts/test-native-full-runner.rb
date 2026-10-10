@@ -172,6 +172,11 @@ class NativeFullRunnerTest < Minitest::Test
       when 'xcrun'
         if ARGV == %w[simctl list devices available --json]
           stage = 'devices'
+          if ENV['NATIVE_FIXTURE_INVENTORY_BARRIER']
+            barrier = ENV.fetch('NATIVE_FIXTURE_INVENTORY_BARRIER')
+            File.write(barrier + '.started', 'inventory reached')
+            sleep 0.01 until File.exist?(barrier + '.release')
+          end
           puts File.read(ENV.fetch('NATIVE_FIXTURE_DEVICES'))
         elsif ARGV[0, 2] == %w[simctl boot]
           stage = 'boot'
@@ -294,6 +299,41 @@ class NativeFullRunnerTest < Minitest::Test
     until yield
       flunk message if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
       sleep 0.02
+    end
+  end
+
+  # Cancellation before ownership/build must remain actionable without starting work.
+  def test_early_cancellation_reports_cancelled_without_acquiring_devices
+    pid = nil
+    %w[INT TERM].each do |signal|
+      barrier = File.join(@root, "inventory-#{signal}")
+      @environment['NATIVE_FIXTURE_INVENTORY_BARRIER'] = barrier
+      fixture_inputs
+      log = File.join(@root, "early-cancel-#{signal}.log")
+      pid = Process.spawn(@environment, '/bin/bash', 'native-ios/scripts/test-native-full.sh',
+                          '--simulator-id', SIMULATOR, '--output-dir', @output,
+                          chdir: @snapshot, out: log, err: [:child, :out], pgroup: true)
+      wait_until('Inventory inspection did not start') { File.exist?(barrier + '.started') }
+      Process.kill(signal, pid)
+      File.write(barrier + '.release', 'complete inventory')
+      result = nil
+      wait_until('Early cancellation did not settle') { result = Process.waitpid2(pid, Process::WNOHANG) }
+      pid = nil
+      output = File.read(log)
+      refute result.last.success?, output
+      assert_includes output, 'FAIL: Native run cancelled'
+      refute_includes output, 'PASS:'
+      refute_includes output, @root
+      refute_includes output, SIMULATOR
+      assert commands.all? { |tool, args| tool == 'xcrun' && args == %w[simctl list devices available --json] },
+             'Early cancellation must not generate, build, boot, shut down or test.'
+      refute File.exist?(File.join(File.realpath('/tmp'), "metashadowing-native-simulators-#{Process.uid}", SIMULATOR))
+      assert_empty Dir.glob(File.join(@output, 'native-lease-*/active'))
+    end
+  ensure
+    if pid
+      Process.kill('TERM', -pid) rescue nil
+      Process.waitpid(pid) rescue nil
     end
   end
 
@@ -500,6 +540,8 @@ class NativeFullRunnerTest < Minitest::Test
     [
       ->(device) { device['deviceTypeIdentifier'] = 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro' },
       ->(device) { device['name'] = 'MetaShadowing Native W2 iOS 27' },
+      ->(device) { device['name'] = 'MetaShadowing Native Pre-push W2 iOS 27' },
+      ->(device) { device['name'] = 'MetaShadowing Native Pre-push w2 iOS 27' },
       ->(device) { device['isAvailable'] = false }
     ].each do |change|
       @devices = Marshal.load(original)
@@ -542,6 +584,8 @@ class NativeFullRunnerTest < Minitest::Test
     original = Marshal.dump(@devices)
     [
       ->(device) { device['name'] = 'MetaShadowing Native W2 iOS 27' },
+      ->(device) { device['name'] = 'MetaShadowing Native Pre-push W2 iOS 27' },
+      ->(device) { device['name'] = 'MetaShadowing Native Pre-push w2 iOS 27' },
       ->(device) { device['name'] = 'Reference iPhone' },
       ->(device) { device['isAvailable'] = false },
       ->(device) { device['isAvailable'] = 'true' },

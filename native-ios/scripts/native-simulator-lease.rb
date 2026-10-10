@@ -111,7 +111,10 @@ class NativeSimulatorLease
       matches = devices.select { |device| device['udid'].to_s.upcase == id }
       raise 'The explicit simulator could not be resolved' unless matches.length == 1
       device = matches.first
-      raise 'The explicit simulator could not be resolved' unless device['isAvailable'] == true && device['name'].is_a?(String) && device['name'].start_with?('MetaShadowing Native Pre-push')
+      unless device['isAvailable'] == true && device['name'].is_a?(String) &&
+             device['name'].start_with?('MetaShadowing Native Pre-push') && !device['name'].match?(/\bW2\b/i)
+        raise 'The explicit simulator could not be resolved'
+      end
       device
     end
     if @ids.length == 2
@@ -223,7 +226,7 @@ if $PROGRAM_NAME == __FILE__
                'Private local configuration must not enter the snapshot', 'Simulator inventory failed',
                'The explicit simulator could not be resolved', 'The two simulators must use the same device type',
                'Unsafe simulator lock directory', 'Simulator ownership lock exists; wait for the owner or inspect its retained private evidence',
-               'Native cleanup failed']
+               'Native cleanup failed', 'Native run cancelled']
     message = allowed.include?(error.message) || error.message.match?(/\ARequired tool unavailable: [a-z]+\z/) ? error.message : 'Native runner failed; private evidence retained'
     warn "FAIL: #{message}"
     exit 1
