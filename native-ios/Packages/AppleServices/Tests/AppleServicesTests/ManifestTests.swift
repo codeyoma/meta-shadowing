@@ -3,6 +3,21 @@ import Testing
 @testable import AppleServices
 
 struct ManifestTests {
+    @Test func overlappingVideoPhrasesPreserveOriginalBounds() throws {
+        let data = Data(#"{"kind":"video","schemaVersion":1,"id":"video-sample","version":1,"title":"Video","media":{"file":"video/source.mp4","bytes":3,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","duration":5},"phrases":[{"id":"one","start":1,"end":3,"text":"One","translation":"하나"},{"id":"two","start":2.8,"end":4,"text":"Two","translation":"둘"}]}"#.utf8)
+        let descriptor = DeliveryPackage(key: "video-sample-v1", files: [
+            .init(file: "manifest.json", bytes: data.count, sha256: String(repeating: "b", count: 64)),
+            .init(file: "video/source.mp4", bytes: 3, sha256: String(repeating: "a", count: 64))])
+        let parsed = try PackageManifest.decode(data, descriptor: descriptor)
+        #expect(parsed.phrases.map(\.media) == [.video("video/source.mp4", start: 1, end: 3),
+                                               .video("video/source.mp4", start: 2.8, end: 4)])
+        for replacement in ["-1", "0.8", "1"] {
+            let invalid = Data(String(decoding: data, as: UTF8.self)
+                .replacingOccurrences(of: "\"start\":2.8", with: "\"start\":\(replacement)").utf8)
+            #expect(throws: DeliveryError.invalidPackage) { try PackageManifest.decode(invalid, descriptor: descriptor) }
+        }
+    }
+
     @Test func videoRangesMustBeOrderedAndWithinPinnedMedia() throws {
         let data = Data(#"{"kind":"video","schemaVersion":1,"id":"video-sample","version":1,"title":"Video","media":{"file":"video/source.mp4","bytes":3,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","duration":2},"phrases":[{"id":"one","start":0,"end":1,"text":"Hello","translation":"안녕"}]}"#.utf8)
         let descriptor = DeliveryPackage(key: "video-sample-v1", files: [

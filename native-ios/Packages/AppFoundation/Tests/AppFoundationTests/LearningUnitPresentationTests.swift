@@ -4,6 +4,48 @@ import Testing
 @testable import AppFoundation
 
 @Suite struct LearningUnitPresentationTests {
+    @Test(arguments: [7, 9])
+    func fullscreenMemberKeepsPairsHintsAndOriginalSession(_ stage: Int) throws {
+        let scope = try LearningScope(profileID: "text", packageKey: "sample-v1", language: "english", book: "sample", stage: stage)
+        let plan = try LearningPlan.make(scope: scope, runID: "captions", sources: [
+            .init(index: 0, text: "First phrase", translation: "첫 구간"),
+            .init(index: 1, text: "Second secret phrase", translation: "둘째 구간")
+        ], groupSize: 2)
+        let session = try LearningSession.start(plan: plan, preferences: .fresh)
+        let before = session
+        let caption = try LearningUnitPresentation.make(session: session, revealOriginal: false,
+                                                        elapsedSeconds: 0, sourceMember: 1)
+        #expect(caption.lines.map(\.sourceIndex) == [1, 1])
+        #expect(caption.lines.map(\.accessibleText) == [stage == 9 ? "Second …" : "Second secret phrase", "둘째 구간"])
+        let shown = try LearningUnitPresentation.make(session: session, revealOriginal: true,
+                                                      elapsedSeconds: 0, sourceMember: 1)
+        #expect(shown.lines.map(\.accessibleText) == ["Second secret phrase", "둘째 구간"])
+        let portrait = try LearningUnitPresentation.make(session: session, revealOriginal: true, elapsedSeconds: 0)
+        #expect(portrait.lines.map(\.sourceIndex) == [0, 0, 1, 1])
+        #expect(throws: ProductError.invalidContent) {
+            try LearningUnitPresentation.make(session: session, revealOriginal: false, elapsedSeconds: 0, sourceMember: 2)
+        }
+        #expect(session == before)
+    }
+
+    @Test func finalShortGroupUsesLocalMemberIndex() throws {
+        let scope = try LearningScope(profileID: "text", packageKey: "sample-v1", language: "english", book: "sample", stage: 7)
+        let plan = try LearningPlan.make(scope: scope, runID: "short-caption", sources: [
+            .init(index: 0, text: "First", translation: "하나"),
+            .init(index: 1, text: "Second", translation: "둘"),
+            .init(index: 2, text: "Last", translation: "셋")
+        ], groupSize: 2)
+        let start = try LearningSession.start(plan: plan, preferences: .fresh)
+        let session = try LearningReducer.reduce(start, event: .selectSource(2)).session
+        let caption = try LearningUnitPresentation.make(session: session, revealOriginal: true,
+                                                        elapsedSeconds: 0, sourceMember: 0)
+        #expect(caption.lines.map(\.accessibleText) == ["Last", "셋"])
+        #expect(caption.lines.map(\.sourceIndex) == [2, 2])
+        #expect(throws: ProductError.invalidContent) {
+            try LearningUnitPresentation.make(session: session, revealOriginal: true, elapsedSeconds: 0, sourceMember: 1)
+        }
+    }
+
     @Test(arguments: [1, 2, 3, 4, 7, 8])
     func nonHintStagesAlwaysShowTargetText(_ stage: Int) throws {
         let scope = try LearningScope(profileID: "text", packageKey: "sample-v1", language: "english", book: "sample", stage: stage)

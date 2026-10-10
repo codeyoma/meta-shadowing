@@ -30,10 +30,72 @@ blocked while saving, and the Stages tab opens only after a successful commit.
 
 ### Video packages — stages 1–16
 
+Owner-approved fullscreen extension (2026-10-10, #129–#132): stages 1–10 retain
+the same native player, saved unit, cycles, rate and explicit-confirmation rules.
+Portrait keeps fixed video above the whole unit. Only the fullscreen button
+requests landscape; only the exit-fullscreen button returns to portrait during
+learning. Physical rotation alone does neither. Leaving, completing or losing
+access to the lesson releases its orientation policy and restores portrait browsing.
+The video uses its original aspect ratio without cropping. Learning actions and
+cycle feedback remain visible. Landscape captions show the actual active source
+member over the video, preserving paired translation, hints, reveal visibility,
+fonts and accessibility. Long captions scroll without moving the controls. A
+pending/cancelled native member seek cannot publish the next member prematurely;
+the last selected member remains visible after playback ends. Presentation changes
+never confirm work, award XP, replace the runtime or reset its position.
+The landscape toolbar exposes separate learning-options, method-guide, speed,
+fullscreen text-size, sentence-analysis and exit-fullscreen controls. Opening an
+option pauses/checkpoints first; exiting fullscreen is presentation-only. Dismissal
+returns to paused landscape learning. Audio and silent stages remain portrait. See the
+[approved fullscreen specification](superpowers/specs/2026-10-10-native-video-fullscreen-design.md)
+for scope; simulator results do not establish physical rotation-lock acceptance.
+
+The normal learning header shows `Lv N`, speed, group size when applicable, then
+sentence analysis. Both normal and fullscreen method-guide buttons use `Lv N`
+without an icon. Normal media speed and fullscreen speed/text-size controls open
+compact, button-anchored native popovers instead of full sheets. Group-size
+popovers appear only in grouped stages 7–10: between speed and analysis in normal
+audio/video learning, and between text size and analysis in fullscreen video.
+The 2/3/4 choices edit the active run, not future-run defaults. Outside taps or the
+close button dismiss the popover without resuming. General options, the method
+guide, sentence analysis and silent-stage reveal speed retain their sheets. All
+editors share the existing save/retry boundary. Removing either header cancels
+pending popover presentation, including when its initial pause/save has not finished.
+
+Owner-approved fullscreen presentation refinement (2026-10-10): the video remains
+behind the controls and captions, without a separate bottom footer or opaque text
+card. Centered white captions use a shadow and a compact translucent black backing;
+the two bottom thumb lanes stay clear of caption text. The existing learning action
+is a compact button, with cycle dots directly above it and Repeat alongside when
+eligible. The main action stays anchored 4 pt inside the safe-area edge, including
+when Repeat appears or three cycle dots become five. Repeat and extra dots expand
+inward: to the left at the right dock and to the right at the left dock. The group
+starts at the bottom right, follows horizontal dragging, and
+snaps to the nearest bottom edge using the gesture's projected end. It never moves
+vertically. A drag cancels a pending button press and cannot confirm practice.
+Accessible left/right actions provide the same positioning without dragging.
+The side choice lasts for the mounted lesson, including fullscreen exit/reentry;
+it is not a saved profile preference. No separate play/pause button or automatic
+control hiding is added. Portrait controls and learning semantics are unchanged.
+
+Fullscreen original and translated text sizes are separate profile preferences,
+edited from the fullscreen toolbar without changing normal-screen sizes. Both use
+the existing 12–48 range, native text scaling and separate 20/18 reset; font families
+remain shared. Older stored preferences seed the fullscreen values from their
+previous video/list sizes once when decoded, then edits and resets remain independent.
+Both pairs survive local reopening and backup restore under the same profile
+boundary. Older clients that reject the new preference fields need updating before
+importing those backups; no CloudKit service acceptance is implied by local tests.
+
 Video stages 1–6 play one bounded source phrase; stages 7–10 play the saved
-unit's ordered source segments on one native player. Intervening source gaps
-are skipped, without an extra confirmation, cycle, delay or reward. Native
-position and duration count only selected segment time. A checkpoint exactly
+unit's ordered source segments on one native player. Owner amendment (2026-10-10):
+overlapping or touching video intervals play continuously, without a member-boundary
+pause or seek. Shared source time plays once, and captions switch to the later member
+at its original start. Single-phrase practice retains its original start and end;
+no source timestamps or media bytes are rewritten. Starts must increase and ends
+must not move backward. Intervening disconnected source gaps are still skipped,
+without an extra confirmation, cycle, delay or reward. Native position and duration
+count selected time once, excluding both duplicated overlap and source gaps. A checkpoint exactly
 at a member boundary resumes the next included member, not the excluded gap.
 Single-member stage-one checkpoints retain their existing meaning.
 
@@ -393,9 +455,11 @@ remain in the native media contract linked above.
   player options drawer can explicitly change that paused session's speed without
   changing the phrase, cycle, or saved audio position.
   All playback-speed editors reuse one rate control: the “배속”
-  heading, one-line native slider with live rate on the right, and system tick
-  marks at the 0.25×/1×/2×/3× positions instead of scale labels. The settings heading sits
-  outside the card. The settings preference and paused-session rate keep their separate
+  heading, native slider snapping in 0.25× increments, twelve visible quarter-step
+  marks below the slider, and the current rate on its right. The settings heading sits
+  outside the card. The value column reserves four numeric characters plus `×`
+  at the current Dynamic Type size, so rate edits cannot resize the slider or ticks.
+  The settings preference and paused-session rate keep their separate
   persistence scopes; sharing the layout must not overwrite either implicitly.
 - Selecting a stage keeps the current Stages screen visible while its lesson is
   prepared. Only a ready, authorized lesson presents the player; no intermediate
@@ -584,14 +648,16 @@ confirmation. The current owner-approved behavior requires explicit confirmation
   protected by an online authority in this local-only prototype.
 - Normal awards and persistence are quiet: update the header and stage status,
   with no routine alerts. Only genuine storage/recovery failures need alerts.
-- The Swift player's transient committed-XP receipt appears immediately above
-  the main action, at a random horizontal position chosen once for each receipt.
-  The text uses adaptive primary ink: black in light mode and white in dark mode,
-  with no background or border. It starts fading as soon
+- The Swift player's transient committed-XP receipt is a transparent toast at a
+  random horizontal and vertical position chosen once for each receipt. It stays
+  inside the current content viewport, clear of the top tools and bottom cycle/action
+  strip, and clamps to the new bounds on rotation. Audio lessons use adaptive primary
+  ink; video lessons use white text with a dark shadow over both inline and fullscreen
+  video. There is no background or border. It starts fading as soon
   as its position is measured and disappears in 0.5 seconds, without a hold.
   It stays within the available width and never intercepts touches.
-  A permanently reserved footer area contains the complete text and its travel,
-  so long or scrolled lessons cannot appear behind it and awards do not move text.
+  There is no permanently reserved XP area above the cycles. The toast briefly
+  overlays the lesson without moving its text or controls or intercepting touches.
   This transient decoration caps its visual text scaling at XXXL; its complete
   award remains available in the accessibility label and announcement.
   Reduce Motion retains a stationary fade with no scale or travel. Final-run

@@ -8,6 +8,134 @@ import XCTest
 @testable import MetaShadowingNative
 
 @MainActor final class PlayerLayoutRenderingTests: XCTestCase {
+    func testRateLabelReservesFourNumericCharactersWithoutMovingSliderOrTicks() async throws {
+        continueAfterFailure = false
+        for compact in [false, true] {
+            for largeText in [false, true] {
+                var baseline: [CGRect]?
+                for rate in [1.0, 0.25, 0.5, 1.25, 2.0, 2.75, 3.0] {
+                    var preferences = LearningPreferences.fresh
+                    preferences.rate = rate
+                    let measurements = PlayerLayoutMeasurements()
+                    let ids = ["rate-slider", "rate-current-value"] + (1...12).map { "rate-tick-\($0)" }
+                    let view = PreferenceEditorView(option: .rate, preferences: preferences, compact: compact) { _ in true }
+                        .environment(\.dynamicTypeSize, largeText ? .accessibility5 : .large)
+                    try await withView(view, measurements: measurements, required: ids) { _ in
+                        let frames = try ids.map { try frame($0, in: measurements) }
+                        if let baseline {
+                            for (index, current) in frames.enumerated() {
+                                XCTAssertEqual(current.minX, baseline[index].minX, accuracy: 0.5, "\(ids[index]) at \(rate)×")
+                                XCTAssertEqual(current.width, baseline[index].width, accuracy: 0.5, "\(ids[index]) at \(rate)×")
+                            }
+                        } else { baseline = frames }
+                    }
+                }
+            }
+        }
+    }
+
+    func testRateDragSnapsToQuarterStepsAndClampsAtBothEnds() {
+        for (input, expected) in [(-1.0, 0.25), (0.36, 0.25), (0.38, 0.5), (0.74, 0.75),
+                                  (1.12, 1.0), (1.13, 1.25), (1.63, 1.75), (2.87, 2.75), (4.0, 3.0)] {
+            XCTAssertEqual(RateEditorView.quarterStep(input), expected, "Input: \(input)")
+        }
+    }
+
+    func testRateValueRendersRightOfSliderWithQuarterTicksBelowInBothEditors() async throws {
+        for compact in [false, true] {
+            for largeText in [false, true] {
+                let measurements = PlayerLayoutMeasurements()
+                let ids = ["rate-slider", "rate-current-value"] + (1...12).map { "rate-tick-\($0)" }
+                let view = PreferenceEditorView(option: .rate, preferences: .fresh, compact: compact) { _ in true }
+                    .environment(\.dynamicTypeSize, largeText ? .accessibility5 : .large)
+                try await withView(view, measurements: measurements, required: ids) { host in
+                    let slider = try frame("rate-slider", in: measurements)
+                    let value = try frame("rate-current-value", in: measurements)
+                    XCTAssertGreaterThanOrEqual(slider.width + value.width + 12, host.view.bounds.width - 80,
+                                                "The track and value must fill the row, including at large text sizes")
+                    XCTAssertGreaterThan(value.minX, slider.maxX)
+                    XCTAssertEqual(value.midY, slider.midY, accuracy: 1)
+                    XCTAssertTrue(host.view.bounds.contains(value))
+                    var previousX = slider.minX - 1
+                    for step in 1...12 {
+                        let tick = try frame("rate-tick-\(step)", in: measurements)
+                        XCTAssertGreaterThanOrEqual(tick.minY, slider.maxY)
+                        XCTAssertLessThanOrEqual(tick.maxX, slider.maxX)
+                        XCTAssertGreaterThan(tick.minX, previousX)
+                        XCTAssertTrue(host.view.bounds.contains(tick))
+                        let ink = try pixels(host.view, crop: tick)
+                        XCTAssertTrue(stride(from: 0, to: ink.bytes.count, by: 4).contains {
+                            ink.bytes[$0] < 210 && ink.bytes[$0 + 1] < 210 && ink.bytes[$0 + 2] < 210
+                        }, "Quarter-step marker must actually be visible")
+                        previousX = tick.minX
+                    }
+                }
+            }
+        }
+    }
+
+    func testFooterDoesNotReserveBlankSpaceAboveCycles() async throws {
+        try await withPlayer(mode: "audio", largeText: false) { player in
+            let runtime = try XCTUnwrap(player.flow.runtime)
+            let measurements = PlayerLayoutMeasurements()
+            let view = LearningControlsView(runtime: runtime, onActionFrameChange: { _ in })
+                .fixedSize(horizontal: false, vertical: true).playerLayoutFrame("footer")
+            try await withView(view, measurements: measurements, required: ["footer", "cycle-timeline", "player-main"]) { _ in
+                let footer = try frame("footer", in: measurements)
+                let timeline = try frame("cycle-timeline", in: measurements)
+                XCTAssertLessThanOrEqual(timeline.minY - footer.minY, 4,
+                                         "Content should reach the cycle strip, without a permanent XP slot")
+                XCTAssertGreaterThanOrEqual(try frame("player-main", in: measurements).height, 44)
+            }
+        }
+    }
+
+    func testGroupedHeaderKeepsFourControlsVisibleWithoutOverlap() async throws {
+        for largeText in [false, true] {
+            try await withPlayer(mode: "video", largeText: largeText, stage: 7) { player in
+                let ids = ["player-level", "player-speed", "player-group", "player-analysis"]
+                let frames = try ids.map { try player.frame($0) }
+                for frame in frames {
+                    XCTAssertGreaterThanOrEqual(frame.width, 44)
+                    XCTAssertGreaterThanOrEqual(frame.height, 44)
+                    XCTAssertTrue(player.window.bounds.contains(frame))
+                    XCTAssertEqual(frame.midY, frames[0].midY, accuracy: 1)
+                }
+                for index in 1..<frames.count {
+                    XCTAssertLessThan(frames[index - 1].maxX, frames[index].minX)
+                }
+            }
+        }
+    }
+
+    func testFullscreenCaptionSizesRenderIndependentlyFromPortraitSizes() async throws {
+        let session = try session(sourceCount: 1)
+        func measure(_ value: LearningPreferences, fullscreen: Bool) async throws -> [CGRect] {
+            let measurements = PlayerLayoutMeasurements()
+            var result: [CGRect] = []
+            let ids = ["learning-line-0-0-target", "learning-line-0-0-translation"]
+            try await withView(LearningContentView(session: session, motion: LearningMotionState(), preferences: value,
+                                                   fullscreenCaptions: fullscreen),
+                               measurements: measurements, required: ids) { _ in
+                result = try ids.map { try frame($0, in: measurements) }
+            }
+            return result
+        }
+        var value = LearningPreferences.fresh
+        let normal = try await measure(value, fullscreen: false)
+        let fullscreen = try await measure(value, fullscreen: true)
+        value.fullscreenOriginalTextSize = 40; value.fullscreenTranslationTextSize = 36
+        let enlarged = try await measure(value, fullscreen: true)
+        let unchangedNormal = try await measure(value, fullscreen: false)
+        value.originalTextSize = 32; value.translationTextSize = 30
+        let unchangedFullscreen = try await measure(value, fullscreen: true)
+        for index in 0..<2 {
+            XCTAssertGreaterThan(enlarged[index].height, fullscreen[index].height * 1.5)
+            XCTAssertEqual(unchangedNormal[index].height, normal[index].height, accuracy: 1)
+            XCTAssertEqual(unchangedFullscreen[index].height, enlarged[index].height, accuracy: 1)
+        }
+    }
+
     func testHeaderGeometryAcrossTitleLengthsAndTextSizes() async throws {
         for mode in ["audio", "long"] {
             for largeText in [false, true] {
@@ -135,7 +263,7 @@ import XCTest
         }
     }
 
-    private func withPlayer(mode: String, largeText: Bool,
+    private func withPlayer(mode: String, largeText: Bool, stage: Int = 1,
                             body: (Player) async throws -> Void) async throws {
         let root = try MediaFixtureFactory.root()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -144,10 +272,10 @@ import XCTest
         let model = ProductModel(workspace: workspace)
         await model.activate()
         let flow = LearningFlow(workspace: workspace)
-        await flow.open(packageKey: "ui-fixture-v1", stage: 1, startWhenPresented: true)
+        await flow.open(packageKey: "ui-fixture-v1", stage: stage, startWhenPresented: true)
         flow.suspend()
         let measurements = PlayerLayoutMeasurements()
-        let view = LearningPlayerView(route: .init(packageKey: "ui-fixture-v1", stage: 1, flow: flow), model: model)
+        let view = LearningPlayerView(route: .init(packageKey: "ui-fixture-v1", stage: stage, flow: flow), model: model)
             .environment(\.dynamicTypeSize, largeText ? .accessibility5 : .large)
         let required = ["player-book-title", "player-options", "player-progress", "player-counter", "player-level",
                         "player-speed", "player-analysis", "cycle-timeline", "player-main",

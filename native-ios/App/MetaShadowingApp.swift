@@ -6,6 +6,7 @@ import SwiftUI
 
 @main
 struct MetaShadowingApp: App {
+    @UIApplicationDelegateAdaptor(LearningOrientationAppDelegate.self) private var orientationDelegate
     @State private var profiles: ProductProfileOwner
     @State private var serviceOwner: ServiceOwner
     private var model: ProductModel { profiles.model }

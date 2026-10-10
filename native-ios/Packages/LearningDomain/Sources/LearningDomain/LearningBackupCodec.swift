@@ -124,7 +124,7 @@ public enum LearningBackupCodec {
     static func normalizedPreference(key: String, value: String) throws -> String {
         let json = try BackupJSON.parse(value, limit: 2048)
         if key == "settings" {
-            _ = try json.object(keys: ["mode", "rate"], optional: ["speechView", "groupSize", "crazyWpm", "originalTextSize", "translationTextSize", "originalTextFont", "translationTextFont"])
+            _ = try json.object(keys: ["mode", "rate"], optional: ["speechView", "groupSize", "crazyWpm", "originalTextSize", "translationTextSize", "originalTextFont", "translationTextFont", "fullscreenOriginalTextSize", "fullscreenTranslationTextSize"])
             let preferences = try JSONDecoder().decode(LearningPreferences.self, from: json.data())
             return try BackupJSON.encoded(preferences).json()
         }

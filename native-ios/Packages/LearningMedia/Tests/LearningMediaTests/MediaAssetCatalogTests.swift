@@ -8,6 +8,20 @@ func mediaScope(stage: Int = 1) throws -> LearningScope {
 }
 
 struct MediaAssetCatalogTests {
+    @Test func overlappingVideoCatalogKeepsSingleAndGroupedSourceBounds() throws {
+        let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        let file = root.appending(path: "source.mp4")
+        let sources: [MediaSource] = [.video(file: file, start: 1, end: 3), .video(file: file, start: 2.8, end: 4)]
+        for stage in [1, 7] {
+            let scope = try mediaScope(stage: stage)
+            let catalog = try MediaAssetCatalog(scope: scope, sourceCount: 2, root: root, sources: sources)
+            let plan = try LearningPlan.make(scope: scope, runID: "overlap", sources: [
+                .init(index: 0, text: "One", translation: "하나"), .init(index: 1, text: "Two", translation: "둘")], groupSize: 2)
+            #expect(try catalog.sources(for: plan, unit: 0) == (stage == 1 ? [sources[0]] : sources))
+            if stage == 1 { #expect(try catalog.sources(for: plan, unit: 1) == [sources[1]]) }
+        }
+    }
+
     @Test func catalogRejectsEscapedSymlinkAndNetworkURL() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let package = root.appending(path: "package")

@@ -6,6 +6,7 @@ struct LessonVideoSurface: UIViewRepresentable {
     let transport: VideoSegmentTransport
     func makeUIView(context: Context) -> VideoSurface {
         let view = VideoSurface()
+        view.playerLayer.videoGravity = .resizeAspect
         transport.attach(view.playerLayer)
         context.coordinator.transport = transport
         return view

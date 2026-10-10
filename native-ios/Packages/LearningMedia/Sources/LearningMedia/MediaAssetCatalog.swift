@@ -24,6 +24,7 @@ public struct MediaAssetCatalog: Sendable {
         let prefix = canonicalRoot.path.hasSuffix("/") ? canonicalRoot.path : canonicalRoot.path + "/"
         var videoFile: URL?
         var previousEnd = 0.0
+        var previousStart = -Double.infinity
         let video: Bool
         if case .video = sources[0] { video = true } else { video = false }
         for source in sources {
@@ -36,9 +37,10 @@ public struct MediaAssetCatalog: Sendable {
             case .audio:
                 guard !video else { throw MediaFailure.invalidAsset }
             case let .video(file, start, end):
-                guard video, start.isFinite, end.isFinite, start >= previousEnd, end > start,
+                guard video, start.isFinite, end.isFinite, start >= 0, start > previousStart,
+                      end >= previousEnd, end > start,
                       videoFile == nil || videoFile == file else { throw MediaFailure.invalidAsset }
-                videoFile = file; previousEnd = end
+                videoFile = file; previousStart = start; previousEnd = end
             }
         }
         self.scope = scope; self.root = canonicalRoot; entries = sources

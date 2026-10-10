@@ -3,10 +3,9 @@ import SwiftUI
 
 /// A transient receipt of a durable write. This view never changes learning progress.
 struct LearningRewardView: View {
-    // A compact, non-interactive receipt shares the footer's reserved feedback area.
-    static let clearanceHeight: CGFloat = 72
     let feedback: CommittedLearningFeedback
     let actionFrame: CGRect
+    var overVideo = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visible = true
     @State private var raised = false
@@ -14,6 +13,7 @@ struct LearningRewardView: View {
     @State private var receiptSize: CGSize = .zero
     // One random seed per command identity; playback updates never reroll the receipt.
     @State private var horizontalFraction = CGFloat.random(in: 0...1)
+    @State private var verticalFraction = CGFloat.random(in: 0...1)
     @State private var rise = CGFloat.random(in: 6...12)
     private var announcement: String {
         var parts: [String] = []
@@ -39,12 +39,13 @@ struct LearningRewardView: View {
                 // Keep transient decoration compact; the full award is still announced and labeled.
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .padding(.horizontal, 12).padding(.vertical, 8)
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(overVideo ? Color.white : Color.primary)
+                .shadow(color: .black.opacity(overVideo ? 0.9 : 0), radius: 2, y: 1)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("player-reward-burst")
-                // Measure the receipt, not the flexible proposal, so horizontal jitter has room.
+                // Measure text so the transparent toast can stay inside the content area.
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { receiptSize = $0 }
-                .frame(maxWidth: max(0, min(actionFrame.width, geometry.size.width) - 16))
+                .frame(maxWidth: max(0, geometry.size.width - 32))
                 .fixedSize(horizontal: false, vertical: true)
                 .scaleEffect(reduceMotion || raised ? 1 : 0.75, anchor: .bottom)
                 .position(position(in: geometry.size))
@@ -64,11 +65,24 @@ struct LearningRewardView: View {
     }
 
     private func position(in size: CGSize) -> CGPoint {
-        let halfWidth = receiptSize.width / 2, halfHeight = receiptSize.height / 2
-        let left = max(8, actionFrame.minX + 8) + halfWidth
-        let right = min(size.width - 8, actionFrame.maxX - 8) - halfWidth
-        let x = left + max(0, right - left) * horizontalFraction
-        let lift = reduceMotion || !raised ? 0 : rise
-        return CGPoint(x: x, y: max(halfHeight + 8, actionFrame.minY - 8 - halfHeight - lift))
+        Self.toastPosition(in: size, receipt: receiptSize, actionFrame: actionFrame,
+                           anchor: UnitPoint(x: horizontalFraction, y: verticalFraction),
+                           lift: reduceMotion || !raised ? 0 : rise)
+    }
+
+    static func toastPosition(in size: CGSize, receipt: CGSize, actionFrame: CGRect,
+                              anchor: UnitPoint, lift: CGFloat) -> CGPoint {
+        let halfWidth = min(receipt.width, size.width) / 2
+        let halfHeight = min(receipt.height, size.height) / 2
+        let minX = min(size.width / 2, halfWidth + 16)
+        let maxX = max(minX, size.width - halfWidth - 16)
+        // Keep the top tools and bottom cycle/action strip clear. Clamp again if completion
+        // changes the viewport while a landscape receipt is still fading.
+        let top = min(80, size.height * 0.2)
+        let bottom = min(size.height - 16, max(top + receipt.height, actionFrame.minY - 80))
+        let minY = min(size.height - halfHeight, top + halfHeight)
+        let maxY = max(minY, min(size.height - halfHeight, bottom - halfHeight))
+        return CGPoint(x: minX + (maxX - minX) * min(1, max(0, anchor.x)),
+                       y: max(minY, minY + (maxY - minY) * min(1, max(0, anchor.y)) - lift))
     }
 }
