@@ -10,6 +10,7 @@ struct LearningPlayerView: View {
     @State private var boundaryToken: UUID?
     private let flow: LearningFlow
     @State private var exiting = false
+    @State private var orientation = LessonOrientation()
     // Retain the last action frame for the final receipt, after completion removes the footer.
     @State private var rewardActionFrame: CGRect = .zero
     @Environment(\.dismiss) private var dismiss
@@ -34,6 +35,13 @@ struct LearningPlayerView: View {
                         } description: { Text("확인한 학습이 저장되었어요.") } actions: {
                             Button("스테이지로 돌아가기") { Task { await exit() } }
                         }
+                    } else if let video = flow.video {
+                        VideoLearningView(runtime: runtime, video: video, flow: flow,
+                                          model: model,
+                                          preferences: model.snapshot?.preferences.learning ?? .fresh,
+                                          orientation: orientation) { frame in
+                            if !frame.isEmpty { rewardActionFrame = frame }
+                        }
                     } else {
                         ScrollView {
                             VStack(spacing: 20) {
@@ -48,15 +56,7 @@ struct LearningPlayerView: View {
                         .background(Color(uiColor: .systemGroupedBackground))
                         .safeAreaBar(edge: .top) {
                             VStack(spacing: 0) {
-                                PlayerHeaderView(runtime: runtime, flow: flow)
-                                if let video = flow.video {
-                                    // The video stays fixed above the scrolling text and is never obscured.
-                                    LessonVideoSurface(transport: video).aspectRatio(16 / 9, contentMode: .fit)
-                                        .clipShape(.rect(cornerRadius: 16)).accessibilityLabel("학습 영상")
-                                        .accessibilityIdentifier("lesson-video")
-                                        .playerLayoutFrame("lesson-video")
-                                        .padding([.horizontal, .top])
-                                }
+                                PlayerHeaderView(runtime: runtime, flow: flow, model: model)
                             }
                         }
                         .safeAreaBar(edge: .bottom) {
@@ -76,23 +76,31 @@ struct LearningPlayerView: View {
             }
             .overlay {
                 if let feedback = flow.runtime?.feedback {
-                    LearningRewardView(feedback: feedback, actionFrame: rewardActionFrame).id(feedback.commandID)
+                    LearningRewardView(feedback: feedback, actionFrame: rewardActionFrame,
+                                       overVideo: flow.video != nil).id(feedback.commandID)
                 }
             }
             .coordinateSpace(.named("player-reward"))
             .navigationTitle(flow.title).navigationBarTitleDisplayMode(.inline)
             .toolbarVisibility(.hidden, for: .navigationBar)
             .safeAreaBar(edge: .top) {
-                PlayerTitleView(title: flow.title.isEmpty ? String(localized: "학습") : flow.title,
-                                session: flow.runtime?.controls.session) {
-                    Task { await flow.presentOptions(.menu) }
+                if !orientation.isFullscreen {
+                    PlayerTitleView(title: flow.title.isEmpty ? String(localized: "학습") : flow.title,
+                                    session: flow.runtime?.controls.session) {
+                        Task { await flow.presentOptions(.menu) }
+                    }
                 }
             }
         }
         .interactiveDismissDisabled()
+        .background { LessonOrientationHost(orientation: orientation).frame(width: 0, height: 0) }
+        .alert("화면 방향을 변경하지 못했어요", isPresented: $orientation.failed) {
+            Button("확인", role: .cancel) { }
+        } message: { Text("다시 전체화면 버튼을 눌러 주세요.") }
         .background { DictionaryHost(presenter: flow.playerPresenter).frame(width: 0, height: 0) }
         .onChange(of: flow.playerDictionary.busy) { _, _ in flow.dictionarySettled() }
-        .sheet(item: Binding(get: { flow.options }, set: { if $0 == nil { flow.dismissOptions() } })) { option in
+        .sheet(item: Binding(get: { flow.optionsUsePopover ? nil : flow.options },
+                            set: { if $0 == nil && !flow.optionsUsePopover { flow.dismissOptions() } })) { option in
             LearningOptionsView(flow: flow, model: model, initial: option, exit: exit)
                 .allowsHitTesting(!exiting)
         }
@@ -101,9 +109,14 @@ struct LearningPlayerView: View {
             await flow.startPresentedLesson()
         }
         .onChange(of: scenePhase) { _, phase in if phase != .active { flow.suspend() } }
-        .onChange(of: flow.runtime?.controls) { _, _ in flow.validateReference() }
+        .onChange(of: flow.runtime?.controls) { _, _ in
+            flow.validateReference()
+            if flow.runtime?.controls.session.phase == .complete { orientation.release() }
+        }
+        .onChange(of: flow.accessInvalidated) { _, invalid in if invalid { orientation.release() } }
         .onChange(of: flow.closedByService, initial: true) { if flow.closedByService { dismiss() } }
         .onDisappear {
+            orientation.release()
             if let boundaryToken { profiles?.unregisterBoundary(boundaryToken) }
             Task { await flow.close() }
         }
@@ -111,6 +124,7 @@ struct LearningPlayerView: View {
     private func exit() async {
         guard !exiting else { return }
         exiting = true
+        orientation.release()
         await flow.close(retainingPresentation: true)
         dismiss()
         await model.activate()
@@ -159,9 +173,10 @@ struct PlayerTitleView: View {
         .padding(.horizontal).padding(.vertical, 6)
     }
 }
-private struct PlayerHeaderView: View {
+struct PlayerHeaderView: View {
     let runtime: NativeLearningRuntime
     let flow: LearningFlow
+    let model: ProductModel
     var body: some View {
         let session = runtime.controls.session
         VStack(spacing: 8) {
@@ -172,15 +187,28 @@ private struct PlayerHeaderView: View {
                             .lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
                     }.accessibilityShowsLargeContentViewer()
                         .playerLayoutFrame("player-level")
-                    Spacer()
+                    Spacer(minLength: 8)
                     Button {
-                        Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate) }
+                        Task { await flow.presentOptions(session.isSilent ? .revealSpeed : .rate,
+                                                         asPopover: !session.isSilent) }
                     } label: {
                         Text(session.isSilent ? "S\(session.reveal?.level ?? 1)" : "\(session.rate.formatted())×")
                             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
                     }.accessibilityLabel("학습 속도").accessibilityShowsLargeContentViewer()
                         .playerLayoutFrame("player-speed")
-                    Spacer()
+                        .modifier(LearningQuickSettingAnchor(route: .rate, runtime: runtime, flow: flow, model: model))
+                    if (7...10).contains(session.plan.scope.stage) {
+                        Spacer(minLength: 8)
+                        Button { Task { await flow.presentOptions(.group, asPopover: true) } } label: {
+                            Text("\(session.plan.groupSize)구간")
+                                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.75).frame(minWidth: 32)
+                        }
+                        .accessibilityLabel("학습 구간 크기").accessibilityValue(Text("\(session.plan.groupSize)구간"))
+                        .accessibilityIdentifier("player-group").accessibilityShowsLargeContentViewer()
+                        .playerLayoutFrame("player-group")
+                        .modifier(LearningQuickSettingAnchor(route: .group, runtime: runtime, flow: flow, model: model))
+                    }
+                    Spacer(minLength: 8)
                     Button { Task { await flow.presentOptions(.analysis) } } label: {
                         Image(systemName: "text.magnifyingglass").frame(minWidth: 32)
                     }
@@ -190,5 +218,9 @@ private struct PlayerHeaderView: View {
                 .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
             }
         }.padding(.horizontal).padding(.top, 8)
+            .onDisappear {
+                // Portrait/fullscreen transitions remove this popover's anchor, even during its pause/save.
+                if flow.optionsUsePopover { flow.dismissOptions() }
+            }
     }
 }

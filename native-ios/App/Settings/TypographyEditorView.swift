@@ -5,57 +5,98 @@ import SwiftUI
 struct TypographyEditorView: View {
     let value: LearningPreferences
     var videoLayout = false
+    var fullscreenSizes = false
     let change: (LearningPreferences) -> Void
     var body: some View {
-        Section("미리보기") { TypographyPreview(value: value, videoLayout: videoLayout).listRowBackground(Color.clear) }
+        if !fullscreenSizes { preview }
         Section("원문") {
-            Picker("원문 폰트", selection: Binding(get: { value.originalTextFont ?? "system" }, set: { font in
-                var next = value; next.originalTextFont = font; change(next)
-            })) { ForEach(LearningFont.choices, id: \.0) { Text($0.1).tag($0.0) } }
-                .accessibilityIdentifier("original-font")
-            TextSizeControl(title: String(localized: "원문 크기"), identifier: "original-size", value: value.originalTextSize ?? 20) { size in
-                var next = value; next.originalTextSize = size; change(next)
+            if !fullscreenSizes {
+                Picker("원문 폰트", selection: Binding(get: { value.originalTextFont ?? "system" }, set: { font in
+                    var next = value; next.originalTextFont = font; change(next)
+                })) { ForEach(LearningFont.choices, id: \.0) { Text($0.1).tag($0.0) } }
+                    .accessibilityIdentifier("original-font")
+            }
+            TextSizeControl(title: String(localized: "원문 크기"), identifier: fullscreenSizes ? "fullscreen-original-size" : "original-size",
+                            value: fullscreenSizes ? value.fullscreenOriginalTextSize : value.originalTextSize ?? 20) { size in
+                var next = value
+                if fullscreenSizes { next.fullscreenOriginalTextSize = size } else { next.originalTextSize = size }
+                change(next)
             }
         }
         Section("번역") {
-            Picker("번역 폰트", selection: Binding(get: { value.translationTextFont ?? "system" }, set: { font in
-                var next = value; next.translationTextFont = font; change(next)
-            })) { ForEach(LearningFont.choices, id: \.0) { Text($0.1).tag($0.0) } }
-                .accessibilityIdentifier("translation-font")
-            TextSizeControl(title: String(localized: "번역 크기"), identifier: "translation-size", value: value.translationTextSize ?? 18) { size in
-                var next = value; next.translationTextSize = size; change(next)
+            if !fullscreenSizes {
+                Picker("번역 폰트", selection: Binding(get: { value.translationTextFont ?? "system" }, set: { font in
+                    var next = value; next.translationTextFont = font; change(next)
+                })) { ForEach(LearningFont.choices, id: \.0) { Text($0.1).tag($0.0) } }
+                    .accessibilityIdentifier("translation-font")
+            }
+            TextSizeControl(title: String(localized: "번역 크기"), identifier: fullscreenSizes ? "fullscreen-translation-size" : "translation-size",
+                            value: fullscreenSizes ? value.fullscreenTranslationTextSize : value.translationTextSize ?? 18) { size in
+                var next = value
+                if fullscreenSizes { next.fullscreenTranslationTextSize = size } else { next.translationTextSize = size }
+                change(next)
             }
         }
         Section {
-            Button("크기 초기화 (20 / 18)") { var next = value; next.resetTextSizes(); change(next) }
-            Button("폰트 초기화 (System)") { var next = value; next.resetFonts(); change(next) }
+            Button("크기 초기화 (20 / 18)") {
+                var next = value
+                if fullscreenSizes { next.resetFullscreenTextSizes() } else { next.resetTextSizes() }
+                change(next)
+            }
+            if !fullscreenSizes {
+                Button("폰트 초기화 (System)") { var next = value; next.resetFonts(); change(next) }
+            }
+        }
+        // Landscape is short: put the editable sizes before the long preview.
+        if fullscreenSizes { preview }
+    }
+    private var preview: some View {
+        Section("미리보기") {
+            TypographyPreview(value: value.displayedForVideo(videoLayout, fullscreen: fullscreenSizes), videoLayout: videoLayout)
+                .listRowBackground(Color.clear)
         }
     }
 }
-private struct TextSizeControl: View {
+struct TextSizeControl: View {
     let title: String
     let identifier: String
     let value: Int
     let change: (Int) -> Void
+    let compact: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var draft: String
     @FocusState private var focused: Bool
-    init(title: String, identifier: String, value: Int, change: @escaping (Int) -> Void) {
-        self.title = title; self.identifier = identifier; self.value = value; self.change = change; draft = String(value)
+    init(title: String, identifier: String, value: Int, compact: Bool = false, change: @escaping (Int) -> Void) {
+        self.title = title; self.identifier = identifier; self.value = value; self.change = change; self.compact = compact
+        draft = String(value)
     }
     var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            TextField(title, text: $draft).keyboardType(.numberPad).multilineTextAlignment(.trailing)
-                .monospacedDigit().frame(minWidth: 44, maxWidth: 64).focused($focused)
-                .accessibilityIdentifier(identifier).onSubmit(commit)
-            Stepper(title, value: Binding(get: { value }, set: { focused = false; change($0) }), in: 12...48)
-                .labelsHidden()
-                .accessibilityIdentifier("\(identifier)-stepper")
+        Group {
+            if compact && dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(title)
+                    HStack { field.frame(maxWidth: .infinity); stepper }
+                }
+            } else {
+                HStack {
+                    Text(title)
+                    Spacer()
+                    field.frame(minWidth: 44, maxWidth: 64)
+                    stepper
+                }
+            }
         }
         .onChange(of: value) { _, new in draft = String(new) }
         .onChange(of: focused) { _, active in if !active { commit() } }
         .toolbar { if focused { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("완료") { focused = false } } } }
+    }
+    private var field: some View {
+        TextField(title, text: $draft).keyboardType(.numberPad).multilineTextAlignment(.trailing)
+            .monospacedDigit().focused($focused).accessibilityIdentifier(identifier).onSubmit(commit)
+    }
+    private var stepper: some View {
+        Stepper(title, value: Binding(get: { value }, set: { focused = false; change($0) }), in: 12...48)
+            .labelsHidden().accessibilityIdentifier("\(identifier)-stepper")
     }
     private func commit() {
         if let size = LearningTypographyDraft.validSize(draft), size != value { change(size) }

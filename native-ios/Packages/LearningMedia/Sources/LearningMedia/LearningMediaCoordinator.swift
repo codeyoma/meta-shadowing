@@ -274,7 +274,7 @@ public struct LearningMediaState: Sendable {
                 driver.onEvent = { [weak self] in self?.receive($0) }
                 let position: Double
                 if frameOnly {
-                    position = sources.reduce(0) { total, source in if case let .video(_, start, end) = source { total + end - start } else { total } }
+                    position = try VideoMediaTimeline(sources: sources).selected.duration
                 } else { position = seconds }
                 try await driver.prepare(.init(token: token, sources: sources, positionSeconds: position, rate: rate))
                 guard self.valid(current, token), await self.authorize(plan.scope) else { throw MediaFailure.accessDenied }

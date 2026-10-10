@@ -5,7 +5,7 @@ import Observation
 import Foundation
 
 enum LearningOptionRoute: String, Identifiable, Hashable {
-    case menu, rate, group, revealSpeed, revealPresets, display, typography, sentences, guide, analysis
+    case menu, rate, group, revealSpeed, revealPresets, display, typography, fullscreenTypography, sentences, guide, analysis
     var id: String { rawValue }
 }
 
@@ -18,6 +18,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     private(set) var closedByService = false
     private(set) var title = ""
     private(set) var options: LearningOptionRoute?
+    private(set) var optionsUsePopover = false
     private(set) var analysis: AnalysisModel?
     let analysisPresenter: DictionaryPresenter
     let playerPresenter: DictionaryPresenter
@@ -32,6 +33,8 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     @ObservationIgnored private var openingPaused = false
     @ObservationIgnored private var closing = false
     @ObservationIgnored private var awaitingPresentation = false
+    @ObservationIgnored private var optionsRevision = 0
+    @ObservationIgnored private var openingOptions = false
     init(workspace: ProductWorkspace) {
         self.workspace = workspace
         let analysis = DictionaryPresenter(), player = DictionaryPresenter()
@@ -118,21 +121,37 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         _ = await runtime.coordinator.perform(openingPaused || options != nil ? .pause : .stageEntry)
     }
 
-    func presentOptions(_ route: LearningOptionRoute) async {
-        guard options == nil else { return }
+    func presentOptions(_ route: LearningOptionRoute, asPopover: Bool = false) async {
+        guard options == nil, !openingOptions, !closing else { return }
+        if asPopover {
+            guard let runtime, !runtime.controls.session.isSilent,
+                  route == .rate || (route == .fullscreenTypography && video != nil) ||
+                    (route == .group && (7...10).contains(runtime.controls.session.plan.scope.stage)) else { return }
+        }
         guard let runtime else {
             if route == .menu {
                 // Opening options interrupts launch intent even if dismissed before loading finishes.
                 openingPaused = true
+                optionsUsePopover = false
                 options = .menu
             }
             return
         }
         playerDictionary.cancel()
         let request = generation
+        let presentationRevision = optionsRevision
+        openingOptions = true
+        optionsUsePopover = asPopover
+        defer {
+            if presentationRevision == optionsRevision {
+                openingOptions = false
+                if options == nil { optionsUsePopover = false }
+            }
+        }
         runtime.setMenuOpen(true)
         let paused = await runtime.coordinator.perform(.pause)
-        guard request == generation, self.runtime === runtime else { return }
+        guard request == generation, self.runtime === runtime,
+              presentationRevision == optionsRevision else { return }
         guard route == .menu || (paused.controller.active && !paused.controller.saveFailed) else {
             runtime.setMenuOpen(false)
             return
@@ -140,8 +159,11 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         options = route
     }
     func dismissOptions() {
+        optionsRevision += 1
+        openingOptions = false
         invalidateAnalysis()
         options = nil
+        optionsUsePopover = false
         runtime?.setMenuOpen(false)
     }
     func suspend() {
@@ -153,9 +175,11 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     }
     func close(retainingPresentation: Bool = false) async {
         closing = true
+        optionsRevision += 1
+        openingOptions = false
         awaitingPresentation = false
         generation += 1; loading = false; openingPaused = false
-        if !retainingPresentation { options = nil }
+        if !retainingPresentation { options = nil; optionsUsePopover = false }
         await releaseResources(retainingPresentation: retainingPresentation)
     }
     func prepareServiceBoundary() async throws {

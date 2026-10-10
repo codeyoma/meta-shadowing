@@ -22,7 +22,8 @@ public struct LearningTextBubble: Identifiable, Equatable, Sendable {
 public struct LearningUnitPresentation: Equatable, Sendable {
     public let bubbles: [LearningTextBubble]
     public var lines: [LearningTextLine] { bubbles.flatMap(\.lines) }
-    public static func make(session: LearningSession, revealOriginal: Bool, elapsedSeconds: Double) throws -> Self {
+    public static func make(session: LearningSession, revealOriginal: Bool, elapsedSeconds: Double,
+                            sourceMember: Int? = nil) throws -> Self {
         let policy = try StagePolicy.forStage(session.plan.scope.stage)
         if session.isSilent {
             let source = session.plan.sources[session.unit]
@@ -34,7 +35,13 @@ public struct LearningUnitPresentation: Equatable, Sendable {
                     spans: line.spans.map { LearningTextSpan(text: $0.text, visible: $0.visible) }, hint: nil)
             })])
         }
-        return Self(bubbles: session.currentSources.flatMap { index in
+        let sources: [Int]
+        if let sourceMember {
+            let current = Array(session.currentSources)
+            guard current.indices.contains(sourceMember) else { throw ProductError.invalidContent }
+            sources = [current[sourceMember]]
+        } else { sources = Array(session.currentSources) }
+        return Self(bubbles: sources.flatMap { index in
             let source = session.plan.sources[index]
             let originals = quoted(source.text), translations = quoted(source.translation)
             let pairs: [(String, String)]

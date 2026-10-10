@@ -6,6 +6,30 @@ Books, Stages and Settings, with the twelve original Morning Notes audio phrases
 bundled for offline learning. The player supports all sixteen domain stages,
 paused options, sentence navigation and shared typography/speed/grouping editors.
 Native analysis, relation graphs and Apple dictionary are implemented under #97.
+The #129–#132 video extension adds button-only landscape fullscreen, active-member
+captions, persistent learning controls and a paused tools menu to the existing
+native video lesson. Orientation is scoped to the lesson; ordinary browsing and
+audio/silent practice remain portrait. No public video delivery is added.
+Fullscreen captions and compact learning controls overlay the video. Dragging the
+action/cycle group docks it at either bottom edge without confirming practice;
+accessible positioning actions are also available. There is no separate pause button.
+Fullscreen exposes options, method guide, speed, its own text sizes, sentence
+analysis and exit as direct top controls. The main action stays fixed at the safe-area
+edge while Repeat and cycle dots expand inward. Fullscreen original/translation
+sizes persist independently of normal-screen sizes; font families remain shared.
+Normal and fullscreen media speed use compact popovers, as do fullscreen text
+sizes. Grouped stages 7–10 add a 2/3/4-segment popover in either layout that changes
+only the active run. The normal header order is `Lv N`, speed, optional group size,
+then analysis; fullscreen also labels the method guide `Lv N` without an icon.
+Outside taps dismiss without resuming. Full options/reference pages and silent
+reveal-speed editors retain their sheets. Pending popovers are cancelled when
+their normal or fullscreen header disappears.
+All playback-speed editors share a stepped 0.25–3× slider with quarter-step marks
+underneath and the live value on its right in a fixed four-character numeric slot
+plus `×`, scaled with Dynamic Type. Editing the rate never changes the track width.
+XP appears as a brief transparent text toast at a
+stable random content position per award; no permanent footer space is reserved.
+Video lessons use shadowed white toast text so dark or bright footage stays legible.
 “문장 분석” opens a single sentence directly; Back returns to paused learning.
 Multiple sentences retain the list/detail flow. Installed packages receive full
 byte/hash verification during download, re-download and updates, while ordinary

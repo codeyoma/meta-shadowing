@@ -110,26 +110,9 @@ struct LearningOptionsView: View {
         flow.analysis?.state == .ready && flow.analysis?.sentences.count == 1
     }
     private func preferenceEditor(_ route: LearningOptionRoute, runtime: NativeLearningRuntime) -> some View {
-        PreferenceEditorView(option: route, preferences: activePreferences(runtime), videoLayout: flow.video != nil) { value in
-            switch route {
-            case .rate:
-                let result = await runtime.coordinator.editWhilePaused(.changeRate(value.rate))
-                return !result.controller.saveFailed && result.controller.snapshot.session.rate == value.rate
-            case .group where (7...10).contains(runtime.controls.session.plan.scope.stage):
-                let result = await runtime.coordinator.editWhilePaused(.regroup(size: value.groupSize, newPlanID: UUID().uuidString))
-                return !result.controller.saveFailed && result.controller.snapshot.session.plan.groupSize == value.groupSize
-            default:
-                var global = model.snapshot?.preferences.learning ?? .fresh
-                switch route {
-                case .group: global.groupSize = value.groupSize
-                case .revealSpeed, .revealPresets: global.revealWPM = value.revealWPM
-                default:
-                    global.speechView = value.speechView
-                    global.originalTextFont = value.originalTextFont; global.translationTextFont = value.translationTextFont
-                    global.originalTextSize = value.originalTextSize; global.translationTextSize = value.translationTextSize
-                }
-                return await model.saveLearningPreferences(global)
-            }
+        let settings = LearningPreferenceSession(runtime: runtime, model: model)
+        return PreferenceEditorView(option: route, preferences: settings.value, videoLayout: flow.video != nil) { value in
+            await settings.save(value, for: route)
         }.disabled(runtime.controls.saveFailed)
     }
     private func revealSelection(_ runtime: NativeLearningRuntime) -> some View {
@@ -163,9 +146,44 @@ struct LearningOptionsView: View {
         }.padding().background(.bar).disabled(runtime.controls.saveFailed || model.busy)
     }
     private func activePreferences(_ runtime: NativeLearningRuntime) -> LearningPreferences {
+        LearningPreferenceSession(runtime: runtime, model: model).value
+    }
+}
+
+/// Shared save boundary for the full options sheet and the fullscreen quick popovers.
+struct LearningPreferenceSession {
+    let runtime: NativeLearningRuntime
+    let model: ProductModel
+
+    var value: LearningPreferences {
         var value = model.snapshot?.preferences.learning ?? .fresh
         value.rate = runtime.controls.session.rate
         if (7...10).contains(runtime.controls.session.plan.scope.stage) { value.groupSize = runtime.controls.session.plan.groupSize }
         return value
+    }
+
+    func save(_ value: LearningPreferences, for route: LearningOptionRoute) async -> Bool {
+        switch route {
+        case .rate:
+            let result = await runtime.coordinator.editWhilePaused(.changeRate(value.rate))
+            return !result.controller.saveFailed && result.controller.snapshot.session.rate == value.rate
+        case .group where (7...10).contains(runtime.controls.session.plan.scope.stage):
+            let result = await runtime.coordinator.editWhilePaused(.regroup(size: value.groupSize, newPlanID: UUID().uuidString))
+            return !result.controller.saveFailed && result.controller.snapshot.session.plan.groupSize == value.groupSize
+        default:
+            var global = model.snapshot?.preferences.learning ?? .fresh
+            switch route {
+            case .fullscreenTypography:
+                global.fullscreenOriginalTextSize = value.fullscreenOriginalTextSize
+                global.fullscreenTranslationTextSize = value.fullscreenTranslationTextSize
+            case .group: global.groupSize = value.groupSize
+            case .revealSpeed, .revealPresets: global.revealWPM = value.revealWPM
+            default:
+                global.speechView = value.speechView
+                global.originalTextFont = value.originalTextFont; global.translationTextFont = value.translationTextFont
+                global.originalTextSize = value.originalTextSize; global.translationTextSize = value.translationTextSize
+            }
+            return await model.saveLearningPreferences(global)
+        }
     }
 }

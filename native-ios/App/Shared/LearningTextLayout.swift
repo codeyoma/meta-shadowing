@@ -41,9 +41,13 @@ struct LearningTextLayout<Item: Identifiable, Content: View>: View {
 
 extension LearningPreferences {
     /// A presentation-only override; never save this copy back to the profile.
-    func displayedForVideo(_ video: Bool) -> Self {
+    func displayedForVideo(_ video: Bool, fullscreen: Bool = false) -> Self {
         var result = self
         if video { result.speechView = "list" }
+        if fullscreen {
+            result.originalTextSize = fullscreenOriginalTextSize
+            result.translationTextSize = fullscreenTranslationTextSize
+        }
         return result
     }
 }

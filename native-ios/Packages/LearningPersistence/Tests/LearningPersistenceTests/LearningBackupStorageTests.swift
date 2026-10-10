@@ -4,6 +4,26 @@ import Testing
 @testable import LearningPersistence
 
 @Suite struct LearningBackupStorageTests {
+    @Test func fullscreenSizesSurviveReopenAndBackupWithoutChangingNormalSizesOrOtherProfiles() async throws {
+        let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
+        let source = store(root.appending(path: "source")), target = store(root.appending(path: "target"))
+        var preferences = ProfilePreferences()
+        preferences.learning = try JSONDecoder().decode(LearningPreferences.self, from:
+            Data(#"{"mode":"manual","rate":1,"originalTextSize":26,"translationTextSize":22,"fullscreenOriginalTextSize":32,"fullscreenTranslationTextSize":28}"#.utf8))
+        _ = try await source.savePreferences(preferences, profileID: "guest")
+        let reopened = store(root.appending(path: "source"))
+        let exported = try await reopened.exportBackup(profileID: "guest")
+        _ = try await target.restoreIntoEmptyProfile(exported.payload, profileID: "restored")
+        for value in [try await reopened.preferences(profileID: "guest"), try await target.preferences(profileID: "restored")] {
+            let encoded = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(value.learning)) as? [String: Any])
+            #expect(encoded["originalTextSize"] as? Int == 26)
+            #expect(encoded["translationTextSize"] as? Int == 22)
+            #expect(encoded["fullscreenOriginalTextSize"] as? Int == 32)
+            #expect(encoded["fullscreenTranslationTextSize"] as? Int == 28)
+        }
+        #expect(try await source.preferences(profileID: "other").learning == .fresh)
+    }
+
     @Test func importedSameRunCheckpointRejectsStaleWriter() async throws {
         let root = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: root) }
         let local = store(root.appending(path: "local")), remote = store(root.appending(path: "remote"))

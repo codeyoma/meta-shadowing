@@ -33,6 +33,7 @@ public struct PackageManifest: Sendable {
         var paths = Set<String>()
         var phrases: [Phrase] = []
         var previousEnd = 0.0
+        var previousStart = -Double.infinity
         if let kind = raw.kind {
             guard kind == "video", raw.schemaVersion == 1, raw.id.hasPrefix("video-"),
                   raw.id.count <= 80, let media = raw.media, media.file == "video/source.mp4",
@@ -48,10 +49,11 @@ public struct PackageManifest: Sendable {
                 guard let id = phrase.id, !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       id.count <= 10_000, phrase.text.count <= 10_000, phrase.translation.count <= 10_000,
                       paths.insert(id).inserted, let start = phrase.start, let end = phrase.end,
-                      start.isFinite, end.isFinite, start >= previousEnd, end > start, end <= media.duration
+                      start.isFinite, end.isFinite, start >= 0, start > previousStart,
+                      end >= previousEnd, end > start, end <= media.duration
                 else { throw DeliveryError.invalidPackage }
                 phrases.append(Phrase(text: phrase.text, translation: phrase.translation, media: .video(media.file, start: start, end: end)))
-                previousEnd = end
+                previousStart = start; previousEnd = end
                 continue
             }
             guard let file = phrase.file, let bytes = phrase.bytes, let sha256 = phrase.sha256,
