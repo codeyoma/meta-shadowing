@@ -71,8 +71,7 @@ final class PlayerUITests: XCTestCase {
         ])
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 15))
         app.buttons["video-enter-fullscreen"].tap()
-        let landscape = NSPredicate { _, _ in app.frame.width > app.frame.height }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landscape, object: nil)], timeout: 5), .completed)
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: app.buttons["video-font-size"], timeout: 5))
         func tapTool(_ identifier: String) {
             let button = app.buttons[identifier]
             XCTAssertTrue(button.existsOrWait(timeout: 5))
@@ -230,7 +229,8 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 15))
         app.buttons["video-enter-fullscreen"].tap()
         let group = app.buttons["video-group"]
-        XCTAssertTrue(group.hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: group, timeout: 5))
+        XCTAssertTrue(group.isHittable)
         group.tap()
         let popup = app.otherElements["learning-setting-popup"]
         XCTAssertTrue(popup.existsOrWait(timeout: 5))
@@ -255,6 +255,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.segmentedControls.buttons["3구간"].isSelected)
         app.buttons["options-close"].tap()
         app.buttons["video-exit-fullscreen"].tap()
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: app.buttons["player-options"], timeout: 5))
         XCTAssertTrue(app.staticTexts["learning-line-1-0-target"].existsOrWait(timeout: 5), "Both remaining sources in this two-source fixture must remain visible")
         app.buttons["player-options"].tap()
         let exit = app.buttons["options-exit"]
@@ -265,12 +266,14 @@ final class PlayerUITests: XCTestCase {
         app.buttons["stage-7"].tap()
         XCTAssertTrue(app.buttons["video-enter-fullscreen"].hittableOrWait(timeout: 5))
         app.buttons["video-enter-fullscreen"].tap()
-        XCTAssertTrue(group.hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: group, timeout: 5))
+        XCTAssertTrue(group.isHittable)
         group.tap()
         XCTAssertTrue(app.segmentedControls.buttons["3구간"].existsOrWait(timeout: 5))
         XCTAssertTrue(app.segmentedControls.buttons["3구간"].isSelected, "Saved regrouping must survive leaving and reopening the lesson")
         app.buttons["options-close"].tap()
         app.buttons["video-exit-fullscreen"].tap()
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: app.buttons["player-options"], timeout: 5))
         app.exitLearningThroughOptions()
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
@@ -284,9 +287,8 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 15))
         app.buttons["video-enter-fullscreen"].tap()
         let collapse = app.buttons["video-exit-fullscreen"]
-        XCTAssertTrue(collapse.hittableOrWait(timeout: 5))
-        let landscape = NSPredicate { _, _ in app.frame.width > app.frame.height }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landscape, object: nil)], timeout: 5), .completed)
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: collapse, timeout: 5))
+        XCTAssertTrue(collapse.isHittable)
         let timeline = app.descendants(matching: .any)["cycle-timeline"]
         let video = app.otherElements["lesson-video"]
         let original = main.frame
@@ -340,6 +342,7 @@ final class PlayerUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         collapse.tap()
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: app.buttons["player-options"], timeout: 5))
         app.exitLearningThroughOptions()
         XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "6 / 100 XP", timeout: 5))
     }
@@ -359,9 +362,8 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(expand.hittableOrWait(timeout: 5))
         expand.tap()
         let collapse = app.buttons["video-exit-fullscreen"]
-        XCTAssertTrue(collapse.hittableOrWait(timeout: 5))
-        let landscape = NSPredicate { _, _ in app.frame.width > app.frame.height }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landscape, object: nil)], timeout: 5), .completed)
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: collapse, timeout: 5))
+        XCTAssertTrue(collapse.isHittable)
         XCTAssertTrue(main.isHittable)
         XCTAssertTrue(app.frame.contains(timeline.frame))
         XCUIDevice.shared.orientation = .portrait
@@ -399,14 +401,14 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(collapse.hittableOrWait(timeout: 5))
         XCTAssertGreaterThan(app.frame.width, app.frame.height)
         collapse.tap()
-        let portrait = NSPredicate { _, _ in app.frame.height > app.frame.width }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: portrait, object: nil)], timeout: 5), .completed)
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: expand, timeout: 5))
         XCTAssertTrue(expand.isHittable)
         XCTAssertTrue(app.staticTexts["learning-line-0-0-target"].exists)
         XCTAssertTrue(app.staticTexts["learning-line-1-0-target"].exists)
         XCTAssertEqual(main.label, "학습 이어하기")
         expand.tap()
-        XCTAssertTrue(tools.hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: tools, timeout: 5))
+        XCTAssertTrue(tools.isHittable)
         tools.tap()
         XCTAssertTrue(app.buttons["options-close"].hittableOrWait(timeout: 5))
         let optionsList = app.collectionViews.firstMatch
@@ -800,7 +802,8 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(expand.isHittable)
         expand.tap()
         let collapse = app.buttons["video-exit-fullscreen"]
-        XCTAssertTrue(collapse.hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: collapse, timeout: 5))
+        XCTAssertTrue(collapse.isHittable)
         XCTAssertGreaterThan(app.frame.width, app.frame.height)
         XCTAssertTrue(app.frame.contains(footer.frame))
         XCTAssertTrue(footer.isHittable)
@@ -817,7 +820,8 @@ final class PlayerUITests: XCTestCase {
         fullscreen.lifetime = .keepAlways
         add(fullscreen)
         collapse.tap()
-        XCTAssertTrue(expand.hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: expand, timeout: 5))
+        XCTAssertTrue(expand.isHittable)
         app.exitLearningThroughOptions()
         XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
     }
@@ -886,7 +890,8 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 15))
         app.buttons["video-enter-fullscreen"].tap()
         let collapse = app.buttons["video-exit-fullscreen"]
-        XCTAssertTrue(collapse.hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: collapse, timeout: 5))
+        XCTAssertTrue(collapse.isHittable)
         XCTAssertFalse(app.staticTexts["Secret two"].exists, "Fullscreen must not reveal hidden words")
         let toggle = app.switches["subtitle-toggle"]
         toggle.tap()
@@ -897,7 +902,8 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Secret two"].exists)
         XCTAssertEqual(app.buttons["player-main"].label, "학습 이어하기")
         collapse.tap()
-        XCTAssertTrue(app.buttons["video-enter-fullscreen"].hittableOrWait(timeout: 5))
+        XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: app.buttons["video-enter-fullscreen"], timeout: 5))
+        XCTAssertTrue(app.buttons["video-enter-fullscreen"].isHittable)
         XCTAssertTrue(app.staticTexts["Secret one"].exists, "Explicit reveal survives the layout change")
         toggle.tap()
         XCTAssertTrue(app.staticTexts["Secret one"].waitForNonExistence(timeout: 5))
