@@ -49,7 +49,7 @@ final class BookshelfUITests: XCTestCase {
         card.tap()
         XCTAssertTrue(app.tabBars.buttons["스테이지"].wait(for: \.isSelected, toEqual: true, timeout: 5))
         XCTAssertTrue(app.buttons["stage-1"].exists)
-        XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
+        app.assertBrowsingXP("0 / 100 XP")
     }
 
     @MainActor func testGrayCardCancelsAndRetriesWithInlineDownloadProgress() throws {

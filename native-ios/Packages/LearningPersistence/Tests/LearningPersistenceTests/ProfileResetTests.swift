@@ -126,6 +126,5 @@ struct ProfileResetTests {
 }
 
 private func resetEnvelope(_ generation: String) throws -> Data {
-    let progress = try JSONSerialization.jsonObject(with: LearningBackupCodec.encode(.empty))
-    return try JSONSerialization.data(withJSONObject: ["version": 5, "generation": generation, "progress": progress])
+    try LearningBackupCodec.encode(LearningBackup.empty.withResetGeneration(generation))
 }

@@ -71,6 +71,12 @@ public actor SQLiteLearningStore: LearningStore {
         let db = try connection(scope.profileID)
         return try progress(readLedger(db), db: db, scope: scope, today: today)
     }
+    public func checkpointStageOrder(scope: LearningScope) throws -> [Int] {
+        try connection(scope.profileID).query("SELECT stage FROM checkpoints WHERE package=? ORDER BY clock DESC,stage ASC", [.text(scope.packageKey)]).map { row in
+            guard let stage = row["stage"]?.integer, (1...16).contains(stage) else { throw LearningStoreError.corrupt }
+            return Int(stage)
+        }
+    }
     public func preferences(profileID: String) throws -> ProfilePreferences {
         try decode(ProfilePreferences.self, connection(profileID).query("SELECT state FROM preferences WHERE id=1").first?["state"])
     }

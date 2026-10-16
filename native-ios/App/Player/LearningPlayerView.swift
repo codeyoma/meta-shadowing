@@ -98,6 +98,7 @@ struct LearningPlayerView: View {
             }
         }
         .interactiveDismissDisabled()
+        .safeAreaBar(edge: .bottom) { LearningTimeRecoveryView(flow: flow, exit: exit) }
         .background { LessonOrientationHost(orientation: orientation).frame(width: 0, height: 0) }
         .alert("화면 방향을 변경하지 못했어요", isPresented: $orientation.failed) {
             Button("확인", role: .cancel) { }
@@ -111,16 +112,22 @@ struct LearningPlayerView: View {
         }
         .task { [flow] in
             boundaryToken = profiles?.registerBoundary { [weak flow] in try await flow?.prepareServiceBoundary() }
+            flow.setStudyPresentation(visible: true, active: scenePhase == .active)
             await flow.startPresentedLesson()
         }
-        .onChange(of: scenePhase) { _, phase in if phase != .active { flow.suspend() } }
+        .onChange(of: scenePhase) { _, phase in
+            flow.setStudyPresentation(visible: true, active: phase == .active)
+            if phase != .active { flow.suspend() }
+        }
         .onChange(of: flow.runtime?.controls) { _, _ in
+            flow.refreshStudyEligibility()
             flow.validateReference()
             if flow.runtime?.controls.session.phase == .complete { orientation.release() }
         }
         .onChange(of: flow.accessInvalidated) { _, invalid in if invalid { orientation.release() } }
         .onChange(of: flow.closedByService, initial: true) { if flow.closedByService { dismiss() } }
         .onDisappear {
+            flow.setStudyPresentation(visible: false, active: false)
             orientation.release()
             if let boundaryToken { profiles?.unregisterBoundary(boundaryToken) }
             Task { await flow.close() }
@@ -129,6 +136,7 @@ struct LearningPlayerView: View {
     private func exit() async {
         guard !exiting else { return }
         exiting = true
+        guard await flow.requestStudyExit() else { exiting = false; return }
         orientation.release()
         await flow.close(retainingPresentation: true)
         dismiss()

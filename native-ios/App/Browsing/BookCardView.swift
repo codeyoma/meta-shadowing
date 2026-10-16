@@ -6,7 +6,6 @@ struct BookCardView: View {
     let summary: BookStudySummary
     var services: ProductServicesModel? = nil
     let select: () -> Void
-    @State private var removal: ServiceConfirmation?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private var download: DownloadModel? { services?.downloads[summary.id] }
     private var busy: Bool { download?.busy == true }
@@ -50,7 +49,7 @@ struct BookCardView: View {
                         BookTagsView(book: summary.book)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(4).allowsHitTesting(false)
-                        managementMenu
+                        BookManagementMenu(summary: summary, services: services)
                     }.padding(4)
                     Spacer(minLength: 0)
                     BookCardProgress(summary: summary, download: download)
@@ -58,10 +57,6 @@ struct BookCardView: View {
                 }
             }
         }
-        .alert("다운로드를 삭제할까요?", item: $removal) { request in
-            Button("다운로드 삭제", role: .destructive) { Task { await services?.perform(request) } }
-            Button("취소", role: .cancel) { }
-        } message: { _ in Text("\(summary.book.title)의 다운로드만 삭제합니다. 학습 기록은 남습니다.") }
     }
     private var details: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -73,8 +68,10 @@ struct BookCardView: View {
                 let title = Text(summary.book.title).font(.headline).foregroundStyle(.primary)
                 if dynamicTypeSize.isAccessibilitySize { title.fixedSize(horizontal: false, vertical: true) }
                 else { title.lineLimit(2, reservesSpace: true) }
-                Text("총 \(summary.book.sentenceCount)문장").font(.caption).foregroundStyle(.secondary)
-                if let recoveryMessage { Text(recoveryMessage).font(.caption).foregroundStyle(.secondary) }
+                Text(recoveryMessage ?? String(localized: "총 \(summary.book.sentenceCount)문장"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: true)
                 // Reserve exactly the visible sibling progress row's Dynamic Type height.
                 BookCardProgress(summary: summary, download: download).hidden().accessibilityHidden(true)
             }.padding([.horizontal, .bottom], 12)
@@ -83,35 +80,9 @@ struct BookCardView: View {
         .clipShape(.rect(cornerRadius: 16))
         .contentShape(.rect(cornerRadius: 16))
     }
-    private var managementMenu: some View {
-        Menu {
-            if busy, let services, let download {
-                Button("다운로드 취소", systemImage: "xmark") {
-                    Task { await services.cancelDownload(download.key) }
-                }
-            }
-            Button("삭제하기", systemImage: "trash", role: .destructive, action: requestRemoval)
-                .disabled(!summary.available || download == nil || busy || services?.actionBusy == true)
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.body.weight(.semibold))
-                .frame(width: 32, height: 32)
-                .background(.regularMaterial, in: .circle)
-                .overlay { Circle().strokeBorder(.black.opacity(0.25), lineWidth: 1) }
-                .frame(width: 44, height: 44).contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.primary)
-        .accessibilityLabel("\(summary.book.title) 도서 관리")
-        .accessibilityIdentifier("manage-\(summary.id)")
-    }
     private func primaryAction() {
         guard canActivate else { return }
         if summary.available { select() }
         else if let services, let download { services.download(download.key) }
-    }
-    private func requestRemoval() {
-        guard let services, let download, summary.available, !busy, !services.actionBusy else { return }
-        removal = services.confirmation(.removeDownload(download.key))
     }
 }

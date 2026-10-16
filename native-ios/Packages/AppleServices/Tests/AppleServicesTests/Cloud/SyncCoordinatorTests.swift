@@ -259,8 +259,7 @@ import Testing
         let before = try await fixture.store.exportBackup(profileID: profile)
         let other = try ProgressTransport(directory: root.appendingPathComponent("other"), scope: "test-scope", cloud: fixture.cloud)
         let request = UUID()
-        let empty = try JSONSerialization.data(withJSONObject: ["version": 5, "generation": request.uuidString.lowercased(),
-            "progress": JSONSerialization.jsonObject(with: LearningBackupCodec.encode(.empty))])
+        let empty = try LearningBackupCodec.encode(LearningBackup.empty.withResetGeneration(request.uuidString.lowercased()))
         _ = try await other.reset(scope: "test-scope", requestId: request.uuidString.lowercased(), expectedGeneration: "", json: String(decoding: empty, as: UTF8.self))
         await #expect(throws: (any Error).self) {
             try await fixture.coordinator.refresh(importGuest: true, generation: fixture.coordinator.snapshot.generation)
@@ -352,8 +351,7 @@ import Testing
         try await fixture.coordinator.refresh(generation: fixture.coordinator.snapshot.generation)
         let other = try ProgressTransport(directory: root.appendingPathComponent("other"), scope: "test-scope", cloud: fixture.cloud)
         let request = UUID()
-        let progress = try JSONSerialization.jsonObject(with: LearningBackupCodec.encode(.empty))
-        let empty = try JSONSerialization.data(withJSONObject: ["version": 5, "generation": request.uuidString.lowercased(), "progress": progress])
+        let empty = try LearningBackupCodec.encode(LearningBackup.empty.withResetGeneration(request.uuidString.lowercased()))
         _ = try await other.reset(scope: "test-scope", requestId: request.uuidString.lowercased(), expectedGeneration: "", json: String(decoding: empty, as: UTF8.self))
         try await fixture.coordinator.refresh(generation: fixture.coordinator.snapshot.generation)
         #expect(try await fixture.store.readLanguageProgress(profileID: profile, language: "english", today: StudyDay("2026-09-27")).xp == 0)

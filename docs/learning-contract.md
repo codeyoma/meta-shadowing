@@ -28,6 +28,73 @@ blocked while saving, and the Stages tab opens only after a successful commit.
 
 ## Current stage expansion — 2026-09-20
 
+### Stage detail and measured learning-screen time — 2026-10-16
+
+The native Stage detail groups the unchanged sixteen stages into 쉐도잉 (1–6),
+다구간 쉐도잉 (7–10), and 크레이지 스피킹 (11–16). Family rings count stages with
+three confirmed full runs, using denominators 6, 4, and 6. The book percentage
+uses sixteen stages. New visible names do not change the reducer's methods:
+stages 1–4 still share the existing subtitle practice. Guidance describes the
+implemented method. The row title, completion marks and chevron toggle one
+expanded guide. Only the circular play control launches practice; launch and
+disclosure are independent controls. Rows keep the same raised surface whether
+collapsed or expanded (white in light appearance); only the full-width expanded
+guidance matches the family selector's unselected background, using the adaptive
+tertiary system fill over the page background in both appearances.
+Disclosure taps animate the layout, guidance opacity and chevron over 200 ms.
+Reversing a tap retargets the current motion. Reduce Motion retains only the
+guidance fade, with no height travel or animated rotation. Family changes and
+progress updates do not trigger this disclosure animation.
+
+Continue selects the most recently saved eligible unfinished checkpoint in this
+book; otherwise it selects the first eligible incomplete stage. A completed book
+offers review. Saved grouped unit counts, including a remainder, remain authoritative.
+Preparation stays on Stages until a ready lesson is presented. Back returns to
+Bookshelf without changing selection or history. Fixed floating controls place
+Back on the left and one level/XP/streak capsule on the right; the entire capsule
+opens the existing XP popover. There is no full-width bar background or top
+scroll-edge blur. Bookshelf retains its separate XP and streak display. The cover
+starts at the screen's top edge behind the status and navigation bars and fades
+into the semantic page background at its bottom. The family/language and book-title
+block starts midway through that fade, preserving its measured height before the
+statistics so long titles and accessibility text remain readable. Navigation remains fixed while
+the detail scrolls. The cover has no
+separate controls. Confirmed download-only management remains on
+Bookshelf and never removes study records.
+
+Accumulated time is foreground dwell on the presented, authorized learning screen,
+including paused reading, audio, video/fullscreen and silent stages. Exclude all
+options/popovers and their opening waits, dictionary requests/presentation,
+analysis, loading/error replacements, completion, background/lock and exit.
+Tool dismissal or foreground return restarts eligible dwell, not playback.
+Rotation keeps one recording owner. No historical duration is inferred.
+
+Measure elapsed intervals using a monotonic clock. Preserve sub-millisecond
+remainder while mounted and persist integer milliseconds every ten eligible
+seconds and at exclusion/exit boundaries, before writer revocation. Each visit
+submits a cumulative value; SQLite transactionally applies only its increase.
+Retries, lower/out-of-order writes and duplicate final replies cannot add time
+again. Profile/reset generations and the active writer are checked in the write
+transaction. No timing write changes XP, streaks, cycles or checkpoints.
+
+Failed saves retain their cumulative value and an actionable retry. Explicit exit
+requires a successful final save or an explicit choice to leave without unsaved
+time. This choice cannot bypass a failed learning checkpoint. Profile/history
+boundaries cannot silently abandon pending time. Successful periodic saves bound
+ordinary forced-termination loss to roughly ten seconds, not a guaranteed zero:
+scheduling delays and failures increase the uncommitted interval.
+
+Schema 3 adds stable-language/book counters per random local database replica.
+Download replacement/removal retains time; authorized history deletion clears it.
+Backup version 6 preserves the validated version-4 progress payload and reset
+generation, adding exact validated counters. Versions 1–5 import with zero time.
+The same counter key merges by maximum; different replicas sum once. A restored
+database retains imported contributions but uses its own identity for future
+learning. Visit capabilities and monotonic anchors never enter backups. Time-only
+history counts as learning data. Malformed, noninteger, overflowing or oversized
+payloads fail before mutation. Older clients may reject version 6, so update all
+syncing devices; do not strip time to manufacture compatibility.
+
 ### Video packages — stages 1–16
 
 Owner-approved fullscreen extension (2026-10-10, #129–#132): stages 1–10 retain

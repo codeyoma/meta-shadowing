@@ -20,6 +20,8 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     private(set) var options: LearningOptionRoute?
     private(set) var optionsUsePopover = false
     private(set) var analysis: AnalysisModel?
+    private(set) var studyTime: StudyTimeRecorder?
+    private(set) var studyExitPending = false
     let analysisPresenter: DictionaryPresenter
     let playerPresenter: DictionaryPresenter
     let analysisDictionary: DictionaryRequestOwner
@@ -35,20 +37,34 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     @ObservationIgnored private var awaitingPresentation = false
     @ObservationIgnored private var optionsRevision = 0
     @ObservationIgnored private var openingOptions = false
-    init(workspace: ProductWorkspace) {
+    @ObservationIgnored private let studyClock: any StudyTimeClock
+    @ObservationIgnored private var studyVisible = false
+    @ObservationIgnored private var studyActive = false
+    @ObservationIgnored private var studyEligible = false
+    @ObservationIgnored private var pendingStudyTools: Set<UUID> = []
+    init(workspace: ProductWorkspace, studyClock: any StudyTimeClock = MonotonicStudyTimeClock(),
+         playerDictionaryPresenter: (any DictionaryPresenting)? = nil) {
         self.workspace = workspace
+        self.studyClock = studyClock
         let analysis = DictionaryPresenter(), player = DictionaryPresenter()
         analysisPresenter = analysis; playerPresenter = player
         analysisDictionary = DictionaryRequestOwner(presenter: analysis)
-        playerDictionary = DictionaryRequestOwner(presenter: player)
+        playerDictionary = DictionaryRequestOwner(presenter: playerDictionaryPresenter ?? player)
     }
 
     func open(packageKey: String, stage: Int, startWhenPresented: Bool = false) async {
         generation += 1
         let request = generation
+        if let studyTime, !(await studyTime.close(discardUnsaved: false)) {
+            if request == generation { studyExitPending = true }
+            return
+        }
+        guard request == generation else { return }
         await releaseResources()
         guard request == generation, !Task.isCancelled else { return }
         closing = false
+        studyTime = nil; studyExitPending = false; studyEligible = false
+        pendingStudyTools.removeAll()
         awaitingPresentation = false
         loading = true; failed = false; accessInvalidated = false; closedByService = false
         let task = Task { [workspace] in
@@ -85,6 +101,14 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
                 makeTransport: { _ in if let video { video } else { AudioQueueTransport() } },
                 initiallyPresented: !startWhenPresented)
             self.runtime = runtime
+            let timeSession = LearningStudyTime(workspace: workspace, writerID: opened.initial.snapshot.handle.writerID)
+            studyTime = StudyTimeRecorder(clock: studyClock,
+                save: { try await timeSession.write($0, finishing: false) },
+                finish: { try await timeSession.write($0, finishing: true) })
+            runtime.onControlsChange = { [weak self, weak runtime] in
+                guard let self, let runtime, self.runtime === runtime else { return }
+                self.refreshStudyEligibility()
+            }
             accessChanges = Task { [weak self, workspace] in
                 let changes = await workspace.referenceChanges(packageKey: packageKey)
                 for await _ in changes {
@@ -93,6 +117,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
                     self?.invalidateAnalysis()
                     self?.playerDictionary.cancel()
                     self?.accessInvalidated = true
+                    self?.refreshStudyEligibility()
                     self?.runtime?.setAccess(false)
                 }
             }
@@ -108,6 +133,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
             } else {
                 _ = await runtime.coordinator.perform(.stageEntry)
             }
+            refreshStudyEligibility()
         } catch {
             guard request == generation else { return }
             pending = nil; loading = false; failed = true
@@ -116,6 +142,7 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     func startPresentedLesson() async {
         guard awaitingPresentation, !closing, !accessInvalidated, let runtime else { return }
         awaitingPresentation = false
+        refreshStudyEligibility()
         runtime.present()
         runtime.setMenuOpen(options != nil)
         _ = await runtime.coordinator.perform(openingPaused || options != nil ? .pause : .stageEntry)
@@ -141,14 +168,19 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         playerDictionary.cancel()
         let request = generation
         let presentationRevision = optionsRevision
+        let timePreparation = UUID()
+        pendingStudyTools.insert(timePreparation)
         openingOptions = true
         optionsUsePopover = asPopover
         defer {
+            pendingStudyTools.remove(timePreparation)
             if presentationRevision == optionsRevision {
                 openingOptions = false
                 if options == nil { optionsUsePopover = false }
             }
+            if request == generation { refreshStudyEligibility() }
         }
+        refreshStudyEligibility()
         runtime.setMenuOpen(true)
         let paused = await runtime.coordinator.perform(.pause)
         guard request == generation, self.runtime === runtime,
@@ -166,8 +198,11 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         options = nil
         optionsUsePopover = false
         runtime?.setMenuOpen(false)
+        refreshStudyEligibility()
     }
     func suspend() {
+        studyActive = false
+        refreshStudyEligibility()
         if awaitingPresentation { openingPaused = true }
         playerDictionary.cancel()
         invalidateAnalysis()
@@ -176,25 +211,71 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
     }
     func close(retainingPresentation: Bool = false) async {
         closing = true
+        generation += 1
+        let request = generation
+        studyVisible = false
+        refreshStudyEligibility()
+        if let studyTime, !(await studyTime.close(discardUnsaved: false)) {
+            if request == generation { closing = false; studyExitPending = true }
+            return
+        }
+        guard request == generation else { return }
         optionsRevision += 1
         openingOptions = false
         awaitingPresentation = false
-        generation += 1; loading = false; openingPaused = false
+        loading = false; openingPaused = false
         if !retainingPresentation { options = nil; optionsUsePopover = false }
         await releaseResources(retainingPresentation: retainingPresentation)
     }
     func prepareServiceBoundary() async throws {
+        studyExitPending = true
+        refreshStudyEligibility()
         // Retained outgoing content is not an active learning owner. close()
         // below waits for its existing teardown before the profile can change.
         if let runtime, !closing {
             let paused = await runtime.coordinator.perform(.pause)
             guard paused.controller.active, !paused.controller.saveFailed, paused.controller.paused else {
+                cancelStudyExitPreparation()
                 throw ProductError.busy
             }
         }
+        guard await requestStudyExit(discardUnsaved: false) else { throw ProductError.busy }
         await close()
         closedByService = true
     }
+    func setStudyPresentation(visible: Bool, active: Bool) {
+        studyVisible = visible; studyActive = active
+        refreshStudyEligibility()
+    }
+    func refreshStudyEligibility() {
+        let eligible = studyVisible && studyActive && !loading && !failed && !closing && !awaitingPresentation
+            && !accessInvalidated && !studyExitPending && !openingOptions && pendingStudyTools.isEmpty
+            && options == nil && !playerDictionary.busy
+            && runtime?.controls.active == true && runtime?.controls.saveFailed == false
+            && runtime?.controls.session.phase != .complete && runtime?.controls.error == nil
+        let wasEligible = studyEligible
+        studyEligible = eligible
+        studyTime?.setEligible(eligible)
+        if wasEligible && !eligible, let studyTime { Task { _ = await studyTime.flush() } }
+    }
+    func requestStudyExit(discardUnsaved: Bool = false) async -> Bool {
+        studyExitPending = true
+        refreshStudyEligibility()
+        if let runtime, !closing {
+            let paused = await runtime.coordinator.perform(.pause)
+            // A time-only discard never bypasses an unsaved learning checkpoint.
+            guard paused.controller.active, !paused.controller.saveFailed, paused.controller.paused else {
+                cancelStudyExitPreparation()
+                return false
+            }
+        }
+        return await studyTime?.close(discardUnsaved: discardUnsaved) ?? true
+    }
+    private func cancelStudyExitPreparation() {
+        studyExitPending = false
+        refreshStudyEligibility()
+    }
+    func retryStudyTime() async -> Bool { await studyTime?.retry() ?? true }
     private func releaseResources(retainingPresentation: Bool = false) async {
         playerDictionary.cancel()
         accessChanges?.cancel(); accessChanges = nil
@@ -255,8 +336,15 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
             let session = runtime.controls.session
             return runtime.controls.active && !runtime.controls.saveFailed && permitsWord()
                 && session.plan == identity.plan && session.unit == identity.unit
-        }, prepare: { [weak runtime, workspace] in
-            guard let runtime else { return false }
+        }, prepare: { [weak self, weak runtime, workspace] in
+            guard let self, let runtime, self.runtime === runtime, !self.closing else { return false }
+            let timePreparation = UUID()
+            self.pendingStudyTools.insert(timePreparation)
+            self.refreshStudyEligibility()
+            defer {
+                self.pendingStudyTools.remove(timePreparation)
+                if self.runtime === runtime { self.refreshStudyEligibility() }
+            }
             runtime.setMenuOpen(true)
             let paused = await runtime.coordinator.perform(.pause)
             guard paused.controller.active, !paused.controller.saveFailed, paused.controller.paused else { return false }
@@ -265,5 +353,8 @@ enum LearningOptionRoute: String, Identifiable, Hashable {
         // The menu gate stays closed to remote actions until the owned dictionary is gone.
         if self.runtime === runtime { dictionarySettled() }
     }
-    func dictionarySettled() { if !playerDictionary.busy, options == nil { runtime?.setMenuOpen(false) } }
+    func dictionarySettled() {
+        if !playerDictionary.busy, options == nil { runtime?.setMenuOpen(false) }
+        refreshStudyEligibility()
+    }
 }

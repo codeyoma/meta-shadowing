@@ -2,6 +2,84 @@ import XCTest
 import UIKit
 
 final class ProductUITests: XCTestCase {
+    @MainActor func testStageRowBodyTogglesGuidanceAndOnlyPlayStartsLearning() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let book = app.buttons["book-morning-notes-v1"]
+        XCTAssertTrue(book.hittableOrWait(timeout: 20)); book.tap()
+        let guide = app.buttons["stage-guide-1"]
+        app.revealBrowsingElement(guide)
+        let title = app.staticTexts["쉐도잉 1"]
+        XCTAssertTrue(title.isHittable); title.tap()
+        let content = app.staticTexts["stage-guidance-1"]
+        XCTAssertTrue(content.existsOrWait(timeout: 5), "Tapping the row title expands guidance, not learning")
+        XCTAssertFalse(app.buttons["player-options"].exists)
+        XCTAssertEqual(guide.value as? String, "펼쳐짐")
+        guide.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertTrue(content.waitForNonExistence(timeout: 5))
+        guide.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)).tap()
+        XCTAssertTrue(content.existsOrWait(timeout: 5), "The completion area also belongs to disclosure")
+        let play = app.buttons["stage-1"]
+        XCTAssertEqual(play.frame.width, play.frame.height, accuracy: 1, "Only the circular play target starts practice")
+        XCTAssertGreaterThanOrEqual(play.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(guide.frame.height, 44)
+        play.tap()
+        XCTAssertTrue(app.buttons["player-options"].hittableOrWait(timeout: 10))
+    }
+    @MainActor func testStageDetailFamiliesAndStudyTimeSurviveReopen() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+        app.launch()
+        let book = app.buttons["book-morning-notes-v1"]
+        XCTAssertTrue(book.hittableOrWait(timeout: 20)); book.tap()
+        let time = app.staticTexts["stage-study-time"]
+        XCTAssertTrue(time.existsOrWait(timeout: 5))
+        XCTAssertLessThan(app.staticTexts["stage-book-title"].frame.minY, time.frame.minY)
+        XCTAssertGreaterThan(app.buttons["stage-continue"].frame.minY, time.frame.maxY)
+        let emptyTime = time.value as? String
+        let guide = app.buttons["stage-guide-1"]
+        app.revealBrowsingElement(guide)
+        XCTAssertTrue(guide.isHittable); guide.tap()
+        XCTAssertGreaterThanOrEqual(guide.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(guide.frame.width, 44)
+        XCTAssertFalse(app.buttons["player-options"].exists, "Disclosure must not launch learning")
+        XCTAssertTrue(app.staticTexts["stage-guidance-1"].exists)
+        for family in 0...2 {
+            let selector = app.buttons["stage-family-\(family)"]
+            app.revealBrowsingElement(selector)
+            XCTAssertTrue(selector.isHittable)
+            XCTAssertGreaterThanOrEqual(selector.frame.height, 44)
+            selector.tap()
+            XCTAssertTrue(app.buttons["stage-\([1, 7, 11][family])"].exists)
+        }
+        let silent = app.buttons["stage-11"]
+        for _ in 0..<5 where !silent.isHittable { app.swipeUp() }
+        XCTAssertTrue(silent.isHittable); silent.tap()
+        let options = app.buttons["player-options"]
+        XCTAssertTrue(options.hittableOrWait(timeout: 10)); options.tap()
+        XCTAssertTrue(app.buttons["options-close"].hittableOrWait(timeout: 5))
+        app.buttons["options-close"].tap()
+        XCTAssertTrue(options.hittableOrWait(timeout: 5))
+        app.exitLearningThroughOptions()
+        for _ in 0..<5 where !time.isHittable { app.swipeDown() }
+        XCTAssertTrue(time.existsOrWait(timeout: 5))
+        let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            time.value as? String != nil && time.value as? String != emptyTime
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 5), .completed)
+        let saved = time.value as? String
+        XCTAssertNotEqual(saved, emptyTime)
+        app.assertBrowsingXP("0 / 100 XP")
+        app.terminate(); app.launch()
+        XCTAssertTrue(book.hittableOrWait(timeout: 20)); book.tap()
+        XCTAssertTrue(time.existsOrWait(timeout: 5))
+        XCTAssertEqual(time.value as? String, saved)
+        app.buttons["stage-back"].tap()
+        XCTAssertTrue(book.hittableOrWait(timeout: 5))
+    }
     @MainActor func testLearningSettingsSummariesWrapAtLargestTextSize() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -220,6 +298,20 @@ final class ProductUITests: XCTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).tap()
         XCTAssertTrue(details.waitForNonExistence(timeout: 5))
         XCTAssertEqual(experience.label, "0 / 100 XP", "Inspecting XP must not award progress")
+        app.terminate()
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let book = app.buttons["book-morning-notes-v1"]
+        XCTAssertTrue(book.hittableOrWait(timeout: 20)); book.tap()
+        let title = app.staticTexts["stage-book-title"]
+        XCTAssertTrue(title.existsOrWait(timeout: 5))
+        let titleFrame = title.frame
+        XCTAssertGreaterThanOrEqual(titleFrame.minX, 16, "Large stage content must not widen the entire page")
+        XCTAssertLessThanOrEqual(titleFrame.maxX, app.frame.maxX - 16)
+        XCTAssertTrue(experience.isHittable, "The XP control remains reachable at the largest text size")
+        experience.tap()
+        XCTAssertTrue(details.hittableOrWait(timeout: 5))
+        XCTAssertEqual(details.label, "0 / 100 XP")
     }
 
     @MainActor func testRevealPresetsSnapAndCascadeAcrossRelaunch() {
@@ -263,10 +355,11 @@ final class ProductUITests: XCTestCase {
         let names = ["자막 쉐도잉", "자막 쉐도잉", "무자막 쉐도잉", "다구간 쉐도잉",
                      "다구간 무자막", "속사포 영한", "속사포 한영", "속사포 한글"]
         for stage in 1...16 {
+            app.revealStage(stage)
             XCTAssertEqual(app.buttons["stage-\(stage)"].label, "스테이지 \(stage), \(names[(stage - 1) / 2])")
             XCTAssertEqual(app.buttons["stage-\(stage)"].value as? String, "완료 0/3")
         }
-        let stage = app.buttons["stage-3"]
+        let stage = app.revealStage(3)
         for _ in 0..<5 {
             guard !stage.isHittable else { break }
             app.swipeUp()
@@ -336,7 +429,7 @@ final class ProductUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["1×"].exists)
     }
 
-    @MainActor func testBooksStagesSettingsAndEmptyLanguage() {
+    @MainActor func testBooksStagesSettingsAndEmptyLanguage() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
@@ -345,13 +438,53 @@ final class ProductUITests: XCTestCase {
         XCTAssertTrue(book.existsOrWait(timeout: 15))
         guard book.exists else { return }
         XCTAssertTrue(book.hittableOrWait(timeout: 10))
+        let libraryExperience = app.buttons["header-xp"].label
+        let libraryLevel = app.buttons["header-xp"].value as? String
         book.tap()
         XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["스테이지"].isSelected,
                       "Choosing a book opens its stages in the Stages tab")
-        XCTAssertTrue(app.buttons["header-xp"].exists)
-        XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
-        app.tabBars.buttons["책장"].tap()
+        let navigation = app.navigationBars.firstMatch
+        let back = navigation.buttons["stage-back"]
+        XCTAssertTrue(back.hittableOrWait(timeout: 5), "Back belongs to the fixed navigation bar, not the scrolling cover")
+        XCTAssertGreaterThanOrEqual(back.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(back.frame.height, 44)
+        let experience = navigation.buttons["header-xp"]
+        XCTAssertTrue(experience.isHittable)
+        XCTAssertEqual(experience.label, libraryExperience)
+        XCTAssertEqual(experience.value as? String, "\(libraryLevel ?? ""), 연속 학습 0일")
+        XCTAssertGreaterThanOrEqual(experience.frame.width, 110, "The entire XP and streak capsule is one button")
+        XCTAssertGreaterThan(experience.frame.minX, back.frame.maxX)
+        XCTAssertFalse(app.buttons["language-menu"].exists, "Stages uses Back instead of the library language menu")
+        XCTAssertFalse(app.buttons["manage-morning-notes-v1"].exists, "Download management remains on Bookshelf")
+        XCTAssertEqual(app.buttons.matching(identifier: "stage-back").count, 1)
+        let coverHeight = app.frame.width / 1.35
+        let subtitle = app.staticTexts["쉐도잉 · 영어"]
+        let title = app.staticTexts["stage-book-title"]
+        XCTAssertGreaterThan(subtitle.frame.minY, coverHeight * 0.75)
+        XCTAssertLessThan(subtitle.frame.minY, coverHeight * 0.9,
+                          "The title block starts within the middle of the cover's bottom fade")
+        XCTAssertLessThan(title.frame.minY, coverHeight,
+                          "The book title overlaps the fading artwork instead of sitting below it")
+        XCTAssertGreaterThan(title.frame.minY, subtitle.frame.maxY)
+        XCTAssertGreaterThan(app.staticTexts["stage-study-time"].frame.minY, title.frame.maxY,
+                             "Statistics follow the title's real height")
+        try assertStageCoverBehindBars(app, navigation: navigation)
+        experience.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertTrue(app.staticTexts["header-xp-details"].existsOrWait(timeout: 5))
+        XCTAssertEqual(app.staticTexts["header-xp-details"].label, libraryExperience)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).tap()
+        XCTAssertTrue(app.staticTexts["header-xp-details"].waitForNonExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Stage navigation shares library XP and streak with Back"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let backFrame = back.frame
+        app.swipeUp()
+        XCTAssertTrue(back.isHittable, "Back stays available after scrolling the artwork away")
+        XCTAssertEqual(back.frame.minY, backFrame.minY, accuracy: 1)
+        XCTAssertTrue(experience.isHittable, "XP inspection remains in the fixed header")
+        back.tap()
         XCTAssertTrue(book.hittableOrWait(timeout: 5),
                       "Books returns directly to the library, without a pushed stage screen")
         XCTAssertFalse(app.buttons["stage-1"].exists)
@@ -362,7 +495,7 @@ final class ProductUITests: XCTestCase {
         // Learning status belongs to the browsing screens' toolbars, not Settings.
         XCTAssertFalse(app.buttons["language-menu"].exists)
         XCTAssertFalse(app.buttons["header-xp"].exists)
-        app.tabBars.buttons["스테이지"].tap()
+        app.tabBars.buttons["책장"].tap()
         let englishButton = app.buttons["language-menu"].frame
         XCTAssertEqual(englishButton.width, englishButton.height, accuracy: 1)
         XCTAssertGreaterThanOrEqual(englishButton.width, 44)
@@ -380,5 +513,30 @@ final class ProductUITests: XCTestCase {
         app.terminate()
         app.launch()
         XCTAssertTrue(app.staticTexts["이 언어의 도서가 아직 없어요"].existsOrWait(timeout: 15))
+    }
+
+    /// The bundled blue cover must render behind both bars, not an empty safe-area strip.
+    @MainActor private func assertStageCoverBehindBars(_ app: XCUIApplication, navigation: XCUIElement) throws {
+        let image = try XCTUnwrap(app.screenshot().image.cgImage)
+        let scale = CGFloat(image.width) / app.frame.width
+        let regions = [
+            ("status bar", CGRect(x: app.frame.width * 0.18, y: app.frame.minY + 8, width: 18, height: 10)),
+            ("navigation bar", CGRect(x: app.frame.midX - 15, y: navigation.frame.midY - 4, width: 30, height: 8))
+        ]
+        for (name, region) in regions {
+            let crop = try XCTUnwrap(image.cropping(to: CGRect(x: region.minX * scale, y: region.minY * scale,
+                width: region.width * scale, height: region.height * scale)))
+            var pixels = [UInt8](repeating: 0, count: 8 * 4 * 4)
+            let bluePixels = try pixels.withUnsafeMutableBytes { bytes in
+                let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: 8, height: 4,
+                    bitsPerComponent: 8, bytesPerRow: 32, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.draw(crop, in: CGRect(x: 0, y: 0, width: 8, height: 4))
+                return stride(from: 0, to: bytes.count, by: 4).filter {
+                    Int(bytes[$0 + 2]) > Int(bytes[$0]) + 20 && Int(bytes[$0 + 1]) > Int(bytes[$0]) + 10
+                }.count
+            }
+            XCTAssertGreaterThan(bluePixels, 16, "Blue cover artwork must reach behind the \(name)")
+        }
     }
 }

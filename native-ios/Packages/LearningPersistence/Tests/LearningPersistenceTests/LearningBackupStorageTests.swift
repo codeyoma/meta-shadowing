@@ -135,8 +135,7 @@ import Testing
         let a = try temporaryRoot(); defer { try? FileManager.default.removeItem(at: a) }
         let target = store(a)
         let empty = try LearningBackupCodec.encode(.empty)
-        let progress = try JSONSerialization.jsonObject(with: empty)
-        let envelope = try JSONSerialization.data(withJSONObject: ["version": 5, "generation": "d6e43a28-c2dd-4f64-9c83-b51cf38c45ea", "progress": progress])
+        let envelope = try LearningBackupCodec.encode(LearningBackup.empty.withResetGeneration("d6e43a28-c2dd-4f64-9c83-b51cf38c45ea"))
         _ = try await target.restoreIntoEmptyProfile(envelope, profileID: "guest")
         let before = try await target.inspect(profileID: "guest")
         await #expect(throws: LearningError.self) { try await target.mergeBackup(empty, profileID: "guest") }

@@ -36,10 +36,30 @@ struct ProductTabsView: View {
                             } else if let book = snapshot.selectedBook {
                                 StagePathView(summary: book) {
                                     learningEntry.prepare(packageKey: book.id, stage: $0, model: model, profiles: profiles)
-                                }.allowsHitTesting(!learningEntry.preparing)
-                            } else { ContentUnavailableView("도서를 선택해 주세요", systemImage: "book") }
+                                }.id(book.id).allowsHitTesting(!learningEntry.preparing)
+                                    .toolbar {
+                                        ToolbarItem(placement: .topBarLeading) {
+                                            HStack(spacing: 0) {
+                                                Button {
+                                                    BrowsingTapFeedback.light.perform { tab = 0 }
+                                                } label: {
+                                                    Image(systemName: "chevron.backward")
+                                                        .frame(width: 44, height: 44)
+                                                        .contentShape(.circle)
+                                                        .glassEffect(.regular.interactive(), in: .circle)
+                                                }
+                                                .buttonStyle(.plain)
+                                                .accessibilityLabel("책장으로 돌아가기")
+                                                .accessibilityIdentifier("stage-back")
+                                            }.fixedSize()
+                                        }.sharedBackgroundVisibility(.hidden)
+                                        StudyProgressToolbar(progress: snapshot.progress, grouped: true)
+                                    }
+                            } else {
+                                ContentUnavailableView("도서를 선택해 주세요", systemImage: "book")
+                                    .toolbar { statusToolbar(snapshot) }
+                            }
                         }
-                        .toolbar { statusToolbar(snapshot) }
                         .browsingRecovery(model: model, services: services)
                     }
                 }

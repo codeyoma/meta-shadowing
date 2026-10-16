@@ -75,10 +75,10 @@ final class NativeFoundationUITests: XCTestCase {
         }
         XCTAssertTrue(sample.hittableOrWait(timeout: 10))
         sample.tap()
-        let first = app.buttons["stage-1"]
+        let first = app.revealStage(1)
         XCTAssertTrue(first.existsOrWait(timeout: 5))
         XCTAssertTrue(first.isHittable)
-        let last = app.buttons["stage-16"]
+        let last = app.revealStage(16)
         for _ in 0..<20 {
             guard !last.isHittable else { break }
             app.swipeUp()

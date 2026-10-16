@@ -61,7 +61,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: group, timeout: 5))
         XCTAssertEqual(group.value as? String, "4구간")
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
 
     @MainActor func testFullscreenPopoversKeepControlsReachableAtLargestTextSize() {
@@ -262,8 +262,8 @@ final class PlayerUITests: XCTestCase {
         for _ in 0..<8 where !exit.isHittable { app.swipeUp() }
         XCTAssertTrue(exit.isHittable)
         exit.tap()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
-        app.buttons["stage-7"].tap()
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
+        app.revealStage(7).tap()
         XCTAssertTrue(app.buttons["video-enter-fullscreen"].hittableOrWait(timeout: 5))
         app.buttons["video-enter-fullscreen"].tap()
         XCTAssertTrue(app.videoLayoutOrWait(fullscreen: true, control: group, timeout: 5))
@@ -344,7 +344,7 @@ final class PlayerUITests: XCTestCase {
         collapse.tap()
         XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: app.buttons["player-options"], timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "6 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("6 / 100 XP", timeout: 5)
     }
 
     @MainActor func testVideoFullscreenChangesOnlyByButtonsWithoutCredit() {
@@ -420,7 +420,7 @@ final class PlayerUITests: XCTestCase {
         }
         XCTAssertTrue(exit.isHittable)
         exit.tap()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
         XCTAssertGreaterThan(app.frame.height, app.frame.width)
     }
 
@@ -451,7 +451,7 @@ final class PlayerUITests: XCTestCase {
         }
         XCTAssertTrue(exit.isHittable)
         exit.tap()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("1 / 100 XP", timeout: 5)
     }
 
     @MainActor func testBriefVideoRewardDoesNotMoveLargestLessonText() {
@@ -470,7 +470,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertEqual(app.descendants(matching: .any)["learning-line-0-0-translation"].frame.minY,
                        translationFrame.minY, accuracy: 1)
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("1 / 100 XP", timeout: 5)
     }
 
     @MainActor func testBriefRepeatedRewardsPreserveLayoutAndCredit() {
@@ -493,7 +493,7 @@ final class PlayerUITests: XCTestCase {
                                sentenceFrame.minY, accuracy: 1)
             }
             app.exitLearningThroughOptions()
-            XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "2 / 100 XP", timeout: 5))
+            app.assertBrowsingXP("2 / 100 XP", timeout: 5)
             app.terminate()
         }
     }
@@ -526,7 +526,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(
             for: \.label, toEqual: "확인한 반복 1/3", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("1 / 100 XP", timeout: 5)
     }
 
     @MainActor func testOptionsOpensAtFullHeightWithoutAnExpansionGesture() {
@@ -565,7 +565,7 @@ final class PlayerUITests: XCTestCase {
         main.tap()
         XCTAssertTrue(app.staticTexts["2/2"].existsOrWait(timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("3 / 100 XP", timeout: 5)
     }
 
     @MainActor func testPlayerOptionsMatchSettingsOrderForAudioAndSilentStages() {
@@ -605,7 +605,7 @@ final class PlayerUITests: XCTestCase {
             XCTAssertTrue(app.navigationBars[speedTitle].existsOrWait(timeout: 5))
             app.buttons["options-close"].tap()
             app.exitLearningThroughOptions()
-            XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+            app.assertBrowsingXP("0 / 100 XP", timeout: 5)
             app.terminate()
         }
     }
@@ -644,7 +644,7 @@ final class PlayerUITests: XCTestCase {
             app.swipeUp()
         }
         exit.tap()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         XCTAssertEqual(app.buttons["배속"].value as? String, "1×")
@@ -668,12 +668,13 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["스테이지 완료"].existsOrWait(timeout: 5))
         XCTAssertTrue(completion.waitForNonExistence(timeout: 1))
         app.terminate(); app.launch()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "6 / 100 XP", timeout: 20))
+        app.assertBrowsingXP("6 / 100 XP", timeout: 20)
         XCTAssertFalse(reward.exists)
         XCTAssertFalse(completion.exists)
         // The selected book persists; use its Stages tab directly after relaunch.
         XCTAssertTrue(app.tabBars.buttons["스테이지"].hittableOrWait(timeout: 5))
         app.tabBars.buttons["스테이지"].tap()
+        app.revealStage(11)
         XCTAssertTrue(app.buttons["stage-11"].existsOrWait(timeout: 5))
         XCTAssertEqual(app.buttons["stage-11"].value as? String, "완료 1/3",
                        "A persisted full run fills one stage check, not all three")
@@ -686,7 +687,7 @@ final class PlayerUITests: XCTestCase {
         let book = app.buttons["book-morning-notes-v1"]
         XCTAssertTrue(book.hittableOrWait(timeout: 20))
         book.tap()
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         let main = app.buttons["player-main"]
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
         main.tap()
@@ -703,13 +704,13 @@ final class PlayerUITests: XCTestCase {
         XCTAssertEqual(app.switches["icloud-sync-toggle"].value as? String, "0")
         app.tabBars.buttons["책장"].tap()
         book.tap()
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         XCTAssertTrue(timeline.wait(for: \.label, toEqual: "확인한 반복 1/3", timeout: 10))
         app.buttons["player-options"].tap()
         app.buttons["options-close"].tap()
         XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("1 / 100 XP", timeout: 5)
         XCTAssertTrue((app.buttons["stage-1"].value as? String ?? "").hasPrefix("완료 0/3"),
                       "One confirmed sentence cycle must not fill a stage-run check")
     }
@@ -736,7 +737,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(active.wait(for: \.label, toEqual: "현재 S1 · 175 WPM", timeout: 5))
         app.buttons["options-close"].tap()
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
 
     @MainActor func testGuideExplainsActiveStageWithoutGrantingCredit() {
@@ -771,7 +772,7 @@ final class PlayerUITests: XCTestCase {
         app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
 
     @MainActor func testVideoStaysFixedWhileLargeLessonTextScrolls() {
@@ -823,7 +824,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.videoLayoutOrWait(fullscreen: false, control: expand, timeout: 5))
         XCTAssertTrue(expand.isHittable)
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
 
     @MainActor func testOptionsSheetHasOneCloseAndAListExit() {
@@ -855,7 +856,7 @@ final class PlayerUITests: XCTestCase {
             XCTAssertTrue(leave.isHittable, "Stage exit must be reachable in the options list; largeText=\(largeText)")
             leave.tap()
             XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 5), "Stage exit did not return to stages; largeText=\(largeText)")
-            XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5), "Opening and leaving options changed XP; largeText=\(largeText)")
+            app.assertBrowsingXP("0 / 100 XP", timeout: 5, "Opening and leaving options changed XP; largeText=\(largeText)")
             app.terminate()
         }
     }
@@ -879,7 +880,7 @@ final class PlayerUITests: XCTestCase {
             }
             XCTAssertTrue(app.staticTexts["하나"].exists)
             app.exitLearningThroughOptions()
-            XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+            app.assertBrowsingXP("0 / 100 XP", timeout: 5)
             app.terminate()
         }
     }
@@ -908,7 +909,7 @@ final class PlayerUITests: XCTestCase {
         toggle.tap()
         XCTAssertTrue(app.staticTexts["Secret one"].waitForNonExistence(timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
 
     @MainActor func testUngroupedPlayerCanEditGlobalGroupAndRevealPresets() {
@@ -933,7 +934,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         XCTAssertTrue(app.staticTexts["1/2"].exists)
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         group.tap()
@@ -978,7 +979,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "다음 학습", timeout: 5))
         XCTAssertTrue(app.staticTexts["1/2"].exists)
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
 
     @MainActor func testProgressTrackWidthSurvivesCounterDigitBoundary() {
@@ -989,7 +990,7 @@ final class PlayerUITests: XCTestCase {
         let book = app.buttons["book-morning-notes-v1"]
         XCTAssertTrue(book.hittableOrWait(timeout: 20))
         book.tap()
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         XCTAssertTrue(app.buttons["player-options"].existsOrWait(timeout: 10))
         func selectSource(_ index: Int) {
             app.buttons["player-options"].tap()
@@ -1041,7 +1042,7 @@ final class PlayerUITests: XCTestCase {
         app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         app.buttons["다구간 학습 사이즈"].tap()
@@ -1076,8 +1077,8 @@ final class PlayerUITests: XCTestCase {
         app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
-        app.buttons["stage-1"].tap()
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
+        app.revealStage(1).tap()
         XCTAssertTrue(speed.existsOrWait(timeout: 10))
         speed.tap()
         XCTAssertTrue(slider.existsOrWait(timeout: 5))
@@ -1103,8 +1104,8 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 10))
         XCTAssertEqual(timeline.label, "확인한 반복 3/5")
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
-        app.buttons["stage-1"].tap()
+        app.assertBrowsingXP("3 / 100 XP", timeout: 5)
+        app.revealStage(1).tap()
         XCTAssertTrue(timeline.existsOrWait(timeout: 10))
         XCTAssertEqual(timeline.label, "확인한 반복 3/5")
         app.buttons["player-options"].tap()
@@ -1152,7 +1153,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["1×"].exists)
         app.buttons["options-close"].tap()
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         app.buttons["배속"].tap()
@@ -1176,7 +1177,7 @@ final class PlayerUITests: XCTestCase {
         }
         XCTAssertTrue(book.hittableOrWait(timeout: 10), "The fixture book must be tappable")
         book.tap()
-        let row = app.buttons["stage-\(stage)"]
+        let row = app.revealStage(stage)
         for _ in 0..<10 {
             guard !row.isHittable else { break }
             app.swipeUp()
@@ -1216,7 +1217,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertFalse(video.buttons["버블로 보기"].exists, "Video options must not offer an ineffective bubble choice")
         video.buttons["options-close"].tap()
         video.exitLearningThroughOptions()
-        XCTAssertTrue(video.buttons["header-xp"].wait(for: \.label, toEqual: "2 / 100 XP", timeout: 5))
+        video.assertBrowsingXP("2 / 100 XP", timeout: 5)
         video.tabBars.buttons["설정"].tap()
         video.buttons["학습 설정"].tap()
         video.buttons["학습 화면"].tap()
@@ -1233,7 +1234,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(silent.otherElements["learning-bubble-0-0"].exists, "Silent stages without video honor the bubble preference")
         action.tap()
         silent.exitLearningThroughOptions()
-        XCTAssertTrue(silent.buttons["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
+        silent.assertBrowsingXP("3 / 100 XP", timeout: 5)
     }
     @MainActor func testAudioLayoutChangesBetweenConversationAndReadingWithoutCredit() {
         continueAfterFailure = false
@@ -1259,7 +1260,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertLessThan(secondFrame.maxY, listCardFrame.maxY)
         XCTAssertEqual(app.buttons["player-main"].label, "학습 이어하기")
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
     @MainActor func testAllSentencesSelectsPausedWithoutCredit() {
         let app = fixture(stage: 1, mode: "audio")
@@ -1271,7 +1272,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         XCTAssertTrue(app.staticTexts["2/2"].exists)
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
     @MainActor func testSaveFailureRetryDoesNotDuplicateCreditOrAutoplay() {
         let app = fixture(stage: 1, mode: "audio", extra: ["--ui-test-product-fail-save"])
@@ -1290,7 +1291,7 @@ final class PlayerUITests: XCTestCase {
         app.buttons["options-close"].tap()
         XCTAssertTrue(main.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5), "Retry must leave playback paused")
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5), "Retry must commit exactly one XP before leaving the player")
+        app.assertBrowsingXP("1 / 100 XP", timeout: 5, "Retry must commit exactly one XP before leaving the player")
         app.terminate(); app.launch()
         XCTAssertTrue(app.buttons["header-xp"].existsOrWait(timeout: 15), "Relaunch must restore the fixture profile")
         XCTAssertEqual(app.buttons["header-xp"].label, "1 / 100 XP", "Relaunch must preserve exactly one committed XP")
@@ -1306,7 +1307,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertEqual(app.buttons["header-xp"].label, "0 / 100 XP")
         book.tap()
         XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 5))
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         let action = app.buttons["player-main"]
         XCTAssertTrue(action.existsOrWait(timeout: 10))
         XCTAssertFalse(app.buttons["player-exit"].exists, "Stage exit belongs in the options sheet")
@@ -1322,6 +1323,6 @@ final class PlayerUITests: XCTestCase {
         app.buttons["options-close"].tap()
         XCTAssertTrue(action.wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("1 / 100 XP", timeout: 5)
     }
 }

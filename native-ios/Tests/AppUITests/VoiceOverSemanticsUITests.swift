@@ -51,7 +51,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         app.buttons["book-morning-notes-v1"].tap()
         XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 10))
         try audit(app, "\(label) stages", types: types)
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 20))
         try audit(app, "\(label) player", types: types)
         app.buttons["player-options"].tap()
@@ -62,7 +62,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         try audit(app, "\(label) rate editor", types: types)
         app.buttons["options-close"].tap()
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].existsOrWait(timeout: 10))
+        XCTAssertTrue(app.buttons["stage-back"].existsOrWait(timeout: 10))
         app.tabBars.buttons["설정"].tap()
         XCTAssertTrue(app.buttons["학습 설정"].existsOrWait(timeout: 5))
         try audit(app, "\(label) settings", types: types)
@@ -137,14 +137,21 @@ final class VoiceOverSemanticsUITests: XCTestCase {
 
         book.tap()
         XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 10))
-        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'stage-'"))
-        XCTAssertEqual((0..<rows.count).map { rows.element(boundBy: $0).identifier },
-                       (1...16).map { "stage-\($0)" }, "Stages must be read in order")
+        for family in 0...2 {
+            let first = [1, 7, 11][family], last = [6, 10, 16][family]
+            app.revealStage(first)
+            let rows = app.buttons.matching(NSPredicate(format: "identifier MATCHES %@", "stage-[0-9]+"))
+            XCTAssertEqual((0..<rows.count).map { rows.element(boundBy: $0).identifier },
+                           (first...last).map { "stage-\($0)" }, "Each family's stages must be read in order")
+        }
+        app.revealStage(1)
         XCTAssertEqual(app.buttons["stage-1"].label, "스테이지 1, 자막 쉐도잉")
         XCTAssertEqual(app.buttons["stage-1"].value as? String, "완료 0/3")
+        app.revealStage(11)
         XCTAssertEqual(app.buttons["stage-11"].label, "스테이지 11, 속사포 영한")
+        app.revealStage(1)
 
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         let main = app.buttons["player-main"]
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
         XCTAssertEqual(main.label, "학습 확인")
@@ -159,6 +166,6 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         XCTAssertEqual(rate.value as? String, "1배속")
         app.buttons["options-close"].tap()
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
 }

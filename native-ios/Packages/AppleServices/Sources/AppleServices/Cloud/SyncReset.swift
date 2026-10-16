@@ -106,8 +106,6 @@ extension SyncCoordinator {
         }
     }
     func resetPayload(_ request: UUID) throws -> Data {
-        let raw = try JSONSerialization.data(withJSONObject: ["version": 5, "generation": request.uuidString.lowercased(),
-            "progress": JSONSerialization.jsonObject(with: LearningBackupCodec.encode(.empty))])
-        return try LearningBackupCodec.encode(LearningBackupCodec.decode(raw))
+        try LearningBackupCodec.encode(LearningBackup.empty.withResetGeneration(request.uuidString.lowercased()))
     }
 }

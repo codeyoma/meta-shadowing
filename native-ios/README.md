@@ -61,6 +61,56 @@ The Expo app remains the behavioral reference until the later migration tickets 
 
 ## Ownership and isolation
 
+### Book stage detail and accumulated study time
+
+The Stages tab presents a scrolling book detail: bundled cover artwork, source
+count, accumulated foreground learning time, completed-stage percentage, a
+continuation action, and three practice families. The families retain stage IDs
+1–6, 7–10, and 11–16; their completion rings require three confirmed full runs
+per stage. The row title, completion marks and chevron toggle one expanded guide;
+only the circular play control starts that row's practice. Rows keep the same
+raised surface whether collapsed or expanded (white in light appearance); only
+the full-width expanded guidance matches the family selector's unselected background.
+It uses the adaptive tertiary system fill over the page background in both appearances.
+Disclosure taps animate expansion/collapse, guidance opacity and the chevron over
+200 ms with an interruptible ease-out. Reduce Motion uses only the guidance fade,
+without animated height or chevron rotation. Only one guide stays expanded.
+The fixed navigation controls use Back on the left and one capsule combining
+level, XP and streak on the right. Tapping anywhere on that capsule opens the
+existing XP popover. Bookshelf retains its separate XP and streak display.
+Back returns to Bookshelf without clearing the selected book. The cover
+extends from the screen's top edge behind the status and navigation bars; the
+navigation controls remain fixed while the artwork and detail scroll. There is
+no full-width navigation background or top scroll-edge blur. The cover fades into
+the semantic page background at its bottom in both appearances. The family/language
+and book-title block begins midway through that fade. Its full measured height
+remains in the scroll layout, so long titles and large text push statistics down
+instead of overlapping or clipping them. The cover
+has no separate navigation or management controls; download management remains on Bookshelf.
+Download-only removal retains learning time.
+At accessibility text sizes, stage-row content stacks vertically instead of
+forcing the cover, title and statistics beyond the scrolling viewport.
+
+Time measures presence on the actual learning screen, including paused reading,
+silent practice and fullscreen video. Options and popovers (including their
+opening preparation), dictionary, analysis, background/lock, loading, completion
+and exit are excluded. It does not award XP, streaks, cycles or completion.
+There is no historical time estimate for preexisting learning.
+
+One monotonic recorder saves cumulative integer milliseconds every ten eligible
+seconds and at exclusion/exit boundaries. SQLite schema 3 adds transactional,
+profile/book-scoped counters and an idempotent visit frontier. Normal saves are
+silent. Failed time saves retain a retry action; explicit exit also offers to
+discard only the unsaved time, never an unsaved learning checkpoint. Forced
+termination can lose the uncommitted interval, approximately ten seconds after
+successful periodic saves; delayed scheduling or failed writes can increase it.
+
+Backup version 6 includes per-database time counters and preserves reset authority.
+Versions 1–5 remain readable with zero imported time. Duplicate counters merge by
+maximum; distinct database replicas contribute independently. Update all syncing
+devices before using version-6 backups: older clients may reject them. Local
+merge tests do not establish physical-lock or live private-CloudKit acceptance.
+
 - `LearningDomain`: Sendable values, sixteen-stage rules, reward receipts and backup validation.
 - `LearningPersistence`: profile-isolated, actor-owned transactional system SQLite.
 - `AppFoundation`: local workspaces, committed-state controller and observable bootstrap.
@@ -325,13 +375,13 @@ It also requires both full non-commerce test targets exactly once, with serial e
 Generating the CI project replaces only the ignored generated Xcode project;
 run `xcodegen generate --spec native-ios/project.yml` to return to local settings.
 Ordinary PRs and protected-branch pushes use `light` CI: all six unfiltered host
-package suites (currently 375 cases), tooling/configuration checks, and one generic
+package suites, tooling/configuration checks, and one generic
 unsigned Debug app build with product inspection. Run the same host logic gate with
 `bash native-ios/scripts/ci-swift-package-tests.sh`. It rejects missing, empty,
 skipped or failed Swift Testing results. Generic compilation does not boot a simulator.
 Automatic CI has no simulator execution or test-product build/upload/download.
 
-The complete 180-case native simulator suite, including all 105 native integration
+The complete native simulator suite, including all native integration
 cases and all UI journeys, runs locally before push. The local gate also inspects
 its Debug test app, builds and inspects Release, exercises the runtime product
 guard, and compiles the fictional downloader. These checks remain available in
@@ -339,7 +389,8 @@ manual CI (`test_scope: full`); `test_scope: light` selects only ordinary checks
 Host package success does not establish native media, lifecycle, rendering or UI
 behavior. Three redundant UI launches were consolidated into existing same-fixture
 journeys, preserving their geometry, screenshot, and pre-download XP assertions;
-75 UI methods remain. Positive existence and selected navigation-hittability
+The stage-detail work adds a family/time-persistence journey without removing
+existing UI coverage. Positive existence and selected navigation-hittability
 checks use an immediate query with the original timeout as fallback. Enabled,
 selected, label, disappearance, media, and persistence readiness waits remain
 unchanged. Bounded scroll searches stop once their target is hittable; repeated

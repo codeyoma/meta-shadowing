@@ -123,17 +123,22 @@ enum ProgressEnvelope {
     guard !data.isEmpty, data.count <= ProgressStore.maxBytes else { throw ProgressCloudError.tooLarge }
     guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ProgressCloudError.corrupt }
     guard let version = root["version"] as? Int, version >= 5 else { return "" }
-    guard version == 5, Set(root.keys) == ["version", "generation", "progress"],
-          let generation = root["generation"] as? String, UUID(uuidString: generation) != nil,
+    guard (5...6).contains(version), Set(root.keys) == (version == 5
+            ? ["version", "generation", "progress"] : ["version", "generation", "progress", "studyTime"]),
+          version != 6 || root["studyTime"] is [Any],
           let progress = root["progress"] as? [String: Any], progress["version"] as? Int == 4,
           Set(progress.keys) == ["version", "tables", "sync"],
           progress["tables"] is [String: Any], progress["sync"] is [String: Any]
     else { throw ProgressCloudError.corrupt }
+    if version == 6, root["generation"] is NSNull { return "" }
+    guard let generation = root["generation"] as? String, generation.count == 36,
+          UUID(uuidString: generation) != nil else { throw ProgressCloudError.corrupt }
     return generation
   }
   static func validateReset(_ data: Data, requestId: String) throws {
     guard UUID(uuidString: requestId) != nil, try generation(data) == requestId,
           let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          root["version"] as? Int != 6 || (root["studyTime"] as? [Any])?.isEmpty == true,
           let progress = root["progress"] as? [String: Any],
           let tables = progress["tables"] as? [String: Any],
           Set(tables.keys) == ["checkpoints", "completions", "daily_stages", "stage_awards", "study_days", "preferences", "cycle_credits", "unit_credits"],
