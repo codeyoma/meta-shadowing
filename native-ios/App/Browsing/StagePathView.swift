@@ -7,7 +7,6 @@ struct StagePathView: View {
     let summary: BookStudySummary
     let open: (Int) -> Void
     @State private var selection: StageDetailSelection
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     init(summary: BookStudySummary, open: @escaping (Int) -> Void) {
         self.summary = summary; self.open = open
         selection = StageDetailSelection(continuationStage: StageDetailSummary(summary: summary, verifiedTestAccess: Self.testAccess).continuationStage)
@@ -23,24 +22,15 @@ struct StagePathView: View {
         let detail = StageDetailSummary(summary: summary, verifiedTestAccess: Self.testAccess)
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                StageDetailHeader(summary: summary, family: selection.family)
+                StageDetailHeader(summary: summary)
                 VStack(alignment: .leading, spacing: 20) {
-                    StageStatisticsView(summary: summary, percentage: detail.completedPercentage)
-                    StageContinuationButton(summary: summary, detail: detail, open: open)
+                    StageOverviewCard(summary: summary, detail: detail, open: open)
                     if !summary.available {
                         Label("자료를 열 수 없어요. 책장에서 다시 시도해 주세요. 학습 기록은 그대로 있어요.",
                               systemImage: "exclamationmark.triangle")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
-                    StageFamilyView(family: selection.family, completed: detail.completed(in: selection.family), selection: $selection)
-                    VStack(spacing: 0) {
-                        ForEach(selection.family.stages, id: \.self) { stage in
-                            StagePracticeRow(stage: stage, summary: summary, prominent: stage == detail.continuationStage,
-                                expanded: selection.expandedStage == stage, reduceMotion: reduceMotion,
-                                open: { open(stage) }, toggle: { selection.toggleGuide(stage) })
-                            if stage != selection.family.stages.last { Divider() }
-                        }
-                    }.compositingGroup().clipShape(.rect(cornerRadius: 26))
+                    StagePracticeCard(summary: summary, detail: detail, selection: $selection, open: open)
                 }.padding(.horizontal, 16)
             }.padding(.bottom, 24)
         }
@@ -49,6 +39,29 @@ struct StagePathView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .scrollEdgeEffectHidden(true, for: .top)
+    }
+}
+
+private struct StagePracticeCard: View {
+    let summary: BookStudySummary
+    let detail: StageDetailSummary
+    @Binding var selection: StageDetailSelection
+    let open: (Int) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        VStack(spacing: 0) {
+            StageFamilyView(family: selection.family, completed: detail.completed(in: selection.family), selection: $selection)
+                .padding(16)
+            ForEach(selection.family.stages, id: \.self) { stage in
+                StagePracticeRow(stage: stage, summary: summary, prominent: stage == detail.continuationStage,
+                    expanded: selection.expandedStage == stage, reduceMotion: reduceMotion,
+                    open: { open(stage) }, toggle: { selection.toggleGuide(stage) })
+                if stage != selection.family.stages.last { Divider() }
+            }
+        }
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .compositingGroup().clipShape(.rect(cornerRadius: 26))
+        .accessibilityElement(children: .contain).accessibilityIdentifier("stage-practice-card")
     }
 }
 

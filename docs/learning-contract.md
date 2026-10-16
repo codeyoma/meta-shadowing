@@ -30,7 +30,15 @@ blocked while saving, and the Stages tab opens only after a successful commit.
 
 ### Stage detail and measured learning-screen time — 2026-10-16
 
-The native Stage detail groups the unchanged sixteen stages into 쉐도잉 (1–6),
+The native Stage detail places statistics above a full-width yellow continuation
+footer in one rounded card, split 6:4 at standard text sizes. The compact card
+grows to fit either section within its allocated share; accessibility text
+keeps independently growing sections instead of forcing a ratio. The current
+family heading, description, completion ring, selector and rows share a second
+card. Cards grow naturally at accessibility text sizes; the continuation action
+keeps at least a 44-point touch target. These groups retain independent accessible
+controls and do not change learning actions.
+The detail groups the unchanged sixteen stages into 쉐도잉 (1–6),
 다구간 쉐도잉 (7–10), and 크레이지 스피킹 (11–16). Family rings count stages with
 three confirmed full runs, using denominators 6, 4, and 6. The book percentage
 uses sixteen stages. New visible names do not change the reducer's methods:
@@ -55,10 +63,10 @@ Back on the left and one level/XP/streak capsule on the right; the entire capsul
 opens the existing XP popover. There is no full-width bar background or top
 scroll-edge blur. Bookshelf retains its separate XP and streak display. The cover
 starts at the screen's top edge behind the status and navigation bars and fades
-into the semantic page background at its bottom. The family/language and book-title
-block starts midway through that fade, preserving its measured height before the
-statistics so long titles and accessibility text remain readable. Navigation remains fixed while
-the detail scrolls. The cover has no
+into the semantic page background at its bottom. The book title starts midway
+through that fade without a family/language caption, preserving its measured
+height before the statistics so long titles and accessibility text remain readable.
+Navigation remains fixed while the detail scrolls. The cover has no
 separate controls. Confirmed download-only management remains on
 Bookshelf and never removes study records.
 

@@ -2,6 +2,68 @@ import XCTest
 import UIKit
 
 final class ProductUITests: XCTestCase {
+    @MainActor func testStageCardsGroupStatisticsActionAndPracticeWithoutClipping() {
+        continueAfterFailure = false
+        var normalOverviewHeight: CGFloat = 0
+        for largeText in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
+            if largeText {
+                app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+            }
+            app.launch()
+            let book = app.buttons["book-morning-notes-v1"]
+            XCTAssertTrue(book.hittableOrWait(timeout: 20)); book.tap()
+            let overview = app.otherElements["stage-overview-card"]
+            XCTAssertTrue(overview.existsOrWait(timeout: 5), "Statistics and continuation share one accessible card")
+            XCTAssertFalse(app.staticTexts["쉐도잉 · 영어"].exists)
+            let time = overview.staticTexts["stage-study-time"]
+            let action = overview.buttons["stage-continue"]
+            XCTAssertTrue(time.exists)
+            XCTAssertTrue(action.exists)
+            let cardFrame = overview.frame, actionFrame = action.frame
+            XCTAssertGreaterThanOrEqual(actionFrame.height, 44)
+            XCTAssertEqual(actionFrame.minX, cardFrame.minX, accuracy: 1)
+            XCTAssertEqual(actionFrame.maxX, cardFrame.maxX, accuracy: 1)
+            XCTAssertEqual(actionFrame.maxY, cardFrame.maxY, accuracy: 1)
+            XCTAssertGreaterThan(actionFrame.minY, time.frame.maxY)
+            if largeText {
+                XCTAssertGreaterThan(cardFrame.height, normalOverviewHeight + 100,
+                    "Accessibility text grows naturally instead of enforcing a clipped ratio")
+            } else {
+                normalOverviewHeight = cardFrame.height
+                XCTAssertEqual(actionFrame.height / cardFrame.height, 0.4, accuracy: 0.01)
+            }
+            let practice = app.otherElements["stage-practice-card"]
+            XCTAssertTrue(practice.exists)
+            for family in 0...2 {
+                let selector = practice.buttons["stage-family-\(family)"]
+                app.revealBrowsingElement(selector)
+                XCTAssertTrue(selector.isHittable); selector.tap()
+                XCTAssertTrue(practice.otherElements["stage-family-progress"].exists)
+                let guide = practice.buttons["stage-guide-\([1, 7, 11][family])"]
+                app.revealBrowsingElement(guide)
+                XCTAssertTrue(guide.isHittable)
+                XCTAssertGreaterThanOrEqual(guide.frame.minX, practice.frame.minX)
+                XCTAssertLessThanOrEqual(guide.frame.maxX, practice.frame.maxX)
+                if family == 0 {
+                    guide.tap()
+                    let guidance = practice.staticTexts["stage-guidance-1"]
+                    XCTAssertTrue(guidance.existsOrWait(timeout: 5))
+                    XCTAssertGreaterThanOrEqual(guidance.frame.minX, practice.frame.minX)
+                    XCTAssertLessThanOrEqual(guidance.frame.maxX, practice.frame.maxX)
+                    XCTAssertFalse(app.buttons["player-options"].exists)
+                    guide.tap()
+                    XCTAssertTrue(guidance.waitForNonExistence(timeout: 5))
+                }
+            }
+            app.revealBrowsingElement(action)
+            XCTAssertTrue(action.isHittable); action.tap()
+            XCTAssertTrue(app.buttons["player-options"].hittableOrWait(timeout: 10),
+                "The integrated continuation footer still opens the eligible lesson")
+            app.terminate()
+        }
+    }
     @MainActor func testStageRowBodyTogglesGuidanceAndOnlyPlayStartsLearning() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -459,14 +521,13 @@ final class ProductUITests: XCTestCase {
         XCTAssertFalse(app.buttons["manage-morning-notes-v1"].exists, "Download management remains on Bookshelf")
         XCTAssertEqual(app.buttons.matching(identifier: "stage-back").count, 1)
         let coverHeight = app.frame.width / 1.35
-        let subtitle = app.staticTexts["쉐도잉 · 영어"]
         let title = app.staticTexts["stage-book-title"]
-        XCTAssertGreaterThan(subtitle.frame.minY, coverHeight * 0.75)
-        XCTAssertLessThan(subtitle.frame.minY, coverHeight * 0.9,
-                          "The title block starts within the middle of the cover's bottom fade")
+        XCTAssertFalse(app.staticTexts["쉐도잉 · 영어"].exists)
+        XCTAssertGreaterThan(title.frame.minY, coverHeight * 0.75)
+        XCTAssertLessThan(title.frame.minY, coverHeight * 0.9,
+                          "The book title starts within the middle of the cover's bottom fade")
         XCTAssertLessThan(title.frame.minY, coverHeight,
                           "The book title overlaps the fading artwork instead of sitting below it")
-        XCTAssertGreaterThan(title.frame.minY, subtitle.frame.maxY)
         XCTAssertGreaterThan(app.staticTexts["stage-study-time"].frame.minY, title.frame.maxY,
                              "Statistics follow the title's real height")
         try assertStageCoverBehindBars(app, navigation: navigation)

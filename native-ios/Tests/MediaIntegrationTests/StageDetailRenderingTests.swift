@@ -22,6 +22,41 @@ import XCTest
             XCTAssertGreaterThan(b.height, a.height)
         }
     }
+    func testOverviewUsesSixToFourSectionsAndFitsWrappedStatistics() async throws {
+        for (width, size) in [(288.0, DynamicTypeSize.large), (358.0, .large), (358.0, .xxxLarge)] {
+            let value = summary()
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: width, height: 800)
+            window.windowLevel = .alert; window.overrideUserInterfaceStyle = .light
+            let card = StageOverviewCard(summary: value, detail: StageDetailSummary(summary: value, verifiedTestAccess: true), open: { _ in })
+                .dynamicTypeSize(size)
+            let measurement = UIHostingController(rootView: card)
+            let cardSize = measurement.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+            let statistics = UIHostingController(rootView: StageStatisticsView(summary: value, percentage: 6).dynamicTypeSize(size))
+                .sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+            let host = UIHostingController(rootView: card
+                .frame(maxHeight: .infinity, alignment: .top)
+                .background(Color(uiColor: .systemGroupedBackground)).ignoresSafeArea())
+            window.rootViewController = host; window.isHidden = false
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(60))
+            let image = accordionImage(host.view)
+            var footerStart: Int?
+            for y in 0..<Int(cardSize.height) {
+                let pixel = try backgroundPixel(image, x: 8, y: y)
+                if pixel[0] > 200 && pixel[1] > 120 && pixel[2] < 100 { footerStart = y; break }
+            }
+            XCTAssertEqual(Double(try XCTUnwrap(footerStart)), cardSize.height * 0.6, accuracy: 1,
+                "The yellow footer begins at 60 percent of the actual rendered card")
+            XCTAssertGreaterThanOrEqual(cardSize.height * 0.6 + 0.5, statistics.height,
+                "The statistics section must still fit the full wrapped content")
+            if width == 358 && size == .large {
+                XCTAssertLessThanOrEqual(cardSize.height, 160, "The normal card stays near its previous overall height")
+            }
+        }
+    }
     func testOverlappingHeaderReservesLongTitleAndAccessibilityHeight() {
         let longTitle = "Morning Notes · A long book title that wraps naturally · 긴 제목도 끝까지 읽을 수 있어요"
         for width in [288.0, 358.0, 398.0] {

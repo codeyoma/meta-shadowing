@@ -40,6 +40,7 @@ struct StageFamilyView: View {
                         Text(family.title).tag(family).accessibilityIdentifier("stage-family-\(family.rawValue)")
                     }
                 }.pickerStyle(.segmented).controlSize(.large).frame(minHeight: 44)
+                    .background(Color(uiColor: .systemGroupedBackground), in: .capsule)
             }
         }
     }

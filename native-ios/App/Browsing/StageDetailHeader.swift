@@ -3,7 +3,6 @@ import SwiftUI
 
 struct StageDetailHeader: View {
     let summary: BookStudySummary
-    var family: StageFamily = .shadowing
     private let coverAspectRatio: CGFloat = 1.35
     private let fadeStart = 0.65
     var body: some View {
@@ -21,12 +20,10 @@ struct StageDetailHeader: View {
                     ], startPoint: .top, endPoint: .bottom)
                     .allowsHitTesting(false)
                 }.compositingGroup().clipped()
-            VStack(alignment: .leading, spacing: 12) {
-                Text("\(family.title) · \((StudyLanguage(rawValue: summary.book.language) ?? .english).title)")
-                    .font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                Text(summary.book.title).font(.largeTitle.bold()).fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader).accessibilityIdentifier("stage-book-title")
-            }.padding(.horizontal, 16)
+            Text(summary.book.title).font(.largeTitle.bold()).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader).accessibilityIdentifier("stage-book-title")
+                .padding(.horizontal, 16)
         }
     }
 }
@@ -65,7 +62,6 @@ struct StageStatisticsView: View {
             if !dynamicTypeSize.isAccessibilitySize { Divider().frame(height: 44).accessibilityHidden(true) }
             StageStatistic(title: "완료", value: "\(percentage)%")
         }.padding(16).frame(maxWidth: .infinity)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: .rect(cornerRadius: 24))
     }
 }
 
@@ -88,6 +84,7 @@ struct StageContinuationButton: View {
     let summary: BookStudySummary
     let detail: StageDetailSummary
     let open: (Int) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private var title: String {
         guard let stage = detail.continuationStage else { return String(localized: "자료를 열 수 없어요") }
         if detail.isReview { return String(localized: "스테이지 \(stage) 다시 연습하기") }
@@ -99,8 +96,60 @@ struct StageContinuationButton: View {
             if let stage = detail.continuationStage { BrowsingTapFeedback.light.perform { open(stage) } }
         } label: {
             Label(title, systemImage: "play.fill").font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 28).fixedSize(horizontal: false, vertical: true)
-        }.buttonStyle(.primaryAction).disabled(detail.continuationStage == nil)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .frame(maxWidth: .infinity, minHeight: 44,
+                       maxHeight: dynamicTypeSize.isAccessibilitySize ? nil : .infinity)
+        }.buttonStyle(StageContinuationStyle()).disabled(detail.continuationStage == nil)
             .accessibilityIdentifier("stage-continue")
+    }
+}
+
+private struct StageContinuationStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.foregroundStyle(BrandStyle.ink)
+            .background(BrandStyle.yellow.opacity(configuration.isPressed ? 0.8 : 1))
+            .opacity(isEnabled ? 1 : 0.5)
+    }
+}
+
+struct StageOverviewCard: View {
+    let summary: BookStudySummary
+    let detail: StageDetailSummary
+    let open: (Int) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(StageOverviewLayout())
+        layout {
+            StageStatisticsView(summary: summary, percentage: detail.completedPercentage)
+            StageContinuationButton(summary: summary, detail: detail, open: open)
+        }
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .compositingGroup().clipShape(.rect(cornerRadius: 26))
+        .accessibilityElement(children: .contain).accessibilityIdentifier("stage-overview-card")
+    }
+}
+
+/// A compact 6:4 split grows to fit either section; accessibility text uses a natural stack.
+private struct StageOverviewLayout: Layout {
+    private let fractions: [CGFloat] = [0.6, 0.4]
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+            ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let requiredHeight = zip(subviews, fractions).map { subview, fraction in
+            subview.sizeThatFits(ProposedViewSize(width: width, height: nil)).height / fraction
+        }.max() ?? 0
+        return CGSize(width: width, height: max(152, requiredHeight))
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for (subview, fraction) in zip(subviews, fractions) {
+            let rowHeight = bounds.height * fraction
+            subview.place(at: CGPoint(x: bounds.midX, y: y + rowHeight / 2),
+                          anchor: .center, proposal: ProposedViewSize(width: bounds.width, height: rowHeight))
+            y += rowHeight
+        }
     }
 }
