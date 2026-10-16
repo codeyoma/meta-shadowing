@@ -82,7 +82,8 @@ def stop_runner(pid)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + grace
     loop do
       begin
-        Process.waitpid(pid, Process::WNOHANG)
+        result = Process.waitpid2(pid, Process::WNOHANG)
+        yield result.last if result && block_given?
       rescue Errno::ECHILD
         nil
       end
@@ -102,6 +103,7 @@ owned_lock = nil
 runner_pid = nil
 snapshot = nil
 results = nil
+cleanup_snapshot = true
 begin
   root = capture!('git', 'rev-parse', '--show-toplevel').strip
   Dir.chdir(root)
@@ -233,6 +235,27 @@ begin
         runner_pid = nil
         status.success?
       ensure
+        if runner_pid
+          %w[INT TERM].each { |signal| Signal.trap(signal, 'IGNORE') }
+          # Cancellation interrupted the foreground reader. Keep draining this
+          # pipe until the supervisor has finished its host/guest cleanup.
+          drainage = Thread.new do
+            loop { log.write(reader.readpartial(4096)) }
+          rescue EOFError, IOError
+            nil
+          end
+          settled = stop_runner(runner_pid) do |status|
+            log.puts JSON.generate('supervisor_exit' => status.exitstatus, 'signal' => status.termsig)
+          end
+          drainage.join(1)
+          drainage.kill if drainage.alive?
+          unless settled
+            owned_lock = nil
+            cleanup_snapshot = false
+            warn 'Native pre-push: cancellation could not drain native processes; repository lock retained for inspection.'
+          end
+          runner_pid = nil
+        end
         reader.close unless reader.closed?
         writer.close unless writer.closed?
       end
@@ -251,7 +274,6 @@ begin
 rescue StandardError
   fail_push('required tools or local evidence are unavailable; push blocked.')
 ensure
-  cleanup_snapshot = true
   if runner_pid
     %w[INT TERM].each { |signal| Signal.trap(signal, 'IGNORE') }
     unless stop_runner(runner_pid)

@@ -583,6 +583,90 @@ class NativePrePushTest < Minitest::Test
     assert File.file?(@env.fetch('NATIVE_TEST_CLEANUP_RECORD')), 'TERM grace must allow owned cleanup to finish'
   end
 
+  # The transport must remain writable while an interrupted supervisor settles.
+  def test_cancellation_preserves_supervisor_output_until_cleanup_finishes
+    @env['NATIVE_TEST_CLEANUP_PROGRESS'] = '1'
+    @env['NATIVE_TEST_CLEANUP_RECORD'] = File.join(@temporary, 'supervisor-cleaned')
+    assert_cancellation_drains_owned_build_processes('Native full: running selected native tests.')
+    assert File.file?(@env.fetch('NATIVE_TEST_CLEANUP_RECORD')), 'Closing the progress pipe must not interrupt supervisor cleanup'
+  end
+
+  # Exercise the real hook/supervisor pipe, not an inline replacement supervisor.
+  def test_cancellation_through_real_supervisor_drains_hosts_and_used_guest
+    %w[test-native-full.sh native-simulator-lease.rb].each do |name|
+      FileUtils.cp(File.join(SOURCE, 'native-ios/scripts', name), File.join(@repo, 'native-ios/scripts', name))
+    end
+    @env['NATIVE_TEST_GUEST_STATE'] = File.join(@temporary, 'guest-state')
+    File.write(@env.fetch('NATIVE_TEST_GUEST_STATE'), 'Booted')
+    stub_tool('xcrun', <<~'RUBY')
+      #!/usr/bin/env ruby
+      require 'json'
+      path = ENV.fetch('NATIVE_TEST_GUEST_STATE')
+      if ARGV == %w[simctl list devices available --json]
+        puts JSON.generate(devices: {'com.apple.CoreSimulator.SimRuntime.iOS-27-0' => [{
+          udid: '11111111-1111-4111-8111-111111111111', name: 'MetaShadowing Native Pre-push Fixture',
+          isAvailable: true, state: File.read(path), deviceTypeIdentifier: 'fixture-iPhone'
+        }]})
+      elsif ARGV == %w[simctl shutdown 11111111-1111-4111-8111-111111111111]
+        sleep 0.2
+        File.write(path, 'Shutdown')
+      else
+        abort 'Unexpected simulator command'
+      end
+    RUBY
+    # External tools are required by the supervisor but never executed by this body.
+    %w[jq swift rg file otool nm codesign plutil strings cmp ditto grep sed mkdir rm mktemp dirname].each do |tool|
+      stub_tool(tool, "#!/bin/sh\nexit 99\n") unless ENV.fetch('PATH').split(File::PATH_SEPARATOR).any? { |dir| File.executable?(File.join(dir, tool)) }
+    end
+    write('native-ios/scripts/native-full-body.sh', <<~'SH')
+      #!/bin/bash
+      exec ruby -rjson -e '
+        $stdout.sync = true
+        File.write(ENV.fetch("NATIVE_FULL_LEASE_STATE"), "11111111-1111-4111-8111-111111111111\n")
+        child = fork { trap("TERM") { exit 1 }; sleep 60 }
+        trap("TERM") { Process.wait(child); exit 1 }
+        File.write(ENV.fetch("NATIVE_TEST_RECORD"), JSON.generate(pid: Process.pid, child: child, snapshot: Dir.pwd, marker: File.join(File.dirname(ENV.fetch("NATIVE_FULL_LEASE_STATE")), "active")))
+        loop { puts "Native full: running selected native tests."; sleep 0.005 }
+      '
+    SH
+    oid = commit
+    input_read, input_write = IO.pipe
+    output_path = File.join(@temporary, 'real-supervisor-cancel-output')
+    output = File.open(output_path, 'w')
+    hook_pid = Process.spawn(@env, 'sh', '.githooks/pre-push', 'origin', 'private-remote.invalid',
+                             chdir: @repo, in: input_read, out: output, err: output)
+    input_read.close
+    input_write.write("refs/heads/dev #{oid} refs/heads/dev #{ZERO}\n")
+    input_write.close
+    Timeout.timeout(10) { sleep 0.02 until File.file?(@record) && !File.read(@record).empty? }
+    state = records.first
+    @retained_snapshots << state.fetch('snapshot')
+    Process.kill('TERM', hook_pid)
+    _pid, status = Timeout.timeout(45) { Process.wait2(hook_pid) }
+    refute status.success?
+    refute process_alive?(state.fetch('pid')), 'The real supervisor must drain its independently owned body'
+    refute process_alive?(state.fetch('child')), 'The body descendant must stop before ownership is released'
+    assert_equal 'Shutdown', File.read(@env.fetch('NATIVE_TEST_GUEST_STATE'))
+    refute File.exist?(state.fetch('marker')), File.read(output_path)
+    refute File.exist?(File.join(@repo, '.git/native-pre-push/lock')), File.read(output_path)
+    refute File.exist?(File.join(File.realpath('/tmp'), "metashadowing-native-simulators-#{Process.uid}", PRIMARY))
+    refute File.exist?(state.fetch('snapshot'))
+    assert_empty Dir.glob(File.join(@repo, '.git/native-pre-push/pass-*.json'))
+    refute_includes File.read(output_path), 'PASS:'
+  ensure
+    [state && state['pid'], state && state['child'], hook_pid].compact.each do |pid|
+      Process.kill('KILL', pid) if process_alive?(pid)
+    rescue Errno::ESRCH
+      nil
+    end
+    begin
+      Process.wait(hook_pid) if hook_pid
+    rescue Errno::ECHILD
+      nil
+    end
+    [input_read, input_write, output].compact.each { |io| io.close unless io.closed? }
+  end
+
   # Supervisor exit is not proof that its separately owned groups and guests settled.
   def test_active_lease_after_failed_exit_retains_snapshot_archive_and_repository_lock
     @env['NATIVE_TEST_FAILURE'] = '1'
@@ -655,7 +739,7 @@ class NativePrePushTest < Minitest::Test
       # NATIVE_FULL_CONTRACT_VERSION=5
       # NATIVE_SCOPE_CONTRACT_VERSION=1
       echo "$NATIVE_TEST_BLOCK_PHASE"
-      exec ruby -rjson -e 'child = fork { sleep 60 }; trap("TERM") { Process.wait(child); sleep ENV.fetch("NATIVE_TEST_CLEANUP_DELAY", "0").to_f; File.write(ENV.fetch("NATIVE_TEST_CLEANUP_RECORD"), "cleaned") if ENV["NATIVE_TEST_CLEANUP_RECORD"]; exit 1 }; File.write(ENV.fetch("NATIVE_TEST_RECORD"), JSON.generate({pids: [Process.pid, child], snapshot: Dir.pwd})); sleep 60'
+      exec ruby -rjson -e '$stdout.sync = true; child = fork { sleep 60 }; trap("TERM") { puts "Native full: validating results." if ENV["NATIVE_TEST_CLEANUP_PROGRESS"]; Process.wait(child); sleep ENV.fetch("NATIVE_TEST_CLEANUP_DELAY", "0").to_f; File.write(ENV.fetch("NATIVE_TEST_CLEANUP_RECORD"), "cleaned") if ENV["NATIVE_TEST_CLEANUP_RECORD"]; exit 1 }; File.write(ENV.fetch("NATIVE_TEST_RECORD"), JSON.generate({pids: [Process.pid, child], snapshot: Dir.pwd})); sleep 60'
     SH
     oid = commit
     input_read, input_write = IO.pipe
