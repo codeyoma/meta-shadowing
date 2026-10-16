@@ -467,10 +467,21 @@ final class ProductUITests: XCTestCase {
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].hittableOrWait(timeout: 20))
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
-        app.buttons["배속"].tap()
+        let rateOption = app.buttons["배속"]
+        rateOption.tap()
+        // The new slider can exist while SwiftUI still exposes the outgoing settings row.
+        XCTAssertTrue(rateOption.wait(for: \.exists, toEqual: false, timeout: 5),
+                      "Wait for the outgoing settings row before counting page headings")
         let slider = app.sliders["재생 속도"]
         XCTAssertTrue(slider.existsOrWait(timeout: 5))
-        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", "배속")).count, 1,
+        let titleCount = app.staticTexts.matching(NSPredicate(format: "label == %@", "배속")).count
+        if titleCount != 1 {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Playback rate accessibility hierarchy"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
+        XCTAssertEqual(titleCount, 1,
                        "Keep the page title without a duplicate section heading")
         XCTAssertTrue(app.staticTexts["1×"].exists)
         for label in ["0.25×", "2×", "3×"] { XCTAssertFalse(app.staticTexts[label].exists, label) }
