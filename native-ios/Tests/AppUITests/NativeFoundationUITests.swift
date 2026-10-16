@@ -35,7 +35,9 @@ final class NativeFoundationUITests: XCTestCase {
         XCTAssertTrue(sample.existsOrWait(timeout: 15))
         XCTAssertTrue(sample.hittableOrWait(timeout: 10))
         sample.tap()
-        XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 5))
+        XCTAssertTrue(app.buttons["stage-back"].existsOrWait(timeout: 5))
+        let first = app.revealStage(1)
+        XCTAssertTrue(first.isHittable)
         XCUIDevice.shared.press(.home)
         // Home can return before XCTest observes the app in the background.
         let background = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -51,7 +53,7 @@ final class NativeFoundationUITests: XCTestCase {
             XCTFail("Activation must reach foreground before navigation; state=\(app.state.rawValue)")
             return
         }
-        XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 5))
+        XCTAssertTrue(first.existsOrWait(timeout: 5))
         let booksTab = app.tabBars.buttons["책장"]
         XCTAssertTrue(booksTab.hittableOrWait(timeout: 5),
                       "Foreground activation must restore the Books tab's hit point before tapping")

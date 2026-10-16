@@ -627,7 +627,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertEqual(app.buttons["다구간 학습 사이즈"].value as? String, "2구간")
         XCTAssertEqual(app.buttons["학습 화면"].value as? String, "리스트로 보기")
         XCTAssertEqual(app.collectionViews.buttons["폰트 설정"].value as? String, "원문 System 20 · 번역 System 18")
-        XCTAssertEqual(app.buttons["크레이지 스피킹"].value as? String, "S1 150 · S2 200 · S3 250 · S4 300 WPM")
+        XCTAssertEqual(app.collectionViews.buttons["크레이지 스피킹"].value as? String, "S1 150 · S2 200 · S3 250 · S4 300 WPM")
         app.buttons["배속"].tap()
         app.sliders["재생 속도"].adjust(toNormalizedSliderPosition: 1)
         XCTAssertTrue(app.sliders["재생 속도"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
@@ -916,7 +916,7 @@ final class PlayerUITests: XCTestCase {
         let app = fixture(stage: 1, mode: "audio")
         XCTAssertTrue(app.buttons["player-options"].existsOrWait(timeout: 10))
         app.buttons["player-options"].tap()
-        let group = app.buttons["다구간 학습 사이즈"], presets = app.buttons["크레이지 스피킹"]
+        let group = app.buttons["다구간 학습 사이즈"], presets = app.collectionViews.buttons["크레이지 스피킹"]
         XCTAssertTrue(group.existsOrWait(timeout: 5))
         XCTAssertTrue(presets.exists)
         guard group.exists, presets.exists else { return }
@@ -974,7 +974,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertFalse(app.buttons["active-reveal-level-1"].isSelected)
         app.navigationBars["단어 공개 속도"].buttons["BackButton"].tap()
         XCTAssertEqual(app.buttons["단어 공개 속도"].value as? String, "S1 · 175 WPM")
-        XCTAssertEqual(app.buttons["크레이지 스피킹"].value as? String, "S1 150 · S2 200 · S3 250 · S4 300 WPM")
+        XCTAssertEqual(app.collectionViews.buttons["크레이지 스피킹"].value as? String, "S1 150 · S2 200 · S3 250 · S4 300 WPM")
         app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "다음 학습", timeout: 5))
         XCTAssertTrue(app.staticTexts["1/2"].exists)
