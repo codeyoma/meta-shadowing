@@ -79,7 +79,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(app.buttons["remove-local-history"].exists)
         XCTAssertTrue(app.buttons["delete-cloud-history"].exists)
     }
-    @MainActor func testServiceConfirmationsInLightAndDarkAtLargestText() {
+    @MainActor func testDataConfirmationsInLightAndDarkAtLargestText() {
         continueAfterFailure = false
         let original = XCUIDevice.shared.appearance
         defer { XCUIDevice.shared.appearance = original }
@@ -129,7 +129,20 @@ final class AppleServicesUITests: XCTestCase {
             XCTAssertTrue(cloudReady, app.debugDescription)
             XCTAssertTrue(app.alerts.staticTexts["현재 iCloud 계정의 학습 기록과 이 기기의 해당 프로필 기록을 삭제합니다. 다른 기기도 다음 동기화 때 반영됩니다. 자동 동기화는 꺼집니다."].exists)
             app.alerts.buttons["취소"].tap()
-            app.tabBars.buttons["책장"].tap()
+            app.terminate()
+        }
+    }
+    @MainActor func testDownloadConfirmationInLightAndDarkAtLargestText() {
+        continueAfterFailure = false
+        let original = XCUIDevice.shared.appearance
+        defer { XCUIDevice.shared.appearance = original }
+        for appearance in [XCUIDevice.Appearance.light, .dark] {
+            XCUIDevice.shared.appearance = appearance
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-test-product", "--ui-test-services", "--ui-test-cloud-confirmation", "--ui-test-probe-id", UUID().uuidString,
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+            app.launch()
+            XCTAssertTrue(app.buttons["book-morning-notes-v1"].existsOrWait(timeout: 20))
             let download = app.buttons["download-hosted-morning-notes-v1"]
             for _ in 0..<8 {
                 guard !download.isHittable else { break }

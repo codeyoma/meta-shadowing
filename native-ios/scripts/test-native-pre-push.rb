@@ -6,6 +6,7 @@ require 'open3'
 require 'json'
 require 'timeout'
 require 'digest'
+require_relative 'test-native-test-scope'
 
 class NativePrePushTest < Minitest::Test
   SOURCE = File.expand_path('../..', __dir__)
@@ -32,7 +33,7 @@ class NativePrePushTest < Minitest::Test
     git('config', 'native.prePushSimulator', '11111111-1111-4111-8111-111111111111')
     execute('git', 'init', '--quiet', '--bare', @remote)
     git('remote', 'add', 'origin', @remote)
-    %w[.githooks/pre-push native-ios/scripts/native-pre-push.rb native-ios/scripts/install-native-git-hooks.sh].each do |relative|
+    %w[.githooks/pre-push native-ios/scripts/native-pre-push.rb native-ios/scripts/native-test-scope.rb native-ios/scripts/install-native-git-hooks.sh].each do |relative|
       source = File.join(SOURCE, relative)
       next unless File.exist?(source)
       destination = File.join(@repo, relative)
@@ -45,6 +46,8 @@ class NativePrePushTest < Minitest::Test
     stub_tool('xcodebuild', '#!/bin/sh\nprintf "Xcode 27.0\\nBuild version 27A1\\n"\n'.gsub('\\n', "\n"))
     stub_tool('xcodegen', "#!/bin/sh\nprintf 'Version: 2.46.0\\n'\n")
     stub_devices
+    base = commit
+    git('update-ref', 'refs/remotes/origin/dev', base)
   end
 
   def teardown
@@ -77,6 +80,48 @@ class NativePrePushTest < Minitest::Test
     assert_equal 1, records.length, 'The full runner must validate the pushed snapshot'
     assert_equal ['committed', false, true], records.fetch(0).values_at('content', 'private', 'output_exists')
     assert_equal "dirty working copy\n", File.read(File.join(@repo, 'native-ios/public.txt'))
+  end
+
+  # A Stage-only PR must not execute unrelated player/settings screen tests.
+  def test_stage_only_push_records_full_pr_scope
+    add_runner
+    base = commit
+    git('update-ref', 'refs/remotes/origin/dev', base)
+    write('native-ios/App/Browsing/StageDetailHeader.swift', "// first Stage edit\n")
+    commit
+    write('native-ios/App/Browsing/StageFamilyView.swift', "// second Stage edit\n")
+    head = commit
+    output, status = push(head, 'refs/heads/stage-scope')
+    assert status.success?, output
+    scope = records.last['scope']
+    assert_kind_of Hash, scope, 'The hook must pass an explicit PR scope, not run the full suite'
+    assert_equal base, scope.fetch('base')
+    assert_equal head, scope.fetch('head')
+    assert_equal ['stages'], scope.fetch('screens')
+    assert_equal ['native-ios/App/Browsing/StageDetailHeader.swift', 'native-ios/App/Browsing/StageFamilyView.swift'], scope.fetch('paths')
+    assert_includes scope.fetch('selectors'), '-only-testing:NativeMediaIntegrationTests/StageDetailRenderingTests'
+    refute scope.fetch('selectors').any? { |flag| flag.include?('PlayerUITests') || flag.include?('testFontSettings') }
+  end
+
+  # The same head can represent a different PR diff after the target advances.
+  def test_pass_cache_is_bound_to_pr_merge_base
+    add_runner
+    first = commit
+    assert push(first, 'refs/heads/cache-base-one').last.success?
+    assert push(first, 'refs/heads/cache-base-reuse').last.success?
+    assert_equal 1, records.length
+    git('update-ref', 'refs/remotes/origin/dev', first)
+    assert push(first, 'refs/heads/cache-base-two').last.success?
+    assert_equal 2, records.length
+  end
+
+  def test_missing_pr_base_blocks_before_runner
+    add_runner
+    head = commit
+    git('update-ref', '-d', 'refs/remotes/origin/dev')
+    output, status = push(head, 'refs/heads/no-base')
+    refute status.success?, output
+    assert_empty records
   end
 
   # Native Xcode resources outside native-ios must come from the pushed commit.
@@ -608,6 +653,7 @@ class NativePrePushTest < Minitest::Test
     write('native-ios/scripts/test-native-full.sh', <<~'SH')
       #!/bin/sh
       # NATIVE_FULL_CONTRACT_VERSION=5
+      # NATIVE_SCOPE_CONTRACT_VERSION=1
       echo "$NATIVE_TEST_BLOCK_PHASE"
       exec ruby -rjson -e 'child = fork { sleep 60 }; trap("TERM") { Process.wait(child); sleep ENV.fetch("NATIVE_TEST_CLEANUP_DELAY", "0").to_f; File.write(ENV.fetch("NATIVE_TEST_CLEANUP_RECORD"), "cleaned") if ENV["NATIVE_TEST_CLEANUP_RECORD"]; exit 1 }; File.write(ENV.fetch("NATIVE_TEST_RECORD"), JSON.generate({pids: [Process.pid, child], snapshot: Dir.pwd})); sleep 60'
     SH
@@ -733,6 +779,7 @@ class NativePrePushTest < Minitest::Test
     write('native-ios/scripts/test-native-full.sh', <<~'SH')
       #!/bin/bash
       # NATIVE_FULL_CONTRACT_VERSION=5
+      # NATIVE_SCOPE_CONTRACT_VERSION=1
       exec ruby -rjson - "$4" <<'RUBY'
       $stdout.sync = true
       lease = File.join(ARGV.fetch(0), 'native-lease-fixture')
@@ -755,6 +802,7 @@ class NativePrePushTest < Minitest::Test
     write('native-ios/scripts/test-native-full.sh', <<~'SH')
       #!/bin/bash
       # NATIVE_FULL_CONTRACT_VERSION=5
+      # NATIVE_SCOPE_CONTRACT_VERSION=1
       set -eu
       test "$1" = --simulator-id
       test "$3" = --output-dir
@@ -779,6 +827,7 @@ class NativePrePushTest < Minitest::Test
           primary: ARGV[1],
           secondary: ARGV[5],
           argument_count: ARGV.length,
+          scope: ENV['NATIVE_TEST_SCOPE_FILE'] && JSON.parse(File.read(ENV.fetch('NATIVE_TEST_SCOPE_FILE'))),
           git_discovered: status.success?,
           git_work_tree: work_tree_status.success?,
           snapshot: Dir.pwd,
@@ -832,7 +881,7 @@ class NativePrePushTest < Minitest::Test
 
   def commit
     git('add', '.')
-    git('commit', '--quiet', '-m', 'Synthetic hook fixture')
+    git('commit', '--quiet', '--allow-empty', '-m', 'Synthetic hook fixture')
     git('rev-parse', 'HEAD').strip
   end
 

@@ -42,6 +42,23 @@ for tool in xcodebuild xcodegen xcrun jq ruby bash swift rg file otool nm codesi
   command -v "$tool" >/dev/null || fail "Required tool unavailable: $tool"
 done
 run_dir=$(mktemp -d "$output_dir/native-full.XXXXXX" 2>/dev/null) || fail 'Cannot create private test outputs'
+scope_file=${NATIVE_TEST_SCOPE_FILE:-}
+native_selection=()
+unset TEST_RUNNER_NATIVE_UI_SCREEN_SCOPE
+if [ -n "$scope_file" ]; then
+  ruby -rfileutils -e 'FileUtils.cp(*ARGV)' "$scope_file" "$run_dir/scope.json" || fail 'Cannot retain the scoped test plan'
+  scope_file="$run_dir/scope.json"
+  ruby native-ios/scripts/native-test-scope.rb selection "$scope_file" "$run_dir/selection.json" || fail 'Invalid scoped test plan'
+  while IFS= read -r selector; do native_selection+=("$selector"); done < <(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0]))' "$run_dir/selection.json")
+  TEST_RUNNER_NATIVE_UI_SCREEN_SCOPE="$(ruby -rjson -e 's = JSON.parse(File.read(ARGV[0])); puts s.fetch("audit_screens", s.fetch("screens")).join(",")' "$scope_file")"
+  export TEST_RUNNER_NATIVE_UI_SCREEN_SCOPE
+  package_arguments=()
+  while IFS= read -r package; do package_arguments+=(--package "$package"); done < <(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("packages")' "$scope_file")
+  if [ "${#package_arguments[@]}" -gt 0 ]; then
+    echo 'Native full: running scoped package tests.'
+    TMPDIR="$run_dir" bash native-ios/scripts/ci-swift-package-tests.sh "${package_arguments[@]}" > "$run_dir/packages.log" 2>&1 || fail 'Related Swift package tests failed'
+  fi
+fi
 xcodebuild -version > "$run_dir/toolchain.log" 2>&1 || fail 'Xcode version inspection failed'
 if ! ruby -e 'exit(File.read(ARGV.fetch(0)).match?(/^Xcode 27(?:\.|$)/) ? 0 : 1)' "$run_dir/toolchain.log"; then
   fail 'Select Xcode 27 before full verification'
@@ -84,14 +101,19 @@ bash native-ios/scripts/test-service-build.sh \
 echo 'Native full: checking runtime inspection guard.'
 bash native-ios/scripts/test-native-runtime-inspection.sh "$release_app" \
   > "$run_dir/runtime-inspection.log" 2>&1 || fail 'Native runtime inspection regression failed'
+if [ -n "$scope_file" ] && [ "${#native_selection[@]}" -eq 0 ]; then
+  echo 'PASS: 0 native test cases matched the selected inventory.'
+  exit 0
+fi
 echo 'Native full: preparing simulator.'
 test -n "${NATIVE_FULL_LEASE_STATE:-}" || fail 'The simulator lease supervisor is required'
-printf 'used\n' > "$NATIVE_FULL_LEASE_STATE"
+printf '%s\n' "$requested_simulator" > "$NATIVE_FULL_LEASE_STATE"
 if [ "$state" = Shutdown ]; then
   xcrun simctl boot "$requested_simulator" > "$run_dir/boot.log" 2>&1 || fail 'Dedicated simulator boot failed'
 fi
 xcrun simctl bootstatus "$requested_simulator" -b > "$run_dir/bootstatus.log" 2>&1 || fail 'Dedicated simulator readiness failed'
-if [ -n "$secondary_simulator" ]; then
+if [ -n "$secondary_simulator" ] && [ -z "$scope_file" ]; then
+  printf '%s\n' "$secondary_simulator" >> "$NATIVE_FULL_LEASE_STATE"
   secondary_state=$(jq -er --arg id "$secondary_simulator" '.devices["com.apple.CoreSimulator.SimRuntime.iOS-27-0"][] | select(.udid == $id) | .state' "$run_dir/devices.json")
   if [ "$secondary_state" = Shutdown ]; then
     xcrun simctl boot "$secondary_simulator" > "$run_dir/secondary-boot.log" 2>&1 || fail 'Secondary simulator boot failed'
@@ -122,17 +144,24 @@ if ! jq -e '
 ' "$run_dir/inventory.json" > "$run_dir/enumeration-validation.log" 2>&1; then
   fail 'Full native inventory is empty, incomplete, disabled or invalid'
 fi
-if [ -n "$secondary_simulator" ]; then
+if [ -n "$secondary_simulator" ] && [ -z "$scope_file" ]; then
   ruby native-ios/scripts/native-test-shards.rb "$run_dir" "$products" "$requested_simulator" "$secondary_simulator"
   exit $?
 fi
-printf '[]\n' > "$run_dir/selection.json"
-echo 'Native full: running all native tests.'
+if [ -n "$scope_file" ]; then
+  ruby native-ios/scripts/native-test-scope.rb verify "$scope_file" "$run_dir/inventory.json" || fail 'Scoped selectors do not match the compiled inventory'
+fi
+if [ -z "$scope_file" ]; then
+  printf '[]\n' > "$run_dir/selection.json"
+  echo 'Native full: running all native tests.'
+else
+  echo 'Native full: running selected native tests.'
+fi
 native_status=0
 xcodebuild test-without-building -testProductsPath "$products" \
   -destination "$destination" -parallel-testing-enabled NO \
   -collect-test-diagnostics never -resultBundlePath "$run_dir/native.xcresult" \
-  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "$run_dir/native.log" 2>&1 || native_status=$?
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- ${native_selection[@]+"${native_selection[@]}"} > "$run_dir/native.log" 2>&1 || native_status=$?
 test -f "$run_dir/native.xcresult/Info.plist" || fail 'No finalized native result bundle'
 echo 'Native full: validating results.'
 xcrun xcresulttool get test-results summary --path "$run_dir/native.xcresult" \

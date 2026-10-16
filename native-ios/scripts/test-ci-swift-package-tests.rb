@@ -90,6 +90,13 @@ class CISwiftPackageTestsTest < Minitest::Test
     refute_includes output + error, @root
   end
 
+  def test_scoped_packages_do_not_execute_unrelated_package_suites
+    output, error, status = run_gate('--package', 'LearningPersistence')
+    assert status.success?, error
+    assert_equal [['test', '--package-path', 'native-ios/Packages/LearningPersistence']], commands
+    assert_includes output, 'PASS: 39 Swift package tests passed across 1 packages.'
+  end
+
   def test_zero_test_passed_summary_does_not_approve_a_package
     @environment['SWIFT_GATE_MODE'] = 'zero'
     output, error, status = run_gate

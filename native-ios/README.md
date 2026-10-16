@@ -65,9 +65,15 @@ The Expo app remains the behavioral reference until the later migration tickets 
 
 The Stages tab presents a scrolling book detail: bundled cover artwork, source
 count, accumulated foreground learning time, completed-stage percentage, a
-continuation action, and three practice families. The families retain stage IDs
-1–6, 7–10, and 11–16; their completion rings require three confirmed full runs
-per stage. The row title, completion marks and chevron toggle one expanded guide;
+continuation action, and three practice families.
+The statistics and full-width yellow continuation footer share one rounded card,
+with a 6:4 statistics-to-action split at standard text sizes. The compact card
+grows as needed to fit either section within its allocated share.
+Accessibility text keeps natural, independently growing sections. The family heading,
+description, completion ring, selector and stage rows share a second rounded card.
+Both cards grow with accessibility text rather than enforcing a fixed height.
+The families retain stage IDs 1–6, 7–10, and 11–16; their completion rings require
+three confirmed full runs per stage. The row title, completion marks and chevron toggle one expanded guide;
 only the circular play control starts that row's practice. Rows keep the same
 raised surface whether collapsed or expanded (white in light appearance); only
 the full-width expanded guidance matches the family selector's unselected background.
@@ -82,9 +88,9 @@ Back returns to Bookshelf without clearing the selected book. The cover
 extends from the screen's top edge behind the status and navigation bars; the
 navigation controls remain fixed while the artwork and detail scroll. There is
 no full-width navigation background or top scroll-edge blur. The cover fades into
-the semantic page background at its bottom in both appearances. The family/language
-and book-title block begins midway through that fade. Its full measured height
-remains in the scroll layout, so long titles and large text push statistics down
+the semantic page background at its bottom in both appearances. The book title,
+without a family/language caption, begins midway through that fade. Its full
+measured height remains in the scroll layout, so long titles and large text push statistics down
 instead of overlapping or clipping them. The cover
 has no separate navigation or management controls; download management remains on Bookshelf.
 Download-only removal retains learning time.
@@ -381,8 +387,11 @@ unsigned Debug app build with product inspection. Run the same host logic gate w
 skipped or failed Swift Testing results. Generic compilation does not boot a simulator.
 Automatic CI has no simulator execution or test-product build/upload/download.
 
-The complete native simulator suite, including all native integration
-cases and all UI journeys, runs locally before push. The local gate also inspects
+Before push, the local gate selects native tests from the complete PR diff:
+directly edited screens get their UI/rendering/accessibility tests; shared logic
+gets related unit/integration tests without expanding to unrelated consumer screens.
+See [scope ownership and base selection](../docs/native-ci.md#scoped-local-pre-push-validation).
+The local gate also inspects
 its Debug test app, builds and inspects Release, exercises the runtime product
 guard, and compiles the fictional downloader. These checks remain available in
 manual CI (`test_scope: full`); `test_scope: light` selects only ordinary checks.
@@ -405,7 +414,7 @@ Each runner boots only after validation and executes `test-without-building
 Manual full CI retains four disjoint selections: `player`, `player-options`,
 `product`, and `remaining`. Local/full execution validates exact executed identifiers
 against the compiled inventory and retains `-parallel-testing-enabled NO`.
-See [the CI profiles](../docs/native-ci.md#fast-remote-checks-and-local-full-regression).
+See [the CI profiles](../docs/native-ci.md#fast-remote-checks-and-local-validation).
 
 For each clone, install the local hook with a dedicated iOS 27 simulator named
 `MetaShadowing Native Pre-push iOS 27`:
@@ -423,7 +432,7 @@ bash native-ios/scripts/install-native-git-hooks.sh \
   --secondary-simulator-id <SECONDARY_SIMULATOR_ID>
 ```
 
-The full runner still builds once and executes every native test. It runs native
+Explicit manual full regression still builds once and executes every native test. It runs native
 integrations first, then two disjoint UI selections on separate devices. Each
 selection stays internally serial. Independent checksummed product copies and
 separate result bundles prevent worker-output collisions. Exact selected and
@@ -442,15 +451,18 @@ setting with `git config --local --unset native.prePushSecondarySimulator`.
 See [the measured two-device result](../docs/research/2026-10-09-local-native-parallel-results.md)
 for timings, startup/resource limits and verification boundaries.
 
-The hook tests archived pushed commits, not dirty working files, and blocks pushes
-on any native, Release or downloader failure. It preserves existing custom hooks
-and the W2 preview simulator. Older full-runner contracts or cached results cannot
-satisfy the expanded gate.
-Exact-commit successful results may be reused for the same toolchain, execution
-mode and configured simulator identities; new commits require full testing.
-Contract version 5 invalidates older passes. Hooks are locally bypassable, so
-remote checks and human release approval remain required. Full pre-push testing
-moves the long wait locally; it does not make that work disappear.
+The hook tests archived pushed commits, not dirty working files. Its scope uses
+the merge base with `refs/remotes/origin/dev` by default; a different PR target
+requires repository-local `native.prePushBaseRef`. A missing/ambiguous base or
+unmapped app source blocks validation instead of guessing. Selected identifiers
+must match finalized results exactly, with no failures or skips. A genuine
+build-only plan runs the build/product guards without starting a simulator.
+Scoped runs use only the primary simulator; the configured secondary is retained
+for explicit full runs and is not booted or shut down by a scoped run.
+The hook retains private scope/result evidence and binds successful caching to
+the pushed commit, PR merge base, toolchain, destinations and scoped contract.
+Older unscoped cached passes cannot satisfy this gate. Scoped success is not
+full-regression evidence. Hosted checks and human release approval remain required.
 
 Run all four full selections, or omit selection filters, to cover the full native
 suite manually on an isolated simulator.
