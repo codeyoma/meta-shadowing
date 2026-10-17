@@ -23,6 +23,7 @@ extension SQLiteLearningStore {
     }
     func snapshotBackup(_ db: SQLiteConnection) throws -> LearningBackup {
         var backup = try importedBackup(db)
+        try backup.setStudyTimeCounters(timeCounters(db))
         try backup.setLedger(readLedger(db))
         for row in try db.query("SELECT state,clock FROM checkpoints") where row["state"]?.data != nil {
             let state = try decode(LearningSession.self, row["state"])
@@ -91,6 +92,10 @@ extension SQLiteLearningStore {
         let payload = try LearningBackupCodec.encode(backup), ledger = try backup.rewardLedger(profileID: profileID)
         try writeLedger(ledger, db: db)
         try db.execute("INSERT INTO backup_imports VALUES(1,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state", [.blob(payload)])
+        for counter in backup.studyTimeCounters {
+            try db.execute("INSERT INTO study_time VALUES(?,?,?,?) ON CONFLICT(language,book,replica) DO UPDATE SET milliseconds=MAX(milliseconds,excluded.milliseconds)",
+                [.text(counter.language), .text(counter.book), .text(counter.replicaID), .integer(counter.milliseconds)])
+        }
         for record in try backup.checkpointRecords() {
             try db.execute("INSERT INTO checkpoints(package,stage,run,state,clock,wire) VALUES(?,?,?,NULL,?,?) ON CONFLICT(package,stage) DO UPDATE SET run=excluded.run,state=NULL,clock=excluded.clock,wire=excluded.wire",
                 [.text(record.package), .integer(Int64(record.stage)), .text(record.runID), .text(record.stamp), .text(record.state)])

@@ -98,7 +98,7 @@ final class ReferenceToolsUITests: XCTestCase {
         XCTAssertTrue(close.existsOrWait(timeout: 5)); close.tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
     @MainActor func testLongGraphAtLargestTextSizeReachesLastToken() {
         continueAfterFailure = false
@@ -189,7 +189,7 @@ final class ReferenceToolsUITests: XCTestCase {
         app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
     @MainActor func testAnalysisSelectionAndCopyDoNotEarnCredit() {
         continueAfterFailure = false
@@ -205,7 +205,7 @@ final class ReferenceToolsUITests: XCTestCase {
         app.buttons["options-close"].tap()
         XCTAssertTrue(app.buttons["player-main"].wait(for: \.label, toEqual: "학습 이어하기", timeout: 5))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
     @MainActor private func openSingleSentenceAnalysis(_ app: XCUIApplication) {
         app.buttons["문장 분석"].tap()
@@ -228,7 +228,7 @@ final class ReferenceToolsUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["1/\(unitCount)"].exists, "Analysis must preserve the learning cursor")
         XCTAssertEqual(app.descendants(matching: .any)["cycle-timeline"].label, "확인한 반복 0/3")
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
     @MainActor private func openFixture(mode: String = "analysis", stage: Int = 1, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
@@ -242,6 +242,7 @@ final class ReferenceToolsUITests: XCTestCase {
         }
         XCTAssertTrue(book.hittableOrWait(timeout: 10))
         book.tap()
+        app.revealStage(stage)
         for _ in 0..<16 {
             guard !app.buttons["stage-\(stage)"].isHittable else { break }
             app.swipeUp()

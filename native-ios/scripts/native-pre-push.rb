@@ -9,6 +9,7 @@ require 'digest'
 ENV['GIT_NO_REPLACE_OBJECTS'] = '1'
 $stdout.sync = true
 NATIVE_FULL_CONTRACT_VERSION = 5
+NATIVE_SCOPE_CONTRACT_VERSION = 1
 PROGRESS_LINES = [
   'Native full: generating project.',
   'Native full: building test products.',
@@ -23,7 +24,8 @@ PROGRESS_LINES = [
   'Native full: running native integrations.',
   'Native full: running two UI selections.',
   'Native full: validating combined results.',
-  'Native full: validating results.'
+  'Native full: validating results.',
+  'Native full: running selected native tests.', 'Native full: running scoped package tests.'
 ].freeze
 
 def fail_push(message)
@@ -80,7 +82,8 @@ def stop_runner(pid)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + grace
     loop do
       begin
-        Process.waitpid(pid, Process::WNOHANG)
+        result = Process.waitpid2(pid, Process::WNOHANG)
+        yield result.last if result && block_given?
       rescue Errno::ECHILD
         nil
       end
@@ -100,6 +103,7 @@ owned_lock = nil
 runner_pid = nil
 snapshot = nil
 results = nil
+cleanup_snapshot = true
 begin
   root = capture!('git', 'rev-parse', '--show-toplevel').strip
   Dir.chdir(root)
@@ -154,6 +158,14 @@ begin
   File.write(File.join(lock, 'owner'), "pid=#{Process.pid}\n", mode: 'w', perm: 0o600)
   %w[INT TERM].each { |signal| Signal.trap(signal) { exit 1 } }
   commits.each do |oid|
+    configured_base, base_status = Open3.capture2e('git', 'config', '--local', '--null', '--get-all', 'native.prePushBaseRef')
+    bases = base_status.exitstatus == 1 ? ['refs/remotes/origin/dev'] : configured_base.split("\0")
+    fail_push('configure one native.prePushBaseRef branch reference.') unless (base_status.success? || base_status.exitstatus == 1) &&
+      bases.length == 1 && bases.first.match?(%r{\Arefs/(?:heads|remotes)/[^\s]+\z})
+    base_tip = capture!('git', 'rev-parse', '--verify', "#{bases.first}^{commit}").strip
+    merge_bases = capture!('git', 'merge-base', '--all', base_tip, oid).lines.map(&:strip)
+    fail_push('PR base must resolve to one merge base; refresh the configured base reference.') unless merge_bases.length == 1
+    base = merge_bases.first
     private_config = capture!('git', 'ls-tree', '--name-only', oid, '--', 'native-ios/Config/Local.xcconfig').strip
     fail_push('pushed commit contains private local configuration; push blocked.') unless private_config.empty?
     runner = capture!('git', 'ls-tree', oid, '--', 'native-ios/scripts/test-native-full.sh')
@@ -165,9 +177,12 @@ begin
     unless markers == ["# NATIVE_FULL_CONTRACT_VERSION=#{NATIVE_FULL_CONTRACT_VERSION}"]
       fail_push('pushed commit lacks the required full-test contract; push blocked.')
     end
+    scope_markers = committed_runner.lines.grep(/\A# NATIVE_SCOPE_CONTRACT_VERSION=/).map(&:chomp)
+    fail_push('pushed commit lacks the required scoped-test contract; push blocked.') unless scope_markers == ["# NATIVE_SCOPE_CONTRACT_VERSION=#{NATIVE_SCOPE_CONTRACT_VERSION}"]
     identity = { 'contract_version' => NATIVE_FULL_CONTRACT_VERSION, 'commit' => oid, 'toolchain' => toolchain,
                  'simulator' => simulator, 'secondary_simulator' => secondary_simulator,
-                 'mode' => secondary_simulator ? 'two-simulator' : 'serial', 'runtime' => runtime }
+                 'mode' => secondary_simulator ? 'two-simulator' : 'serial', 'runtime' => runtime,
+                 'scope_contract_version' => NATIVE_SCOPE_CONTRACT_VERSION, 'base' => base }
     key = Digest::SHA256.hexdigest(JSON.generate(identity))
     cache = File.join(evidence, "pass-#{key}.json")
     if File.file?(cache) && JSON.parse(File.read(cache)) == identity
@@ -182,13 +197,26 @@ begin
     archive = File.join(run, 'snapshot.tar')
     capture!('git', 'archive', '--format=tar', "--output=#{archive}", oid, 'native-ios', 'assets')
     capture!('tar', '-xf', archive, '-C', snapshot)
-    puts 'Native pre-push: running full tests for a pushed commit.'
+    paths = capture!('git', 'diff', '--no-renames', '--name-only', '-z', base, oid, '--', 'native-ios', 'assets').split("\0").sort
+    hunks = paths.grep(%r{\Anative-ios/Tests/AppUITests/.*\.swift\z}).to_h do |path|
+      patch = capture!('git', 'diff', '--no-ext-diff', '--no-textconv', '--unified=0', base, oid, '--', path)
+      [path, patch.scan(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/).map { |line, count| [line.to_i, count.to_s.empty? ? 1 : count.to_i] }]
+    end
+    changes = File.join(results, 'changes.json')
+    scope_path = File.join(results, 'scope.json')
+    File.write(changes, JSON.generate('base' => base, 'head' => oid, 'paths' => paths, 'hunks' => hunks), mode: 'w', perm: 0o600)
+    _scope_output, scope_status = Open3.capture2e('ruby', File.join(snapshot, 'native-ios/scripts/native-test-scope.rb'), 'plan', changes, scope_path, chdir: snapshot)
+    fail_push('changed native source has no valid test scope; review the ownership mapping.') unless scope_status.success?
+    scope = JSON.parse(File.read(scope_path))
+    puts "Native pre-push: scoped screens #{scope.fetch('screens').join(', ').then { |names| names.empty? ? '(none; logic/build checks only)' : names }}."
+    puts "Native pre-push: audit screens #{scope.fetch('audit_screens').join(', ')}." unless scope.fetch('audit_screens').empty?
     verdict = nil
     success = File.open(File.join(run, 'runner.log'), 'w', 0o600) do |log|
       reader, writer = IO.pipe
       begin
         child_environment = ENV.keys.grep(/\AGIT_/).to_h { |name| [name, nil] }
         child_environment['TMPDIR'] = File.join(snapshot, '.tmp')
+        child_environment['NATIVE_TEST_SCOPE_FILE'] = scope_path
         FileUtils.mkdir_p(child_environment.fetch('TMPDIR'), mode: 0o700)
         arguments = ['bash', 'native-ios/scripts/test-native-full.sh', '--simulator-id', simulator, '--output-dir', results]
         arguments.concat(['--secondary-simulator-id', secondary_simulator]) if secondary_simulator
@@ -207,6 +235,27 @@ begin
         runner_pid = nil
         status.success?
       ensure
+        if runner_pid
+          %w[INT TERM].each { |signal| Signal.trap(signal, 'IGNORE') }
+          # Cancellation interrupted the foreground reader. Keep draining this
+          # pipe until the supervisor has finished its host/guest cleanup.
+          drainage = Thread.new do
+            loop { log.write(reader.readpartial(4096)) }
+          rescue EOFError, IOError
+            nil
+          end
+          settled = stop_runner(runner_pid) do |status|
+            log.puts JSON.generate('supervisor_exit' => status.exitstatus, 'signal' => status.termsig)
+          end
+          drainage.join(1)
+          drainage.kill if drainage.alive?
+          unless settled
+            owned_lock = nil
+            cleanup_snapshot = false
+            warn 'Native pre-push: cancellation could not drain native processes; repository lock retained for inspection.'
+          end
+          runner_pid = nil
+        end
         reader.close unless reader.closed?
         writer.close unless writer.closed?
       end
@@ -215,17 +264,16 @@ begin
     FileUtils.remove_entry(snapshot)
     snapshot = nil
     File.delete(archive)
-    fail_push('full tests failed; push blocked. Evidence is in the Git common directory under native-pre-push.') unless success
+    fail_push('scoped tests or build checks failed; push blocked. Evidence is in the Git common directory under native-pre-push.') unless success
     temporary_pass = File.join(run, 'pass.json')
     File.write(temporary_pass, JSON.generate(identity), mode: 'w', perm: 0o600)
     File.rename(temporary_pass, cache)
     puts verdict if verdict
-    puts 'Native pre-push: full tests passed; evidence retained under Git common directory/native-pre-push.'
+    puts 'Native pre-push: scoped checks passed; evidence retained under Git common directory/native-pre-push. This is not full-regression evidence.'
   end
 rescue StandardError
   fail_push('required tools or local evidence are unavailable; push blocked.')
 ensure
-  cleanup_snapshot = true
   if runner_pid
     %w[INT TERM].each { |signal| Signal.trap(signal, 'IGNORE') }
     unless stop_runner(runner_pid)

@@ -5,7 +5,24 @@ public enum LearningBackupCodec {
         do { return try decodeRoot(BackupJSON.parse(data)) } catch { throw LearningError.invalidState }
     }
     static func decodeRoot(_ value: BackupJSON) throws -> LearningBackup {
-        let preview = try value.object, version = try preview.int("version", 1, 5)
+        let preview = try value.object, version = try preview.int("version", 1, 6)
+        if version == 6 {
+            let envelope = try value.object(keys: ["version", "generation", "progress", "studyTime"])
+            guard try envelope.required("progress").object.int("version") == 4 else { throw LearningError.invalidState }
+            let generation: String? = envelope["generation"] == .null ? nil : try envelope.text("generation")
+            var result = try decodeRoot(envelope.required("progress")).withResetGeneration(generation)
+            var seen = Set<String>()
+            let counters = try envelope.required("studyTime").array.map { row in
+                let object = try row.object(keys: ["language", "book", "replicaID", "milliseconds"])
+                let counter = try StudyTimeCounter(language: object.text("language"), book: object.text("book"),
+                    replicaID: object.text("replicaID"), milliseconds: object.required("milliseconds").integer(0, StudyTimeCounter.maximumMilliseconds))
+                guard seen.insert(counter.language + ":" + counter.book + ":" + counter.replicaID).inserted else { throw LearningError.invalidState }
+                return counter
+            }
+            try result.setStudyTimeCounters(counters)
+            guard try wireValue(result).data().count <= 16 * 1024 * 1024 else { throw LearningError.invalidState }
+            return result
+        }
         if version == 5 {
             let envelope = try value.object(keys: ["version", "generation", "progress"])
             let generation = try envelope.text("generation")
@@ -155,10 +172,11 @@ public enum LearningBackupCodec {
                 "events": .array(try run.events.map { try BackupJSON.encoded($0) })]
             if let lineage = run.lineage { row["lineage"] = .string(lineage) }; return .object(row)
         }
-        var json: BackupJSON = .object(["version": .integer(4), "tables": .object(backup.tables.mapValues { .array($0.map(BackupJSON.object)) }),
+        let progress: BackupJSON = .object(["version": .integer(4), "tables": .object(backup.tables.mapValues { .array($0.map(BackupJSON.object)) }),
             "sync": .object(["clocks": .object(backup.clocks.mapValues(BackupJSON.string)), "runs": .array(runs)])])
-        if let generation = backup.resetGeneration { json = .object(["version": .integer(5), "generation": .string(generation), "progress": json]) }
-        return json
+        let counters = try StudyTimeCounter.merged(backup.studyTimeCounters)
+        return .object(["version": .integer(6), "generation": backup.resetGeneration.map(BackupJSON.string) ?? .null,
+            "progress": progress, "studyTime": .array(try counters.map { try .encoded($0) })])
     }
     public static func encode(_ backup: LearningBackup) throws -> Data {
         let data = try wireValue(backup).data()

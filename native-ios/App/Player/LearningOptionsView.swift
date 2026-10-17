@@ -46,6 +46,7 @@ struct LearningOptionsView: View {
         }
         // A failed save stays actionable on every page, outside the navigation stack.
         .safeAreaBar(edge: .bottom) {
+            LearningTimeRecoveryView(flow: flow, exit: exit)
             if let runtime = flow.runtime, runtime.controls.saveFailed {
                 HStack {
                     Label("저장하지 못했어요.", systemImage: "exclamationmark.triangle.fill").symbolRenderingMode(.multicolor)

@@ -43,3 +43,6 @@
   and local packages; do not import Expo or a JavaScript runtime into it.
 - Quiet by default. Show actionable errors, not routine save/connectivity notices.
 - Test public behavior and durable checkpoints. Never count a resume as completion.
+- Before PR/push, use the scoped local native gate described in docs/native-ci.md:
+  test directly edited screens and related shared logic, using the complete PR diff.
+  Full simulator regression is explicit manual/release validation; hosted CI stays unchanged.

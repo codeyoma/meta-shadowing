@@ -6,6 +6,7 @@ public struct LearningBackup: Equatable, Sendable {
     var clocks: [String: String]
     var runs: [RewardRun]
     public internal(set) var resetGeneration: String?
+    public internal(set) var studyTimeCounters: [StudyTimeCounter] = []
     public static var empty: Self { Self(tables: Dictionary(uniqueKeysWithValues: columns.keys.map { ($0, []) }), clocks: [:], runs: [], resetGeneration: nil) }
     static let columns: [String: [String]] = [
         "checkpoints": ["package", "stage", "state"], "completions": ["package", "stage", "run", "completed_at"],
@@ -90,7 +91,7 @@ public struct LearningBackup: Equatable, Sendable {
         }
         return counts.mapValues(\.count)
     }
-    public var hasLearningData: Bool { tables.contains { $0.key != "preferences" && !$0.value.isEmpty } }
+    public var hasLearningData: Bool { !studyTimeCounters.isEmpty || tables.contains { $0.key != "preferences" && !$0.value.isEmpty } }
     public func rewardLedger(profileID: String) throws -> RewardLedger {
         let normalized = try runs.map { run in
             var result = run

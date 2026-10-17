@@ -15,6 +15,8 @@ import UIKit
     public private(set) var feedback: CommittedLearningFeedback?
     public let coordinator: LearningMediaCoordinator
     public let monitoring: VoiceMonitoring
+    /// Semantic lifecycle changes reach the lesson owner before asynchronous UI updates.
+    @ObservationIgnored public var onControlsChange: (@MainActor () -> Void)?
     @ObservationIgnored private let session: LessonAudioSession
     @ObservationIgnored private let graph: VoiceMonitorEngine
     @ObservationIgnored private let remote: LessonRemoteControl
@@ -80,13 +82,17 @@ import UIKit
     public func close() async {
         guard !closed else { return }
         closed = true; feedback = nil; lifecycle?.close(); lifecycle = nil
+        onControlsChange = nil
         remoteActivation?.cancel(); remoteActivation = nil
         monitoring.close(); graph.close(); remote.close(); haptics.stop()
         await coordinator.close()
     }
     private func updated(_ state: LearningMediaState) {
         self.state = state
-        controls = LearningControlPresentation(state: state, gate: coordinator.remoteState)
+        let next = LearningControlPresentation(state: state, gate: coordinator.remoteState)
+        let changed = controls != next
+        controls = next
+        if changed { onControlsChange?() }
         motion.update(state)
         let complete = state.controller.snapshot.session.phase == .complete
         if complete != context.complete { context.complete = complete; applyContext() }

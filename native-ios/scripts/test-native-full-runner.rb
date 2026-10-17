@@ -20,7 +20,7 @@ class NativeFullRunnerTest < Minitest::Test
     @output = File.join(@root, 'private-output')
     @bin = File.join(@root, 'bin')
     FileUtils.mkdir_p([File.join(@snapshot, 'native-ios/scripts'), File.join(@snapshot, 'native-ios/Config'), @output, @bin])
-    %w[test-native-full.sh native-full-body.sh native-simulator-lease.rb native-test-shards.rb validate-native-test-results.rb verify-native-product.sh configure-apple-services.swift
+    %w[test-native-full.sh native-full-body.sh native-simulator-lease.rb native-test-shards.rb native-test-scope.rb ci-swift-package-tests.sh validate-native-test-results.rb verify-native-product.sh configure-apple-services.swift
        test-service-build.sh test-native-runtime-inspection.sh].each do |name|
       source = File.join(SCRIPT_ROOT, name)
       FileUtils.cp(source, File.join(@snapshot, 'native-ios/scripts', name)) if File.file?(source)
@@ -218,6 +218,12 @@ class NativeFullRunnerTest < Minitest::Test
           abort 'Unexpected Apple command'
         end
       when 'swift'
+        if ARGV.first == 'test'
+          warn 'PRIVATE package failure diagnostic'
+          exit 17 if ENV['NATIVE_FIXTURE_FAIL'] == 'packages'
+          puts '✔ Test run with 2 tests passed after 0.01 seconds.'
+          exit 0
+        end
         stage = 'service-configuration'
         abort 'Only fictional downloader configuration may use Swift here' unless ARGV[0].end_with?('/scripts/configure-apple-services.swift') && File.file?(ARGV[0]) && ARGV[1] == '--fixture-output' && ARGV.length == 3
         config = ARGV.fetch(2)
@@ -292,6 +298,77 @@ class NativeFullRunnerTest < Minitest::Test
   def run_full(arguments = ['--simulator-id', SIMULATOR, '--output-dir', @output])
     fixture_inputs
     Open3.capture3(@environment, '/bin/bash', 'native-ios/scripts/test-native-full.sh', *arguments, chdir: @snapshot)
+  end
+
+  def scoped_plan(selectors)
+    path = File.join(@root, 'scope.json')
+    File.write(path, JSON.generate('version' => 1, 'screens' => [], 'packages' => [], 'selectors' => selectors))
+    @environment['NATIVE_TEST_SCOPE_FILE'] = path
+  end
+
+  # Ignoring the scope would execute the unrelated player UI test.
+  def test_scoped_runner_executes_and_validates_only_selected_cases
+    scoped_plan(['-only-testing:NativeMediaIntegrationTests/TransportTests'])
+    output, error, status = run_full
+    assert status.success?, error
+    assert_includes output, 'PASS: 1 native test cases matched the selected inventory.'
+    execution = commands.find { |tool, args| tool == 'xcodebuild' && args.include?('-resultBundlePath') }[1]
+    assert_equal ['-only-testing:NativeMediaIntegrationTests/TransportTests'], execution.grep(/-only-testing:/)
+  end
+
+  # An explicit build-only plan must never turn an empty selection into all tests.
+  def test_build_only_scope_runs_product_checks_without_booting_or_running_tests
+    scoped_plan([])
+    output, error, status = run_full
+    assert status.success?, error
+    assert_includes output, 'PASS: 0 native test cases matched the selected inventory.'
+    refute commands.any? { |tool, args| tool == 'xcodebuild' && args.first == 'test-without-building' }
+    refute commands.any? { |tool, args| tool == 'xcrun' && %w[boot bootstatus shutdown].include?(args[1]) }
+    assert commands.any? { |tool, args| tool == 'xcodebuild' && args.include?('Release') }
+  end
+
+  def test_scoped_runner_rejects_unfiltered_extra_cases
+    scoped_plan(['-only-testing:NativeMediaIntegrationTests/TransportTests'])
+    @environment['NATIVE_FIXTURE_UNFILTERED_RESULT'] = '1'
+    output, error, status = run_full
+    refute status.success?, error
+    refute_includes output, 'PASS:'
+  end
+
+  def test_failed_package_raw_diagnostics_survive_snapshot_cleanup
+    scoped_plan([])
+    path = @environment.fetch('NATIVE_TEST_SCOPE_FILE')
+    File.write(path, JSON.generate(JSON.parse(File.read(path)).merge('packages' => ['LearningPersistence'])))
+    @environment['TMPDIR'] = File.join(@snapshot, '.tmp')
+    FileUtils.mkdir_p(@environment.fetch('TMPDIR'))
+    @environment['NATIVE_FIXTURE_FAIL'] = 'packages'
+    output, error, status = run_full
+    refute status.success?, error
+    refute_includes output, 'PASS:'
+    FileUtils.remove_entry(@snapshot)
+    logs = Dir.glob(File.join(@output, 'native-full.*', 'native-swift-package-tests.*', 'LearningPersistence.log'))
+    assert_equal 1, logs.length, 'Raw package diagnostics must stay outside the disposable source snapshot'
+    assert_includes File.read(logs.first), 'PRIVATE package failure diagnostic'
+  end
+
+  def test_unknown_compiled_selector_is_rejected_before_native_execution
+    scoped_plan(['-only-testing:NativeMediaIntegrationTests/MissingTests'])
+    output, error, status = run_full
+    refute status.success?, error
+    refute_includes output, 'PASS:'
+    refute commands.any? { |tool, args| tool == 'xcodebuild' && args.include?('-resultBundlePath') },
+      'Unknown selectors must not cause Xcode to execute a fallback test set'
+  end
+
+  def test_scoped_run_does_not_boot_or_shutdown_unused_secondary_preview
+    arguments = parallel_fixture
+    @devices['devices'].values.first.last['state'] = 'Booted'
+    scoped_plan(['-only-testing:NativeMediaIntegrationTests/TransportTests'])
+    output, error, status = run_full(arguments)
+    assert status.success?, error
+    refute commands.any? { |tool, args| tool == 'xcrun' && %w[boot bootstatus shutdown].include?(args[1]) && args.include?(SECONDARY) }
+    current = JSON.parse(File.read(@environment.fetch('NATIVE_FIXTURE_DEVICES')))
+    assert_equal 'Booted', current['devices'].values.first.last['state']
   end
 
   def wait_until(message)

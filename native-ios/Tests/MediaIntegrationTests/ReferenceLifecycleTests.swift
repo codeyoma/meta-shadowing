@@ -143,7 +143,7 @@ private actor DeferredReferenceAccessCatalog: ProductCatalog {
     }
     func release() { pending?.resume(returning: true); pending = nil }
 }
-private actor RevocableReferenceCatalog: ProductCatalog {
+actor RevocableReferenceCatalog: ProductCatalog {
     let base: ProductTestCatalog
     var allowed = true
     let stream = AsyncStream<Void>.makeStream()

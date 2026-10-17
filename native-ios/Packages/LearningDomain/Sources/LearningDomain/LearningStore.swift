@@ -75,6 +75,11 @@ public struct ProfilePreferences: Codable, Equatable, Sendable {
     }
 }
 public protocol LearningStore: Actor {
+    func checkpointStageOrder(scope: LearningScope) async throws -> [Int]
+    func beginStudyTime(handle: LearningHandle, visitID: UUID) async throws -> StudyTimeLease
+    func recordStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt
+    func finishStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt
+    func readStudyTime(profileID: String, language: String, book: String) async throws -> Int64
     func readLanguageProgress(profileID: String, language: String, today: StudyDay) async throws -> LanguageStudyProgress
     func readCheckpoint(plan: LearningPlan) async throws -> LearningSession?
     func open(plan: LearningPlan, preferences: LearningPreferences, writerID: UUID) async throws -> LearningSnapshot

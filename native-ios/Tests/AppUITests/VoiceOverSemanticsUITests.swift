@@ -16,7 +16,8 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    @MainActor private func launch(largestText: Bool = false) -> XCUIApplication {
+    @MainActor private func launch(largestText: Bool = false) throws -> XCUIApplication {
+        let scope = try ScreenTestScope()
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-product", "--ui-test-probe-id", UUID().uuidString]
         if largestText {
@@ -24,12 +25,14 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         }
         app.launch()
         XCTAssertTrue(app.buttons["book-morning-notes-v1"].hittableOrWait(timeout: 20))
-        let kind = app.staticTexts["book-kind-morning-notes-v1"]
-        XCTAssertTrue(kind.exists, "Book kind must remain in the UI accessibility snapshot")
-        XCTAssertEqual(kind.label, "샘플")
-        let estimate = app.staticTexts["book-xp-morning-notes-v1"]
-        XCTAssertTrue(estimate.exists, "XP estimate must remain in the UI accessibility snapshot")
-        XCTAssertEqual(estimate.label, "전체 16스테이지를 각 3회 학습하면 최소 1,728 XP, 추가 사이클 제외")
+        if scope.contains("bookshelf") {
+            let kind = app.staticTexts["book-kind-morning-notes-v1"]
+            XCTAssertTrue(kind.exists, "Book kind must remain in the UI accessibility snapshot")
+            XCTAssertEqual(kind.label, "샘플")
+            let estimate = app.staticTexts["book-xp-morning-notes-v1"]
+            XCTAssertTrue(estimate.exists, "XP estimate must remain in the UI accessibility snapshot")
+            XCTAssertEqual(estimate.label, "전체 16스테이지를 각 3회 학습하면 최소 1,728 XP, 추가 사이클 제외")
+        }
         return app
     }
 
@@ -38,7 +41,7 @@ final class VoiceOverSemanticsUITests: XCTestCase {
         // Audit the complete navigation flow for VoiceOver before running the same
         // flow's visual diagnostics in a fresh process/profile. Keep every category.
         for types in [Self.voiceOverAudits, Self.visualAudits] {
-            let app = launch(largestText: largestText)
+            let app = try launch(largestText: largestText)
             defer { app.terminate() }
             try auditPrincipalScreens(app, label, types: types)
         }
@@ -47,25 +50,36 @@ final class VoiceOverSemanticsUITests: XCTestCase {
     /// Visits each principal screen in the same process and audits it.
     @MainActor private func auditPrincipalScreens(_ app: XCUIApplication, _ label: String,
                                                 types: XCUIAccessibilityAuditType) throws {
-        try audit(app, "\(label) library", types: types)
-        app.buttons["book-morning-notes-v1"].tap()
-        XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 10))
-        try audit(app, "\(label) stages", types: types)
-        app.buttons["stage-1"].tap()
-        XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 20))
-        try audit(app, "\(label) player", types: types)
-        app.buttons["player-options"].tap()
-        XCTAssertTrue(app.buttons["options-close"].existsOrWait(timeout: 5))
-        try audit(app, "\(label) options", types: types)
-        app.buttons["배속"].tap()
-        XCTAssertTrue(app.sliders["재생 속도"].existsOrWait(timeout: 5))
-        try audit(app, "\(label) rate editor", types: types)
-        app.buttons["options-close"].tap()
-        app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].existsOrWait(timeout: 10))
+        let scope = try ScreenTestScope()
+        if scope.contains("bookshelf") { try audit(app, "\(label) library", types: types) }
+        if scope.needsStages {
+            app.buttons["book-morning-notes-v1"].tap()
+            XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 10))
+            if scope.contains("stages") { try audit(app, "\(label) stages", types: types) }
+        }
+        if scope.needsLearning {
+            app.revealStage(1).tap()
+            XCTAssertTrue(app.buttons["player-main"].wait(for: \.isEnabled, toEqual: true, timeout: 20))
+            if scope.contains("player") { try audit(app, "\(label) player", types: types) }
+            if scope.contains("options") || scope.contains("rate") {
+                app.buttons["player-options"].tap()
+                XCTAssertTrue(app.buttons["options-close"].existsOrWait(timeout: 5))
+                if scope.contains("options") { try audit(app, "\(label) options", types: types) }
+                if scope.contains("rate") {
+                    app.buttons["배속"].tap()
+                    XCTAssertTrue(app.sliders["재생 속도"].existsOrWait(timeout: 5))
+                    try audit(app, "\(label) rate editor", types: types)
+                }
+                app.buttons["options-close"].tap()
+            }
+            app.exitLearningThroughOptions()
+            XCTAssertTrue(app.buttons["stage-back"].existsOrWait(timeout: 10))
+        }
+        guard scope.needsSettings else { return }
         app.tabBars.buttons["설정"].tap()
         XCTAssertTrue(app.buttons["학습 설정"].existsOrWait(timeout: 5))
-        try audit(app, "\(label) settings", types: types)
+        if scope.contains("settings") { try audit(app, "\(label) settings", types: types) }
+        guard scope.contains("typography") else { return }
         app.buttons["학습 설정"].tap()
         let typography = app.buttons["폰트 설정"]
         XCTAssertTrue(typography.hittableOrWait(timeout: 5))
@@ -127,38 +141,54 @@ final class VoiceOverSemanticsUITests: XCTestCase {
 
     /// The names, values and order in browsing and learning UI automation snapshots.
     @MainActor func testVoiceOverLabelsValuesAndOrder() throws {
-        let app = launch()
-        XCTAssertEqual(app.buttons["language-menu"].label, "학습 언어, 영어")
-        XCTAssertTrue(app.otherElements["연속 학습 0일"].exists || app.staticTexts["연속 학습 0일"].exists,
-                      "Streak must read as one element with its unit")
-        let book = app.buttons["book-morning-notes-v1"]
-        XCTAssertEqual(book.label, "Morning Notes 학습하기")
-        XCTAssertEqual(book.value as? String, "완료한 스테이지 0/16")
-
-        book.tap()
+        let scope = try ScreenTestScope()
+        let app = try launch()
+        defer { app.terminate() }
+        if scope.contains("bookshelf") {
+            XCTAssertEqual(app.buttons["language-menu"].label, "학습 언어, 영어")
+            XCTAssertTrue(app.otherElements["연속 학습 0일"].exists || app.staticTexts["연속 학습 0일"].exists,
+                          "Streak must read as one element with its unit")
+            let book = app.buttons["book-morning-notes-v1"]
+            XCTAssertEqual(book.label, "Morning Notes 학습하기")
+            XCTAssertEqual(book.value as? String, "완료한 스테이지 0/16")
+        }
+        guard scope.needsStages else { return }
+        app.buttons["book-morning-notes-v1"].tap()
         XCTAssertTrue(app.buttons["stage-1"].existsOrWait(timeout: 10))
-        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'stage-'"))
-        XCTAssertEqual((0..<rows.count).map { rows.element(boundBy: $0).identifier },
-                       (1...16).map { "stage-\($0)" }, "Stages must be read in order")
-        XCTAssertEqual(app.buttons["stage-1"].label, "스테이지 1, 자막 쉐도잉")
-        XCTAssertEqual(app.buttons["stage-1"].value as? String, "완료 0/3")
-        XCTAssertEqual(app.buttons["stage-11"].label, "스테이지 11, 속사포 영한")
-
-        app.buttons["stage-1"].tap()
+        if scope.contains("stages") {
+            for family in 0...2 {
+                let first = [1, 7, 11][family], last = [6, 10, 16][family]
+                app.revealStage(first)
+                let rows = app.buttons.matching(NSPredicate(format: "identifier MATCHES %@", "stage-[0-9]+"))
+                XCTAssertEqual((0..<rows.count).map { rows.element(boundBy: $0).identifier },
+                               (first...last).map { "stage-\($0)" }, "Each family's stages must be read in order")
+            }
+            app.revealStage(1)
+            XCTAssertEqual(app.buttons["stage-1"].label, "스테이지 1, 자막 쉐도잉")
+            XCTAssertEqual(app.buttons["stage-1"].value as? String, "완료 0/3")
+            app.revealStage(11)
+            XCTAssertEqual(app.buttons["stage-11"].label, "스테이지 11, 속사포 영한")
+            app.revealStage(1)
+        }
+        guard scope.needsLearning else { return }
+        app.revealStage(1).tap()
         let main = app.buttons["player-main"]
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
-        XCTAssertEqual(main.label, "학습 확인")
-        XCTAssertEqual(app.buttons["player-options"].label, "학습 옵션")
-        XCTAssertFalse(app.buttons["player-options"].label.isEmpty, "Options must have a spoken name")
-        XCTAssertTrue(app.buttons["학습 속도"].exists)
-        XCTAssertTrue(app.buttons["문장 분석"].exists)
-        XCTAssertEqual(app.descendants(matching: .any)["cycle-timeline"].label, "확인한 반복 0/3")
+        if scope.contains("player") {
+            XCTAssertEqual(main.label, "학습 확인")
+            XCTAssertEqual(app.buttons["player-options"].label, "학습 옵션")
+            XCTAssertFalse(app.buttons["player-options"].label.isEmpty, "Options must have a spoken name")
+            XCTAssertTrue(app.buttons["학습 속도"].exists)
+            XCTAssertTrue(app.buttons["문장 분석"].exists)
+            XCTAssertEqual(app.descendants(matching: .any)["cycle-timeline"].label, "확인한 반복 0/3")
+        }
+        guard scope.contains("rate") else { return }
         app.buttons["학습 속도"].tap()
         let rate = app.sliders["재생 속도"]
         XCTAssertTrue(rate.existsOrWait(timeout: 5))
         XCTAssertEqual(rate.value as? String, "1배속")
         app.buttons["options-close"].tap()
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
 }

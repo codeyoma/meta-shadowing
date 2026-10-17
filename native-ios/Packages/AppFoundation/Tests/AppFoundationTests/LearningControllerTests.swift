@@ -5,6 +5,11 @@ import Testing
 @testable import AppFoundation
 
 actor FailingStore: LearningStore {
+    func checkpointStageOrder(scope: LearningScope) async throws -> [Int] { try await underlying.checkpointStageOrder(scope: scope) }
+    func beginStudyTime(handle: LearningHandle, visitID: UUID) async throws -> StudyTimeLease { try await underlying.beginStudyTime(handle: handle, visitID: visitID) }
+    func recordStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt { try await underlying.recordStudyTime(lease, cumulativeMilliseconds: cumulativeMilliseconds) }
+    func finishStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt { try await underlying.finishStudyTime(lease, cumulativeMilliseconds: cumulativeMilliseconds) }
+    func readStudyTime(profileID: String, language: String, book: String) async throws -> Int64 { try await underlying.readStudyTime(profileID: profileID, language: language, book: book) }
     func readLanguageProgress(profileID: String, language: String, today: StudyDay) async throws -> LanguageStudyProgress {
         try await underlying.readLanguageProgress(profileID: profileID, language: language, today: today)
     }

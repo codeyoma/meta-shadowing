@@ -62,12 +62,7 @@ extension SQLiteLearningStore {
                   !leases.values.contains(where: { $0.handle.scope.profileID == lease.profileID }) else { throw LearningStoreError.staleWriter }
             let generation = try snapshotBackup(db).resetGeneration
             try clearLearningRows(db)
-            var empty = try LearningBackupCodec.encode(.empty)
-            if let generation {
-                empty = try JSONSerialization.data(withJSONObject: ["version": 5, "generation": generation,
-                    "progress": JSONSerialization.jsonObject(with: empty)])
-            }
-            try installBackup(LearningBackupCodec.decode(empty), db: db, profileID: lease.profileID)
+            try installBackup(LearningBackup.empty.withResetGeneration(generation), db: db, profileID: lease.profileID)
             _ = try incrementRevision(db)
             state.enabled = false; state.baseToken = ""; state.resetIntent = nil
             state.learningGeneration = try readServiceState(db).writerGeneration
@@ -91,7 +86,7 @@ extension SQLiteLearningStore {
         var state = try readServiceState(db)
         state.learningGeneration = UUID()
         try writeServiceState(state, db: db)
-        for table in ["checkpoints", "reward_runs", "completions", "study_days", "historical_awards", "backup_imports", "commands"] {
+        for table in ["checkpoints", "reward_runs", "completions", "study_days", "historical_awards", "backup_imports", "commands", "study_time", "study_time_visit"] {
             try db.execute("DELETE FROM \(table)")
         }
         try db.execute("UPDATE preferences SET state=?,clock='',selection_clock='' WHERE id=1", [.blob(try encode(ProfilePreferences()))])

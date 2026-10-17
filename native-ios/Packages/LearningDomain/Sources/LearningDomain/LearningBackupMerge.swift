@@ -4,6 +4,7 @@ extension LearningBackup {
     public func merged(with other: Self) throws -> Self {
         guard resetGeneration == other.resetGeneration else { throw LearningError.invalidState }
         var result = Self.empty; result.resetGeneration = resetGeneration
+        try result.setStudyTimeCounters(studyTimeCounters + other.studyTimeCounters)
         result.clocks = clocks
         for (key, stamp) in other.clocks { result.clocks[key] = max(result.clocks[key] ?? "", stamp) }
         result.runs = try RewardLedger(runs: runs).merged(with: RewardLedger(runs: other.runs)).runs

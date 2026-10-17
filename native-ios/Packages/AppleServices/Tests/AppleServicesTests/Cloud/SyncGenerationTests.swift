@@ -56,6 +56,11 @@ struct SyncGenerationTests {
 
 /// Suspend only the storage boundary under test; all actual state uses SQLite.
 private actor SuspendedServiceStore: ServiceProfileStore {
+    func checkpointStageOrder(scope: LearningScope) async throws -> [Int] { try await base.checkpointStageOrder(scope: scope) }
+    func beginStudyTime(handle: LearningHandle, visitID: UUID) async throws -> StudyTimeLease { try await base.beginStudyTime(handle: handle, visitID: visitID) }
+    func recordStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt { try await base.recordStudyTime(lease, cumulativeMilliseconds: cumulativeMilliseconds) }
+    func finishStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt { try await base.finishStudyTime(lease, cumulativeMilliseconds: cumulativeMilliseconds) }
+    func readStudyTime(profileID: String, language: String, book: String) async throws -> Int64 { try await base.readStudyTime(profileID: profileID, language: language, book: book) }
     let base: SQLiteLearningStore
     var pausedScope: String?
     var pauseNextActivation = false

@@ -8,7 +8,7 @@ public struct StageStudySummary: Equatable, Sendable {
     public let confirmed: Int
     public let planned: Int
     public let complete: Bool
-    init(_ session: LearningSession) {
+    public init(_ session: LearningSession) {
         unit = session.unit; unitCount = session.unitCount
         confirmed = session.current.confirmed; planned = session.current.planned
         complete = session.phase == .complete
@@ -20,6 +20,16 @@ public struct BookStudySummary: Identifiable, Equatable, Sendable {
     public let completedRuns: [Int: Int]
     public let checkpoints: [Int: StageStudySummary]
     public let available: Bool
+    public let studyMilliseconds: Int64
+    public let latestStage: Int?
+    public let recentStages: [Int]
+    public let plannedUnitCounts: [Int: Int]
+    public init(book: CatalogBook, completedRuns: [Int: Int], checkpoints: [Int: StageStudySummary], available: Bool,
+                studyMilliseconds: Int64 = 0, latestStage: Int? = nil, plannedUnitCounts: [Int: Int] = [:], recentStages: [Int] = []) {
+        self.book = book; self.completedRuns = completedRuns; self.checkpoints = checkpoints; self.available = available
+        self.studyMilliseconds = studyMilliseconds; self.latestStage = latestStage; self.plannedUnitCounts = plannedUnitCounts
+        self.recentStages = recentStages.isEmpty ? latestStage.map { [$0] } ?? [] : recentStages
+    }
     public var completedStages: Int { completedRuns.values.filter { $0 >= 3 }.count }
     public var currentStage: Int { (1...16).first { completedRuns[$0, default: 0] < 3 } ?? 16 }
 }
@@ -62,13 +72,16 @@ public actor ProductWorkspace {
             try Task.checkCancellation()
             let scope = try scope(book, stage: 1)
             let progress = try await store.readProgress(scope: scope, today: today)
+            let studyMilliseconds = try await store.readStudyTime(profileID: profileID, language: book.language, book: book.book)
             var checkpoints: [Int: StageStudySummary] = [:]
+            var unitCounts: [Int: Int] = [:]
             var available = await catalog.permitsPractice(packageKey: book.id)
             if available {
                 do {
                     let material = try await catalog.materials(packageKey: book.id)
                     for stage in 1...16 {
                         let plan = try plan(material, stage: stage, preferences: preferences.learning)
+                        unitCounts[stage] = plan.units.count
                         if let saved = try await store.readCheckpoint(plan: plan) {
                             checkpoints[stage] = StageStudySummary(saved)
                         }
@@ -76,8 +89,10 @@ public actor ProductWorkspace {
                 } catch is CancellationError { throw CancellationError() }
                 catch { available = false }
             }
+            let recentStages = try await store.checkpointStageOrder(scope: scope)
             summaries.append(BookStudySummary(book: book, completedRuns: progress.completedRuns,
-                                              checkpoints: checkpoints, available: available))
+                checkpoints: checkpoints, available: available, studyMilliseconds: studyMilliseconds,
+                latestStage: recentStages.first, plannedUnitCounts: unitCounts, recentStages: recentStages))
         }
         try Task.checkCancellation()
         return ProductSnapshot(preferences: preferences, progress: progress, books: summaries)
@@ -129,6 +144,25 @@ public actor ProductWorkspace {
     public func permitsPractice(_ scope: LearningScope) async -> Bool {
         guard scope.profileID == profileID else { return false }
         return await catalog.permitsPractice(packageKey: scope.packageKey)
+    }
+    public func beginStudyTime(writerID: UUID, visitID: UUID) async throws -> StudyTimeLease {
+        guard let controller = lessons[writerID]?.controller else { throw ProductError.denied }
+        let state = await controller.state
+        guard state.active, state.snapshot.handle.scope.profileID == profileID else { throw ProductError.denied }
+        return try await store.beginStudyTime(handle: state.snapshot.handle, visitID: visitID)
+    }
+    public func recordStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt {
+        try await validateStudyLease(lease)
+        return try await store.recordStudyTime(lease, cumulativeMilliseconds: cumulativeMilliseconds)
+    }
+    public func finishStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt {
+        try await validateStudyLease(lease)
+        return try await store.finishStudyTime(lease, cumulativeMilliseconds: cumulativeMilliseconds)
+    }
+    private func validateStudyLease(_ lease: StudyTimeLease) async throws {
+        guard lease.handle.scope.profileID == profileID, let controller = lessons[lease.handle.writerID]?.controller else { throw ProductError.denied }
+        let state = await controller.state
+        guard state.active, state.snapshot.handle.scope == lease.handle.scope else { throw ProductError.denied }
     }
     public func referenceChanges() async -> AsyncStream<Void> { await catalog.referenceChanges() }
     public func referenceChanges(packageKey: String) async -> AsyncStream<Void> { await catalog.referenceChanges(packageKey: packageKey) }

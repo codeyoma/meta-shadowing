@@ -347,15 +347,34 @@ private actor DeferredLessonCatalog: ProductCatalog {
 }
 
 /// Holds only a real SQLite pause commit, so presentation cancellation is deterministic.
-private actor DeferredPopoverPauseStore: LearningStore {
+actor DeferredPopoverPauseStore: LearningStore {
+    func checkpointStageOrder(scope: LearningScope) async throws -> [Int] { try await underlying.checkpointStageOrder(scope: scope) }
+    func beginStudyTime(handle: LearningHandle, visitID: UUID) async throws -> StudyTimeLease { try await underlying.beginStudyTime(handle: handle, visitID: visitID) }
+    func recordStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt {
+        if timeFailure { throw LearningStoreError.injectedFailure }
+        return try await underlying.recordStudyTime(lease, cumulativeMilliseconds: cumulativeMilliseconds)
+    }
+    func finishStudyTime(_ lease: StudyTimeLease, cumulativeMilliseconds: Int64) async throws -> StudyTimeReceipt {
+        if timeFailure { throw LearningStoreError.injectedFailure }
+        return try await underlying.finishStudyTime(lease, cumulativeMilliseconds: cumulativeMilliseconds)
+    }
+    func readStudyTime(profileID: String, language: String, book: String) async throws -> Int64 { try await underlying.readStudyTime(profileID: profileID, language: language, book: book) }
     private let underlying: SQLiteLearningStore
     private var hold = false
+    private var failPause = false
+    private var timeFailure = false
+    func setTimeFailure(_ value: Bool) { timeFailure = value }
     private var gate: CheckedContinuation<Void, Never>?
     var entered = false
     init(root: URL) { underlying = SQLiteLearningStore(root: root) }
     func holdNextPause() { hold = true }
+    func failNextPause() { failPause = true }
     func release() { gate?.resume(); gate = nil }
     func apply(_ command: LearningCommand) async throws -> CommitReceipt {
+        if failPause, command.event == .pause {
+            failPause = false
+            throw LearningStoreError.injectedFailure
+        }
         if hold, command.event == .pause {
             hold = false; entered = true
             await withCheckedContinuation { gate = $0 }

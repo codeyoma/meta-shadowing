@@ -27,9 +27,7 @@ struct StudyStatusToolbar: ToolbarContent {
     let select: (StudyLanguage) -> Void
     var body: some ToolbarContent {
         languageMenu
-        ToolbarItem(placement: .topBarTrailing) {
-            StudyStatusView(progress: progress)
-        }.sharedBackgroundVisibility(.hidden)
+        StudyProgressToolbar(progress: progress)
     }
     private var languageMenu: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
@@ -67,8 +65,22 @@ struct StudyStatusToolbar: ToolbarContent {
     }
 }
 
+/// Shared level, XP inspection and streak display for both browsing headers.
+struct StudyProgressToolbar: ToolbarContent {
+    let progress: LanguageStudyProgress
+    var grouped = false
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            HStack(spacing: 0) {
+                StudyStatusView(progress: progress, grouped: grouped)
+            }.fixedSize()
+        }.sharedBackgroundVisibility(.hidden)
+    }
+}
+
 private struct StudyStatusView: View {
     let progress: LanguageStudyProgress
+    var grouped = false
     @State private var showsExperience = false
     @ScaledMetric(relativeTo: .subheadline) private var symbolRowHeight = 24
     @ScaledMetric(relativeTo: .caption2) private var valueRowHeight = 14
@@ -77,16 +89,30 @@ private struct StudyStatusView: View {
             : String(localized: "\(progress.level.current) / \(progress.level.required) XP")
     }
     var body: some View {
+        Group {
+            if grouped {
+                Button { showsExperience = true } label: {
+                    HStack(spacing: 12) { levelIndicator; streakIndicator }
+                        .padding(.horizontal, 14).padding(.vertical, 2)
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .accessibilityLabel(experienceText)
+                .accessibilityValue(Text("Lv. \(progress.level.level), 연속 학습 \(progress.streak)일"))
+                .accessibilityHint("현재 레벨의 경험치 보기")
+                .accessibilityIdentifier("header-xp")
+                .background { ExperiencePopover(isPresented: $showsExperience) { experienceDetails } }
+            } else {
+                libraryStatus
+            }
+        }
+        .accessibilityShowsLargeContentViewer { largeContent }
+    }
+    private var libraryStatus: some View {
         HStack(spacing: 12) {
             Button { showsExperience = true } label: {
-                VStack(spacing: 1) {
-                    Text("Lv. \(progress.level.level)").font(.subheadline.bold())
-                        .frame(height: symbolRowHeight)
-                    ProgressView(value: Double(progress.level.current), total: Double(progress.level.required))
-                        .progressViewStyle(.linear).tint(BrandStyle.yellow)
-                        .frame(width: 68, height: valueRowHeight)
-                }
-                .monospacedDigit().frame(minHeight: 44).contentShape(.rect)
+                levelIndicator
             }
             .buttonStyle(.plain)
             .accessibilityLabel(experienceText)
@@ -96,22 +122,33 @@ private struct StudyStatusView: View {
             .background {
                 ExperiencePopover(isPresented: $showsExperience) { experienceDetails }
             }
-            VStack(spacing: 1) {
-                Image(systemName: "flame.fill").foregroundStyle(progress.streak > 0 ? .orange : .secondary)
-                    .frame(height: symbolRowHeight)
-                Text(progress.streak, format: .number).font(.caption2.bold()).monospacedDigit()
-                    .frame(height: valueRowHeight)
-            }
-            .font(.subheadline.bold()).frame(minHeight: 44)
+            streakIndicator
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("연속 학습 \(progress.streak)일")
         }
-        .accessibilityShowsLargeContentViewer {
-            Label(progress.level.maxLevel
-                  ? "Lv. \(progress.level.level) · MAX · 연속 \(progress.streak)일"
-                  : "Lv. \(progress.level.level) · \(progress.level.current) / \(progress.level.required) XP · 연속 \(progress.streak)일",
-                  systemImage: "flame.fill")
-        }
+    }
+    private var levelIndicator: some View {
+        VStack(spacing: 1) {
+            Text("Lv. \(progress.level.level)").font(.subheadline.bold())
+                .frame(height: symbolRowHeight)
+            ProgressView(value: Double(progress.level.current), total: Double(progress.level.required))
+                .progressViewStyle(.linear).tint(BrandStyle.yellow)
+                .frame(width: 68, height: valueRowHeight)
+        }.monospacedDigit().frame(minHeight: 44).contentShape(.rect)
+    }
+    private var streakIndicator: some View {
+        VStack(spacing: 1) {
+            Image(systemName: "flame.fill").foregroundStyle(progress.streak > 0 ? .orange : .secondary)
+                .frame(height: symbolRowHeight)
+            Text(progress.streak, format: .number).font(.caption2.bold()).monospacedDigit()
+                .frame(height: valueRowHeight)
+        }.font(.subheadline.bold()).frame(minHeight: 44)
+    }
+    private var largeContent: some View {
+        Label(progress.level.maxLevel
+              ? "Lv. \(progress.level.level) · MAX · 연속 \(progress.streak)일"
+              : "Lv. \(progress.level.level) · \(progress.level.current) / \(progress.level.required) XP · 연속 \(progress.streak)일",
+              systemImage: "flame.fill")
     }
     private var experienceDetails: some View {
         VStack(alignment: .leading, spacing: 6) {

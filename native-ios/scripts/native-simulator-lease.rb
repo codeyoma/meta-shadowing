@@ -143,11 +143,15 @@ class NativeSimulatorLease
 
   def settle_guests
     return true unless File.file?(@usage)
-    devices = selected_devices
+    used = File.readlines(@usage).map(&:strip)
+    # Older full bodies mark all configured destinations with one "used" line.
+    used = @ids if used == ['used']
+    raise 'Invalid simulator usage evidence' if used.empty? || (used - @ids).any?
+    devices = selected_devices.select { |device| used.include?(device.fetch('udid').upcase) }
     devices.each do |device|
       control('simctl', 'shutdown', device.fetch('udid')) unless device['state'] == 'Shutdown'
     end
-    selected_devices.all? { |device| device['state'] == 'Shutdown' }
+    selected_devices.select { |device| used.include?(device.fetch('udid').upcase) }.all? { |device| device['state'] == 'Shutdown' }
   rescue StandardError
     false
   end

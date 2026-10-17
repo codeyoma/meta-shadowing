@@ -5,11 +5,12 @@ into `dev`/`main`, pushes to those branches and manual dispatch. PR checkout use
 GitHub's merge candidate, not only the head. The owner approved replacing the
 Expo reference CI lane; the reference source remains available for migration.
 
-## Fast remote checks and local full regression
+## Fast remote checks and local validation
 
 Owner update, 2026-10-09: ordinary pull requests and `dev`/`main` pushes run
 the `light` profile, with no simulator execution. Long checks run in the local
-`pre-push` hook, where a failure blocks the push. Manual `workflow_dispatch`
+`pre-push` hook, where a failure blocks the push. The October 17 update below
+replaces automatic local full regression with scoped validation. Manual `workflow_dispatch`
 defaults to `full` and also accepts `light`; there is no automatic scheduled full run.
 
 Every remote run retains all six unfiltered host Swift package suites (currently
@@ -20,20 +21,20 @@ simulator; it is not a configuration-only or empty build check.
 | Execution boundary | Checks |
 | --- | --- |
 | Automatic GitHub CI | Six host Swift package suites, tooling/configuration contracts, one generic Debug build and Debug product inspection |
-| Local pre-push | Complete native simulator suite (currently 180 cases), Debug product inspection, Release build and product/runtime inspection, fictional downloader build |
+| Local pre-push | Tests for directly edited screens and related shared logic, Debug product inspection, Release build and product/runtime inspection, fictional downloader build |
 | Explicit manual full CI | All ordinary checks plus complete shared test-product build, four simulator shards, Release/product/runtime inspection and fictional downloader build |
 
 Automatic runs do not build or transfer test products, boot/install/launch a
 simulator, enumerate native tests, or execute UI/native-integration tests. The
-entire `NativeMediaIntegrationTests` target also moves to local/manual full
-regression: its iOS-only audio, lifecycle, haptics and rendering checks cannot be
-replaced by host package tests. The full suite now contains 75 UI methods after
-three same-fixture standalone tests were consolidated into existing journeys;
-their original assertions remain. See [the UI test audit](research/2026-10-09-ui-wait-expansion.md).
+native integration tests run locally when selected and in manual full regression:
+their iOS-only audio, lifecycle, haptics and rendering checks cannot be replaced
+by host package tests. The October 9 audit recorded 75 UI methods after three
+same-fixture standalone tests were consolidated into existing journeys; their
+original assertions remain. See [the UI test audit](research/2026-10-09-ui-wait-expansion.md).
 Test-internal readiness fast paths, bounded scroll-search exits, and static
 geometry reuse retain that same inventory and the original failure/time limits;
 see [the internal-query verification](research/2026-10-09-test-internal-results.md).
-Ordinary remote success is not evidence that the 180 native simulator cases ran.
+Ordinary remote success is not evidence that the native simulator suite ran.
 
 The previous eight-UI-test remote profile still incurred long simulator startup
 and automation work. The owner explicitly chose a simulator-free automatic gate
@@ -43,6 +44,65 @@ and [Apple's testing guidance](https://developer.apple.com/videos/play/wwdc2022/
 The exact simulator-free boundary is this project's choice, not a claim that
 Apple requires it. Long work moves locally; it is not eliminated, and no particular
 hosted duration is guaranteed.
+
+### Scoped local pre-push validation
+
+Owner update, 2026-10-17: before PR/push, select tests from the entire PR diff,
+not only the last commit or the last push. Directly edited screens receive their
+UI, rendering and accessibility coverage. Shared logic receives related package
+and native integration tests; it does not automatically select every consumer
+screen. Changed UI test methods are included independently, without selecting
+the untouched methods of a mixed-screen test class. Imports/setup/shared-method
+changes own that test file's methods. The reviewed `LearningPlayerActions` helper
+selects actual calling test methods, including local wrapper calls. Other shared
+UI/integration test helpers block until their consumers have reviewed ownership.
+Broad offline acceptance journeys stay manual full regression unless their own
+test source changes. Files defining several UI surfaces explicitly own each of
+those surfaces; pure tokenizer logic does not acquire screen ownership.
+
+`native-test-scope.rb` owns source-to-test mappings. Unknown app Swift source
+blocks the gate until its ownership is reviewed; it never silently skips the
+source or falls back to the whole suite. Selectors must match compiled methods
+before execution. Finalized results must match the selected identifiers exactly,
+with no extra, missing, failed, skipped or expected-failure cases. An explicit
+plan with no native tests is build-only, not proof of simulator behavior.
+
+Accessibility journeys audit only the selected principal screens and avoid
+unneeded player/editor navigation. All audit types, light/dark/large-text passes,
+failure criteria and diagnostic attachments remain. When the audit journey or
+its scope helper itself changes without an edited app audit screen, its explicit
+principal-screen ownership is recorded as `audit_screens`; an empty value never
+silently means a full audit. The scope is forwarded using Xcode's documented
+[`TEST_RUNNER_` environment convention](https://developer.apple.com/documentation/xcode/environment-variable-reference).
+Ordinary manual full runs retain the original all-screen journey.
+Data-deletion and bookshelf download confirmations are separate test methods,
+preserving both appearances and largest-text assertions without cross-screen selection.
+
+The default PR target is the locally available `refs/remotes/origin/dev`.
+For another target, configure an explicit branch ref before pushing:
+
+```sh
+git config --local native.prePushBaseRef refs/remotes/origin/your-target
+```
+
+The hook performs no fetch or remote mutation. The configured target and pushed
+commit must have one merge base; missing or ambiguous ancestry blocks validation.
+It archives the exact pushed commit, then that revision's selector generates
+`scope.json` from relative changed paths and test hunks. Dirty working files are
+excluded. Private evidence records the head/base, source paths, selected screens,
+audit screens, packages, selectors and actual results. The pass cache includes
+the head, merge base and scoped contract in addition to the existing toolchain
+and destination identity. A pass for a different PR diff cannot be reused.
+
+Scoped execution is serial on the primary dedicated simulator. An unused
+configured secondary is not booted or shut down, including when it hosts a live
+preview. Build/product/runtime/downloader guards remain required. Related host
+package suites remain unfiltered within each selected package. Hosted automatic
+CI still runs all six packages and the same required checks.
+
+Full simulator regression remains explicit manual/release validation. A scoped
+pass cannot satisfy the release requirement for full-regression evidence. No
+GitHub workflow, required check name, remote ruleset or human approval changes.
 
 ### Install the local hook
 
@@ -62,7 +122,7 @@ bash native-ios/scripts/install-native-git-hooks.sh \
 ```
 
 Both IDs must be distinct, available iOS 27 destinations with the same device
-type. Native integrations execute first on the primary device; only after they
+type. In an explicit full run, native integrations execute first on the primary device; only after they
 pass do the two disjoint UI selections execute concurrently. Each XCTest command
 keeps `-parallel-testing-enabled NO`. The inspected build is copied with matching
 content, modes and symlink targets into separate worker directories. Each result
@@ -93,17 +153,17 @@ The [local two-device experiment](research/2026-10-09-local-native-parallel-resu
 records the measured result and its startup/resource limitations.
 
 The hook reads Git's actual pushed object IDs, not just `HEAD`. It archives each
-unique pushed commit into an isolated snapshot and runs the complete native
-scheme and the Release/downloader/product guards from that snapshot. The Debug
+unique pushed commit into an isolated snapshot and runs its scoped test selection
+and the Release/downloader/product guards from that snapshot. The Debug
 inspection reuses the compiled test app instead of building it again. Dirty/untracked working files and private
 `Local.xcconfig` are not test inputs. Ref deletions do not need a test run. A
 missing tool, simulator, test runner, result or successful test blocks the push.
 Concurrent local full runs are rejected, not run against the same simulator.
 
 Successful results may be reused only for the exact commit, Xcode/XcodeGen
-versions, execution mode and both configured simulator identities/runtime.
-Contract version 5 invalidates older passes. Failed or incomplete results are never
-cached; another commit requires another full run. Evidence stays under the local
+versions, execution mode and both configured simulator identities/runtime, plus
+the PR merge base and scoped contract. Failed or incomplete results are never
+cached; another commit or PR diff requires another scoped run. Evidence stays under the local
 Git directory, outside tracked source. A same-commit retry after a network failure
 does not repeat a completed test run. The archived runner must declare the current
 full-gate contract; old runner versions and weaker cached passes cannot satisfy

@@ -4,7 +4,7 @@ import LearningDomain
 enum LearningSchema {
     static func prepare(_ db: SQLiteConnection, profileID: String) throws {
         let version = try db.query("PRAGMA user_version").first?["user_version"]?.integer ?? -1
-        guard version <= 2 else { throw LearningStoreError.unsupportedSchema }
+        guard version <= 3 else { throw LearningStoreError.unsupportedSchema }
         guard version >= 0 else { throw LearningStoreError.corrupt }
         // Check the version before changing any persistent PRAGMA or schema.
         try db.execute("PRAGMA journal_mode=WAL")
@@ -40,6 +40,17 @@ enum LearningSchema {
                 try db.execute("CREATE TABLE service_state(id INTEGER PRIMARY KEY CHECK(id=1), state BLOB NOT NULL)")
                 try db.execute("INSERT INTO service_state VALUES(1,?)", [.blob(try encode(ServiceProfileState()))])
                 try db.execute("PRAGMA user_version=2")
+            }
+        }
+        if version < 3 {
+            try db.transaction {
+                try db.script("""
+                    CREATE TABLE IF NOT EXISTS study_time(language TEXT NOT NULL, book TEXT NOT NULL, replica TEXT NOT NULL,
+                      milliseconds INTEGER NOT NULL CHECK(milliseconds BETWEEN 0 AND 9007199254740991), PRIMARY KEY(language,book,replica));
+                    CREATE TABLE IF NOT EXISTS study_time_visit(id INTEGER PRIMARY KEY CHECK(id=1), lease BLOB NOT NULL,
+                      cumulative INTEGER NOT NULL CHECK(cumulative BETWEEN 0 AND 9007199254740991), retired INTEGER NOT NULL CHECK(retired IN (0,1)));
+                    PRAGMA user_version=3;
+                    """)
             }
         }
         guard try db.query("SELECT profile FROM metadata WHERE id=1").first?["profile"]?.text == profileID else { throw LearningStoreError.corrupt }

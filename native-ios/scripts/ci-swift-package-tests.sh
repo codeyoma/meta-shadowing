@@ -1,9 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-if [[ "$#" != 0 ]]; then
-    echo 'Swift package tests: expected no arguments; run from the repository root.' >&2
-    exit 1
+ci_packages=()
+while [[ "$#" -gt 0 ]]; do
+    if [[ "$1" != --package || "$#" -lt 2 ]]; then
+        echo 'Swift package tests: expected no arguments or repeated --package NAME; run from the repository root.' >&2
+        exit 1
+    fi
+    case "$2" in
+        LearningDomain|LearningPersistence|AppFoundation|LearningMedia|LearningReference|AppleServices) ;;
+        *) echo 'Swift package tests: unknown package.' >&2; exit 1 ;;
+    esac
+    case " ${ci_packages[*]:-} " in *" $2 "*) echo 'Swift package tests: duplicate package.' >&2; exit 1 ;; esac
+    ci_packages+=("$2")
+    shift 2
+done
+if [[ "${#ci_packages[@]}" -eq 0 ]]; then
+    ci_packages=(LearningDomain LearningPersistence AppFoundation LearningMedia LearningReference AppleServices)
 fi
 
 # Raw Swift output may contain local paths or test payloads. Keep it private.
@@ -19,7 +32,7 @@ fail_package() {
 }
 
 ci_total=0
-for ci_package in LearningDomain LearningPersistence AppFoundation LearningMedia LearningReference AppleServices; do
+for ci_package in "${ci_packages[@]}"; do
     if swift test --package-path "native-ios/Packages/$ci_package" >"$ci_logs/$ci_package.log" 2>&1; then
         :
     else
@@ -45,5 +58,5 @@ RUBY
     ci_total=$((ci_total + ci_count))
 done
 
-echo "PASS: $ci_total Swift package tests passed across 6 packages."
+echo "PASS: $ci_total Swift package tests passed across ${#ci_packages[@]} packages."
 ci_succeeded=true

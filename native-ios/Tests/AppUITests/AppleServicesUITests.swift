@@ -79,7 +79,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(app.buttons["remove-local-history"].exists)
         XCTAssertTrue(app.buttons["delete-cloud-history"].exists)
     }
-    @MainActor func testServiceConfirmationsInLightAndDarkAtLargestText() {
+    @MainActor func testDataConfirmationsInLightAndDarkAtLargestText() {
         continueAfterFailure = false
         let original = XCUIDevice.shared.appearance
         defer { XCUIDevice.shared.appearance = original }
@@ -129,7 +129,20 @@ final class AppleServicesUITests: XCTestCase {
             XCTAssertTrue(cloudReady, app.debugDescription)
             XCTAssertTrue(app.alerts.staticTexts["현재 iCloud 계정의 학습 기록과 이 기기의 해당 프로필 기록을 삭제합니다. 다른 기기도 다음 동기화 때 반영됩니다. 자동 동기화는 꺼집니다."].exists)
             app.alerts.buttons["취소"].tap()
-            app.tabBars.buttons["책장"].tap()
+            app.terminate()
+        }
+    }
+    @MainActor func testDownloadConfirmationInLightAndDarkAtLargestText() {
+        continueAfterFailure = false
+        let original = XCUIDevice.shared.appearance
+        defer { XCUIDevice.shared.appearance = original }
+        for appearance in [XCUIDevice.Appearance.light, .dark] {
+            XCUIDevice.shared.appearance = appearance
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-test-product", "--ui-test-services", "--ui-test-cloud-confirmation", "--ui-test-probe-id", UUID().uuidString,
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+            app.launch()
+            XCTAssertTrue(app.buttons["book-morning-notes-v1"].existsOrWait(timeout: 20))
             let download = app.buttons["download-hosted-morning-notes-v1"]
             for _ in 0..<8 {
                 guard !download.isHittable else { break }
@@ -203,7 +216,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(download.existsOrWait(timeout: 5))
         app.buttons["diagnostic-close"].tap()
         app.tabBars.buttons["책장"].tap()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
         XCTAssertFalse(app.buttons["book-hosted-morning-notes-v1"].exists)
     }
     @MainActor func testServiceSettingsRemainReachableWithLargestText() {
@@ -255,14 +268,14 @@ final class AppleServicesUITests: XCTestCase {
         let bundled = app.buttons["book-morning-notes-v1"]
         XCTAssertTrue(bundled.hittableOrWait(timeout: 20))
         bundled.tap()
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         let main = app.buttons["player-main"]
         XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
         main.tap()
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 1/3", timeout: 5))
         app.exitLearningThroughOptions()
         app.tabBars.buttons["책장"].tap()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "1 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("1 / 100 XP", timeout: 5)
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         app.buttons["다구간 학습 사이즈"].tap()
@@ -278,7 +291,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(hosted.hittableOrWait(timeout: 10))
 
         hosted.tap()
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         for confirmed in 1...2 {
             XCTAssertTrue(main.wait(for: \.isEnabled, toEqual: true, timeout: 20))
             main.tap()
@@ -292,10 +305,10 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertEqual(app.buttons["header-xp"].label, "3 / 100 XP")
         XCTAssertFalse(main.exists, "Relaunch must not auto-confirm or reopen a player")
         hosted.tap()
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 2/3", timeout: 10))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "3 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("3 / 100 XP", timeout: 5)
         app.tabBars.buttons["설정"].tap()
         app.buttons["학습 설정"].tap()
         app.buttons["다구간 학습 사이즈"].tap()
@@ -307,7 +320,7 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertTrue(app.alerts.buttons["이 기기 기록 삭제"].hittableOrWait(timeout: 5))
         app.alerts.buttons["이 기기 기록 삭제"].tap()
         app.tabBars.buttons["책장"].tap()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 10))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 10)
         XCTAssertTrue(hosted.exists)
         app.terminate()
         app.launch()
@@ -322,10 +335,10 @@ final class AppleServicesUITests: XCTestCase {
         XCTAssertEqual(app.switches["icloud-sync-toggle"].value as? String, "0")
         app.tabBars.buttons["책장"].tap()
         bundled.tap()
-        app.buttons["stage-1"].tap()
+        app.revealStage(1).tap()
         XCTAssertTrue(app.descendants(matching: .any)["cycle-timeline"].wait(for: \.label, toEqual: "확인한 반복 0/3", timeout: 10))
         app.exitLearningThroughOptions()
-        XCTAssertTrue(app.buttons["header-xp"].wait(for: \.label, toEqual: "0 / 100 XP", timeout: 5))
+        app.assertBrowsingXP("0 / 100 XP", timeout: 5)
     }
     @MainActor func testLocalAndCloudDeletionHaveSeparateScopedConfirmations() {
         continueAfterFailure = false
